@@ -918,12 +918,14 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    const tieneFusiónActiva = Boolean(m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas);
+    const tieneFusiónActiva = Boolean((m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas) && m.estado !== 'libre');
     if (tieneFusiónActiva) {
       const otros = (m.mesas_unidas && m.mesas_unidas.length > 0)
         ? m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join('+')
         : (m.unida_con ? m.unida_con.toString().replace(/mesa\s*/i, '') : '');
-      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
+      if (otros) {
+        mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
+      }
     }
 
     card.innerHTML = `

@@ -535,35 +535,31 @@ app.get('/api/mesas', async (req, res) => {
         activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1');
       } catch (_) {}
 
-      const mergeActivo = activeMerges.find(
-        am => Number(am.mesa_principal_id) === Number(m.id) || Number(am.mesa_secundaria_id) === Number(m.id)
+      // Solo la mesa principal (la que recibió la comanda transferida) muestra la unión
+      const mergeActivoComoPrincipal = activeMerges.find(
+        am => Number(am.mesa_principal_id) === Number(m.id)
       );
 
       let todasUnidas = [];
-      if (m.unida_con) {
-        todasUnidas.push(m.unida_con);
-      }
-      if (mergeActivo) {
-        if (Number(m.id) === Number(mergeActivo.mesa_principal_id)) {
+      if (m.estado !== 'libre') {
+        if (m.unida_con) {
+          todasUnidas.push(m.unida_con);
+        }
+        if (mergeActivoComoPrincipal) {
           try {
-            const sA = JSON.parse(mergeActivo.snapshot_a);
+            const sA = JSON.parse(mergeActivoComoPrincipal.snapshot_a);
             if (sA && sA.mesa_numero) todasUnidas.push(sA.mesa_numero);
-          } catch (_) {}
-        } else if (Number(m.id) === Number(mergeActivo.mesa_secundaria_id)) {
-          try {
-            const sB = JSON.parse(mergeActivo.snapshot_b);
-            if (sB && sB.mesa_numero) todasUnidas.push(sB.mesa_numero);
           } catch (_) {}
         }
       }
 
       // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
-      const secundariasEnlazadas = mesas
+      const secundariasEnlazadas = (m.estado !== 'libre') ? mesas
         .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
-        .map(sec => sec.numero);
+        .map(sec => sec.numero) : [];
 
       // Detectar mesas en el mismo grupo visual
-      const mesasEnMismoGrupo = m.grupo_mesas
+      const mesasEnMismoGrupo = (m.grupo_mesas && m.estado !== 'libre')
         ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas).map(other => other.numero)
         : [];
 
@@ -578,7 +574,7 @@ app.get('/api/mesas', async (req, res) => {
         m.unida_a_numero = null;
       }
 
-      m.es_mesa_agrupada = Boolean(m.grupo_mesas);
+      m.es_mesa_agrupada = Boolean(m.grupo_mesas && m.estado !== 'libre');
       m.grupo_mesas_nombre = m.grupo_mesas || null;
       m.platos_pendientes = platosPendientes;
       m.items_pendientes = platosPendientes;
@@ -586,7 +582,7 @@ app.get('/api/mesas', async (req, res) => {
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
       m.mesas_unidas = todasUnidas;
-      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo) || Boolean(m.unida_con);
+      m.es_mesa_unida = m.estado !== 'libre' && (todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivoComoPrincipal) || Boolean(m.unida_con));
       if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
         m.unida_con = todasUnidas[0];
       } else if (!m.es_mesa_unida) {
