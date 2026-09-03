@@ -827,7 +827,7 @@ app.post('/api/mesas/restaurar', async (req, res) => {
 // Separar mesas previamente unidas (deshacer fusión restaurando cuentas originales)
 app.post('/api/mesas/separar', async (req, res) => {
   try {
-    const { mesaId } = req.body;
+    const { mesaId, destinoMesaId } = req.body;
     if (!mesaId) return res.status(400).json({ error: 'ID de mesa requerido' });
 
     const mesaTarget = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
@@ -850,13 +850,13 @@ app.post('/api/mesas/separar', async (req, res) => {
       });
     }
 
-    return await separarMesasFusionadas(mesaTarget, res);
+    return await separarMesasFusionadas(mesaTarget, res, destinoMesaId);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-async function separarMesasFusionadas(mesaTarget, res) {
+async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
   try {
     // 1. Buscar si existe un snapshot de TableMerges activo para esta mesa
     const activeMerge = await dbGet(
@@ -869,23 +869,59 @@ async function separarMesasFusionadas(mesaTarget, res) {
       const snapB = JSON.parse(activeMerge.snapshot_b);
       const transferIds = JSON.parse(activeMerge.items_transferidos_ids || '[]');
 
+      // Verificar si la mesa original de A está ocupada
+      const mesaOriginalA = await dbGet('SELECT * FROM Mesas WHERE id = ?', [snapA.mesa_id]);
+      const estaOcupadaOriginal = mesaOriginalA && mesaOriginalA.estado !== 'libre';
+
+      let targetDestinoMesaId = snapA.mesa_id;
+      let targetDestinoNumero = snapA.mesa_numero;
+
+      if (destinoMesaId) {
+        const mesaAlt = await dbGet('SELECT * FROM Mesas WHERE id = ?', [destinoMesaId]);
+        if (!mesaAlt) {
+          return res.status(404).json({ error: 'Mesa de destino seleccionada no encontrada' });
+        }
+        if (mesaAlt.estado !== 'libre' && mesaAlt.id !== snapA.mesa_id) {
+          return res.status(400).json({ error: `La ${mesaAlt.numero} está actualmente ocupada. Selecciona una mesa disponible.` });
+        }
+        targetDestinoMesaId = mesaAlt.id;
+        targetDestinoNumero = mesaAlt.numero;
+      } else if (estaOcupadaOriginal) {
+        // La mesa original está ocupada y no se envió destinoMesaId aún
+        return res.status(200).json({
+          requiereDestino: true,
+          mesaOriginalOcupada: true,
+          mesaOriginalId: snapA.mesa_id,
+          mesaOriginalNumero: snapA.mesa_numero,
+          message: `Original table ${snapA.mesa_numero} is currently occupied. Would you like to restore the original order to another table?`
+        });
+      }
+
       // Devolver los productos originales de Mesa A a su orden original
       if (transferIds.length > 0) {
         const placeholders = transferIds.map(() => '?').join(',');
         await dbRun(`UPDATE DetalleOrden SET orden_id = ? WHERE id IN (${placeholders})`, [snapA.orden_id, ...transferIds]);
       }
 
-      // Restaurar Orden A con sus productos, totales, impuestos, observaciones y estado
+      // Restaurar Orden A con su mesa destino y valores exactos del snapshot
       await dbRun(
-        'UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
-        [snapA.subtotal, snapA.descuento_happy_hour || 0, snapA.servicio_10, snapA.iva_13, snapA.total, snapA.estado, snapA.orden_id]
+        'UPDATE Ordenes SET mesa_id = ?, subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+        [targetDestinoMesaId, snapA.subtotal, snapA.descuento_happy_hour || 0, snapA.servicio_10, snapA.iva_13, snapA.total, snapA.estado, snapA.orden_id]
       );
 
-      // Restaurar Mesa A a su estado y mesero original
+      // Restaurar la mesa destino con el estado y mesero original de A
       await dbRun(
         'UPDATE Mesas SET estado = ?, mesero = ?, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?',
-        [snapA.mesa_estado || 'abierta', snapA.mesa_mesero || 'Juan Jival', snapA.mesa_id]
+        [snapA.mesa_estado || 'abierta', snapA.mesa_mesero || 'Juan Jival', targetDestinoMesaId]
       );
+
+      // Si la mesa destino es diferente a la original, limpiar referencias residuales en la original
+      if (targetDestinoMesaId !== snapA.mesa_id) {
+        await dbRun(
+          'UPDATE Mesas SET unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?',
+          [snapA.mesa_id]
+        );
+      }
 
       // Restaurar Orden B con sus productos y totales originales
       const itemsRestantesB = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [snapB.orden_id]);
@@ -921,15 +957,15 @@ async function separarMesasFusionadas(mesaTarget, res) {
       // Desactivar merge
       await dbRun('UPDATE TableMerges SET activo = 0 WHERE id = ?', [activeMerge.id]);
 
-      io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: snapA.mesa_id });
+      io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: targetDestinoMesaId });
       io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB });
-      io.emit('mesa_actualizada', { mesaId: snapA.mesa_id, estado: snapA.mesa_estado || 'abierta', total: snapA.total });
+      io.emit('mesa_actualizada', { mesaId: targetDestinoMesaId, estado: snapA.mesa_estado || 'abierta', total: snapA.total });
 
       return res.json({
-        message: `Mesas separadas con éxito. Se restauraron Mesa ${snapB.mesa_numero} y Mesa ${snapA.mesa_numero} con sus productos, totales y observaciones exactas.`,
+        message: `Mesas separadas con éxito. Se restauraron Mesa ${snapB.mesa_numero} y Mesa ${targetDestinoNumero} con sus productos, totales y observaciones exactas.`,
         mesaPrincipal: { id: snapB.mesa_id, numero: snapB.mesa_numero, total: totB, estado: estB },
         mesasRestauradas: [
-          { id: snapA.mesa_id, numero: snapA.mesa_numero, total: snapA.total, estado: snapA.mesa_estado || 'abierta' }
+          { id: targetDestinoMesaId, numero: targetDestinoNumero, total: snapA.total, estado: snapA.mesa_estado || 'abierta' }
         ]
       });
     }

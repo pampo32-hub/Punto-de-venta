@@ -881,6 +881,39 @@
     </div>
   </div>
 
+  <!-- MODAL RESTAURAR EN OTRA MESA (SI LA ORIGINAL ESTÁ OCUPADA) -->
+  <div class="modal-backdrop" id="modalRestaurarMesaDestino">
+    <div class="modal-dialog mover-unir-dialog" style="max-width: 480px;">
+      <div class="dialog-header">
+        <div>
+          <h3>⚠️ Mesa Original Ocupada</h3>
+          <small id="txtAvisoMesaOcupada">La mesa original no está disponible</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseRestaurarDestinoModal">✕</button>
+      </div>
+      <div class="dialog-body">
+        <p class="panel-info-txt" id="txtDescMesaOcupada" style="border-left-color: #f59e0b; font-size: 0.95rem; line-height: 1.4;">
+          Original table is currently occupied. Would you like to restore the original order to another table?
+        </p>
+        <div id="contenedorSelectorMesaDestino" style="display:none; margin-top: 16px;">
+          <div class="field-group">
+            <label>Selecciona una mesa disponible (libres únicamente):</label>
+            <select id="selMesaDisponibleRestaurar" class="select-styled"></select>
+          </div>
+          <button class="btn-pri" id="btnConfirmarRestaurarEnMesa" style="margin-top:16px; width:100%; font-weight:800; background:linear-gradient(135deg, #10b981, #059669);">
+            ✅ Restaurar Orden en Mesa Seleccionada
+          </button>
+        </div>
+      </div>
+      <div class="dialog-footer" style="display:flex; justify-content:space-between; gap:10px;">
+        <button class="btn-sec" id="btnCancelarRestaurarDestino">Cancelar</button>
+        <button class="btn-pri" id="btnElegirMesaRestaurar" style="background:linear-gradient(135deg, #0ea5e9, #0284c7); font-weight:800;">
+          Choose Table
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SPLIT BILLS -->
   <div class="modal-backdrop" id="modalSplitBill">
     <div class="modal-dialog split-dialog">

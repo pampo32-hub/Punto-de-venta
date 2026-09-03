@@ -1275,44 +1275,113 @@ async function ejecutarAgruparMesas(mesa1Id, mesa2Id) {
   }
 }
 
-async function solicitarRestaurarMesas(mesaId) {
+async function solicitarSepararMesas(mesaId) {
   const mesa = estado.mesas.find(m => m.id === mesaId);
   const numTxt = mesa ? mesa.numero : 'esta mesa';
 
-  const confirmar = confirm(`🔄 RESTAURAR MESAS\n\n¿Deseas RESTAURAR la ${numTxt} a su estado original?\n\nSe eliminará el grupo visual conservando cada mesa con sus productos, totales y observaciones intactas.`);
+  const confirmar = confirm(`✂️ Separar mesas\n\n¿Deseas SEPARAR la ${numTxt}?\n\nSe restaurarán exactamente los productos originales de cada mesa, con sus totales, impuestos, observaciones y estados originales.`);
   if (!confirmar) return;
 
-  await ejecutarRestaurarMesas(mesaId);
+  await ejecutarSepararMesas(mesaId);
 }
 
-async function ejecutarRestaurarMesas(mesaId) {
+async function solicitarRestaurarMesas(mesaId) {
+  return solicitarSepararMesas(mesaId);
+}
+
+async function ejecutarSepararMesas(mesaId, destinoMesaId = null) {
   try {
-    const res = await fetch('/api/mesas/restaurar', {
+    const payload = { mesaId };
+    if (destinoMesaId) payload.destinoMesaId = destinoMesaId;
+
+    const res = await fetch('/api/mesas/separar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mesaId })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al restaurar mesas');
+    if (!res.ok) throw new Error(data.error || 'Error al separar mesas');
+
+    if (data.requiereDestino) {
+      mostrarDialogoMesaOcupadaAlSeparar(mesaId, data.mesaOriginalNumero || `Mesa ${data.mesaOriginalId}`);
+      return;
+    }
     
-    alert(`🔄 ${data.message}`);
-    document.getElementById('modalComandero').classList.remove('active');
+    alert(`✂️ ${data.message}`);
+    const modalRestaurar = document.getElementById('modalRestaurarMesaDestino');
+    if (modalRestaurar) modalRestaurar.classList.remove('active');
+    const modalCom = document.getElementById('modalComandero');
+    if (modalCom) modalCom.classList.remove('active');
     const modalMoverUnir = document.getElementById('modalMoverUnir');
     if (modalMoverUnir) modalMoverUnir.classList.remove('active');
     
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
-    alert('❌ Error al restaurar mesas: ' + e.message);
+    alert('❌ Error al separar mesas: ' + e.message);
   }
 }
 
-async function solicitarSepararMesas(mesaId) {
-  return solicitarRestaurarMesas(mesaId);
+async function ejecutarRestaurarMesas(mesaId, destinoMesaId = null) {
+  return ejecutarSepararMesas(mesaId, destinoMesaId);
 }
 
-async function ejecutarSepararMesas(mesaId) {
-  return ejecutarRestaurarMesas(mesaId);
+function mostrarDialogoMesaOcupadaAlSeparar(mesaPrincipalId, mesaOriginalNumero) {
+  const modal = document.getElementById('modalRestaurarMesaDestino');
+  if (!modal) {
+    const opcion = confirm(`Original table ${mesaOriginalNumero} is currently occupied. Would you like to restore the original order to another table?`);
+    if (!opcion) return;
+    const disponibles = estado.mesas.filter(m => m.estado === 'libre');
+    if (disponibles.length === 0) return alert('⚠️ No available tables currently free');
+    const nombres = disponibles.map(m => m.numero).join(', ');
+    const elegida = prompt(`Mesas disponibles:\n${nombres}\n\nEscribe el número exacto de la mesa a la cual restaurar la orden:`);
+    if (!elegida) return;
+    const target = disponibles.find(m => m.numero.toLowerCase() === elegida.trim().toLowerCase() || String(m.id) === elegida.trim());
+    if (!target) return alert('Mesa no válida o no disponible.');
+    ejecutarSepararMesas(mesaPrincipalId, target.id);
+    return;
+  }
+
+  const descEl = document.getElementById('txtDescMesaOcupada');
+  const avisoEl = document.getElementById('txtAvisoMesaOcupada');
+  const selectorBox = document.getElementById('contenedorSelectorMesaDestino');
+  const btnElegir = document.getElementById('btnElegirMesaRestaurar');
+  const selDisponibles = document.getElementById('selMesaDisponibleRestaurar');
+  const btnConfirmar = document.getElementById('btnConfirmarRestaurarEnMesa');
+
+  avisoEl.textContent = `Original table ${mesaOriginalNumero} is currently occupied`;
+  descEl.textContent = `Original table ${mesaOriginalNumero} is currently occupied. Would you like to restore the original order to another table?`;
+  selectorBox.style.display = 'none';
+  btnElegir.style.display = 'inline-block';
+  btnElegir.textContent = 'Choose Table';
+
+  btnElegir.onclick = () => {
+    const disponibles = estado.mesas.filter(m => m.estado === 'libre');
+    if (disponibles.length === 0) {
+      selDisponibles.innerHTML = '<option value="">⚠️ No available tables currently free</option>';
+      btnConfirmar.disabled = true;
+    } else {
+      selDisponibles.innerHTML = disponibles.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Libre</option>`).join('');
+      btnConfirmar.disabled = false;
+    }
+    selectorBox.style.display = 'block';
+    btnElegir.style.display = 'none';
+  };
+
+  btnConfirmar.onclick = () => {
+    const destId = Number(selDisponibles.value);
+    if (!destId) return alert('Selecciona una mesa disponible.');
+    ejecutarSepararMesas(mesaPrincipalId, destId);
+  };
+
+  document.getElementById('btnCancelarRestaurarDestino').onclick = () => {
+    modal.classList.remove('active');
+  };
+  document.getElementById('btnCloseRestaurarDestinoModal').onclick = () => {
+    modal.classList.remove('active');
+  };
+
+  modal.classList.add('active');
 }
 
 document.querySelectorAll('.zone-tab').forEach(tab => {
