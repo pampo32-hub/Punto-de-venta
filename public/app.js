@@ -910,7 +910,8 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    if (m.es_mesa_unida || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.unida_con) {
+    const tieneFusiónActiva = Boolean(m.es_mesa_unida && (m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas));
+    if (tieneFusiónActiva) {
       const otros = (m.mesas_unidas && m.mesas_unidas.length > 0)
         ? m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join('+')
         : (m.unida_con ? m.unida_con.toString().replace(/mesa\s*/i, '') : '');
@@ -1145,7 +1146,7 @@ function agregarDragMesa(card, mesaData, canvas) {
     dragState.timer = setTimeout(() => {
       if (!isTouchDown) return;
       
-      const estaUnida = mesaData.unida_con || mesaData.es_mesa_unida || mesaData.es_mesa_secundaria_unida || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.estado === 'unida';
+      const estaUnida = Boolean(mesaData.es_mesa_unida && (mesaData.unida_con || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.grupo_mesas));
       if (estaUnida) {
         const nombreUnidas = (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0)
           ? mesaData.mesas_unidas.join(', ')
@@ -1346,33 +1347,83 @@ function mostrarModalRestaurarMesaDestino(mesaPrincipalId, mesaOriginalNumero) {
   modal.classList.add('active');
 }
 
-function mostrarToastNotificacion(mensaje, tipo = 'info') {
-  let toastContainer = document.getElementById('posToastContainer');
-  if (!toastContainer) {
-    toastContainer = document.createElement('div');
-    toastContainer.id = 'posToastContainer';
-    toastContainer.style.cssText = 'position:fixed; top:24px; left:50%; transform:translateX(-50%); z-index:999999; display:flex; flex-direction:column; gap:10px; max-width:90vw; pointer-events:none;';
-    document.body.appendChild(toastContainer);
+function mostrarNotificacionCentro(mensaje, tipo = 'info', callback = null) {
+  const modal = document.getElementById('modalNotificacionCentro');
+  if (!modal) {
+    if (callback) callback();
+    return;
   }
 
-  const toast = document.createElement('div');
-  const bg = tipo === 'error' ? 'linear-gradient(135deg, #ef4444, #991b1b)' : (tipo === 'success' ? 'linear-gradient(135deg, #10b981, #065f46)' : 'linear-gradient(135deg, #0284c7, #0369a1)');
-  toast.style.cssText = `background:${bg}; color:#fff; padding:14px 24px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.6); font-weight:700; font-size:0.95rem; display:flex; align-items:center; gap:10px; pointer-events:auto; border: 1px solid rgba(255,255,255,0.25); text-align:center;`;
-  toast.textContent = mensaje;
+  const iconEl = document.getElementById('notifCentroIcono');
+  const titEl = document.getElementById('notifCentroTitulo');
+  const msgEl = document.getElementById('notifCentroMensaje');
+  const btnEl = document.getElementById('btnCerrarNotifCentro');
 
-  toastContainer.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-10px)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  let icono = 'ℹ️';
+  let titulo = 'Información';
+  let btnColor = 'var(--primary)';
+
+  const mLower = (mensaje || '').toLowerCase();
+  if (tipo === 'success' || mLower.includes('éxito') || mLower.includes('correct') || mLower.includes('✅') || mLower.includes('restaurar')) {
+    icono = '✅';
+    titulo = '¡Completado!';
+    btnColor = 'linear-gradient(135deg, #10b981, #059669)';
+  } else if (tipo === 'error' || mLower.includes('error') || mLower.includes('❌') || mLower.includes('falló') || mLower.includes('denegad')) {
+    icono = '❌';
+    titulo = 'Atención';
+    btnColor = 'linear-gradient(135deg, #ef4444, #b91c1c)';
+  } else if (tipo === 'warning' || mLower.includes('aviso') || mLower.includes('⚠️') || mLower.includes('ocupada')) {
+    icono = '⚠️';
+    titulo = 'Aviso';
+    btnColor = 'linear-gradient(135deg, #f59e0b, #d97706)';
+  }
+
+  if (iconEl) iconEl.textContent = icono;
+  if (titEl) titEl.textContent = titulo;
+  if (msgEl) msgEl.textContent = (mensaje || '').replace(/^[✅❌⚠️ℹ️🔄🔗✂️\s]+/, '');
+  if (btnEl) btnEl.style.background = btnColor;
+
+  let timerAuto = null;
+  const cerrar = () => {
+    if (timerAuto) clearTimeout(timerAuto);
+    modal.classList.remove('active');
+    if (callback) callback();
+  };
+
+  if (btnEl) btnEl.onclick = cerrar;
+  modal.onclick = (e) => {
+    if (e.target === modal) cerrar();
+  };
+
+  modal.classList.add('active');
+
+  if (tipo === 'success' || tipo === 'info') {
+    timerAuto = setTimeout(cerrar, 4000);
+  }
+}
+
+// Redirigir alert() global hacia el modal centrado en pantalla
+window.alert = function(msg) {
+  mostrarNotificacionCentro(String(msg));
+};
+
+function mostrarToastNotificacion(mensaje, tipo = 'info') {
+  mostrarNotificacionCentro(mensaje, tipo);
 }
 
 async function solicitarSepararMesas(mesaId) {
   const mesa = estado.mesas.find(m => m.id === mesaId);
   if (!mesa) return;
-  const nombreUnidas = mesa.unida_con || 'otra mesa';
+
+  const estaUnida = Boolean(mesa.es_mesa_unida && (mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.grupo_mesas));
+  if (!estaUnida) {
+    mostrarNotificacionCentro(`La Mesa ${mesa.numero} no se encuentra unida. Ya es una mesa individual.`, 'info');
+    return;
+  }
+
+  const nombreUnidas = (mesa.mesas_unidas && mesa.mesas_unidas.length > 0)
+    ? mesa.mesas_unidas.join(', ')
+    : (mesa.unida_con || 'otra mesa');
   mostrarModalConfirmarSeparar(mesa, nombreUnidas);
 }
 
@@ -1407,11 +1458,27 @@ async function ejecutarSepararMesas(mesaId, destinoMesaId = null) {
     const modalMoverUnir = document.getElementById('modalMoverUnir');
     if (modalMoverUnir) modalMoverUnir.classList.remove('active');
 
-    mostrarToastNotificacion(`✂️ ${data.message}`, 'success');
+    // Desactivar visualmente cualquier flag de unión en el estado local de una vez
+    const mesaLocal = estado.mesas.find(m => m.id === mesaId);
+    if (mesaLocal) {
+      mesaLocal.es_mesa_unida = false;
+      mesaLocal.unida_con = null;
+      mesaLocal.mesas_unidas = [];
+    }
+    if (destinoMesaId) {
+      const mesaDestLocal = estado.mesas.find(m => m.id === destinoMesaId);
+      if (mesaDestLocal) {
+        mesaDestLocal.es_mesa_unida = false;
+        mesaDestLocal.unida_con = null;
+        mesaDestLocal.mesas_unidas = [];
+      }
+    }
+
+    mostrarNotificacionCentro(`✂️ ${data.message}`, 'success');
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
-    mostrarToastNotificacion(`❌ Error al separar mesas: ${e.message}`, 'error');
+    mostrarNotificacionCentro(`❌ Error al separar mesas: ${e.message}`, 'error');
   }
 }
 
@@ -1455,22 +1522,16 @@ async function abrirComanderoMesa(mesaId) {
       }));
 
       // Detectar si hay ítems de otras mesas unidas o si la mesa es secundaria unida
-      const origenesUnidos = [
-        ...new Set([
-          ...mesa.items
-            .map(it => it.origen_mesa_numero)
-            .filter(num => num && String(num) !== String(mesa.numero)),
-          ...(mesa.mesas_unidas || [])
-        ])
-      ];
+      // Detectar si la mesa está activamente unida a otra mesa
+      const esUnidaReal = Boolean(mesa.es_mesa_unida && (mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.es_mesa_secundaria_unida || mesa.grupo_mesas));
 
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
-        if (origenesUnidos.length > 0 || mesa.es_mesa_unida || mesa.unida_con || mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
+        if (esUnidaReal) {
           bannerEl.style.display = 'flex';
           const txt = mesa.es_mesa_secundaria_unida 
             ? `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`
-            : `🔗 Mesa Unida con ` + (origenesUnidos.length > 0 ? origenesUnidos.join(', ') : (mesa.unida_con || 'otra mesa'));
+            : `🔗 Mesa Unida con ` + ((mesa.mesas_unidas && mesa.mesas_unidas.length > 0) ? mesa.mesas_unidas.join(', ') : (mesa.unida_con || 'otra mesa'));
           document.getElementById('comMergedBannerTxt').textContent = txt;
           const btnSep = document.getElementById('btnSepararComandero');
           if (btnSep) {
@@ -1487,18 +1548,7 @@ async function abrirComanderoMesa(mesaId) {
       mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
-        if (mesa.es_mesa_unida || mesa.unida_con || mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
-          bannerEl.style.display = 'flex';
-          const txt = `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`;
-          document.getElementById('comMergedBannerTxt').textContent = txt;
-          const btnSep = document.getElementById('btnSepararComandero');
-          if (btnSep) {
-            btnSep.textContent = '✂️ Separar Mesas';
-            btnSep.onclick = () => solicitarSepararMesas(mesa.id);
-          }
-        } else {
-          bannerEl.style.display = 'none';
-        }
+        bannerEl.style.display = 'none';
       }
     }
   } catch (e) {
@@ -2005,7 +2055,7 @@ function cargarSelectoresMoverUnir() {
 
   const ocupadas = estado.mesas.filter(m => m.estado !== 'libre');
   const libres = estado.mesas.filter(m => m.estado === 'libre');
-  const fusionadas = estado.mesas.filter(m => m.grupo_mesas || m.es_mesa_agrupada || m.es_mesa_unida || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida || m.estado === 'unida');
+  const fusionadas = estado.mesas.filter(m => m.es_mesa_unida && (m.grupo_mesas || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida));
 
   if (ocupadas.length === 0) {
     selOrig.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';

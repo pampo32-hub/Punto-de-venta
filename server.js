@@ -517,16 +517,32 @@ app.get('/api/mesas', async (req, res) => {
         return it.nombre_producto;
       });
 
-      // Detectar si la mesa tiene consumos fusionados de otras mesas
-      const origenesFusionados = [
-        ...new Set(
-          items
-            .map(it => it.origen_mesa_numero)
-            .filter(num => num && String(num) !== String(m.numero))
-        )
-      ];
+      // Detectar si la mesa tiene una fusión activa en TableMerges
+      let activeMerges = [];
+      try {
+        activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1');
+      } catch (_) {}
 
-      // Detectar mesas secundarias enlazadas a esta mesa principal
+      const mergeActivo = activeMerges.find(
+        am => am.mesa_principal_id === m.id || am.mesa_secundaria_id === m.id
+      );
+
+      let todasUnidas = [];
+      if (mergeActivo) {
+        if (m.id === mergeActivo.mesa_principal_id) {
+          try {
+            const sA = JSON.parse(mergeActivo.snapshot_a);
+            if (sA && sA.mesa_numero) todasUnidas.push(sA.mesa_numero);
+          } catch (_) {}
+        } else if (m.id === mergeActivo.mesa_secundaria_id) {
+          try {
+            const sB = JSON.parse(mergeActivo.snapshot_b);
+            if (sB && sB.mesa_numero) todasUnidas.push(sB.mesa_numero);
+          } catch (_) {}
+        }
+      }
+
+      // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
       const secundariasEnlazadas = mesas
         .filter(sec => sec.unida_a_mesa_id === m.id)
         .map(sec => sec.numero);
@@ -536,7 +552,7 @@ app.get('/api/mesas', async (req, res) => {
         ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas).map(other => other.numero)
         : [];
 
-      const todasUnidas = [...new Set([...origenesFusionados, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
+      todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
 
       if (m.unida_a_mesa_id) {
         const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
@@ -555,7 +571,10 @@ app.get('/api/mesas', async (req, res) => {
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
       m.mesas_unidas = todasUnidas;
-      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas);
+      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo);
+      if (!m.es_mesa_unida) {
+        m.unida_con = null;
+      }
     }
 
     res.json({ zonas, mesas });
@@ -953,12 +972,36 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
         [estB, snapB.mesa_id]
       );
 
+      // Limpiar flags en la mesa destino
+      await dbRun(
+        'UPDATE Mesas SET unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?',
+        [targetDestinoMesaId]
+      );
+
+      // Si se restauró a otra mesa, limpiar también la original de A por seguridad
+      if (targetDestinoMesaId !== snapA.mesa_id) {
+        await dbRun(
+          'UPDATE Mesas SET unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?',
+          [snapA.mesa_id]
+        );
+      }
+
+      // Normalizar DetalleOrden para que cada orden pertenezca limpiamente a su mesa individual
+      await dbRun(
+        'UPDATE DetalleOrden SET origen_mesa_numero = ?, origen_mesa_id = ? WHERE orden_id = ?',
+        [targetDestinoNumero, targetDestinoMesaId, snapA.orden_id]
+      );
+      await dbRun(
+        'UPDATE DetalleOrden SET origen_mesa_numero = ?, origen_mesa_id = ? WHERE orden_id = ?',
+        [snapB.mesa_numero, snapB.mesa_id, snapB.orden_id]
+      );
+
       // Desactivar merge
       await dbRun('UPDATE TableMerges SET activo = 0 WHERE id = ?', [activeMerge.id]);
 
       io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: targetDestinoMesaId });
-      io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB });
-      io.emit('mesa_actualizada', { mesaId: targetDestinoMesaId, estado: snapA.mesa_estado || 'abierta', total: snapA.total });
+      io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB, unida_con: null, es_mesa_unida: false, mesas_unidas: [] });
+      io.emit('mesa_actualizada', { mesaId: targetDestinoMesaId, estado: snapA.mesa_estado || 'abierta', total: snapA.total, unida_con: null, es_mesa_unida: false, mesas_unidas: [] });
 
       return res.json({
         message: `Mesas separadas con éxito. Se restauraron Mesa ${snapB.mesa_numero} y Mesa ${targetDestinoNumero} con sus productos, totales y observaciones exactas.`,
