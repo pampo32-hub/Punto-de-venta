@@ -6,63 +6,90 @@ const db = new sqlite3.Database(dbPath);
 
 function initDb() {
   db.serialize(() => {
+    // 0. Comercios / Negocios (SaaS Multi-Comercio)
+    db.run(`CREATE TABLE IF NOT EXISTS Negocios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      slogan TEXT,
+      logo_url TEXT,
+      moneda TEXT DEFAULT 'CRC',
+      telefono TEXT,
+      direccion TEXT,
+      activo INTEGER DEFAULT 1
+    )`);
+
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL
+      negocio_id INTEGER DEFAULT 1,
+      nombre TEXT NOT NULL,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
     )`);
 
-    // 2. Mesas (con soporte para coordenadas del editor drag & drop y forma)
+    // 2. Mesas
     db.run(`CREATE TABLE IF NOT EXISTS Mesas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       numero TEXT NOT NULL,
       zona_id INTEGER,
       capacidad INTEGER DEFAULT 4,
-      estado TEXT DEFAULT 'libre', -- libre, ocupada, esperando, cuenta
+      estado TEXT DEFAULT 'libre',
       mesero TEXT,
       x INTEGER DEFAULT 40,
       y INTEGER DEFAULT 40,
-      forma TEXT DEFAULT 'square', -- square, round
+      forma TEXT DEFAULT 'square',
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
       FOREIGN KEY(zona_id) REFERENCES Zonas(id)
     )`);
 
-    // Migraciones seguras para Mesas (por si ya existía la tabla sin x, y, forma)
+    // Migraciones Mesas
     db.run("ALTER TABLE Mesas ADD COLUMN x INTEGER DEFAULT 40", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN y INTEGER DEFAULT 40", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN forma TEXT DEFAULT 'square'", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
     // 3. Categorías
     db.run(`CREATE TABLE IF NOT EXISTS Categorias (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       nombre TEXT NOT NULL,
       icono TEXT,
-      destino TEXT DEFAULT 'cocina' -- cocina, barra
+      destino TEXT DEFAULT 'cocina'
     )`);
+    db.run("ALTER TABLE Categorias ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
-    // 4. Productos (con soporte para 86 List / agotado, curso y happy hour)
+    // 4. Productos (con soporte para fotos/imágenes personalizables en botones)
     db.run(`CREATE TABLE IF NOT EXISTS Productos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       categoria_id INTEGER,
       codigo TEXT,
       nombre TEXT NOT NULL,
       precio REAL NOT NULL,
       descripcion TEXT,
       destino TEXT DEFAULT 'cocina',
-      curso INTEGER DEFAULT 2, -- 1: Entrada, 2: Fuerte, 3: Postre
+      curso INTEGER DEFAULT 2,
       happy_hour INTEGER DEFAULT 0,
       agotado INTEGER DEFAULT 0,
+      imagen_url TEXT,
+      color_badge TEXT,
       activo INTEGER DEFAULT 1,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
       FOREIGN KEY(categoria_id) REFERENCES Categorias(id)
     )`);
 
-    // Migraciones seguras para Productos
+    // Migraciones Productos
     db.run("ALTER TABLE Productos ADD COLUMN curso INTEGER DEFAULT 2", () => {});
     db.run("ALTER TABLE Productos ADD COLUMN happy_hour INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE Productos ADD COLUMN agotado INTEGER DEFAULT 0", () => {});
+    db.run("ALTER TABLE Productos ADD COLUMN imagen_url TEXT", () => {});
+    db.run("ALTER TABLE Productos ADD COLUMN color_badge TEXT", () => {});
+    db.run("ALTER TABLE Productos ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
     // 5. Cajas / Turnos
     db.run(`CREATE TABLE IF NOT EXISTS Cajas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       cajero TEXT NOT NULL,
       fecha_apertura TEXT NOT NULL,
       monto_inicial REAL DEFAULT 0,
@@ -71,14 +98,15 @@ function initDb() {
       total_ventas_efectivo REAL DEFAULT 0,
       total_ventas_tarjeta REAL DEFAULT 0,
       total_ventas_sinpe REAL DEFAULT 0,
-      estado TEXT DEFAULT 'abierta' -- abierta, cerrada
+      estado TEXT DEFAULT 'abierta'
     )`);
+    db.run("ALTER TABLE Cajas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
-    // 6. Movimientos de Caja (Entradas / Salidas de efectivo)
+    // 6. Movimientos de Caja
     db.run(`CREATE TABLE IF NOT EXISTS MovimientosCaja (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       caja_id INTEGER,
-      tipo TEXT NOT NULL, -- entrada, salida
+      tipo TEXT NOT NULL,
       monto REAL NOT NULL,
       concepto TEXT NOT NULL,
       fecha_hora TEXT NOT NULL,
@@ -88,14 +116,15 @@ function initDb() {
     // 7. Órdenes / Cuentas
     db.run(`CREATE TABLE IF NOT EXISTS Ordenes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       numero_orden TEXT NOT NULL,
       mesa_id INTEGER,
-      tipo TEXT DEFAULT 'mesa', -- mesa, barra, para_llevar
+      tipo TEXT DEFAULT 'mesa',
       cliente TEXT DEFAULT 'Cliente General',
       mesero TEXT NOT NULL,
       fecha_apertura TEXT NOT NULL,
       fecha_cierre TEXT,
-      estado TEXT DEFAULT 'abierta', -- abierta, esperando, cuenta_pedida, pagada, cancelada
+      estado TEXT DEFAULT 'abierta',
       subtotal REAL DEFAULT 0,
       descuento_happy_hour REAL DEFAULT 0,
       servicio_10 REAL DEFAULT 0,
@@ -104,10 +133,10 @@ function initDb() {
       notas TEXT,
       FOREIGN KEY(mesa_id) REFERENCES Mesas(id)
     )`);
-
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_happy_hour REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
-    // 8. Detalle de Órdenes (Comandas con cursos de cocina)
+    // 8. Detalle de Órdenes (Comandas)
     db.run(`CREATE TABLE IF NOT EXISTS DetalleOrden (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       orden_id INTEGER NOT NULL,
@@ -117,15 +146,14 @@ function initDb() {
       cantidad INTEGER NOT NULL DEFAULT 1,
       subtotal REAL NOT NULL,
       notas TEXT,
-      curso INTEGER DEFAULT 2, -- 1: Entrada, 2: Fuerte, 3: Postre
-      destino TEXT DEFAULT 'cocina', -- cocina, barra
-      estado_comanda TEXT DEFAULT 'pendiente', -- pendiente, preparando, listo, servido, anulado
+      curso INTEGER DEFAULT 2,
+      destino TEXT DEFAULT 'cocina',
+      estado_comanda TEXT DEFAULT 'pendiente',
       hora_pedido TEXT NOT NULL,
       hora_listo TEXT,
       FOREIGN KEY(orden_id) REFERENCES Ordenes(id),
       FOREIGN KEY(producto_id) REFERENCES Productos(id)
     )`);
-
     db.run("ALTER TABLE DetalleOrden ADD COLUMN curso INTEGER DEFAULT 2", () => {});
 
     // 9. Pagos
@@ -134,7 +162,7 @@ function initDb() {
       orden_id INTEGER NOT NULL,
       caja_id INTEGER,
       mesero TEXT,
-      metodo TEXT NOT NULL, -- Efectivo, Tarjeta, SINPE, Mixto
+      metodo TEXT NOT NULL,
       monto REAL NOT NULL,
       propina REAL DEFAULT 0,
       cambio REAL DEFAULT 0,
@@ -142,10 +170,9 @@ function initDb() {
       FOREIGN KEY(orden_id) REFERENCES Ordenes(id),
       FOREIGN KEY(caja_id) REFERENCES Cajas(id)
     )`);
-
     db.run("ALTER TABLE Pagos ADD COLUMN mesero TEXT", () => {});
 
-    // 10. Auditoría de Anulaciones con PIN de Seguridad
+    // 10. Auditoría de Anulaciones
     db.run(`CREATE TABLE IF NOT EXISTS Anulaciones (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       orden_id INTEGER,
@@ -164,7 +191,7 @@ function initDb() {
     db.run(`CREATE TABLE IF NOT EXISTS FacturasElectronicas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       orden_id INTEGER,
-      tipo_documento TEXT DEFAULT 'FE', -- FE (Factura Electrónica), TE (Tiquete)
+      tipo_documento TEXT DEFAULT 'FE',
       clave TEXT NOT NULL,
       consecutivo TEXT NOT NULL,
       fecha_emision TEXT NOT NULL,
@@ -179,78 +206,114 @@ function initDb() {
       estado_hacienda TEXT DEFAULT 'aceptado'
     )`);
 
-    // Sembrar catálogo inicial si no hay datos
-    db.get('SELECT COUNT(*) as count FROM Zonas', (err, row) => {
+    // 12. Usuarios del Sistema con Género y Roles
+    db.run(`CREATE TABLE IF NOT EXISTS Usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      usuario TEXT UNIQUE NOT NULL,
+      nombre_completo TEXT NOT NULL,
+      password TEXT NOT NULL,
+      rol TEXT NOT NULL, -- developer, admin, cajero, salonero
+      genero TEXT NOT NULL DEFAULT 'M', -- M = Hombre (Salonero), F = Mujer (Salonera)
+      pin TEXT DEFAULT '1234',
+      permisos TEXT DEFAULT '{"salon":true,"kds":true,"caja":true,"facturacion":true}',
+      activo INTEGER DEFAULT 1,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
+    )`);
+
+    // Sembrar Negocio Inicial
+    db.get('SELECT COUNT(*) as count FROM Negocios', (err, row) => {
       if (!err && (!row || row.count === 0)) {
-        console.log('🌱 Sembrando datos iniciales en la base de datos...');
-
-        // Zonas
-        db.run("INSERT INTO Zonas (nombre) VALUES ('Salón Principal'), ('Barra / Bar'), ('Terraza al Aire Libre'), ('Zona VIP')");
-
-        // Mesas iniciales con posiciones y formas
-        const mesas = [
-          { num: 'Mesa 1', zona: 1, cap: 4, x: 40, y: 40, forma: 'square' },
-          { num: 'Mesa 2', zona: 1, cap: 4, x: 220, y: 40, forma: 'square' },
-          { num: 'Mesa 3', zona: 1, cap: 6, x: 400, y: 40, forma: 'round' },
-          { num: 'Mesa 4', zona: 1, cap: 2, x: 40, y: 220, forma: 'square' },
-          { num: 'Barra 1', zona: 2, cap: 1, x: 620, y: 40, forma: 'round' },
-          { num: 'Barra 2', zona: 2, cap: 1, x: 620, y: 190, forma: 'round' },
-          { num: 'Terraza 1', zona: 3, cap: 4, x: 220, y: 220, forma: 'square' },
-          { num: 'Mesa VIP', zona: 4, cap: 8, x: 400, y: 220, forma: 'square' }
-        ];
-        mesas.forEach(m => {
-          db.run('INSERT INTO Mesas (numero, zona_id, capacidad, x, y, forma) VALUES (?, ?, ?, ?, ?, ?)',
-            [m.num, m.zona, m.cap, m.x, m.y, m.forma]
-          );
-        });
-
-        // Categorías
-        const cats = [
-          { nom: 'Bebidas & Cervezas', icono: '🍺', destino: 'barra' },
-          { nom: 'Coctelería & Tragos', icono: '🍸', destino: 'barra' },
-          { nom: 'Bocas & Entradas', icono: '🍤', destino: 'cocina' },
-          { nom: 'Platos Fuertes', icono: '🥩', destino: 'cocina' },
-          { nom: 'Hamburguesas & Snacks', icono: '🍔', destino: 'cocina' },
-          { nom: 'Postres & Cafetería', icono: '☕', destino: 'cocina' }
-        ];
-        cats.forEach(c => {
-          db.run('INSERT INTO Categorias (nombre, icono, destino) VALUES (?, ?, ?)', [c.nom, c.icono, c.destino]);
-        });
-
-        // Catálogo de Productos
-        const prods = [
-          { cat: 1, cod: 'BEB01', nom: 'Imperial Regular', pre: 1800, des: 'barra', cur: 1, hh: 1 },
-          { cat: 1, cod: 'BEB02', nom: 'Pilsen', pre: 1800, des: 'barra', cur: 1, hh: 1 },
-          { cat: 1, cod: 'BEB03', nom: 'Corona Extra', pre: 2500, des: 'barra', cur: 1, hh: 0 },
-          { cat: 1, cod: 'BEB04', nom: 'Refresco Natural', pre: 1600, des: 'barra', cur: 1, hh: 0 },
-          { cat: 2, cod: 'COC01', nom: 'Mojito Clásico Cubano', pre: 3800, des: 'barra', cur: 1, hh: 1 },
-          { cat: 2, cod: 'COC02', nom: 'Margarita Tradicional', pre: 4200, des: 'barra', cur: 1, hh: 0 },
-          { cat: 2, cod: 'COC03', nom: 'Gin Tonic Flor de Caña', pre: 4500, des: 'barra', cur: 1, hh: 0 },
-          { cat: 3, cod: 'ENT01', nom: 'Chifrijo Tradicional', pre: 4500, des: 'cocina', cur: 1, hh: 0 },
-          { cat: 3, cod: 'ENT02', nom: 'Alitas BBQ / Búfalo (8 uds)', pre: 4900, des: 'cocina', cur: 1, hh: 0 },
-          { cat: 3, cod: 'ENT03', nom: 'Patacones con Carne Mechada', pre: 4200, des: 'cocina', cur: 1, hh: 0 },
-          { cat: 3, cod: 'ENT04', nom: 'Ceviche Mixto con Aguacate', pre: 4800, des: 'cocina', cur: 1, hh: 0 },
-          { cat: 4, cod: 'PLA01', nom: 'Corte Rib Eye 350g', pre: 12500, des: 'cocina', cur: 2, hh: 0 },
-          { cat: 4, cod: 'PLA02', nom: 'Arroz con Mariscos a la Tica', pre: 7500, des: 'cocina', cur: 2, hh: 0 },
-          { cat: 5, cod: 'HAM01', nom: 'Hamburguesa Doble Bacon-Cheddar', pre: 5500, des: 'cocina', cur: 2, hh: 0 },
-          { cat: 5, cod: 'HAM02', nom: 'Sandwich de Pollo Crispy', pre: 4800, des: 'cocina', cur: 2, hh: 0 },
-          { cat: 6, cod: 'POS01', nom: 'Tres Leches Artesanal', pre: 2800, des: 'cocina', cur: 3, hh: 0 },
-          { cat: 6, cod: 'POS02', nom: 'Café Espresso Doble', pre: 1400, des: 'cocina', cur: 3, hh: 0 }
-        ];
-        prods.forEach(p => {
-          db.run('INSERT INTO Productos (categoria_id, codigo, nombre, precio, destino, curso, happy_hour) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [p.cat, p.cod, p.nom, p.pre, p.des, p.cur, p.hh]
-          );
-        });
-
-        // Apertura de caja inicial
-        const hoy = new Date().toISOString();
-        db.run('INSERT INTO Cajas (cajero, fecha_apertura, monto_inicial, estado) VALUES (?, ?, ?, ?)',
-          ['Juan Jival', hoy, 50000, 'abierta']
-        );
-
-        console.log('✅ Base de datos configurada y sembrada.');
+        db.run(`INSERT INTO Negocios (id, nombre, slogan, logo_url, moneda, telefono, direccion) 
+          VALUES (1, 'GastroBar Fuego & Brasas', 'Restaurante, Bar & Lounge', 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80', 'CRC', '2222-3344', 'San José, Costa Rica')`);
+        console.log('🌱 Negocio inicial creado.');
       }
+    });
+
+    // Sembrar Usuarios Iniciales (dev, admin, cajero, salonero, salonera)
+    db.get('SELECT COUNT(*) as count FROM Usuarios', (err, row) => {
+      if (!err && (!row || row.count === 0)) {
+        const users = [
+          {
+            negocio_id: 1,
+            usuario: 'dev',
+            nombre: 'Juan Developer',
+            password: 'dev123',
+            rol: 'developer',
+            genero: 'M',
+            pin: '9999',
+            permisos: '{"developer":true,"salon":true,"kds":true,"caja":true,"facturacion":true,"negocios":true}'
+          },
+          {
+            negocio_id: 1,
+            usuario: 'admin',
+            nombre: 'Don Alberto',
+            password: 'admin123',
+            rol: 'admin',
+            genero: 'M',
+            pin: '1234',
+            permisos: '{"salon":true,"kds":true,"caja":true,"facturacion":true,"empleados":true,"catalogo":true}'
+          },
+          {
+            negocio_id: 1,
+            usuario: 'cajero',
+            nombre: 'Roberto Caja',
+            password: 'caja123',
+            rol: 'cajero',
+            genero: 'M',
+            pin: '5555',
+            permisos: '{"salon":true,"caja":true,"facturacion":true}'
+          },
+          {
+            negocio_id: 1,
+            usuario: 'carlos',
+            nombre: 'Carlos Solano',
+            password: 'mesero123',
+            rol: 'salonero',
+            genero: 'M',
+            pin: '1111',
+            permisos: '{"salon":true,"kds":true}'
+          },
+          {
+            negocio_id: 1,
+            usuario: 'sofia',
+            nombre: 'Sofía Morales',
+            password: 'mesera123',
+            rol: 'salonero',
+            genero: 'F',
+            pin: '2222',
+            permisos: '{"salon":true,"kds":true}'
+          }
+        ];
+
+        users.forEach(u => {
+          db.run(
+            `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [u.negocio_id, u.usuario, u.nombre, u.password, u.rol, u.genero, u.pin, u.permisos]
+          );
+        });
+        console.log('🌱 Usuarios iniciales (dev, admin, cajero, carlos [M], sofia [F]) sembrados.');
+      }
+    });
+
+    // Sembrar imágenes iniciales de alta calidad para los productos principales
+    const fotosPlatillos = [
+      { id: 1, cod: 'BEB01', img: 'https://images.unsplash.com/photo-1608270110398-319cf887cf45?w=300&auto=format&fit=crop&q=80' }, // Cerveza
+      { id: 2, cod: 'BEB02', img: 'https://images.unsplash.com/photo-1535958636474-b021ee887b13?w=300&auto=format&fit=crop&q=80' }, // Pilsen
+      { id: 3, cod: 'BEB03', img: 'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=300&auto=format&fit=crop&q=80' }, // Corona
+      { id: 5, cod: 'COC01', img: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=300&auto=format&fit=crop&q=80' }, // Mojito
+      { id: 6, cod: 'COC02', img: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=300&auto=format&fit=crop&q=80' }, // Margarita
+      { id: 8, cod: 'ENT01', img: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80' }, // Chifrijo
+      { id: 9, cod: 'ENT02', img: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=300&auto=format&fit=crop&q=80' }, // Alitas
+      { id: 11, cod: 'ENT04', img: 'https://images.unsplash.com/photo-1535400255456-984241443b29?w=300&auto=format&fit=crop&q=80' }, // Ceviche
+      { id: 12, cod: 'PLA01', img: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80' }, // Rib Eye
+      { id: 14, cod: 'HAM01', img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80' }, // Hamburguesa
+      { id: 16, cod: 'POS01', img: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=300&auto=format&fit=crop&q=80' }  // Tres Leches
+    ];
+
+    fotosPlatillos.forEach(f => {
+      db.run('UPDATE Productos SET imagen_url = ? WHERE codigo = ? OR id = ?', [f.img, f.cod, f.id]);
     });
   });
 }

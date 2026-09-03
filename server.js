@@ -18,7 +18,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// WebSockets para tiempo real (KDS Cocina / Barra / Meseros)
+// WebSockets para tiempo real (KDS Cocina / Barra / Meseros / Admin)
 io.on('connection', (socket) => {
   console.log('🔌 Terminal conectada (Socket ID):', socket.id);
 
@@ -33,7 +33,307 @@ const dbGet = (sql, params = []) => new Promise((res, rej) => db.get(sql, params
 const dbRun = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, function(err) { err ? rej(err) : res(this); }));
 
 // ============================================================================
-// 1. MESAS & DISTRIBUCIÓN DEL SALÓN (DRAG & DROP)
+// 1. AUTENTICACIÓN & LOGIN CON PERFIL DE GÉNERO
+// ============================================================================
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { usuario, password } = req.body;
+    if (!usuario || !password) {
+      return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+    }
+
+    const u = await dbGet('SELECT * FROM Usuarios WHERE usuario = ? AND password = ? AND activo = 1', [usuario.trim(), password.trim()]);
+    if (!u) {
+      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario y contraseña.' });
+    }
+
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
+
+    // Adaptación dinámica de género para el rol
+    let rolEtiqueta = u.rol.toUpperCase();
+    if (u.rol === 'salonero') {
+      rolEtiqueta = u.genero === 'F' ? 'Salonera' : 'Salonero';
+    } else if (u.rol === 'admin') {
+      rolEtiqueta = 'Administrador';
+    } else if (u.rol === 'cajero') {
+      rolEtiqueta = 'Cajero';
+    } else if (u.rol === 'developer') {
+      rolEtiqueta = 'Desarrollador Global';
+    }
+
+    const perfilVisual = `${u.nombre_completo} (${rolEtiqueta})`;
+
+    res.json({
+      ok: true,
+      usuario: {
+        id: u.id,
+        usuario: u.usuario,
+        nombre: u.nombre_completo,
+        rol: u.rol,
+        genero: u.genero,
+        rolEtiqueta,
+        perfilVisual,
+        pin: u.pin,
+        permisos: JSON.parse(u.permisos || '{}'),
+        negocio_id: u.negocio_id
+      },
+      negocio: negocio || {
+        id: 1,
+        nombre: 'GastroBar Fuego & Brasas',
+        slogan: 'Restaurante, Bar & Lounge',
+        logo_url: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80'
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// 2. PORTAL DE DESARROLLADOR (SAAS MULTI-COMERCIO & CONTROL GLOBAL)
+// ============================================================================
+// Negocios (Comercios)
+app.get('/api/dev/negocios', async (req, res) => {
+  try {
+    const negocios = await dbAll(`
+      SELECT n.*, 
+        (SELECT COUNT(*) FROM Usuarios u WHERE u.negocio_id = n.id AND u.activo = 1) as total_usuarios,
+        (SELECT COUNT(*) FROM Mesas m WHERE m.negocio_id = n.id) as total_mesas
+      FROM Negocios n
+      ORDER BY n.id ASC
+    `);
+    res.json(negocios);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/dev/negocios', async (req, res) => {
+  try {
+    const { nombre, slogan = '', logo_url = '', moneda = 'CRC', telefono = '', direccion = '' } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
+
+    const r = await dbRun(
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion) VALUES (?, ?, ?, ?, ?, ?)',
+      [nombre, slogan, logo_url, moneda, telefono, direccion]
+    );
+    const nuevo = await dbGet('SELECT * FROM Negocios WHERE id = ?', [r.lastID]);
+    io.emit('negocio_creado', nuevo);
+    res.json(nuevo);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/dev/negocios/:id', async (req, res) => {
+  try {
+    const { nombre, slogan, logo_url, moneda, telefono, direccion } = req.body;
+    await dbRun(
+      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ? WHERE id = ?',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, req.params.id]
+    );
+    const actualizado = await dbGet('SELECT * FROM Negocios WHERE id = ?', [req.params.id]);
+    io.emit('negocio_actualizado', actualizado);
+    res.json(actualizado);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Usuarios Globales (Developer ve todos los usuarios del sistema)
+app.get('/api/dev/usuarios', async (req, res) => {
+  try {
+    const usuarios = await dbAll(`
+      SELECT u.id, u.negocio_id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.permisos, u.activo,
+             n.nombre as negocio_nombre
+      FROM Usuarios u
+      LEFT JOIN Negocios n ON u.negocio_id = n.id
+      ORDER BY u.id ASC
+    `);
+    res.json(usuarios);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/dev/usuarios', async (req, res) => {
+  try {
+    const { negocio_id = 1, usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234', permisos = '{}' } = req.body;
+    if (!usuario || !password || !nombre_completo) {
+      return res.status(400).json({ error: 'Faltan datos obligatorios del usuario' });
+    }
+
+    const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos);
+
+    const r = await dbRun(
+      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocio_id, usuario.trim(), nombre_completo.trim(), password.trim(), rol, genero, pin, permisosStr]
+    );
+    res.json({ message: 'Usuario creado exitosamente', id: r.lastID });
+  } catch (e) {
+    res.status(500).json({ error: e.message.includes('UNIQUE') ? 'El nombre de usuario ya existe' : e.message });
+  }
+});
+
+app.put('/api/dev/usuarios/:id', async (req, res) => {
+  try {
+    const { nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
+    const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos || {});
+    
+    if (password) {
+      await dbRun(
+        `UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
+         WHERE id = ?`,
+        [nombre_completo, password, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
+      );
+    } else {
+      await dbRun(
+        `UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
+         WHERE id = ?`,
+        [nombre_completo, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
+      );
+    }
+    res.json({ message: 'Usuario actualizado exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/dev/usuarios/:id', async (req, res) => {
+  try {
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (target.usuario === 'dev') return res.status(403).json({ error: 'No es posible eliminar al desarrollador principal' });
+
+    await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Usuario eliminado exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// 3. GESTIÓN DE PERSONAL PARA ADMIN (AISLAMIENTO ESTRICTO: NO VE AL DEVELOPER)
+// ============================================================================
+app.get('/api/admin/empleados', async (req, res) => {
+  try {
+    const negocioId = req.query.negocio_id || 1;
+    // REGLA CRÍTICA: Nunca mostrar a usuarios con rol 'developer'
+    const empleados = await dbAll(`
+      SELECT id, negocio_id, usuario, nombre_completo, rol, genero, pin, activo
+      FROM Usuarios
+      WHERE negocio_id = ? AND rol != 'developer'
+      ORDER BY id ASC
+    `, [negocioId]);
+
+    // Mapear etiquetas con género
+    const listado = empleados.map(e => {
+      let rolDisplay = e.rol;
+      if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';
+      if (e.rol === 'cajero') rolDisplay = 'Cajero';
+      if (e.rol === 'admin') rolDisplay = 'Administrador';
+      return { ...e, rolDisplay };
+    });
+
+    res.json(listado);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/empleados', async (req, res) => {
+  try {
+    const { negocio_id = 1, usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234' } = req.body;
+    
+    // Bloqueo estricto: el admin NO puede crear roles developer
+    if (rol === 'developer') {
+      return res.status(403).json({ error: 'Permiso denegado: El administrador no puede crear usuarios de desarrollador' });
+    }
+
+    const permisos = rol === 'cajero' 
+      ? '{"salon":true,"caja":true,"facturacion":true}'
+      : '{"salon":true,"kds":true}';
+
+    const r = await dbRun(
+      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocio_id, usuario.trim(), nombre_completo.trim(), password.trim(), rol, genero, pin, permisos]
+    );
+
+    res.json({ message: 'Empleado registrado con éxito', id: r.lastID });
+  } catch (e) {
+    res.status(500).json({ error: e.message.includes('UNIQUE') ? 'Ese nombre de usuario ya está en uso' : e.message });
+  }
+});
+
+app.put('/api/admin/empleados/:id', async (req, res) => {
+  try {
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    // Bloqueo estricto: Jamás permitir que un admin modifique a un developer
+    if (target.rol === 'developer') {
+      return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil' });
+    }
+
+    const { nombre_completo, password, rol, genero, pin } = req.body;
+    if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
+
+    if (password) {
+      await dbRun(
+        'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ? WHERE id = ?',
+        [nombre_completo, password, rol, genero, pin, req.params.id]
+      );
+    } else {
+      await dbRun(
+        'UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ? WHERE id = ?',
+        [nombre_completo, rol, genero, pin, req.params.id]
+      );
+    }
+
+    res.json({ message: 'Empleado actualizado con éxito' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/empleados/:id', async (req, res) => {
+  try {
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
+    if (target.rol === 'developer') return res.status(403).json({ error: 'Acción prohibida' });
+
+    await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Empleado eliminado' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// 4. PERSONALIZACIÓN VISUAL DE BOTONES (FOTOS/IMÁGENES DEL MENÚ)
+// ============================================================================
+app.put('/api/productos/:id/visual', async (req, res) => {
+  try {
+    const { imagen_url, nombre, precio, color_badge } = req.body;
+    const prodId = req.params.id;
+
+    await dbRun(
+      'UPDATE Productos SET imagen_url = ?, nombre = COALESCE(?, nombre), precio = COALESCE(?, precio), color_badge = ? WHERE id = ?',
+      [imagen_url || null, nombre || null, precio || null, color_badge || null, prodId]
+    );
+
+    const actualizado = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+    io.emit('producto_visual_cambiado', actualizado);
+    res.json({ message: 'Apariencia del botón actualizada con éxito', producto: actualizado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// 5. MESAS & SALÓN (DRAG & DROP)
 // ============================================================================
 app.get('/api/mesas', async (req, res) => {
   try {
@@ -51,10 +351,9 @@ app.get('/api/mesas', async (req, res) => {
   }
 });
 
-// Guardar coordenadas de mesas en lote desde el editor visual Drag & Drop
 app.post('/api/mesas/posiciones', async (req, res) => {
   try {
-    const { posiciones } = req.body; // Array de [{ id, x, y }]
+    const { posiciones } = req.body;
     if (Array.isArray(posiciones)) {
       for (const pos of posiciones) {
         await dbRun('UPDATE Mesas SET x = ?, y = ? WHERE id = ?', [pos.x, pos.y, pos.id]);
@@ -67,7 +366,6 @@ app.post('/api/mesas/posiciones', async (req, res) => {
   }
 });
 
-// Agregar nueva mesa o silla de barra al plano
 app.post('/api/mesas/crear', async (req, res) => {
   try {
     const { numero, zona_id = 1, capacidad = 4, forma = 'square', x = 60, y = 60 } = req.body;
@@ -83,14 +381,9 @@ app.post('/api/mesas/crear', async (req, res) => {
   }
 });
 
-// Mover o Transferir comanda de una mesa a otra (Transfer Table)
 app.post('/api/mesas/mover', async (req, res) => {
   try {
     const { origenMesaId, destinoMesaId } = req.body;
-    if (!origenMesaId || !destinoMesaId) {
-      return res.status(400).json({ error: 'Debes indicar la mesa de origen y destino' });
-    }
-
     const mesaOrig = await dbGet('SELECT * FROM Mesas WHERE id = ?', [origenMesaId]);
     const mesaDest = await dbGet('SELECT * FROM Mesas WHERE id = ?', [destinoMesaId]);
     if (!mesaOrig || !mesaDest) return res.status(404).json({ error: 'Mesa no encontrada' });
@@ -98,10 +391,7 @@ app.post('/api/mesas/mover', async (req, res) => {
     const orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'cuenta_pedida')", [origenMesaId]);
     if (!orden) return res.status(400).json({ error: 'La mesa de origen no tiene una orden activa' });
 
-    // Actualizar mesa_id en la orden
     await dbRun('UPDATE Ordenes SET mesa_id = ? WHERE id = ?', [destinoMesaId, orden.id]);
-
-    // Actualizar estados de ambas mesas
     await dbRun('UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?', [mesaOrig.estado, mesaOrig.mesero, destinoMesaId]);
     await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL WHERE id = ?", [origenMesaId]);
 
@@ -112,25 +402,15 @@ app.post('/api/mesas/mover', async (req, res) => {
   }
 });
 
-// Unir dos mesas en una sola cuenta consolidada (Merge Tables)
 app.post('/api/mesas/unir', async (req, res) => {
   try {
     const { mesaPrincipalId, mesaSecundariaId } = req.body;
-    if (mesaPrincipalId === mesaSecundariaId) {
-      return res.status(400).json({ error: 'Debes seleccionar dos mesas distintas' });
-    }
-
     const orden1 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'cuenta_pedida')", [mesaPrincipalId]);
     const orden2 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'cuenta_pedida')", [mesaSecundariaId]);
 
-    if (!orden1 || !orden2) {
-      return res.status(400).json({ error: 'Ambas mesas deben tener órdenes activas para fusionarse' });
-    }
+    if (!orden1 || !orden2) return res.status(400).json({ error: 'Ambas mesas deben tener órdenes activas' });
 
-    // Mover todos los ítems de orden 2 a orden 1
     await dbRun('UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ?', [orden1.id, orden2.id]);
-
-    // Recalcular totales de orden 1
     const totalItems = await dbGet("SELECT SUM(subtotal) as sub FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [orden1.id]);
     const subtotal = Number(totalItems.sub) || 0;
     const servicio = Math.round(subtotal * 0.10);
@@ -138,8 +418,6 @@ app.post('/api/mesas/unir', async (req, res) => {
     const total = subtotal + servicio + iva;
 
     await dbRun("UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?", [subtotal, servicio, iva, total, orden1.id]);
-
-    // Cancelar/cerrar orden 2 y liberar mesa secundaria
     await dbRun("UPDATE Ordenes SET estado = 'fusionada', total = 0 WHERE id = ?", [orden2.id]);
     await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL WHERE id = ?", [mesaSecundariaId]);
 
@@ -151,19 +429,18 @@ app.post('/api/mesas/unir', async (req, res) => {
 });
 
 // ============================================================================
-// 2. CATÁLOGO DE MENÚ & CONTROL DE AGOTADOS ("86 LIST")
+// 6. CATÁLOGO DE MENÚ & CONTROL DE AGOTADOS ("86 LIST")
 // ============================================================================
 app.get('/api/menu', async (req, res) => {
   try {
     const categorias = await dbAll('SELECT * FROM Categorias ORDER BY id ASC');
-    const productos = await dbAll('SELECT * FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
+    const productos = await dbAll('SELECT * FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, id ASC');
     res.json({ categorias, productos });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Conmutar producto disponible / agotado (86 list)
 app.post('/api/productos/:id/toggle-86', async (req, res) => {
   try {
     const prodId = req.params.id;
@@ -181,9 +458,8 @@ app.post('/api/productos/:id/toggle-86', async (req, res) => {
 });
 
 // ============================================================================
-// 3. COMANDAS, CURSOS DE COCINA & AUDITORÍA DE ANULACIÓN
+// 7. COMANDAS, CURSOS DE COCINA & AUDITORÍA DE ANULACIÓN
 // ============================================================================
-// Obtener orden activa con sus platillos
 app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
   try {
     const mesaId = req.params.mesaId;
@@ -197,7 +473,6 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
   }
 });
 
-// Enviar o actualizar comanda a cocina/barra
 app.post('/api/comandas/enviar', async (req, res) => {
   try {
     const { mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false } = req.body;
@@ -244,7 +519,6 @@ app.post('/api/comandas/enviar', async (req, res) => {
       }
     }
 
-    // Recalcular totales de la orden
     const rows = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
     let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
 
@@ -277,7 +551,6 @@ app.post('/api/comandas/enviar', async (req, res) => {
   }
 });
 
-// Lanzar Platos Fuertes (Marchando curso 2)
 app.post('/api/comandas/lanzar-fuertes', async (req, res) => {
   try {
     const { mesaId, ordenId } = req.body;
@@ -293,7 +566,6 @@ app.post('/api/comandas/lanzar-fuertes', async (req, res) => {
   }
 });
 
-// Anulación de platillo con PIN de supervisor y registro de auditoría
 app.post('/api/comandas/anular-item', async (req, res) => {
   try {
     const { detalleId, motivo, supervisorPin, mesaNumero = 'Mesa' } = req.body;
@@ -306,18 +578,13 @@ app.post('/api/comandas/anular-item', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Ítem no encontrado' });
 
     const ahora = new Date().toISOString();
-
-    // 1. Marcar el ítem como anulado
     await dbRun("UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE id = ?", [detalleId]);
-
-    // 2. Registrar en auditoría
     await dbRun(
       `INSERT INTO Anulaciones (orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, fecha_hora)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, ahora]
     );
 
-    // 3. Recalcular la orden
     const totalItems = await dbGet("SELECT SUM(subtotal) as sub FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [item.orden_id]);
     const subtotal = Number(totalItems.sub) || 0;
     const servicio = Math.round(subtotal * 0.10);
@@ -334,7 +601,7 @@ app.post('/api/comandas/anular-item', async (req, res) => {
 });
 
 // ============================================================================
-// 4. KITCHEN DISPLAY SYSTEM (KDS)
+// 8. KITCHEN DISPLAY SYSTEM (KDS)
 // ============================================================================
 app.get('/api/kds', async (req, res) => {
   try {
@@ -362,7 +629,7 @@ app.get('/api/kds', async (req, res) => {
 
 app.post('/api/kds/:detalleId/estado', async (req, res) => {
   try {
-    const { estado } = req.body; // 'preparando', 'listo', 'servido'
+    const { estado } = req.body;
     const horaListo = estado === 'listo' ? new Date().toISOString() : null;
     await dbRun('UPDATE DetalleOrden SET estado_comanda = ?, hora_listo = COALESCE(?, hora_listo) WHERE id = ?', [estado, horaListo, req.params.detalleId]);
     
@@ -374,7 +641,7 @@ app.post('/api/kds/:detalleId/estado', async (req, res) => {
 });
 
 // ============================================================================
-// 5. COBRO, CAJA & CONTROL DE PROPINAS (TIP POOL)
+// 9. COBRO, CAJA & CONTROL DE PROPINAS (TIP POOL)
 // ============================================================================
 app.post('/api/ordenes/:id/cobrar', async (req, res) => {
   try {
@@ -388,16 +655,13 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
     const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
     const cajaId = caja ? caja.id : null;
 
-    // Registrar pago
     await dbRun(
       'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
     );
 
-    // Cerrar orden
     await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE id = ?", [ahora, ordenId]);
 
-    // Liberar mesa
     if (orden.mesa_id) {
       await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL WHERE id = ?", [orden.mesa_id]);
       io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0 });
@@ -409,7 +673,6 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
   }
 });
 
-// Estado de la caja activa y Tip Pool por mesero
 app.get('/api/caja/actual', async (req, res) => {
   try {
     const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
@@ -424,7 +687,6 @@ app.get('/api/caja/actual', async (req, res) => {
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id DESC', [caja.id]);
 
-    // Reporte de Propinas (Tip Pool) por mesero del turno
     const tipPool = await dbAll(`
       SELECT 
         COALESCE(p.mesero, 'Mesero General') as nombre,
@@ -443,13 +705,12 @@ app.get('/api/caja/actual', async (req, res) => {
 });
 
 // ============================================================================
-// 6. FACTURACIÓN ELECTRÓNICA EXPRESS
+// 10. FACTURACIÓN ELECTRÓNICA EXPRESS
 // ============================================================================
 app.post('/api/facturacion/consultar-cliente', (req, res) => {
   const { id } = req.body;
   if (!id) return res.status(400).json({ error: 'Cédula requerida' });
 
-  // Simulación de respuesta inmediata de Registro Nacional / Hacienda
   res.json({
     cedula: id,
     nombre: 'CORPORACIÓN GASTRONÓMICA S.A.',
@@ -484,7 +745,7 @@ app.post('/api/facturacion/emitir', async (req, res) => {
 });
 
 // ============================================================================
-// 7. AUTOSERVICIO EN MESA POR QR (PORTAL MÓVIL DEL CLIENTE)
+// 11. AUTOSERVICIO EN MESA POR QR (PORTAL MÓVIL DEL CLIENTE)
 // ============================================================================
 app.get('/api/cliente/mesa/:mesaId', async (req, res) => {
   try {
@@ -502,7 +763,6 @@ app.get('/api/cliente/mesa/:mesaId', async (req, res) => {
   }
 });
 
-// Cliente solicita la cuenta desde su teléfono móvil
 app.post('/api/cliente/mesa/:mesaId/pedir-cuenta', async (req, res) => {
   try {
     const mesaId = req.params.mesaId;

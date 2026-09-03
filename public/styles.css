@@ -1706,3 +1706,621 @@ textarea:focus, select:focus, input:focus {
   font-weight: 700;
   font-size: 0.8rem;
 }
+
+
+/* ============================================================================
+   1. LANDING & LOGIN PAGE MODERNA (ESTILO GASTROBAR / RESTAURANTE)
+   ============================================================================ */
+.landing-hero-view {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(circle at center, #1e1b4b 0%, #030712 100%);
+  color: #fff;
+  overflow-y: auto;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.landing-hero-view.active {
+  display: flex;
+}
+
+.landing-backdrop-overlay {
+  position: absolute;
+  inset: 0;
+  background: url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1600&auto=format&fit=crop&q=80') center/cover no-repeat;
+  opacity: 0.15;
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+.landing-content {
+  position: relative;
+  z-index: 2;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+}
+
+.landing-brand-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ea580c, #b91c1c);
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  box-shadow: 0 0 15px rgba(234, 88, 12, 0.5);
+}
+
+.landing-header h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+  background: linear-gradient(to right, #ffffff, #93c5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-header p {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  line-height: 1.4;
+  margin-bottom: 24px;
+}
+
+.landing-login-box {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(56, 189, 248, 0.15);
+  text-align: left;
+}
+
+.login-card-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.login-logo-circle {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 10px;
+  background: #1e293b;
+  border: 1px solid #38bdf8;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.login-card-header h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.login-card-header p {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.btn-login-submit {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+  margin-top: 18px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+}
+
+.btn-login-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.6);
+}
+
+.demo-accounts-box {
+  margin-top: 22px;
+  border-top: 1px solid #334155;
+  padding-top: 16px;
+}
+
+.demo-title {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 10px;
+}
+
+.demo-chips-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.chip-account {
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.chip-account:hover {
+  border-color: #38bdf8;
+  background: #0f172a;
+  transform: translateY(-1px);
+}
+
+.chip-account.dev { border-color: #a855f7; color: #c084fc; }
+.chip-account.admin { border-color: #eab308; color: #fde047; }
+.chip-account.cajero { border-color: #10b981; color: #34d399; }
+.chip-account.salonero { border-color: #38bdf8; color: #7dd3fc; }
+.chip-account.salonera { border-color: #ec4899; color: #f472b6; }
+
+/* ============================================================================
+   2. PORTAL EXCLUSIVO DE DESARROLLADOR (SAAS CONSOLE)
+   ============================================================================ */
+.dev-portal-container {
+  display: none;
+  min-height: 100vh;
+  background: #090d16;
+  color: #fff;
+  flex-direction: column;
+}
+
+.dev-portal-container.active {
+  display: flex;
+}
+
+.dev-header {
+  height: 60px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.dev-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  background: #6b21a8;
+  color: #f3e8ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.dev-brand h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  display: inline-block;
+  margin-left: 8px;
+}
+
+.dev-user-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dev-user-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #c084fc;
+}
+
+.btn-dev-logout, .btn-user-logout {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #f87171;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.btn-dev-logout:hover, .btn-user-logout:hover {
+  background: #7f1d1d;
+  color: #fff;
+}
+
+.dev-body-layout {
+  display: flex;
+  flex: 1;
+}
+
+.dev-sidebar {
+  width: 240px;
+  background: #0b1120;
+  border-right: 1px solid #1e293b;
+  padding: 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dev-nav-btn {
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 0.88rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dev-nav-btn.active, .dev-nav-btn:hover {
+  background: #1e293b;
+  color: #38bdf8;
+}
+
+.dev-main-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.dev-tab-panel {
+  display: none;
+}
+
+.dev-tab-panel.active {
+  display: block;
+}
+
+.panel-header-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.panel-header-action h3 {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.panel-header-action p {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.negocios-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.negocio-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.negocio-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.negocio-logo-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid #334155;
+  background: #1e293b;
+}
+
+.negocio-details h4 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.negocio-details small {
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.negocio-meta-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  background: #1e293b;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.negocio-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-open-pos-as {
+  flex: 1;
+  padding: 8px;
+  background: #0284c7;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.btn-edit-negocio {
+  padding: 8px 12px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #93c5fd;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.dev-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #0f172a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  font-size: 0.85rem;
+}
+
+.dev-table th, .dev-table td {
+  padding: 12px;
+  border-bottom: 1px solid #1e293b;
+  text-align: left;
+}
+
+.dev-table th {
+  background: #1e293b;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.db-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.db-stat-box {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.db-stat-box span {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #38bdf8;
+  display: block;
+}
+
+.db-stat-box small {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+/* ============================================================================
+   3. PERSONALIZACIÓN VISUAL DE BOTONES (FOTOS APETITOSAS)
+   ============================================================================ */
+.brand-custom-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #38bdf8;
+}
+
+.admin-extra-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-topbar-tool {
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+  color: #93c5fd;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-topbar-tool:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+/* TARJETAS DE PRODUCTOS CON FOTOS EN COMANDERO */
+.products-one-tap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.prod-card-one-tap {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  min-height: 140px;
+}
+
+.prod-card-one-tap:hover {
+  transform: translateY(-2px);
+  border-color: #38bdf8;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.25);
+}
+
+.prod-card-one-tap:active {
+  transform: scale(0.97);
+}
+
+.prod-card-thumb {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  background: #1e293b;
+}
+
+.prod-card-no-thumb {
+  width: 100%;
+  height: 80px;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+.prod-card-content {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+}
+
+.prod-card-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.2;
+}
+
+.prod-card-price {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #38bdf8;
+  margin-top: 4px;
+}
+
+.prod-badge-promo {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #ea580c;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+/* MODAL DE PERSONALIZAR BOTONES */
+.boton-custom-dialog {
+  width: 600px;
+  max-width: 94vw;
+}
+
+.gallery-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.preset-photo-thumb {
+  width: 100%;
+  height: 55px;
+  border-radius: 6px;
+  object-fit: cover;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.preset-photo-thumb:hover, .preset-photo-thumb.selected {
+  border-color: #38bdf8;
+  transform: scale(1.05);
+}
+
+.custom-button-preview-box {
+  background: #090d16;
+  border-radius: 10px;
+  border: 1px dashed #334155;
+  padding: 16px;
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.preview-card {
+  width: 150px;
+  pointer-events: none;
+}
+
+/* STAFF FORM */
+.staff-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  background: #090d16;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #1e293b;
+}
+
+.admin-staff-dialog {
+  width: 680px;
+  max-width: 94vw;
+}
