@@ -800,6 +800,7 @@ async function cargarMesasDesdeBackend() {
     estado.mesas = (data.mesas || []).map(m => {
       const zonaObj = estado.zonas.find(z => z.id === m.zona_id);
       return {
+        ...m,
         id: m.id,
         numero: m.numero,
         zona: zonaObj ? zonaObj.nombre.toLowerCase().replace(/[^a-z]/g, '') : 'salon',
@@ -817,7 +818,14 @@ async function cargarMesasDesdeBackend() {
         platos_pendientes: m.platos_pendientes || m.items_pendientes || [],
         items_pendientes: m.items_pendientes || m.platos_pendientes || [],
         primera_comanda_hora: m.primera_comanda_hora || null,
-        minutos_espera: m.minutos_espera != null ? m.minutos_espera : 0
+        minutos_espera: m.minutos_espera != null ? m.minutos_espera : 0,
+        es_mesa_unida: Boolean(m.es_mesa_unida),
+        unida_con: m.unida_con || null,
+        mesas_unidas: m.mesas_unidas || [],
+        grupo_mesas: m.grupo_mesas || null,
+        es_mesa_agrupada: Boolean(m.es_mesa_agrupada),
+        es_mesa_secundaria_unida: Boolean(m.es_mesa_secundaria_unida),
+        unida_a_numero: m.unida_a_numero || null
       };
     });
 
@@ -910,12 +918,12 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    const tieneFusiónActiva = Boolean(m.es_mesa_unida && (m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas));
+    const tieneFusiónActiva = Boolean(m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas);
     if (tieneFusiónActiva) {
       const otros = (m.mesas_unidas && m.mesas_unidas.length > 0)
         ? m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join('+')
         : (m.unida_con ? m.unida_con.toString().replace(/mesa\s*/i, '') : '');
-      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
+      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
     }
 
     card.innerHTML = `
@@ -1146,7 +1154,7 @@ function agregarDragMesa(card, mesaData, canvas) {
     dragState.timer = setTimeout(() => {
       if (!isTouchDown) return;
       
-      const estaUnida = Boolean(mesaData.es_mesa_unida && (mesaData.unida_con || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.grupo_mesas));
+      const estaUnida = Boolean(mesaData.es_mesa_unida || mesaData.unida_con || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.grupo_mesas);
       if (estaUnida) {
         const nombreUnidas = (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0)
           ? mesaData.mesas_unidas.join(', ')
@@ -1415,7 +1423,7 @@ async function solicitarSepararMesas(mesaId) {
   const mesa = estado.mesas.find(m => m.id === mesaId);
   if (!mesa) return;
 
-  const estaUnida = Boolean(mesa.es_mesa_unida && (mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.grupo_mesas));
+  const estaUnida = Boolean(mesa.es_mesa_unida || mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.grupo_mesas);
   if (!estaUnida) {
     mostrarNotificacionCentro(`La Mesa ${mesa.numero} no se encuentra unida. Ya es una mesa individual.`, 'info');
     return;
@@ -1523,7 +1531,7 @@ async function abrirComanderoMesa(mesaId) {
 
       // Detectar si hay ítems de otras mesas unidas o si la mesa es secundaria unida
       // Detectar si la mesa está activamente unida a otra mesa
-      const esUnidaReal = Boolean(mesa.es_mesa_unida && (mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.es_mesa_secundaria_unida || mesa.grupo_mesas));
+      const esUnidaReal = Boolean(mesa.es_mesa_unida || mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.es_mesa_secundaria_unida || mesa.grupo_mesas);
 
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
@@ -2055,7 +2063,7 @@ function cargarSelectoresMoverUnir() {
 
   const ocupadas = estado.mesas.filter(m => m.estado !== 'libre');
   const libres = estado.mesas.filter(m => m.estado === 'libre');
-  const fusionadas = estado.mesas.filter(m => m.es_mesa_unida && (m.grupo_mesas || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida));
+  const fusionadas = estado.mesas.filter(m => (m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida) && m.estado !== 'libre');
 
   if (ocupadas.length === 0) {
     selOrig.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';

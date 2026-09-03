@@ -524,17 +524,20 @@ app.get('/api/mesas', async (req, res) => {
       } catch (_) {}
 
       const mergeActivo = activeMerges.find(
-        am => am.mesa_principal_id === m.id || am.mesa_secundaria_id === m.id
+        am => Number(am.mesa_principal_id) === Number(m.id) || Number(am.mesa_secundaria_id) === Number(m.id)
       );
 
       let todasUnidas = [];
+      if (m.unida_con) {
+        todasUnidas.push(m.unida_con);
+      }
       if (mergeActivo) {
-        if (m.id === mergeActivo.mesa_principal_id) {
+        if (Number(m.id) === Number(mergeActivo.mesa_principal_id)) {
           try {
             const sA = JSON.parse(mergeActivo.snapshot_a);
             if (sA && sA.mesa_numero) todasUnidas.push(sA.mesa_numero);
           } catch (_) {}
-        } else if (m.id === mergeActivo.mesa_secundaria_id) {
+        } else if (Number(m.id) === Number(mergeActivo.mesa_secundaria_id)) {
           try {
             const sB = JSON.parse(mergeActivo.snapshot_b);
             if (sB && sB.mesa_numero) todasUnidas.push(sB.mesa_numero);
@@ -544,7 +547,7 @@ app.get('/api/mesas', async (req, res) => {
 
       // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
       const secundariasEnlazadas = mesas
-        .filter(sec => sec.unida_a_mesa_id === m.id)
+        .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
         .map(sec => sec.numero);
 
       // Detectar mesas en el mismo grupo visual
@@ -571,8 +574,10 @@ app.get('/api/mesas', async (req, res) => {
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
       m.mesas_unidas = todasUnidas;
-      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo);
-      if (!m.es_mesa_unida) {
+      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo) || Boolean(m.unida_con);
+      if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
+        m.unida_con = todasUnidas[0];
+      } else if (!m.es_mesa_unida) {
         m.unida_con = null;
       }
     }
