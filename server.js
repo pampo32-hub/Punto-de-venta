@@ -45,6 +45,12 @@ db.serialize(() => {
       console.log(`🍸 Happy Hour cargado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}`);
     }
   });
+
+  // Migraciones automáticas para trazabilidad y unión/separación de mesas
+  db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero TEXT", () => {});
+  db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_id INTEGER", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN unida_a_mesa_id INTEGER", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN unida_con TEXT", () => {});
 });
 
 // Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
@@ -490,10 +496,21 @@ app.get('/api/mesas', async (req, res) => {
         return it.nombre_producto;
       });
 
+      // Detectar si la mesa tiene consumos fusionados de otras mesas
+      const origenesFusionados = [
+        ...new Set(
+          items
+            .map(it => it.origen_mesa_numero)
+            .filter(num => num && String(num) !== String(m.numero))
+        )
+      ];
+
       m.platos_pendientes = platosPendientes;
       m.items_pendientes = platosPendientes;
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
+      m.mesas_unidas = origenesFusionados;
+      m.es_mesa_unida = origenesFusionados.length > 0;
     }
 
     res.json({ zonas, mesas });
@@ -647,6 +664,130 @@ app.post('/api/mesas/unir', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// Separar mesas previamente unidas (deshacer fusión restaurando cuentas originales)
+app.post('/api/mesas/separar', async (req, res) => {
+  try {
+    const { mesaId } = req.body;
+    if (!mesaId) return res.status(400).json({ error: 'ID de mesa requerido' });
+
+    const mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesaPrincipal) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    const ordenPrincipal = await dbGet(
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      [mesaId]
+    );
+    if (!ordenPrincipal) {
+      return res.status(400).json({ error: 'La mesa no tiene una cuenta activa para separar' });
+    }
+
+    // Buscar ítems que pertenezcan originalmente a otra mesa
+    const items = await dbAll(
+      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+      [ordenPrincipal.id]
+    );
+
+    const origenesSecundarios = [
+      ...new Set(
+        items
+          .map(it => it.origen_mesa_numero)
+          .filter(num => num && String(num) !== String(mesaPrincipal.numero))
+      )
+    ];
+
+    if (origenesSecundarios.length === 0) {
+      return res.status(400).json({ error: 'Esta mesa no tiene consumos fusionados de otras mesas' });
+    }
+
+    const mesasRestauradas = [];
+
+    for (const origenNum of origenesSecundarios) {
+      let mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero = ?', [origenNum]);
+      if (!mesaSec) {
+        mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero LIKE ?', [`%${origenNum}%`]);
+      }
+      if (!mesaSec) continue;
+
+      // Buscar orden previa 'fusionada' de esa mesa o crear una nueva
+      let ordenSec = await dbGet(
+        "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado = 'fusionada' ORDER BY id DESC LIMIT 1",
+        [mesaSec.id]
+      );
+
+      const ahora = new Date().toISOString();
+      if (!ordenSec) {
+        const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+        const r = await dbRun(
+          "INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado) VALUES (?, ?, ?, ?, ?, 'abierta')",
+          [numOrden, mesaSec.id, 'Cliente General', mesaPrincipal.mesero || 'Juan Jival', ahora]
+        );
+        ordenSec = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
+      }
+
+      // Mover los ítems de esta mesa secundaria de vuelta a su orden
+      await dbRun(
+        'UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ? AND origen_mesa_numero = ?',
+        [ordenSec.id, ordenPrincipal.id, origenNum]
+      );
+
+      // Recalcular orden secundaria
+      const itemsSec = await dbAll(
+        "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+        [ordenSec.id]
+      );
+      const subSec = itemsSec.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+      const servSec = Math.round(subSec * 0.10);
+      const ivaSec = Math.round(subSec * 0.13);
+      const totSec = subSec + servSec + ivaSec;
+      const estadoSec = evaluarEstadoMesaKDS(itemsSec);
+
+      await dbRun(
+        'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+        [subSec, servSec, ivaSec, totSec, estadoSec, ordenSec.id]
+      );
+      await dbRun(
+        'UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?',
+        [estadoSec, mesaPrincipal.mesero || 'Juan Jival', mesaSec.id]
+      );
+
+      io.emit('mesa_actualizada', { mesaId: mesaSec.id, estado: estadoSec, total: totSec });
+      mesasRestauradas.push({ id: mesaSec.id, numero: mesaSec.numero, total: totSec, estado: estadoSec });
+    }
+
+    // Recalcular orden principal con los ítems restantes
+    const itemsRestantes = await dbAll(
+      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+      [ordenPrincipal.id]
+    );
+    const subPrinc = itemsRestantes.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+    const servPrinc = Math.round(subPrinc * 0.10);
+    const ivaPrinc = Math.round(subPrinc * 0.13);
+    const totPrinc = subPrinc + servPrinc + ivaPrinc;
+    const estadoPrinc = evaluarEstadoMesaKDS(itemsRestantes);
+
+    await dbRun(
+      'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+      [subPrinc, servPrinc, ivaPrinc, totPrinc, estadoPrinc, ordenPrincipal.id]
+    );
+    await dbRun(
+      'UPDATE Mesas SET estado = ? WHERE id = ?',
+      [estadoPrinc, mesaPrincipal.id]
+    );
+
+    io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id, ordenId: ordenPrincipal.id });
+    io.emit('mesa_actualizada', { mesaId: mesaPrincipal.id, estado: estadoPrinc, total: totPrinc });
+
+    res.json({
+      message: `Mesas separadas con éxito. Se restauraron ${mesasRestauradas.length} mesa(s).`,
+      mesaPrincipal: { id: mesaPrincipal.id, numero: mesaPrincipal.numero, total: totPrinc, estado: estadoPrinc },
+      mesasRestauradas
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 
 

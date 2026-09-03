@@ -592,15 +592,21 @@
       const itemsList = document.getElementById('cuentaItemsList');
       document.getElementById('cuentaOrdenNumero').textContent = 'Orden #' + (datosMesa.orden.numero_orden || 'ACTIVA');
 
-      itemsList.innerHTML = datosMesa.items.map(it => `
-        <div class="cuenta-item-row">
-          <div class="item-qty-name">
-            <span class="item-title">${it.cantidad}x ${it.nombre_producto}</span>
-            <span class="item-sub">${formatCRC(it.precio_unitario)} c/u ${it.notas ? '• ' + it.notas : ''}</span>
+      itemsList.innerHTML = datosMesa.items.map(it => {
+        const origenBadge = (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(datosMesa.mesa.numero))
+          ? `<span style="display:inline-block; background:rgba(56,189,248,0.25); color:#38bdf8; font-size:0.75rem; font-weight:800; padding:2px 6px; border-radius:6px; margin-right:5px;">[${it.origen_mesa_numero.toString().toLowerCase().includes('mesa') ? it.origen_mesa_numero : 'Mesa ' + it.origen_mesa_numero}]</span>`
+          : '';
+
+        return `
+          <div class="cuenta-item-row">
+            <div class="item-qty-name">
+              <span class="item-title">${it.cantidad}x ${origenBadge}${it.nombre_producto}</span>
+              <span class="item-sub">${formatCRC(it.precio_unitario)} c/u ${it.notas ? '• ' + it.notas : ''}</span>
+            </div>
+            <span class="item-total-price">${formatCRC(it.precio_unitario * it.cantidad)}</span>
           </div>
-          <span class="item-total-price">${formatCRC(it.precio_unitario * it.cantidad)}</span>
-        </div>
-      `).join('');
+        `;
+      }).join('');
 
       const sub = datosMesa.orden.subtotal || 0;
       const serv = datosMesa.orden.servicio || Math.round(sub * 0.10);

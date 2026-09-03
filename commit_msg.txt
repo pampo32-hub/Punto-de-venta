@@ -1,8 +1,0 @@
-fix: corregir drag & drop de mesas, motor de arrastre con pointer events, modal de fusionar/mover mesas e indicadores visuales
-
-- Agregado modal HTML modalMoverUnir completo en index.html
-- Estilos CSS para el modal de mover/unir y efectos visuales de drag & drop (mesa-drop-target-move, mesa-drop-target-merge, dragGhost)
-- Motor unificado de Pointer Events en app.js con umbral de 280ms y tolerancia de jitter de 12px
-- Detección precisa de mesas destino mediante document.elementsFromPoint
-- Fusión y movimiento de mesas funcional tanto por arrastre como por el modal con selectores interactivos
-- 58/58 pruebas E2E pasando exitosamente

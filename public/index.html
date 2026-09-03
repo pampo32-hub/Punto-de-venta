@@ -456,6 +456,20 @@
           <button class="btn-icon-close" id="btnCloseComandero">✕</button>
         </div>
 
+        <!-- Banner de Mesa Fusionada con Botón Rápido de Separar -->
+        <div id="comMergedBanner" class="merged-table-banner" style="display:none;">
+          <div class="merged-banner-left">
+            <span class="merged-icon">🔗</span>
+            <div>
+              <strong id="comMergedBannerTxt">Mesa Unida</strong>
+              <small style="display:block; font-size:0.75rem; color:#94a3b8;">Los platillos muestran la mesa de origen</small>
+            </div>
+          </div>
+          <button class="btn-separar-mini" id="btnSepararComandero" title="Deshacer unión y separar cuentas">
+            ✂️ Separar Mesas
+          </button>
+        </div>
+
         <div class="ticket-body" id="comTicketItemsList"></div>
 
         <div class="ticket-bottom">
@@ -814,6 +828,7 @@
       <div class="transfer-tabs-selector">
         <button class="transfer-tab active" data-tab="mover">🔁 Mover Mesa (Reasignar)</button>
         <button class="transfer-tab" data-tab="unir">🔗 Unir Mesas (Fusionar Cuentas)</button>
+        <button class="transfer-tab" data-tab="separar">✂️ Separar Mesas Unidas</button>
       </div>
       <div class="dialog-body">
         <!-- Panel Mover -->
@@ -845,6 +860,18 @@
           </div>
           <button class="btn-pri danger" id="btnEjecutarUnirMesas" style="margin-top:20px; width:100%; background:linear-gradient(135deg, #f59e0b, #d97706); color:#000; font-weight:800;">
             🔗 Confirmar y Fusionar Cuentas
+          </button>
+        </div>
+
+        <!-- Panel Separar -->
+        <div class="transfer-panel" id="transferPanelSeparar">
+          <p class="panel-info-txt" style="border-left-color: #ef4444;">Deshace la unión de mesas fusionadas por error y restaura las cuentas originales por separado a cada mesa.</p>
+          <div class="field-group">
+            <label>Selecciona la Mesa Fusionada que deseas Separar:</label>
+            <select id="selSepararMesa" class="select-styled"></select>
+          </div>
+          <button class="btn-pri danger" id="btnEjecutarSepararMesas" style="margin-top:20px; width:100%; background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; font-weight:800;">
+            ✂️ Confirmar y Separar Cuentas
           </button>
         </div>
       </div>

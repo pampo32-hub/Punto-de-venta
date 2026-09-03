@@ -3258,3 +3258,78 @@ textarea:focus, select:focus, input:focus {
   box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
 
+/* ==========================================================================
+   TRAZABILIDAD DE MESAS UNIDAS & DESGLOSE POR MESA
+   ========================================================================== */
+.mesa-origin-badge {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(3, 105, 161, 0.35));
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.m-merged-badge {
+  display: inline-block;
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+.merged-table-banner {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 8px 12px 4px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.15);
+}
+
+.merged-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.merged-banner-left .merged-icon {
+  font-size: 1.3rem;
+}
+
+.btn-separar-mini {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-separar-mini:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+}
+
+.btn-separar-mini:active {
+  transform: translateY(1px);
+}
+
+
