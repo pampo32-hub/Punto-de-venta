@@ -30,20 +30,29 @@
         <div class="search-dropdown" id="searchDropdown"></div>
       </div>
 
+      <!-- BOTÓN HAPPY HOUR AUTOMÁTICO / TOGGLE -->
+      <div class="happy-hour-pill" id="btnToggleHappyHour" title="Toca para activar o desactivar Happy Hour">
+        <span class="hh-icon">🍸</span>
+        <div class="hh-info">
+          <span class="hh-title">HAPPY HOUR 2x1</span>
+          <small id="hhStatusTxt">Activado (4 PM - 7 PM)</small>
+        </div>
+      </div>
+
       <!-- MENÚS DE NAVEGACIÓN -->
       <nav class="nav-pills">
         <button class="nav-pill active" data-view="salon">
           <span class="pill-icon">🗺️</span> Salón & Mesas
         </button>
         <button class="nav-pill" data-view="editor-plano">
-          <span class="pill-icon">📐</span> Editor de Salón
+          <span class="pill-icon">📐</span> Editor Salón
         </button>
         <button class="nav-pill" data-view="kds">
           <span class="pill-icon">🍳</span> Cocina & Barra
           <span class="pill-counter" id="kdsCounter">3</span>
         </button>
         <button class="nav-pill" data-view="caja">
-          <span class="pill-icon">💵</span> Caja & Turno
+          <span class="pill-icon">💵</span> Caja & Propinas
         </button>
         <button class="nav-pill" data-view="facturacion">
           <span class="pill-icon">⚡</span> Facturación Express
@@ -79,18 +88,26 @@
             <button class="zone-tab active" data-zona="todas">Todas las Zonas</button>
             <button class="zone-tab" data-zona="salon">Salón Principal</button>
             <button class="zone-tab" data-zona="barra">Barra / Bar</button>
-            <button class="zone-tab" data-zona="terraza">Terraza al Aire Libre</button>
+            <button class="zone-tab" data-zona="terraza">Terraza</button>
             <button class="zone-tab" data-zona="vip">Zona VIP</button>
           </div>
 
-          <button class="btn-quick-action" id="btnIrEditorSalon">
-            ✏️ Mover / Organizar Mesas
-          </button>
+          <div class="salon-quick-tools">
+            <button class="btn-quick-action" id="btnAbrirMoverUnirModal">
+              🔄 Mover / Unir Mesas
+            </button>
+            <button class="btn-quick-action" id="btnGestionarAgotados">
+              ⛔ Lista Agotados (86)
+            </button>
+            <button class="btn-quick-action" id="btnIrEditorSalon">
+              📐 Diseñar Salón
+            </button>
+          </div>
         </div>
 
         <div class="salon-container" id="salonContainer">
           <div class="mesas-canvas-view" id="mesasCanvasView">
-            <!-- Renderizado dinámico de mesas según posición X/Y -->
+            <!-- Renderizado dinámico de mesas -->
           </div>
         </div>
       </section>
@@ -101,7 +118,7 @@
       <section id="view-editor-plano" class="pos-view">
         <div class="view-subbar">
           <div class="editor-help-text">
-            <strong>📐 Diseñador del Local:</strong> Arrastra y suelta las mesas a su posición física real. Agrega nuevas mesas y guarda el diseño.
+            <strong>📐 Diseñador del Local:</strong> Arrastra y suelta las mesas a su posición real en la sala. Agrega nuevas mesas y guarda los cambios.
           </div>
           <div class="editor-actions">
             <button class="btn-tool" id="btnAgregarMesaCuadrada">➕ Mesa Cuadrada</button>
@@ -120,7 +137,7 @@
       </section>
 
       <!-- =================================================================== -->
-      <!-- VISTA 3: PANTALLA DE COCINA Y BARRA (KDS) -->
+      <!-- VISTA 3: PANTALLA DE COCINA Y BARRA (KDS CON AUDIO CHIME) -->
       <!-- =================================================================== -->
       <section id="view-kds" class="pos-view">
         <div class="view-subbar">
@@ -129,19 +146,24 @@
             <button class="kds-tab" data-kds-dest="barra">🍸 Barra & Bebidas</button>
             <button class="kds-tab" data-kds-dest="todos">📋 Todas las Comandas</button>
           </div>
-          <span class="kds-live-tag">⚡ Enlace en tiempo real activo</span>
+          <div class="kds-audio-controls">
+            <button class="btn-bell" id="btnTestBellSound" title="Probar sonido de comanda">🔔 Probar Campana</button>
+            <span class="kds-live-tag">⚡ Enlace en tiempo real activo</span>
+          </div>
         </div>
 
         <div class="kds-tickets-container" id="kdsTicketsContainer">
-          <!-- Tarjetas KDS con cronómetro -->
+          <!-- Tarjetas KDS con cronómetro y tiempos de cocina -->
         </div>
       </section>
 
       <!-- =================================================================== -->
-      <!-- VISTA 4: CAJA Y TURNOS -->
+      <!-- VISTA 4: CAJA, TURNOS & DISTRIBUCIÓN DE PROPINAS (TIP POOL) -->
       <!-- =================================================================== -->
       <section id="view-caja" class="pos-view">
         <div class="caja-grid-layout">
+          
+          <!-- TARJETA 1: BALANCE DE CAJA -->
           <div class="caja-card">
             <h3>💰 Turno Actual de Operación</h3>
             <div class="caja-stat-rows">
@@ -162,17 +184,46 @@
             </div>
           </div>
 
+          <!-- TARJETA 2: REPORTE DE PROPINAS Y MESEROS (TIP POOL) -->
           <div class="caja-card">
-            <h3>📊 Resumen de Comandas del Día</h3>
-            <div class="history-list" id="cajaHistoryList">
-              <!-- Historial de cobros recientes -->
+            <div class="card-title-row">
+              <h3>💵 Control de Propinas & Meseros (Tip Pool)</h3>
+              <span class="pill-counter" style="background:#10b981;">10% Servicio Salón</span>
             </div>
+            <p class="card-desc">Cálculo del 10% de ley y propinas voluntarias por colaborador del turno.</p>
+
+            <div class="tip-pool-table-wrapper">
+              <table class="tip-table">
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>Mesas</th>
+                    <th style="text-align:right;">Venta Total</th>
+                    <th style="text-align:right;">Propina (10%)</th>
+                  </tr>
+                </thead>
+                <tbody id="tipPoolTableBody">
+                  <!-- Filas dinámicas de meseros -->
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colspan="3">Fondo Total de Propinas Acumulado:</th>
+                    <th style="text-align:right; color:#38bdf8; font-size:1.1rem;" id="tipPoolTotalDisplay">₡ 30,700.00</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <button class="btn-primary" id="btnLiquidarPropinas" style="margin-top:16px; width:100%; padding:12px;">
+              📋 Imprimir Reporte de Reparto de Propinas
+            </button>
           </div>
+
         </div>
       </section>
 
       <!-- =================================================================== -->
-      <!-- VISTA 5: FACTURACIÓN EXPRESS (QR Y CÉDULA) -->
+      <!-- VISTA 5: FACTURACIÓN EXPRESS -->
       <!-- =================================================================== -->
       <section id="view-facturacion" class="pos-view">
         <div class="facturacion-layout">
@@ -228,6 +279,9 @@
           <div class="mesa-tag-header">
             <span class="mesa-title-tag" id="comMesaNumero">Mesa 1</span>
             <span class="mesa-sub-tag" id="comMesaZona">Salón Principal</span>
+            <button class="btn-qr-mesa-client" id="btnVerQrMesaCliente" title="Ver código QR para que el cliente consulte su cuenta en vivo">
+              📱 QR Cliente
+            </button>
           </div>
 
           <div class="category-chips" id="comCategoryChips">
@@ -251,12 +305,22 @@
         </div>
 
         <div class="ticket-body" id="comTicketItemsList">
-          <!-- Items del pedido -->
+          <!-- Items del pedido con tiempos de cocina -->
         </div>
 
         <div class="ticket-bottom">
+          <!-- BOTÓN LANZAR PLATOS FUERTES -->
+          <div class="kitchen-course-fire-box">
+            <button class="btn-fire-courses" id="btnLanzarPlatosFuertes">
+              🚀 Lanzar Platos Fuertes a Cocina (Marchando)
+            </button>
+          </div>
+
           <div class="ticket-calc-box">
             <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0.00</span></div>
+            <div class="calc-line" id="comHappyHourRow" style="display:none; color:#f59e0b;">
+              <span>Descuento Happy Hour:</span><span id="comHappyHourDesc">-₡ 0.00</span>
+            </div>
             <div class="calc-line"><span>Servicio Salón (10%):</span><span id="comServicio">₡ 0.00</span></div>
             <div class="calc-line"><span>I.V.A (13%):</span><span id="comIva">₡ 0.00</span></div>
             <div class="calc-line total"><span>TOTAL GENERAL:</span><span id="comTotal">₡ 0.00</span></div>
@@ -293,7 +357,14 @@
       </div>
 
       <div class="dialog-body">
-        <label class="section-label">Modificadores Rápidos Comunes (Toca para activar):</label>
+        <label class="section-label">Tiempo de Servicio (Curso de Cocina):</label>
+        <div class="course-selector-row">
+          <button class="btn-course-opt active" data-course="1">🥣 Tiempo 1: Entrada</button>
+          <button class="btn-course-opt" data-course="2">🥩 Tiempo 2: Plato Fuerte</button>
+          <button class="btn-course-opt" data-course="3">🍰 Tiempo 3: Postre / Café</button>
+        </div>
+
+        <label class="section-label" style="margin-top:14px;">Modificadores Rápidos Comunes (Toca para activar):</label>
         <div class="quick-chips-grid" id="quickModifChips">
           <button class="chip-modif" data-text="Sin cebolla">🚫 Sin cebolla</button>
           <button class="chip-modif" data-text="Extra queso (+₡500)">🧀 Extra queso (+₡500)</button>
@@ -318,14 +389,140 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL 3: SEPARACIÓN Y COMBINACIÓN DE CUENTAS (SPLIT BILLS) -->
+  <!-- MODAL 3: MOVER, TRANSFERIR Y UNIR MESAS (MERGE & TRANSFER) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalMoverUnir">
+    <div class="modal-dialog transfer-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>🔄 Mover, Transferir y Unir Mesas</h3>
+          <small>Reorganización rápida de cuentas en salón</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseMoverUnirModal">✕</button>
+      </div>
+
+      <div class="transfer-tabs">
+        <button class="transfer-tab active" data-tab="mover">🔁 Mover Mesa Completa</button>
+        <button class="transfer-tab" data-tab="unir">🔗 Unir Dos Mesas (Merge)</button>
+      </div>
+
+      <div class="dialog-body">
+        <!-- PESTAÑA MOVER -->
+        <div id="transferPanelMover" class="transfer-panel active">
+          <div class="field-group">
+            <label>Mesa de Origen (Mesa con cuenta abierta):</label>
+            <select id="selMoverOrigen" class="select-lg"></select>
+          </div>
+          <div class="transfer-arrow-down">⬇️ Trasladar a</div>
+          <div class="field-group">
+            <label>Mesa de Destino (Mesa libre donde se sienta el cliente):</label>
+            <select id="selMoverDestino" class="select-lg"></select>
+          </div>
+          <button class="btn-pri" id="btnEjecutarMoverMesa" style="margin-top:20px; width:100%; padding:14px;">
+            🔁 Mover Todos los Consumos a la Nueva Mesa
+          </button>
+        </div>
+
+        <!-- PESTAÑA UNIR -->
+        <div id="transferPanelUnir" class="transfer-panel">
+          <div class="field-group">
+            <label>Primera Mesa (Cuenta principal):</label>
+            <select id="selUnirMesa1" class="select-lg"></select>
+          </div>
+          <div class="transfer-arrow-down">➕ Combinar con</div>
+          <div class="field-group">
+            <label>Segunda Mesa (Se fusionará con la principal):</label>
+            <select id="selUnirMesa2" class="select-lg"></select>
+          </div>
+          <button class="btn-pri" id="btnEjecutarUnirMesas" style="margin-top:20px; width:100%; padding:14px;">
+            🔗 Unir Cuentas en una Sola Comanda
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 4: LISTA DE AGOTADOS EN TIEMPO REAL (86 LIST) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalAgotados">
+    <div class="modal-dialog agotados-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>⛔ Control de Productos Agotados ("86 List")</h3>
+          <small>Los productos marcados se desactivan al instante en todas las pantallas</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseAgotadosModal">✕</button>
+      </div>
+      <div class="dialog-body">
+        <p style="font-size:0.85rem; color:#9ca3af; margin-bottom:12px;">
+          Toca el interruptor para marcar un platillo o bebida como agotado:
+        </p>
+        <div class="agotados-items-list" id="agotadosItemsList">
+          <!-- Lista con interruptores -->
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-pri" id="btnGuardarAgotados">✅ Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 5: QR EN MESA PARA CLIENTE (AUTOSERVICIO & CUENTA EN VIVO) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalQrCliente">
+    <div class="modal-dialog qr-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>📱 Autoservicio en Mesa (QR para el Cliente)</h3>
+          <small id="qrMesaNombre">Mesa 1</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseQrModal">✕</button>
+      </div>
+
+      <div class="dialog-body qr-modal-body">
+        <div class="qr-code-box">
+          <div class="fake-qr-code">
+            <div class="qr-pixel-grid"></div>
+            <span class="qr-scan-label">ESCANÉAME</span>
+          </div>
+          <small style="color:#9ca3af; display:block; margin-top:8px;">
+            URL: <code>https://mirestaurante.com/m/mesa-1</code>
+          </small>
+        </div>
+
+        <!-- SIMULADOR DE PANTALLA MÓVIL DEL CLIENTE -->
+        <div class="mobile-phone-mockup">
+          <div class="phone-screen">
+            <div class="phone-header">
+              <strong>🍺 Mi Bar & Restaurante</strong>
+              <small>Tu Comanda en Vivo</small>
+            </div>
+            <div class="phone-ticket-list" id="phoneClientItems">
+              <!-- Consumos en vivo que ve el cliente en su celular -->
+            </div>
+            <div class="phone-footer">
+              <div class="phone-total">Total: <strong id="phoneClientTotal">₡ 0.00</strong></div>
+              <button class="btn-phone-pedir-cuenta" id="btnClientePideCuentaWeb">
+                🙋 Solicitar la Cuenta al Mesero
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 6: SEPARACIÓN DE CUENTAS (SPLIT BILLS) -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalSplitBill">
     <div class="modal-dialog split-dialog">
       <div class="dialog-header">
         <div>
           <h3>✂️ Separar y Dividir Cuenta (Split Bills)</h3>
-          <small id="splitMesaTitulo">Mesa 1 • Total de la cuenta: ₡ 32,500.00</small>
+          <small id="splitMesaTitulo">Mesa 1 • Total: ₡ 0.00</small>
         </div>
         <button class="btn-icon-close" id="btnCloseSplitModal">✕</button>
       </div>
@@ -337,9 +534,7 @@
 
       <!-- MODO 1: POR ÍTEMS -->
       <div class="split-body-items active" id="splitModeItemsBody">
-        <div class="split-columns-wrapper" id="splitPersonsContainer">
-          <!-- Columna Cuenta Origen y Columnas de Personas -->
-        </div>
+        <div class="split-columns-wrapper" id="splitPersonsContainer"></div>
       </div>
 
       <!-- MODO 2: PARTES IGUALES -->
@@ -354,7 +549,7 @@
 
           <div class="equal-result-box">
             <span>Cada persona debe pagar exactamente:</span>
-            <h2 id="splitMontoPorPersona">₡ 8,125.00</h2>
+            <h2 id="splitMontoPorPersona">₡ 0.00</h2>
             <small>Incluye 10% servicio y 13% IVA</small>
           </div>
         </div>
@@ -368,7 +563,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL 4: ANULACIONES Y CANCELACIONES CON PIN DE SEGURIDAD -->
+  <!-- MODAL 7: ANULACIÓN CON PIN DE SEGURIDAD -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalAnulacion">
     <div class="modal-dialog anula-dialog">
@@ -421,7 +616,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL 5: COBRO RÁPIDO Y FACTURACIÓN -->
+  <!-- MODAL 8: COBRO RÁPIDO Y FACTURACIÓN -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalCobro">
     <div class="modal-dialog cobro-dialog">
@@ -436,7 +631,7 @@
       <div class="dialog-body">
         <div class="cobro-total-banner">
           <span>Monto Total a Cancelar:</span>
-          <h1 id="cobroTotalDisplay">₡ 32,500.00</h1>
+          <h1 id="cobroTotalDisplay">₡ 0.00</h1>
         </div>
 
         <label class="section-label">Selecciona el Método de Pago:</label>
@@ -468,7 +663,7 @@
           </div>
         </div>
 
-        <div class="fe-opt-row">
+        <div class="fe-opt-row" style="margin-top:14px;">
           <label class="checkbox-container">
             <input type="checkbox" id="chkEmitirFacturaElectronica" />
             <span class="checkmark"></span>
