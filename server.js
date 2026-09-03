@@ -520,6 +520,18 @@ app.get('/api/mesas', async (req, res) => {
       // Detectar si la mesa tiene una fusión activa en TableMerges
       let activeMerges = [];
       try {
+        await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mesa_principal_id INTEGER NOT NULL,
+          mesa_secundaria_id INTEGER NOT NULL,
+          orden_principal_id INTEGER,
+          orden_secundaria_id INTEGER,
+          snapshot_a TEXT,
+          snapshot_b TEXT,
+          items_transferidos_ids TEXT,
+          creado_en TEXT,
+          activo INTEGER DEFAULT 1
+        )`);
         activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1');
       } catch (_) {}
 
@@ -746,6 +758,19 @@ app.post('/api/mesas/unir', async (req, res) => {
       items_ids: itemsB.map(i => i.id)
     });
 
+    await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mesa_principal_id INTEGER NOT NULL,
+      mesa_secundaria_id INTEGER NOT NULL,
+      orden_principal_id INTEGER,
+      orden_secundaria_id INTEGER,
+      snapshot_a TEXT,
+      snapshot_b TEXT,
+      items_transferidos_ids TEXT,
+      creado_en TEXT,
+      activo INTEGER DEFAULT 1
+    )`);
+
     await dbRun(`INSERT INTO TableMerges (
       mesa_principal_id, mesa_secundaria_id, orden_principal_id, orden_secundaria_id,
       snapshot_a, snapshot_b, items_transferidos_ids, creado_en, activo
@@ -885,6 +910,19 @@ app.post('/api/mesas/restaurar', procesarSepararMesas);
 
 async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
   try {
+    await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mesa_principal_id INTEGER NOT NULL,
+      mesa_secundaria_id INTEGER NOT NULL,
+      orden_principal_id INTEGER,
+      orden_secundaria_id INTEGER,
+      snapshot_a TEXT,
+      snapshot_b TEXT,
+      items_transferidos_ids TEXT,
+      creado_en TEXT,
+      activo INTEGER DEFAULT 1
+    )`);
+
     // 1. Buscar si existe un snapshot de TableMerges activo para esta mesa
     const activeMerge = await dbGet(
       'SELECT * FROM TableMerges WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1 ORDER BY id DESC LIMIT 1',

@@ -225,6 +225,20 @@ function initDb() {
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
     )`);
 
+    // 13. Historial de Uniones de Mesas (Snapshots para Separación Exacta)
+    db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mesa_principal_id INTEGER NOT NULL,
+      mesa_secundaria_id INTEGER NOT NULL,
+      orden_principal_id INTEGER,
+      orden_secundaria_id INTEGER,
+      snapshot_a TEXT,
+      snapshot_b TEXT,
+      items_transferidos_ids TEXT,
+      creado_en TEXT,
+      activo INTEGER DEFAULT 1
+    )`);
+
     // Sembrar Negocio Inicial
     db.get('SELECT COUNT(*) as count FROM Negocios', (err, row) => {
       if (!err && (!row || row.count === 0)) {

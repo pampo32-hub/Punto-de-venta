@@ -835,6 +835,60 @@
     </div>
   </div>
 
+  <!-- MODAL CONFIRMAR UNIÓN DE MESAS -->
+  <div class="modal-backdrop" id="modalConfirmarUnir">
+    <div class="modal-dialog" style="width: 480px; max-width: 92vw;">
+      <div class="dialog-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">🔗</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem;">Unir Mesas</h3>
+            <small style="color:var(--text-muted);">Fusionar comandas y cuentas</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" id="btnCloseConfirmarUnir">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 22px 20px;">
+        <div id="txtConfirmarUnirDesc" style="font-size: 0.95rem; line-height: 1.6; color: var(--text-main); margin: 0;">
+          ¿Deseas unir las mesas?
+        </div>
+      </div>
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px;">
+        <button class="btn-sec" id="btnCancelarConfirmarUnir">Cancelar</button>
+        <button class="btn-pri" id="btnAceptarConfirmarUnir" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; font-weight:800; padding: 10px 20px;">
+          🔗 Confirmar y Unir Mesas
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIRMAR MOVER MESA -->
+  <div class="modal-backdrop" id="modalConfirmarMover">
+    <div class="modal-dialog" style="width: 450px; max-width: 92vw;">
+      <div class="dialog-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">🔁</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem;">Mover Mesa</h3>
+            <small style="color:var(--text-muted);">Transferir orden a mesa libre</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" id="btnCloseConfirmarMover">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 22px 20px;">
+        <div id="txtConfirmarMoverDesc" style="font-size: 0.95rem; line-height: 1.6; color: var(--text-main); margin: 0;">
+          ¿Deseas mover la orden a la nueva mesa?
+        </div>
+      </div>
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px;">
+        <button class="btn-sec" id="btnCancelarConfirmarMover">Cancelar</button>
+        <button class="btn-pri" id="btnAceptarConfirmarMover" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding: 10px 20px;">
+          🔁 Confirmar Mover
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL CONFIRMAR SEPARACIÓN DE MESAS -->
   <div class="modal-backdrop" id="modalConfirmarSeparar">
     <div class="modal-dialog" style="width: 440px; max-width: 92vw;">

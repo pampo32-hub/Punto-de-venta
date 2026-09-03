@@ -1098,17 +1098,9 @@ function finalizarDrop(clientX, clientY) {
 
   const isTargetLibre = targetMesa.estado === 'libre';
   if (isTargetLibre) {
-    const opcion = confirm(`Has soltado la ${sourceMesa.numero} sobre la ${targetMesa.numero}.\n\n• [Aceptar] = 🔁 MOVER la orden a la ${targetMesa.numero}\n• [Cancelar] = Mantener en ${sourceMesa.numero}`);
-    if (opcion) {
-      ejecutarMoverMesa(sourceMesa.id, targetMesa.id);
-    }
+    mostrarModalConfirmarMover(sourceMesa, targetMesa);
   } else {
-    const totalOrigen = sourceMesa.orden_total > 0 ? formatCRC(sourceMesa.orden_total) : 'cuenta activa';
-    const totalDestino = targetMesa.orden_total > 0 ? formatCRC(targetMesa.orden_total) : 'cuenta activa';
-    const confirmar = confirm(`🔗 ¿Deseas UNIR la ${sourceMesa.numero} (${totalOrigen}) con la ${targetMesa.numero} (${totalDestino})?\n\n• Se transferirán todos los productos, cantidades, observaciones, impuestos y total de la ${sourceMesa.numero} hacia la ${targetMesa.numero}.\n• La ${targetMesa.numero} mostrará el total combinado.\n• La ${sourceMesa.numero} quedará completamente LIBRE y disponible en el salón.`);
-    if (confirmar) {
-      ejecutarUnirMesas(targetMesa.id, sourceMesa.id);
-    }
+    mostrarModalConfirmarUnir(sourceMesa, targetMesa);
   }
 }
 
@@ -1233,6 +1225,82 @@ function agregarDragMesa(card, mesaData, canvas) {
   });
 }
 
+function mostrarModalConfirmarUnir(sourceMesa, targetMesa) {
+  const modal = document.getElementById('modalConfirmarUnir');
+  if (!modal) {
+    ejecutarUnirMesas(targetMesa.id, sourceMesa.id);
+    return;
+  }
+  const totalOrigen = sourceMesa.orden_total > 0 ? formatCRC(sourceMesa.orden_total) : 'cuenta activa';
+  const totalDestino = targetMesa.orden_total > 0 ? formatCRC(targetMesa.orden_total) : 'cuenta activa';
+
+  const descEl = document.getElementById('txtConfirmarUnirDesc');
+  if (descEl) {
+    descEl.innerHTML = `
+      <div style="font-size:1.05rem; font-weight:700; margin-bottom:14px; color:var(--text-main);">
+        ¿Deseas unir la <span style="color:#38bdf8;">${escapeHtml(sourceMesa.numero)}</span> (${totalOrigen}) con la <span style="color:#38bdf8;">${escapeHtml(targetMesa.numero)}</span> (${totalDestino})?
+      </div>
+      <div style="background:rgba(2,132,199,0.12); border:1px solid rgba(2,132,199,0.3); border-radius:10px; padding:14px 16px; margin-bottom:12px;">
+        <ul style="margin:0 0 0 16px; padding:0; color:var(--text-main); font-size:0.9rem; line-height:1.6;">
+          <li>Se transferirán todos los productos, cantidades, observaciones, impuestos y total de la <strong>${escapeHtml(sourceMesa.numero)}</strong> hacia la <strong>${escapeHtml(targetMesa.numero)}</strong>.</li>
+          <li>La <strong>${escapeHtml(targetMesa.numero)}</strong> mostrará el total combinado.</li>
+          <li>La <strong>${escapeHtml(sourceMesa.numero)}</strong> quedará completamente <strong>LIBRE</strong> y disponible en el salón.</li>
+        </ul>
+      </div>
+      <span style="font-size:0.85rem; color:var(--text-muted);">ℹ️ Podrás separar las mesas en cualquier momento manteniendo presionada la ${escapeHtml(targetMesa.numero)}.</span>
+    `;
+  }
+
+  const btnAceptar = document.getElementById('btnAceptarConfirmarUnir');
+  const btnCancelar = document.getElementById('btnCancelarConfirmarUnir');
+  const btnClose = document.getElementById('btnCloseConfirmarUnir');
+
+  if (btnAceptar) {
+    btnAceptar.onclick = () => {
+      modal.classList.remove('active');
+      ejecutarUnirMesas(targetMesa.id, sourceMesa.id);
+    };
+  }
+  if (btnCancelar) btnCancelar.onclick = () => modal.classList.remove('active');
+  if (btnClose) btnClose.onclick = () => modal.classList.remove('active');
+
+  modal.classList.add('active');
+}
+
+function mostrarModalConfirmarMover(sourceMesa, targetMesa) {
+  const modal = document.getElementById('modalConfirmarMover');
+  if (!modal) {
+    ejecutarMoverMesa(sourceMesa.id, targetMesa.id);
+    return;
+  }
+  const descEl = document.getElementById('txtConfirmarMoverDesc');
+  if (descEl) {
+    descEl.innerHTML = `
+      <div style="font-size:1.05rem; font-weight:700; margin-bottom:12px; color:var(--text-main);">
+        ¿Deseas transferir la orden activa de la <span style="color:#10b981;">${escapeHtml(sourceMesa.numero)}</span> a la <span style="color:#10b981;">${escapeHtml(targetMesa.numero)}</span>?
+      </div>
+      <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:10px; padding:12px 14px; margin-bottom:8px;">
+        <span style="color:var(--text-main); font-size:0.9rem; line-height:1.5;">La ${escapeHtml(sourceMesa.numero)} quedará libre y todos sus pedidos pasarán a la ${escapeHtml(targetMesa.numero)}.</span>
+      </div>
+    `;
+  }
+
+  const btnAceptar = document.getElementById('btnAceptarConfirmarMover');
+  const btnCancelar = document.getElementById('btnCancelarConfirmarMover');
+  const btnClose = document.getElementById('btnCloseConfirmarMover');
+
+  if (btnAceptar) {
+    btnAceptar.onclick = () => {
+      modal.classList.remove('active');
+      ejecutarMoverMesa(sourceMesa.id, targetMesa.id);
+    };
+  }
+  if (btnCancelar) btnCancelar.onclick = () => modal.classList.remove('active');
+  if (btnClose) btnClose.onclick = () => modal.classList.remove('active');
+
+  modal.classList.add('active');
+}
+
 async function ejecutarMoverMesa(origenId, destinoId) {
   try {
     const res = await fetch('/api/mesas/mover', {
@@ -1242,10 +1310,10 @@ async function ejecutarMoverMesa(origenId, destinoId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    alert(`✅ ${data.message}`);
+    mostrarNotificacionCentro(`🔁 ${data.message}`, 'success');
     cargarMesasDesdeBackend();
   } catch (e) {
-    alert('❌ Error al mover mesa: ' + e.message);
+    mostrarNotificacionCentro('❌ Error al mover mesa: ' + e.message, 'error');
   }
 }
 
@@ -1258,10 +1326,10 @@ async function ejecutarUnirMesas(mesaPrincipalId, mesaSecundariaId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    alert(`✅ ${data.message}`);
+    mostrarNotificacionCentro(`🔗 ${data.message}`, 'success');
     cargarMesasDesdeBackend();
   } catch (e) {
-    alert('❌ Error al unir mesas: ' + e.message);
+    mostrarNotificacionCentro('❌ Error al unir mesas: ' + e.message, 'error');
   }
 }
 
@@ -1274,10 +1342,10 @@ async function ejecutarAgruparMesas(mesa1Id, mesa2Id) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    alert(`🔗 ${data.message}`);
+    mostrarNotificacionCentro(`🔗 ${data.message}`, 'success');
     cargarMesasDesdeBackend();
   } catch (e) {
-    alert('❌ Error al agrupar mesas: ' + e.message);
+    mostrarNotificacionCentro('❌ Error al agrupar mesas: ' + e.message, 'error');
   }
 }
 
