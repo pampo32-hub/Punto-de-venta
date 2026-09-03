@@ -705,6 +705,40 @@ app.post('/api/mesas/crear', async (req, res) => {
   }
 });
 
+// Renombrar Mesa o Silla de Barra
+const handleRenombrarMesa = async (req, res) => {
+  try {
+    const mesaId = req.params.id;
+    const { numero, nombre } = req.body;
+    const nuevoNombre = (numero || nombre || '').trim();
+    if (!nuevoNombre) {
+      return res.status(400).json({ error: 'El nombre de la mesa o silla no puede estar vacío.' });
+    }
+
+    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesa) return res.status(404).json({ error: 'Mesa o silla no encontrada.' });
+
+    // Validar que no exista otra mesa con el mismo nombre
+    const duplicada = await dbGet('SELECT * FROM Mesas WHERE LOWER(numero) = LOWER(?) AND id != ?', [nuevoNombre, mesaId]);
+    if (duplicada) {
+      return res.status(400).json({ error: `Ya existe otra mesa o silla con el nombre "${nuevoNombre}".` });
+    }
+
+    await dbRun('UPDATE Mesas SET numero = ? WHERE id = ?', [nuevoNombre, mesaId]);
+    const mesaActualizada = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+
+    io.emit('mesa_renombrada', { id: Number(mesaId), numero: nuevoNombre });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), numero: nuevoNombre });
+
+    res.json({ message: `Nombre actualizado exitosamente a "${nuevoNombre}"`, mesa: mesaActualizada });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+};
+
+app.put('/api/mesas/:id', handleRenombrarMesa);
+app.post('/api/mesas/:id/renombrar', handleRenombrarMesa);
+
 app.post('/api/mesas/mover', async (req, res) => {
   try {
     const { origenMesaId, destinoMesaId } = req.body;

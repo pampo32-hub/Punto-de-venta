@@ -1,4 +1,77 @@
 
+let mesaParaRenombrar = null;
+
+window.abrirModalRenombrarMesa = function(mesaId, nombreActual) {
+  mesaParaRenombrar = { id: mesaId, nombre: nombreActual };
+  const modal = document.getElementById('modalRenombrarMesa');
+  const txtActual = document.getElementById('txtRenombrarMesaActual');
+  const txtNuevo = document.getElementById('txtRenombrarMesaNuevo');
+
+  if (txtActual) txtActual.value = nombreActual || '';
+  if (txtNuevo) {
+    txtNuevo.value = nombreActual || '';
+    setTimeout(() => {
+      txtNuevo.focus();
+      txtNuevo.select();
+    }, 100);
+  }
+  if (modal) modal.classList.add('active');
+};
+
+window.renombrarMesaDesdeComandero = function() {
+  if (!estado.mesaActiva) return;
+  window.abrirModalRenombrarMesa(estado.mesaActiva.id, estado.mesaActiva.numero);
+};
+
+window.guardarNuevoNombreMesa = async function() {
+  if (!mesaParaRenombrar) return;
+  const txtNuevo = document.getElementById('txtRenombrarMesaNuevo');
+  const nuevoNombre = (txtNuevo ? txtNuevo.value : '').trim();
+
+  if (!nuevoNombre) {
+    alert('Por favor ingresa un nombre para la mesa o silla.');
+    return;
+  }
+
+  if (nuevoNombre === mesaParaRenombrar.nombre) {
+    document.getElementById('modalRenombrarMesa').classList.remove('active');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/mesas/' + mesaParaRenombrar.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numero: nuevoNombre })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo cambiar el nombre'));
+      return;
+    }
+
+    // Actualizar estado local
+    const m = estado.mesas.find(item => item.id === mesaParaRenombrar.id);
+    if (m) m.numero = nuevoNombre;
+    if (estado.mesaActiva && estado.mesaActiva.id === mesaParaRenombrar.id) {
+      estado.mesaActiva.numero = nuevoNombre;
+      const elNum = document.getElementById('comMesaNumero');
+      if (elNum) elNum.textContent = nuevoNombre;
+    }
+
+    document.getElementById('modalRenombrarMesa').classList.remove('active');
+    mostrarNotificacionCentro(`✏️ Nombre cambiado a "${nuevoNombre}" exitosamente`, 'success');
+
+    await cargarMesasDesdeBackend();
+    const viewEditor = document.getElementById('view-editor-plano');
+    if (viewEditor && viewEditor.classList.contains('active')) {
+      renderEditorPlano();
+    }
+  } catch (e) {
+    alert('❌ Error al actualizar el nombre: ' + e.message);
+  }
+};
+
 window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
   if (!confirm(`¿Estás seguro de que deseas eliminar "${mesaNumero}" del salón?`)) {
     return;
@@ -116,6 +189,7 @@ try {
     });
     socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
     socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
+    socket.on('mesa_renombrada', () => cargarMesasDesdeBackend());
     socket.on('cliente_pidio_cuenta', (d) => {
       sonarCampanaCocina();
       if (typeof mostrarNotificacionCentro === 'function') {
@@ -2737,11 +2811,12 @@ function renderEditorPlano() {
 
     el.innerHTML = `
       <div class="mesa-size-controls">
+        <button class="btn-mesa-size" title="Cambiar nombre de la mesa o silla" style="color:#38bdf8; border-color:#38bdf8;" onclick="event.stopPropagation(); abrirModalRenombrarMesa(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">✏️</button>
         <button class="btn-mesa-size" title="Reducir tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, -15)">-</button>
         <button class="btn-mesa-size" title="Aumentar tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, 15)">+</button>
-        <button class="btn-mesa-size" title="Eliminar mesa o silla" style="color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); eliminarMesaDesdeEditor(${m.id}, '${m.numero}')">🗑️</button>
+        <button class="btn-mesa-size" title="Eliminar mesa o silla" style="color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); eliminarMesaDesdeEditor(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">🗑️</button>
       </div>
-      <span class="mesa-nombre-label">${m.numero}</span>
+      <span class="mesa-nombre-label" style="cursor:pointer;" title="Clic para cambiar nombre" onclick="event.stopPropagation(); abrirModalRenombrarMesa(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">${m.numero} ✏️</span>
       <small class="mesa-cap-label">👥 ${m.capacidad}p</small>
       <div class="mesa-resize-handle" title="Arrastrar para cambiar tamaño">↘</div>
     `;
@@ -3160,6 +3235,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAgotados86();
   initHappyHour();
   initQrCliente();
+  initRenombrarMesas();
 
   // Verificar si hay sesión previa guardada en sessionStorage
   const userGuardado = sessionStorage.getItem('pos_usuario');
@@ -3172,6 +3248,25 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('landingLoginView').classList.add('active');
   }
 });
+
+function initRenombrarMesas() {
+  const btnGuardarRenombrar = document.getElementById('btnGuardarRenombrarMesa');
+  if (btnGuardarRenombrar) {
+    btnGuardarRenombrar.addEventListener('click', window.guardarNuevoNombreMesa);
+  }
+  const txtRenombrarNuevo = document.getElementById('txtRenombrarMesaNuevo');
+  if (txtRenombrarNuevo) {
+    txtRenombrarNuevo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        window.guardarNuevoNombreMesa();
+      }
+    });
+  }
+  const btnEditComandero = document.getElementById('btnEditarNombreMesaComandero');
+  if (btnEditComandero) {
+    btnEditComandero.addEventListener('click', window.renombrarMesaDesdeComandero);
+  }
+}
 
 // Dismiss touch tooltips when tapping outside
 if (typeof document !== 'undefined') {
