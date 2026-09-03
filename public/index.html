@@ -121,14 +121,14 @@
           </div>
         </section>
 
-        <!-- TAB 2: ADMINISTRADORES DE COMERCIOS -->
+        <!-- TAB 2: USUARIOS GLOBALES -->
         <section id="devTabUsuarios" class="dev-tab-panel">
           <div class="panel-header-action">
             <div>
-              <h3>👑 Gestión de Administradores de Restaurantes</h3>
-              <p>Administra exclusivamente las cuentas de Administrador de cada comercio. Los empleados son gestionados directamente por el Admin de cada local.</p>
+              <h3>👥 Gestión Global de Usuarios del Sistema</h3>
+              <p>Crea, modifica o asigna permisos modulares a usuarios de cualquier negocio.</p>
             </div>
-            <button class="btn-pri" onclick="abrirModalUsuarioDev()">➕ Crear Nuevo Administrador</button>
+            <button class="btn-pri" onclick="abrirModalUsuarioDev()">➕ Crear Nuevo Usuario</button>
           </div>
 
           <div class="table-responsive">
@@ -421,7 +421,13 @@
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalComandero">
     <div class="comandero-window">
-      <div class="comandero-catalog">
+      <!-- PESTAÑAS MÓVILES (SOLO VISIBLES EN SMARTPHONES/TABLETS) -->
+      <div class="comandero-mobile-tabs">
+        <button class="com-mob-tab active" id="btnMobTabMenu" onclick="switchComanderoMobileTab('menu')">🍽️ Menú / Platillos</button>
+        <button class="com-mob-tab" id="btnMobTabTicket" onclick="switchComanderoMobileTab('ticket')">🧾 Comanda (<span id="mobTicketCount">0</span>)</button>
+      </div>
+
+      <div class="comandero-catalog" id="comanderoCatalogCol">
         <div class="catalog-topbar">
           <div class="mesa-tag-header">
             <span class="mesa-title-tag" id="comMesaNumero">Mesa 1</span>
@@ -436,7 +442,7 @@
         <div class="products-one-tap-grid" id="comProductsGrid"></div>
       </div>
 
-      <div class="comandero-ticket">
+      <div class="comandero-ticket" id="comanderoTicketCol">
         <div class="ticket-topbar">
           <div>
             <h3>🧾 Comanda Actual</h3>
@@ -448,6 +454,12 @@
         <div class="ticket-body" id="comTicketItemsList"></div>
 
         <div class="ticket-bottom">
+          <div class="kitchen-course-fire-box">
+            <button class="btn-fire-courses" id="btnLanzarPlatosFuertes">
+              🚀 Lanzar Platos Fuertes a Cocina (Marchando)
+            </button>
+          </div>
+
           <div class="ticket-calc-box">
             <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0.00</span></div>
             <div class="calc-line" id="comHappyHourRow" style="display:none; color:#f59e0b;">

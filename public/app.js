@@ -24,6 +24,27 @@ function actualizarBotonEnviarComanda() {
   }
 }
 
+window.switchComanderoMobileTab = function(tab) {
+  const catCol = document.getElementById('comanderoCatalogCol');
+  const tktCol = document.getElementById('comanderoTicketCol');
+  const btnMenu = document.getElementById('btnMobTabMenu');
+  const btnTkt = document.getElementById('btnMobTabTicket');
+
+  if (!catCol || !tktCol) return;
+
+  if (tab === 'menu') {
+    catCol.classList.remove('mobile-hidden');
+    tktCol.classList.remove('mobile-active');
+    if (btnMenu) btnMenu.classList.add('active');
+    if (btnTkt) btnTkt.classList.remove('active');
+  } else {
+    catCol.classList.add('mobile-hidden');
+    tktCol.classList.add('mobile-active');
+    if (btnMenu) btnMenu.classList.remove('active');
+    if (btnTkt) btnTkt.classList.add('active');
+  }
+};
+
 // ============================================================================
 // PUNTO DE VENTA - SISTEMA CON AUTENTICACIÓN, PORTAL DEV Y BOTONES CON FOTOS
 // ============================================================================
@@ -804,6 +825,7 @@ async function abrirComanderoMesa(mesaId) {
 
   renderTicketItems();
   actualizarBotonEnviarComanda();
+  if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
   document.getElementById('modalComandero').classList.add('active');
 }
 
@@ -849,6 +871,13 @@ function renderTicketItems() {
 
   recalcularTotalesTicket();
   actualizarBotonEnviarComanda();
+  const mobCountEl = document.getElementById('mobTicketCount');
+  if (mobCountEl) {
+    const totalQty = (estado.mesaActiva && estado.mesaActiva.items)
+      ? estado.mesaActiva.items.reduce((acc, it) => acc + it.cantidad, 0)
+      : 0;
+    mobCountEl.textContent = totalQty;
+  }
 }
 
 window.modificarCantidadTicket = function(idx, delta) {

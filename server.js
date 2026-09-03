@@ -140,7 +140,7 @@ app.put('/api/dev/negocios/:id', async (req, res) => {
   }
 });
 
-// Usuarios Globales (El Developer solo ve administradores de comercios, no empleados)
+// Usuarios Globales (Developer ve todos los usuarios del sistema)
 app.get('/api/dev/usuarios', async (req, res) => {
   try {
     const usuarios = await dbAll(`
@@ -148,7 +148,6 @@ app.get('/api/dev/usuarios', async (req, res) => {
              n.nombre as negocio_nombre
       FROM Usuarios u
       LEFT JOIN Negocios n ON u.negocio_id = n.id
-      WHERE u.rol IN ('admin', 'developer')
       ORDER BY u.id ASC
     `);
     res.json(usuarios);
@@ -357,14 +356,11 @@ app.post('/api/mesas/posiciones', async (req, res) => {
     const { posiciones } = req.body;
     if (Array.isArray(posiciones)) {
       for (const pos of posiciones) {
-        await dbRun(
-          'UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho, 110), alto = COALESCE(?, alto, 110) WHERE id = ?',
-          [pos.x, pos.y, pos.ancho || null, pos.alto || null, pos.id]
-        );
+        await dbRun('UPDATE Mesas SET x = ?, y = ? WHERE id = ?', [pos.x, pos.y, pos.id]);
       }
     }
     io.emit('mesas_reorganizadas', { posiciones });
-    res.json({ message: 'Distribución física y tamaños guardados exitosamente' });
+    res.json({ message: 'Distribución física del salón guardada exitosamente' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -372,10 +368,10 @@ app.post('/api/mesas/posiciones', async (req, res) => {
 
 app.post('/api/mesas/crear', async (req, res) => {
   try {
-    const { numero, zona_id = 1, capacidad = 4, forma = 'square', x = 60, y = 60, ancho = 110, alto = 110 } = req.body;
+    const { numero, zona_id = 1, capacidad = 4, forma = 'square', x = 60, y = 60 } = req.body;
     const r = await dbRun(
-      'INSERT INTO Mesas (numero, zona_id, capacidad, forma, x, y, ancho, alto) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [numero, zona_id, capacidad, forma, x, y, ancho, alto]
+      'INSERT INTO Mesas (numero, zona_id, capacidad, forma, x, y) VALUES (?, ?, ?, ?, ?, ?)',
+      [numero, zona_id, capacidad, forma, x, y]
     );
     const nuevaMesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [r.lastID]);
     io.emit('nueva_mesa_creada', nuevaMesa);

@@ -2477,3 +2477,489 @@ textarea:focus, select:focus, input:focus {
   color: #94a3b8;
   margin-top: 2px;
 }
+
+
+/* ============================================================================
+   RESPONSIVE DESIGN & ADAPTABILIDAD MULTI-DISPOSITIVO
+   (Laptops 1366x768, Laptops 1280x800, Tablets, Celulares / Móviles)
+   ============================================================================ */
+
+/* Mobile Comandero Tabs (Ocultos por defecto en PC/Laptop) */
+.comandero-mobile-tabs {
+  display: none;
+  width: 100%;
+  background: #0f172a;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  gap: 8px;
+  z-index: 10;
+}
+
+.com-mob-tab {
+  flex: 1;
+  padding: 10px;
+  background: #1e293b;
+  border: 1px solid var(--border-light);
+  color: #94a3b8;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.88rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.com-mob-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ============================================================================
+   1. LAPTOPS MEDIANAS Y PEQUEÑAS (Pantallas de 1025px hasta 1400px, e.g. 1366x768)
+   ============================================================================ */
+@media screen and (max-width: 1400px) {
+  .top-nav {
+    padding: 0 10px;
+    gap: 8px;
+    height: 60px;
+  }
+
+  .brand {
+    gap: 6px;
+  }
+
+  .brand-logo {
+    font-size: 1.4rem;
+  }
+
+  .brand-info h2 {
+    font-size: 0.92rem;
+  }
+
+  .badge-tag {
+    display: none;
+  }
+
+  .quick-search-box {
+    max-width: 170px;
+  }
+
+  .quick-search-box input {
+    height: 34px;
+    font-size: 0.78rem;
+    padding: 0 28px 0 28px;
+  }
+
+  .search-shortcut {
+    display: none;
+  }
+
+  .happy-hour-pill {
+    padding: 4px 8px;
+  }
+
+  .hh-info .hh-title {
+    font-size: 0.72rem;
+  }
+
+  .hh-info small {
+    display: none;
+  }
+
+  .nav-pills {
+    gap: 4px;
+    flex-shrink: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-pill {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .pill-icon {
+    font-size: 0.9rem;
+  }
+
+  .btn-topbar-tool {
+    padding: 5px 8px;
+    font-size: 0.74rem;
+    white-space: nowrap;
+  }
+
+  .user-status-pill {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .user-title {
+    font-size: 0.78rem;
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-subtitle {
+    display: none;
+  }
+
+  /* COMANDERO COMPACTO PARA LAPTOPS 768px DE ALTO */
+  .comandero-window {
+    width: 98vw;
+    height: 96vh;
+  }
+
+  .comandero-catalog {
+    flex: 60%;
+  }
+
+  .comandero-ticket {
+    flex: 40%;
+    min-width: 320px;
+  }
+
+  .catalog-topbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .products-one-tap-grid {
+    padding: 8px;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+
+  .prod-card-one-tap {
+    min-height: 120px;
+  }
+
+  .prod-card-thumb, .prod-card-no-thumb {
+    height: 68px;
+  }
+
+  .ticket-topbar {
+    padding: 10px 14px;
+  }
+
+  .ticket-body {
+    padding: 8px 12px;
+  }
+
+  .ticket-item-row {
+    padding: 6px 10px;
+    margin-bottom: 6px;
+  }
+
+  .ticket-bottom {
+    padding: 10px 14px;
+  }
+
+  .ticket-calc-box .calc-line {
+    font-size: 0.78rem;
+    margin-bottom: 2px;
+  }
+
+  .ticket-calc-box .calc-line.total {
+    font-size: 1.1rem;
+    padding-top: 4px;
+    margin-top: 4px;
+  }
+
+  /* BOTONES DE ACCIÓN EN 1 FILA COMPACTA (3 columnas) */
+  .ticket-action-buttons {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .btn-btn-cmd {
+    padding: 8px 6px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .salon-container {
+    height: calc(100vh - 145px);
+    padding: 12px;
+  }
+
+  .editor-board {
+    height: calc(100vh - 145px);
+  }
+}
+
+/* ============================================================================
+   2. TABLETS Y PANTALLAS COMPACTAS (Pantallas de 769px hasta 1024px)
+   ============================================================================ */
+@media screen and (max-width: 1024px) {
+  .top-nav {
+    height: auto;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+
+  .quick-search-box {
+    order: 3;
+    max-width: 100%;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .nav-pills {
+    order: 4;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 4px 0;
+  }
+
+  .caja-grid-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .db-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .view-subbar {
+    gap: 8px;
+  }
+
+  .legend-group {
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.75rem;
+  }
+
+  .zone-selector {
+    overflow-x: auto;
+    white-space: nowrap;
+    width: 100%;
+    padding-bottom: 4px;
+  }
+
+  .salon-quick-tools {
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .dev-body-layout {
+    flex-direction: column;
+  }
+
+  .dev-sidebar {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .dev-nav-btn {
+    width: auto;
+  }
+}
+
+/* ============================================================================
+   3. CELULARES Y SMARTPHONES (< 768px)
+   ============================================================================ */
+@media screen and (max-width: 768px) {
+  body {
+    overflow-y: auto;
+    height: auto;
+  }
+
+  .pos-app {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .top-nav {
+    height: auto;
+    padding: 8px 10px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .top-nav > * {
+    max-width: 100%;
+  }
+
+  .brand {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .admin-extra-actions {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .btn-topbar-tool {
+    flex: 1;
+    text-align: center;
+  }
+
+  .user-status-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .nav-pills {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    gap: 4px;
+  }
+
+  .nav-pill {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+
+  /* SUBBAR EN MÓVIL */
+  .view-subbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .legend-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .salon-container {
+    height: 70vh;
+    min-height: 380px;
+    padding: 8px;
+  }
+
+  .editor-board {
+    height: 70vh;
+    min-height: 380px;
+  }
+
+  .editor-actions {
+    flex-wrap: wrap;
+  }
+
+  .btn-tool, .btn-save-plan {
+    flex: 1;
+    font-size: 0.75rem;
+    padding: 6px 8px;
+    text-align: center;
+  }
+
+  /* COMANDERO EN PANTALLA COMPLETA MÓVIL CON PESTAÑAS (MENÚ / COMANDA) */
+  .comandero-window {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    position: fixed !important;
+    inset: 0 !important;
+    flex-direction: column !important;
+  }
+
+  .comandero-mobile-tabs {
+    display: flex !important;
+  }
+
+  .comandero-catalog {
+    flex: 1 !important;
+    width: 100% !important;
+    border-right: none !important;
+    display: flex;
+  }
+
+  .comandero-catalog.mobile-hidden {
+    display: none !important;
+  }
+
+  .comandero-ticket {
+    flex: 1 !important;
+    width: 100% !important;
+    display: none;
+  }
+
+  .comandero-ticket.mobile-active {
+    display: flex !important;
+  }
+
+  .ticket-action-buttons {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .btn-btn-cmd {
+    padding: 12px !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* LANDING & LOGIN MÓVIL */
+  .landing-hero-view {
+    padding: 12px;
+  }
+
+  .landing-header h1 {
+    font-size: 1.45rem;
+  }
+
+  .landing-header p {
+    font-size: 0.8rem;
+  }
+
+  .landing-login-box {
+    padding: 18px;
+  }
+
+  .demo-chips-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* DIÁLOGOS Y MODALES EN MÓVIL */
+  .modal-dialog {
+    width: 96vw !important;
+    max-width: 96vw !important;
+    max-height: 94vh !important;
+    padding: 14px !important;
+  }
+
+  .staff-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gallery-presets-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  .split-columns-wrapper {
+    grid-template-columns: 1fr !important;
+  }
+
+  .numeric-keypad {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  .num-btn {
+    height: 52px !important;
+    font-size: 1.2rem !important;
+  }
+}
