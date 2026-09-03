@@ -1,20 +1,8 @@
-feat: Happy Hour persistente con auto-expiracion + Drag Drop de mesas
+fix: corregir drag & drop de mesas, motor de arrastre con pointer events, modal de fusionar/mover mesas e indicadores visuales
 
-Hito 3 - Happy Hour:
-- Estado HH persistido en BD tabla ConfigNegocio
-- GET/POST /api/happy-hour para leer y escribir config
-- setInterval en backend que auto-desactiva HH al llegar hora fin
-- Calculo 2x1 usa flag happy_hour del producto, no nombres hardcoded
-- Frontend sincroniza estado con backend al cargar
-- Click corto: toggle activo/inactivo
-- Click largo 600ms: abre modal configurador de horario
-- Socket happy_hour_cambio sincroniza todas las terminales
-
-Hito 4 - Drag Drop Mesas:
-- Long-press 420ms en mesa activa modo arrastre
-- Soltar sobre mesa ocupada: dialogo Unir
-- Soltar sobre mesa libre: dialogo Mover
-- Ghost visual animado con vibracion haptica
-- Listeners globales unicos sin duplicados
-
-Tests: 58/58 E2E pasando
+- Agregado modal HTML modalMoverUnir completo en index.html
+- Estilos CSS para el modal de mover/unir y efectos visuales de drag & drop (mesa-drop-target-move, mesa-drop-target-merge, dragGhost)
+- Motor unificado de Pointer Events en app.js con umbral de 280ms y tolerancia de jitter de 12px
+- Detección precisa de mesas destino mediante document.elementsFromPoint
+- Fusión y movimiento de mesas funcional tanto por arrastre como por el modal con selectores interactivos
+- 58/58 pruebas E2E pasando exitosamente

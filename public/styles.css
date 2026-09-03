@@ -3101,3 +3101,160 @@ textarea:focus, select:focus, input:focus {
     font-size: 1.2rem !important;
   }
 }
+
+/* ==========================================================================
+   MOVER Y UNIR MESAS — MODAL Y PANELES
+   ========================================================================== */
+.mover-unir-dialog {
+  max-width: 520px;
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+}
+
+.transfer-tabs-selector {
+  display: flex;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  padding: 6px 16px;
+  gap: 8px;
+}
+
+.transfer-tab {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.transfer-tab.active {
+  color: #f59e0b;
+  border-bottom-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 8px 8px 0 0;
+}
+
+.transfer-panel {
+  display: none;
+  padding: 12px 0;
+}
+
+.transfer-panel.active {
+  display: block;
+}
+
+.panel-info-txt {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  margin-bottom: 16px;
+  line-height: 1.4;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 3px solid #3b82f6;
+}
+
+.select-styled {
+  width: 100%;
+  padding: 12px 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.select-styled:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+/* ==========================================================================
+   DRAG & DROP VISUAL FX — SALÓN INTERACTIVO
+   ========================================================================== */
+.mesa-render-card {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.2s ease;
+}
+
+.mesa-render-card:active {
+  cursor: grabbing;
+}
+
+.mesa-render-card.mesa-drag-source {
+  opacity: 0.35 !important;
+  border: 2px dashed #f59e0b !important;
+  transform: scale(0.96) !important;
+}
+
+/* Mesa destino cuando es libre (MOVER) */
+.mesa-render-card.mesa-drop-target-move {
+  border: 2.5px solid #10b981 !important;
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.7), inset 0 0 15px rgba(16, 185, 129, 0.3) !important;
+  transform: scale(1.06) !important;
+  z-index: 100 !important;
+  animation: pulseMove 1s infinite alternate ease-in-out;
+}
+
+/* Mesa destino cuando está ocupada (UNIR) */
+.mesa-render-card.mesa-drop-target-merge {
+  border: 2.5px solid #f59e0b !important;
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.8), inset 0 0 20px rgba(245, 158, 11, 0.3) !important;
+  transform: scale(1.08) !important;
+  z-index: 100 !important;
+  animation: pulseMerge 1s infinite alternate ease-in-out;
+}
+
+@keyframes pulseMove {
+  from { box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
+  to { box-shadow: 0 0 30px rgba(16, 185, 129, 0.9); }
+}
+
+@keyframes pulseMerge {
+  from { box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); }
+  to { box-shadow: 0 0 35px rgba(245, 158, 11, 0.95); }
+}
+
+/* Ghost flotante durante el arrastre */
+#dragGhost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 99999;
+  opacity: 0.92;
+  transform: scale(1.08) rotate(2deg);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(245, 158, 11, 0.6) !important;
+  border: 2px solid #f59e0b !important;
+  border-radius: 12px;
+  cursor: grabbing;
+  transition: transform 0.05s ease;
+}
+
+#dragGhost .drag-badge-indicator {
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f59e0b;
+  color: #000;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+

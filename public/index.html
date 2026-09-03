@@ -801,6 +801,59 @@
     </div>
   </div>
 
+  <!-- MODAL MOVER / UNIR MESAS -->
+  <div class="modal-backdrop" id="modalMoverUnir">
+    <div class="modal-dialog mover-unir-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>🔄 Gestión de Salón: Mover o Unir Mesas</h3>
+          <small>Reasigna cuentas a otra mesa o fusiona consumos de dos mesas en una sola</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseMoverUnirModal">✕</button>
+      </div>
+      <div class="transfer-tabs-selector">
+        <button class="transfer-tab active" data-tab="mover">🔁 Mover Mesa (Reasignar)</button>
+        <button class="transfer-tab" data-tab="unir">🔗 Unir Mesas (Fusionar Cuentas)</button>
+      </div>
+      <div class="dialog-body">
+        <!-- Panel Mover -->
+        <div class="transfer-panel active" id="transferPanelMover">
+          <p class="panel-info-txt">Pasa la cuenta activa y sus consumos de una mesa ocupada hacia una mesa libre.</p>
+          <div class="field-group">
+            <label>1. Mesa de Origen (Con cuenta activa):</label>
+            <select id="selMoverOrigen" class="select-styled"></select>
+          </div>
+          <div class="field-group" style="margin-top:14px;">
+            <label>2. Mesa de Destino (Mesa Libre):</label>
+            <select id="selMoverDestino" class="select-styled"></select>
+          </div>
+          <button class="btn-pri" id="btnEjecutarMoverMesa" style="margin-top:20px; width:100%;">
+            🔁 Confirmar y Mover Mesa
+          </button>
+        </div>
+
+        <!-- Panel Unir -->
+        <div class="transfer-panel" id="transferPanelUnir">
+          <p class="panel-info-txt">Fusiona los consumos de dos mesas en una sola cuenta principal. La mesa secundaria quedará liberada.</p>
+          <div class="field-group">
+            <label>1. Mesa Principal (Mantendrá la cuenta combinada):</label>
+            <select id="selUnirMesa1" class="select-styled"></select>
+          </div>
+          <div class="field-group" style="margin-top:14px;">
+            <label>2. Mesa Secundaria (Se integrará y liberará):</label>
+            <select id="selUnirMesa2" class="select-styled"></select>
+          </div>
+          <button class="btn-pri danger" id="btnEjecutarUnirMesas" style="margin-top:20px; width:100%; background:linear-gradient(135deg, #f59e0b, #d97706); color:#000; font-weight:800;">
+            🔗 Confirmar y Fusionar Cuentas
+          </button>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-sec" onclick="document.getElementById('modalMoverUnir').classList.remove('active')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SPLIT BILLS -->
   <div class="modal-backdrop" id="modalSplitBill">
     <div class="modal-dialog split-dialog">

@@ -914,6 +914,9 @@ function renderSalón(filtroZona = 'todas') {
       });
     }
 
+    card.dataset.mesaId = m.id;
+    card.setAttribute('data-mesa-id', m.id);
+
     // ── Drag & Drop: Long-press para mover/unir mesas ─────────────────────
     agregarDragMesa(card, m, canvas);
     canvas.appendChild(card);
@@ -921,178 +924,246 @@ function renderSalón(filtroZona = 'todas') {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// DRAG & DROP DE MESAS — estado global, listeners de documento únicos
+// DRAG & DROP DE MESAS — MOTOR TÁCTIL Y RATÓN UNIFICADO
 // ────────────────────────────────────────────────────────────────────────────
 const dragState = {
-  dragging: false,
-  mesaId: null,
-  mesaData: null,
+  active: false,
+  sourceMesa: null,
+  sourceCard: null,
   ghost: null,
-  longTimer: null,
+  hoverTargetCard: null,
+  hoverTargetMesa: null,
+  startX: 0,
+  startY: 0,
   offsetX: 0,
   offsetY: 0,
-  canvas: null,
-  sourceCard: null,
+  timer: null,
+  pointerId: null
 };
 
-// Listeners GLOBALES (una sola vez, fuera de cualquier loop)
-document.addEventListener('mousemove', (e) => {
-  if (!dragState.dragging || !dragState.ghost) return;
-  dragState.ghost.style.left = (e.clientX - dragState.offsetX) + 'px';
-  dragState.ghost.style.top  = (e.clientY - dragState.offsetY) + 'px';
-});
-
-document.addEventListener('mouseup', (e) => {
-  if (!dragState.dragging) return;
-  finalizarDrop(e.clientX, e.clientY);
-});
-
-function iniciarDrag(mesaData, card, cx, cy, ox, oy) {
-  dragState.dragging = true;
-  dragState.mesaId   = mesaData.id;
-  dragState.mesaData = mesaData;
-  dragState.offsetX  = ox;
-  dragState.offsetY  = oy;
-  dragState.sourceCard = card;
-
-  const ghost = card.cloneNode(true);
-  ghost.id = 'dragGhost';
-  Object.assign(ghost.style, {
-    position: 'fixed', opacity: '0.78', pointerEvents: 'none',
-    zIndex: '9999', transform: 'scale(1.07)',
-    boxShadow: '0 14px 44px rgba(245,158,11,0.55)',
-    border: '2px solid #f59e0b',
-    left: (cx - ox) + 'px', top: (cy - oy) + 'px'
+function clearDragHighlights() {
+  document.querySelectorAll('.mesa-drop-target-move, .mesa-drop-target-merge').forEach(el => {
+    el.classList.remove('mesa-drop-target-move', 'mesa-drop-target-merge');
   });
-  document.body.appendChild(ghost);
-  dragState.ghost = ghost;
-
-  card.style.opacity = '0.3';
-  document.body.style.userSelect = 'none';
-  navigator.vibrate && navigator.vibrate(60);
 }
 
 function cancelarDrag() {
-  clearTimeout(dragState.longTimer);
-  dragState.longTimer = null;
-  if (!dragState.dragging) return;
-  dragState.dragging = false;
-  dragState.ghost && dragState.ghost.remove();
-  dragState.ghost = null;
-  if (dragState.sourceCard) dragState.sourceCard.style.opacity = '';
-  dragState.sourceCard = null;
+  if (dragState.timer) {
+    clearTimeout(dragState.timer);
+    dragState.timer = null;
+  }
+  clearDragHighlights();
+  if (dragState.ghost) {
+    dragState.ghost.remove();
+    dragState.ghost = null;
+  }
+  if (dragState.sourceCard) {
+    dragState.sourceCard.classList.remove('mesa-drag-source');
+    dragState.sourceCard = null;
+  }
+  dragState.active = false;
+  dragState.sourceMesa = null;
+  dragState.hoverTargetCard = null;
+  dragState.hoverTargetMesa = null;
+  dragState.pointerId = null;
   document.body.style.userSelect = '';
+}
+
+function updateDragPosition(clientX, clientY) {
+  if (!dragState.active || !dragState.ghost) return;
+  dragState.ghost.style.left = (clientX - dragState.offsetX) + 'px';
+  dragState.ghost.style.top = (clientY - dragState.offsetY) + 'px';
+
+  // Buscar mesa bajo el cursor/dedo
+  const elements = document.elementsFromPoint(clientX, clientY) || [];
+  let foundCard = null;
+  for (const el of elements) {
+    const c = el.closest('.mesa-render-card');
+    if (c && c !== dragState.sourceCard) {
+      foundCard = c;
+      break;
+    }
+  }
+
+  if (foundCard !== dragState.hoverTargetCard) {
+    clearDragHighlights();
+    dragState.hoverTargetCard = foundCard;
+    dragState.hoverTargetMesa = null;
+
+    if (foundCard) {
+      const targetId = Number(foundCard.dataset.mesaId);
+      const targetMesa = estado.mesas.find(m => m.id === targetId);
+      if (targetMesa) {
+        dragState.hoverTargetMesa = targetMesa;
+        const isTargetLibre = targetMesa.estado === 'libre';
+        foundCard.classList.add(isTargetLibre ? 'mesa-drop-target-move' : 'mesa-drop-target-merge');
+        
+        const badge = dragState.ghost.querySelector('.drag-badge-indicator');
+        if (badge) {
+          badge.textContent = isTargetLibre 
+            ? `🔁 Soltar para Mover a ${targetMesa.numero}` 
+            : `🔗 Soltar para Unir con ${targetMesa.numero}`;
+        }
+      }
+    } else {
+      const badge = dragState.ghost.querySelector('.drag-badge-indicator');
+      if (badge) badge.textContent = '👉 Arrastra sobre otra mesa';
+    }
+  }
 }
 
 function finalizarDrop(clientX, clientY) {
-  if (!dragState.dragging) return;
-  const canvas = document.getElementById('mesasCanvasView');
-  dragState.dragging = false;
-  dragState.ghost && dragState.ghost.remove();
-  dragState.ghost = null;
-  if (dragState.sourceCard) dragState.sourceCard.style.opacity = '';
-  dragState.sourceCard = null;
-  document.body.style.userSelect = '';
-
-  if (!canvas) return;
-  const canvasRect = canvas.getBoundingClientRect();
-  const relX = clientX - canvasRect.left;
-  const relY = clientY - canvasRect.top;
-
-  let mesaDestino = null;
-  estado.mesas.forEach(m2 => {
-    if (m2.id === dragState.mesaId) return;
-    const mx = m2.x || 40, my = m2.y || 40;
-    const mw = m2.ancho || 130, mh = m2.alto || 120;
-    if (relX >= mx && relX <= mx + mw && relY >= my && relY <= my + mh) {
-      mesaDestino = m2;
-    }
-  });
-
-  if (!mesaDestino) return;
-
-  if (dragState.mesaData.estado === 'libre') {
-    alert('⚠️ La mesa de origen está libre, no hay orden que mover.');
+  if (!dragState.active) {
+    cancelarDrag();
     return;
   }
 
-  if (mesaDestino.estado !== 'libre') {
-    const conf = confirm(`🔗 ¿Deseas UNIR la Mesa ${dragState.mesaData.numero} con la Mesa ${mesaDestino.numero}?\n\nLos consumos se fusionarán en la Mesa ${dragState.mesaData.numero}.`);
-    if (conf) ejecutarUnirMesas(dragState.mesaId, mesaDestino.id);
+  const sourceMesa = dragState.sourceMesa;
+  const targetMesa = dragState.hoverTargetMesa;
+  
+  cancelarDrag();
+
+  if (!sourceMesa || !targetMesa) return;
+  if (sourceMesa.id === targetMesa.id) return;
+
+  if (sourceMesa.estado === 'libre') {
+    alert('⚠️ La mesa de origen no tiene una orden activa para mover o fusionar.');
+    return;
+  }
+
+  const isTargetLibre = targetMesa.estado === 'libre';
+  if (isTargetLibre) {
+    // Diálogo Mover
+    const confirmar = confirm(`🔁 ¿Deseas MOVER la orden de la ${sourceMesa.numero} a la ${targetMesa.numero}?\n\nLa mesa ${sourceMesa.numero} quedará libre y la mesa ${targetMesa.numero} recibirá toda la comanda.`);
+    if (confirmar) {
+      ejecutarMoverMesa(sourceMesa.id, targetMesa.id);
+    }
   } else {
-    const conf = confirm(`🔁 ¿Deseas MOVER la Mesa ${dragState.mesaData.numero} a la Mesa ${mesaDestino.numero}?\n\nLa orden y consumos pasarán a la Mesa ${mesaDestino.numero}.`);
-    if (conf) ejecutarMoverMesa(dragState.mesaId, mesaDestino.id);
+    // Diálogo Unir
+    const totalOrigen = sourceMesa.orden_total > 0 ? formatCRC(sourceMesa.orden_total) : 'cuenta activa';
+    const totalDestino = targetMesa.orden_total > 0 ? formatCRC(targetMesa.orden_total) : 'cuenta activa';
+    const confirmar = confirm(`🔗 ¿Deseas FUSIONAR / UNIR estas dos mesas?\n\n• ${sourceMesa.numero} (${totalOrigen})\n• ${targetMesa.numero} (${totalDestino})\n\nTodos los consumos se consolidarán en una sola cuenta.`);
+    if (confirmar) {
+      ejecutarUnirMesas(targetMesa.id, sourceMesa.id); // targetMesa como principal
+    }
   }
 }
+
+// Listeners globales en document para pointer events
+document.addEventListener('pointermove', (e) => {
+  if (dragState.active) {
+    updateDragPosition(e.clientX, e.clientY);
+  }
+});
+
+document.addEventListener('pointerup', (e) => {
+  if (dragState.active) {
+    finalizarDrop(e.clientX, e.clientY);
+  } else if (dragState.timer) {
+    clearTimeout(dragState.timer);
+    dragState.timer = null;
+  }
+});
+
+document.addEventListener('pointercancel', () => {
+  cancelarDrag();
+});
 
 function agregarDragMesa(card, mesaData, canvas) {
-  let moved = false;
-  let ownLongTimer = null;
+  card.dataset.mesaId = mesaData.id;
 
-  function startLong(cx, cy, ox, oy) {
-    moved = false;
-    ownLongTimer = setTimeout(() => {
-      if (moved) return;
-      iniciarDrag(mesaData, card, cx, cy, ox, oy);
-    }, 420);
-    dragState.longTimer = ownLongTimer;
-  }
+  let isTouchDown = false;
+  let startX = 0;
+  let startY = 0;
 
-  // Mouse
-  card.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    const r = card.getBoundingClientRect();
-    startLong(e.clientX, e.clientY, e.clientX - r.left, e.clientY - r.top);
-    e.preventDefault();
+  card.addEventListener('pointerdown', (e) => {
+    // Solo botón principal del mouse o touch
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    
+    // Ignorar clicks en chip de espera o tooltip
+    if (e.target.closest('.m-wait-chip') || e.target.closest('.mesa-tooltip')) return;
+
+    isTouchDown = true;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    const rect = card.getBoundingClientRect();
+    const ox = e.clientX - rect.left;
+    const oy = e.clientY - rect.top;
+
+    dragState.timer = setTimeout(() => {
+      if (!isTouchDown) return;
+      
+      dragState.active = true;
+      dragState.sourceMesa = mesaData;
+      dragState.sourceCard = card;
+      dragState.startX = startX;
+      dragState.startY = startY;
+      dragState.offsetX = ox;
+      dragState.offsetY = oy;
+      dragState.pointerId = e.pointerId;
+
+      card.classList.add('mesa-drag-source');
+      document.body.style.userSelect = 'none';
+
+      // Crear Ghost visual
+      const ghost = card.cloneNode(true);
+      ghost.id = 'dragGhost';
+      ghost.classList.remove('mesa-drag-source');
+      ghost.style.left = (startX - ox) + 'px';
+      ghost.style.top = (startY - oy) + 'px';
+      ghost.style.width = card.offsetWidth + 'px';
+      ghost.style.height = card.offsetHeight + 'px';
+
+      const indicator = document.createElement('div');
+      indicator.className = 'drag-badge-indicator';
+      indicator.textContent = '👉 Arrastra sobre otra mesa';
+      ghost.appendChild(indicator);
+
+      document.body.appendChild(ghost);
+      dragState.ghost = ghost;
+
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 280);
   });
 
-  card.addEventListener('mousemove', () => { moved = true; });
-
-  card.addEventListener('mouseup', (e) => {
-    clearTimeout(ownLongTimer);
-    if (!dragState.dragging || dragState.mesaId !== mesaData.id) {
-      if (!moved) abrirComanderoMesa(mesaData.id);
+  card.addEventListener('pointermove', (e) => {
+    if (!dragState.active && isTouchDown && dragState.timer) {
+      const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+      if (dist > 12) {
+        clearTimeout(dragState.timer);
+        dragState.timer = null;
+        isTouchDown = false;
+      }
     }
-    // El mouseup global de document maneja el finalizarDrop
   });
 
-  card.addEventListener('mouseleave', () => {
-    if (!dragState.dragging) clearTimeout(ownLongTimer);
-  });
-
-  // Touch
-  card.addEventListener('touchstart', (e) => {
-    const t = e.touches[0];
-    const r = card.getBoundingClientRect();
-    startLong(t.clientX, t.clientY, t.clientX - r.left, t.clientY - r.top);
-  }, { passive: true });
-
-  card.addEventListener('touchmove', (e) => {
-    moved = true;
-    if (!dragState.dragging || dragState.mesaId !== mesaData.id) return;
-    const t = e.touches[0];
-    if (dragState.ghost) {
-      dragState.ghost.style.left = (t.clientX - dragState.offsetX) + 'px';
-      dragState.ghost.style.top  = (t.clientY - dragState.offsetY) + 'px';
+  card.addEventListener('pointerup', (e) => {
+    const wasDragging = dragState.active;
+    if (dragState.timer) {
+      clearTimeout(dragState.timer);
+      dragState.timer = null;
     }
-  }, { passive: true });
+    isTouchDown = false;
 
-  card.addEventListener('touchend', (e) => {
-    clearTimeout(ownLongTimer);
-    if (!dragState.dragging || dragState.mesaId !== mesaData.id) {
-      if (!moved) abrirComanderoMesa(mesaData.id);
-      return;
+    if (!wasDragging) {
+      const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+      if (dist <= 12) {
+        abrirComanderoMesa(mesaData.id);
+      }
     }
-    const t = e.changedTouches[0];
-    finalizarDrop(t.clientX, t.clientY);
   });
 
-  card.addEventListener('touchcancel', cancelarDrag);
+  card.addEventListener('pointercancel', () => {
+    if (dragState.timer) {
+      clearTimeout(dragState.timer);
+      dragState.timer = null;
+    }
+    isTouchDown = false;
+  });
 }
 
-
-
-async function ejecutarMoverMesa(origenId, destinoId, numOrigen, numDestino) {
+async function ejecutarMoverMesa(origenId, destinoId) {
   try {
     const res = await fetch('/api/mesas/mover', {
       method: 'POST',
@@ -1108,21 +1179,22 @@ async function ejecutarMoverMesa(origenId, destinoId, numOrigen, numDestino) {
   }
 }
 
-async function ejecutarUnirMesas(mesa1Id, mesa2Id, num1, num2) {
+async function ejecutarUnirMesas(mesaPrincipalId, mesaSecundariaId) {
   try {
     const res = await fetch('/api/mesas/unir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mesaPrincipalId: mesa1Id, mesaSecundariaId: mesa2Id })
+      body: JSON.stringify({ mesaPrincipalId, mesaSecundariaId })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    alert(`✅ Mesas fusionadas. Total combinado: ${formatCRC(data.total)}`);
+    alert(`✅ ${data.message}`);
     cargarMesasDesdeBackend();
   } catch (e) {
     alert('❌ Error al unir mesas: ' + e.message);
   }
 }
+
 
 
 document.querySelectorAll('.zone-tab').forEach(tab => {
@@ -1593,7 +1665,7 @@ function initMoverUnirMesas() {
   document.getElementById('btnEjecutarMoverMesa').addEventListener('click', async () => {
     const origId = Number(document.getElementById('selMoverOrigen').value);
     const destId = Number(document.getElementById('selMoverDestino').value);
-    if (!origId || !destId) return alert('Selecciona origen y destino.');
+    if (!origId || !destId) return alert('Selecciona mesa de origen y destino.');
 
     try {
       const res = await fetch('/api/mesas/mover', {
@@ -1602,18 +1674,20 @@ function initMoverUnirMesas() {
         body: JSON.stringify({ origenMesaId: origId, destinoMesaId: destId })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al mover mesa');
       alert('🔁 ' + data.message);
       document.getElementById('modalMoverUnir').classList.remove('active');
       cargarMesasDesdeBackend();
     } catch (e) {
-      alert('Error al mover mesa');
+      alert('❌ ' + e.message);
     }
   });
 
   document.getElementById('btnEjecutarUnirMesas').addEventListener('click', async () => {
     const m1Id = Number(document.getElementById('selUnirMesa1').value);
     const m2Id = Number(document.getElementById('selUnirMesa2').value);
-    if (m1Id === m2Id) return alert('Selecciona dos mesas distintas.');
+    if (!m1Id || !m2Id) return alert('Selecciona las dos mesas que deseas unir.');
+    if (m1Id === m2Id) return alert('Debes seleccionar dos mesas distintas.');
 
     try {
       const res = await fetch('/api/mesas/unir', {
@@ -1622,11 +1696,12 @@ function initMoverUnirMesas() {
         body: JSON.stringify({ mesaPrincipalId: m1Id, mesaSecundariaId: m2Id })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al unir mesas');
       alert('🔗 ' + data.message);
       document.getElementById('modalMoverUnir').classList.remove('active');
       cargarMesasDesdeBackend();
     } catch (e) {
-      alert('Error al unir mesas');
+      alert('❌ ' + e.message);
     }
   });
 }
@@ -1637,14 +1712,31 @@ function cargarSelectoresMoverUnir() {
   const selU1 = document.getElementById('selUnirMesa1');
   const selU2 = document.getElementById('selUnirMesa2');
 
+  if (!selOrig || !selDest || !selU1 || !selU2) return;
+
   const ocupadas = estado.mesas.filter(m => m.estado !== 'libre');
   const libres = estado.mesas.filter(m => m.estado === 'libre');
 
-  selOrig.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'SALÓN'})</option>`).join('');
-  selDest.innerHTML = libres.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'SALÓN'}) - Libre</option>`).join('');
-  selU1.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (Cuenta Principal)</option>`).join('');
-  selU2.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (Cuenta a Fusionar)</option>`).join('');
+  if (ocupadas.length === 0) {
+    selOrig.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';
+    selU1.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';
+    selU2.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';
+  } else {
+    selOrig.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Total: ${m.orden_total > 0 ? formatCRC(m.orden_total) : '₡0'}</option>`).join('');
+    selU1.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Principal</option>`).join('');
+    selU2.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Secundaria (a fusionar)</option>`).join('');
+    if (ocupadas.length > 1) {
+      selU2.selectedIndex = 1;
+    }
+  }
+
+  if (libres.length === 0) {
+    selDest.innerHTML = '<option value="">⚠️ No hay mesas libres disponibles</option>';
+  } else {
+    selDest.innerHTML = libres.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Libre</option>`).join('');
+  }
 }
+
 
 // Anulaciones
 let anulaIndex = null;
