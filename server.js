@@ -545,63 +545,73 @@ app.get('/api/mesas', async (req, res) => {
         activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1');
       } catch (_) {}
 
-      const mergeActivo = activeMerges.find(
-        am => Number(am.mesa_principal_id) === Number(m.id) || Number(am.mesa_secundaria_id) === Number(m.id)
-      );
-
       let todasUnidas = [];
-      if (m.unida_con) {
-        todasUnidas.push(m.unida_con);
-      }
-      if (mergeActivo) {
-        if (Number(m.id) === Number(mergeActivo.mesa_principal_id)) {
+      // Si la mesa está libre, no tiene fusiones, ni uniones, ni grupos activos
+      if (m.estado === 'libre') {
+        m.mesas_unidas = [];
+        m.es_mesa_unida = false;
+        m.unida_con = null;
+        m.unida_a_mesa_id = null;
+        m.unida_a_numero = null;
+        m.es_mesa_secundaria_unida = false;
+        m.es_mesa_agrupada = false;
+        m.grupo_mesas = null;
+        m.orden_activa_id = null;
+        m.orden_total = 0;
+      } else {
+        // Solo las mesas receptoras (mesa_principal_id) que recibieron otra mesa muestran el +Mesa agregada
+        const mergesComoPrincipal = activeMerges.filter(
+          am => Number(am.mesa_principal_id) === Number(m.id)
+        );
+
+        if (m.unida_con) {
+          todasUnidas.push(m.unida_con);
+        }
+
+        for (const am of mergesComoPrincipal) {
           try {
-            const sA = JSON.parse(mergeActivo.snapshot_a);
+            const sA = JSON.parse(am.snapshot_a);
             if (sA && sA.mesa_numero) todasUnidas.push(sA.mesa_numero);
           } catch (_) {}
-        } else if (Number(m.id) === Number(mergeActivo.mesa_secundaria_id)) {
-          try {
-            const sB = JSON.parse(mergeActivo.snapshot_b);
-            if (sB && sB.mesa_numero) todasUnidas.push(sB.mesa_numero);
-          } catch (_) {}
+        }
+
+        // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
+        const secundariasEnlazadas = mesas
+          .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
+          .map(sec => sec.numero);
+
+        // Detectar mesas en el mismo grupo visual que no estén libres
+        const mesasEnMismoGrupo = m.grupo_mesas
+          ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas && other.estado !== 'libre').map(other => other.numero)
+          : [];
+
+        todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
+
+        if (m.unida_a_mesa_id) {
+          const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
+          m.unida_a_numero = princMesa ? princMesa.numero : 'Mesa Principal';
+          m.es_mesa_secundaria_unida = true;
+        } else {
+          m.es_mesa_secundaria_unida = false;
+          m.unida_a_numero = null;
+        }
+
+        m.es_mesa_agrupada = Boolean(m.grupo_mesas);
+        m.grupo_mesas_nombre = m.grupo_mesas || null;
+        m.mesas_unidas = todasUnidas;
+        m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas);
+        if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
+          m.unida_con = todasUnidas[0];
+        } else if (!m.es_mesa_unida) {
+          m.unida_con = null;
         }
       }
 
-      // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
-      const secundariasEnlazadas = mesas
-        .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
-        .map(sec => sec.numero);
-
-      // Detectar mesas en el mismo grupo visual
-      const mesasEnMismoGrupo = m.grupo_mesas
-        ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas).map(other => other.numero)
-        : [];
-
-      todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
-
-      if (m.unida_a_mesa_id) {
-        const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
-        m.unida_a_numero = princMesa ? princMesa.numero : 'Mesa Principal';
-        m.es_mesa_secundaria_unida = true;
-      } else {
-        m.es_mesa_secundaria_unida = false;
-        m.unida_a_numero = null;
-      }
-
-      m.es_mesa_agrupada = Boolean(m.grupo_mesas);
-      m.grupo_mesas_nombre = m.grupo_mesas || null;
-      m.platos_pendientes = platosPendientes;
-      m.items_pendientes = platosPendientes;
-      m.todos_platillos = todosPlatillos;
-      m.primera_comanda_hora = primeraComandaHora;
-      m.minutos_espera = minutosEspera;
-      m.mesas_unidas = todasUnidas;
-      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo) || Boolean(m.unida_con);
-      if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
-        m.unida_con = todasUnidas[0];
-      } else if (!m.es_mesa_unida) {
-        m.unida_con = null;
-      }
+      m.platos_pendientes = m.estado === 'libre' ? [] : platosPendientes;
+      m.items_pendientes = m.estado === 'libre' ? [] : platosPendientes;
+      m.todos_platillos = m.estado === 'libre' ? [] : todosPlatillos;
+      m.primera_comanda_hora = m.estado === 'libre' ? null : primeraComandaHora;
+      m.minutos_espera = m.estado === 'libre' ? 0 : minutosEspera;
     }
 
     res.json({ zonas, mesas });
