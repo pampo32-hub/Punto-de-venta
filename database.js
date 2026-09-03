@@ -242,6 +242,86 @@ function initDb() {
       activo INTEGER DEFAULT 1
     )`);
 
+    // 14. Inventario & Control de Stock de Insumos
+    db.run(`CREATE TABLE IF NOT EXISTS Inventario (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      nombre TEXT NOT NULL,
+      categoria TEXT DEFAULT 'General',
+      unidad_medida TEXT DEFAULT 'unidades',
+      stock_actual REAL DEFAULT 0,
+      stock_minimo REAL DEFAULT 5,
+      costo_unitario REAL DEFAULT 0,
+      producto_id INTEGER,
+      actualizado_en TEXT,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
+    )`);
+
+    // 15. Escandallo / Recetas de Productos
+    db.run(`CREATE TABLE IF NOT EXISTS InventarioRecetas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      producto_id INTEGER NOT NULL,
+      insumo_id INTEGER NOT NULL,
+      cantidad REAL NOT NULL DEFAULT 1,
+      FOREIGN KEY(producto_id) REFERENCES Productos(id),
+      FOREIGN KEY(insumo_id) REFERENCES Inventario(id)
+    )`);
+
+    // 16. Sistema de Auditoría y Bitácora de Seguridad
+    db.run(`CREATE TABLE IF NOT EXISTS Auditoria (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      usuario_id INTEGER,
+      usuario_nombre TEXT NOT NULL,
+      accion TEXT NOT NULL,
+      tipo_evento TEXT NOT NULL DEFAULT 'operativo',
+      modulo TEXT NOT NULL DEFAULT 'general',
+      detalle TEXT NOT NULL,
+      motivo TEXT,
+      monto REAL DEFAULT 0,
+      pin_autorizado INTEGER DEFAULT 0,
+      fecha_hora TEXT NOT NULL,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
+    )`);
+
+    // Sembrar Insumos Iniciales si no existen
+    db.get('SELECT COUNT(*) as count FROM Inventario', (err, row) => {
+      if (!err && (!row || row.count === 0)) {
+        const insumosIniciales = [
+          { nombre: 'Cerveza Imperial Regular', categoria: 'Bebidas & Cervezas', unidad: 'botellas', stock: 48, min: 12, costo: 950, prodId: 1 },
+          { nombre: 'Cerveza Pilsen', categoria: 'Bebidas & Cervezas', unidad: 'botellas', stock: 36, min: 12, costo: 950, prodId: 2 },
+          { nombre: 'Cerveza Corona Extra', categoria: 'Bebidas & Cervezas', unidad: 'botellas', stock: 24, min: 10, costo: 1250, prodId: 6 },
+          { nombre: 'Ron Bacardí Carta Blanca', categoria: 'Licores & Destilados', unidad: 'botellas', stock: 8, min: 2, costo: 8500, prodId: 3 },
+          { nombre: 'Tequila José Cuervo Especial', categoria: 'Licores & Destilados', unidad: 'botellas', stock: 6, min: 2, costo: 11000, prodId: 4 },
+          { nombre: 'Gin Tanqueray London Dry', categoria: 'Licores & Destilados', unidad: 'botellas', stock: 5, min: 2, costo: 14000, prodId: 5 },
+          { nombre: 'Corte Rib Eye Prime 350g', categoria: 'Carnes & Cocina', unidad: 'cortes', stock: 22, min: 5, costo: 4200, prodId: 7 },
+          { nombre: 'Tortas de Carne Angus 200g', categoria: 'Carnes & Cocina', unidad: 'unidades', stock: 30, min: 8, costo: 1800, prodId: 8 },
+          { nombre: 'Pan Brioche Artesanal', categoria: 'Panadería & Abarrotes', unidad: 'unidades', stock: 35, min: 10, costo: 450, prodId: null },
+          { nombre: 'Queso Cheddar Madurado', categoria: 'Lácteos & Cocina', unidad: 'porciones', stock: 50, min: 15, costo: 300, prodId: null },
+          { nombre: 'Pescado Corvina Fresca (Ceviche)', categoria: 'Mariscos & Fríos', unidad: 'porciones', stock: 18, min: 5, costo: 2200, prodId: 9 },
+          { nombre: 'Chicharrón de Cerdo Criollo', categoria: 'Carnes & Cocina', unidad: 'kg', stock: 12.5, min: 3, costo: 4500, prodId: 10 },
+          { nombre: 'Alitas de Pollo Seleccionadas', categoria: 'Carnes & Cocina', unidad: 'kg', stock: 15.0, min: 4, costo: 2800, prodId: 11 }
+        ];
+
+        const ahora = new Date().toISOString();
+        insumosIniciales.forEach(ins => {
+          db.run(
+            `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en)
+             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [ins.nombre, ins.categoria, ins.unidad, ins.stock, ins.min, ins.costo, ins.prodId, ahora]
+          );
+        });
+        console.log('🌱 Inventario inicial sembrado con existencias y costos.');
+
+        // Registrar auditoría de inicialización
+        db.run(
+          `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, accion, tipo_evento, modulo, detalle, fecha_hora)
+           VALUES (1, 1, 'Sistema', 'inicio_inventario', 'operativo', 'inventario', 'Carga inicial de inventario base y existencias del restaurante', ?)`,
+          [ahora]
+        );
+      }
+    });
+
     // Sembrar Negocio Inicial
     db.get('SELECT COUNT(*) as count FROM Negocios', (err, row) => {
       if (!err && (!row || row.count === 0)) {

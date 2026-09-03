@@ -1438,6 +1438,9 @@ app.post('/api/comandas/enviar', async (req, res) => {
       });
     }
 
+    // Descontar existencias de inventario en tiempo real
+    await descontarInventarioPorItems(itemsProcesados);
+
     // 7. Recalcular totales de orden
     const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
     let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
@@ -1517,6 +1520,17 @@ app.post('/api/comandas/anular-item', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, ahora]
     );
+
+    await registrarAuditoria({
+      usuarioNombre: req.body.usuarioNombre || 'Supervisor Autorizado',
+      accion: 'anulacion_comanda',
+      tipoEvento: 'seguridad',
+      modulo: 'comandas',
+      detalle: `Anulación de ${item.cantidad}x "${item.nombre_producto}" de ${mesaNumero}`,
+      motivo: motivo || 'Anulación autorizada',
+      monto: item.subtotal,
+      pinAutorizado: 1
+    });
 
     const totalItems = await dbGet("SELECT SUM(subtotal) as sub FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [item.orden_id]);
     const subtotal = Number(totalItems.sub) || 0;
@@ -1900,6 +1914,362 @@ app.post('/api/cliente/mesa/:id/pedir-cuenta', async (req, res) => {
     io.emit('cliente_pidio_cuenta', { mesaId, mesaNumero: mesa.numero });
     io.emit('mesa_actualizada', { id: mesaId, estado: 'cuenta' });
     res.json({ message: 'Cuenta solicitada exitosamente al salonero' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// HELPERS: AUDITORÍA & DEDUCCIÓN DE INVENTARIO
+// ============================================================================
+async function registrarAuditoria({ negocioId = 1, usuarioId = null, usuarioNombre = 'Sistema', accion, tipoEvento = 'operativo', modulo = 'general', detalle, motivo = null, monto = 0, pinAutorizado = 0 }) {
+  try {
+    const ahora = new Date().toISOString();
+    await dbRun(
+      `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocioId, usuarioId, usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado ? 1 : 0, ahora]
+    );
+  } catch (e) {
+    console.error('Error registrando auditoría:', e.message);
+  }
+}
+
+async function descontarInventarioPorItems(items = []) {
+  try {
+    for (const it of items) {
+      const prodId = it.id || it.producto_id;
+      const cant = Number(it.cantidad || 1);
+      if (!prodId || cant <= 0) continue;
+
+      const ahora = new Date().toISOString();
+      // 1. Revisar si hay recetas vinculadas en InventarioRecetas
+      const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
+      if (recetas && recetas.length > 0) {
+        for (const r of recetas) {
+          const totalDesc = r.cantidad * cant;
+          await dbRun(
+            'UPDATE Inventario SET stock_actual = MAX(0, stock_actual - ?), actualizado_en = ? WHERE id = ?',
+            [totalDesc, ahora, r.insumo_id]
+          );
+        }
+      } else {
+        // 2. Si no hay receta, descontar del insumo vinculado directamente al producto
+        await dbRun(
+          'UPDATE Inventario SET stock_actual = MAX(0, stock_actual - ?), actualizado_en = ? WHERE producto_id = ?',
+          [cant, ahora, prodId]
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Error descontando inventario:', e.message);
+  }
+}
+
+function verificarAdmin(req, res, next) {
+  const rol = req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol);
+  if (rol && rol !== 'admin' && rol !== 'developer') {
+    return res.status(403).json({ error: 'Acceso denegado: Requiere permisos de Administrador' });
+  }
+  next();
+}
+
+// ============================================================================
+// 14. MÓDULOS DE ADMINISTRACIÓN: INVENTARIO, AUDITORÍA & MÉTRICAS (EXCLUSIVO ADMIN)
+// ============================================================================
+
+// --- INVENTARIO ---
+app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
+  try {
+    const insumos = await dbAll(`
+      SELECT i.*, p.nombre as producto_vinculado_nombre
+      FROM Inventario i
+      LEFT JOIN Productos p ON i.producto_id = p.id
+      ORDER BY i.categoria ASC, i.nombre ASC
+    `);
+
+    const insumosConEstado = insumos.map(ins => {
+      let estado = 'normal';
+      if (ins.stock_actual <= 0) estado = 'agotado';
+      else if (ins.stock_actual <= ins.stock_minimo) estado = 'bajo';
+      return { ...ins, estado_stock: estado };
+    });
+
+    res.json(insumosConEstado);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
+  try {
+    const { nombre, categoria = 'General', unidad_medida = 'unidades', stock_actual = 0, stock_minimo = 5, costo_unitario = 0, producto_id = null, usuarioNombre = 'Administrador' } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre de insumo requerido' });
+
+    const ahora = new Date().toISOString();
+    const result = await dbRun(
+      `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [nombre.trim(), categoria.trim(), unidad_medida.trim(), Number(stock_actual), Number(stock_minimo), Number(costo_unitario), producto_id ? Number(producto_id) : null, ahora]
+    );
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: 'crear_insumo',
+      tipoEvento: 'operativo',
+      modulo: 'inventario',
+      detalle: `Creación de nuevo insumo "${nombre}" con stock inicial de ${stock_actual} ${unidad_medida}`
+    });
+
+    res.json({ id: result.lastID, message: 'Insumo registrado correctamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { nombre, categoria, unidad_medida, stock_minimo, costo_unitario, producto_id, usuarioNombre = 'Administrador' } = req.body;
+    const ahora = new Date().toISOString();
+
+    await dbRun(
+      `UPDATE Inventario SET 
+        nombre = COALESCE(?, nombre),
+        categoria = COALESCE(?, categoria),
+        unidad_medida = COALESCE(?, unidad_medida),
+        stock_minimo = COALESCE(?, stock_minimo),
+        costo_unitario = COALESCE(?, costo_unitario),
+        producto_id = ?,
+        actualizado_en = ?
+       WHERE id = ?`,
+      [nombre, categoria, unidad_medida, stock_minimo, costo_unitario, producto_id !== undefined ? producto_id : null, ahora, id]
+    );
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: 'actualizar_insumo',
+      tipoEvento: 'operativo',
+      modulo: 'inventario',
+      detalle: `Modificación de parámetros del insumo ID ${id}`
+    });
+
+    res.json({ message: 'Insumo actualizado con éxito' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { tipo, cantidad, motivo = 'Ajuste de stock', usuarioNombre = 'Administrador' } = req.body;
+    const cantNum = Number(cantidad);
+    if (!tipo || isNaN(cantNum) || cantNum === 0) {
+      return res.status(400).json({ error: 'Tipo y cantidad válida requeridos' });
+    }
+
+    const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
+    if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    let nuevoStock = insumo.stock_actual;
+    let accionAuditoria = 'ajuste_inventario';
+    let tipoEvento = 'operativo';
+
+    if (tipo === 'entrada') {
+      nuevoStock += Math.abs(cantNum);
+      accionAuditoria = 'entrada_mercaderia';
+    } else if (tipo === 'merma' || tipo === 'salida') {
+      nuevoStock = Math.max(0, nuevoStock - Math.abs(cantNum));
+      accionAuditoria = 'merma_perdida';
+      tipoEvento = 'financiero';
+    } else if (tipo === 'fijar') {
+      nuevoStock = Math.max(0, cantNum);
+      accionAuditoria = 'conteo_fisico';
+    }
+
+    const ahora = new Date().toISOString();
+    await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [nuevoStock, ahora, id]);
+
+    const costoTotalAjuste = Math.abs(cantNum) * (insumo.costo_unitario || 0);
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: accionAuditoria,
+      tipoEvento,
+      modulo: 'inventario',
+      detalle: `${tipo.toUpperCase()}: ${insumo.nombre} (${cantNum > 0 ? '+' : ''}${cantNum} ${insumo.unidad_medida}) -> Stock resultante: ${nuevoStock}`,
+      motivo,
+      monto: costoTotalAjuste
+    });
+
+    res.json({ message: 'Ajuste de inventario aplicado', stock_actual: nuevoStock });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- AUDITORÍA ---
+app.get('/api/admin/auditoria', verificarAdmin, async (req, res) => {
+  try {
+    const { tipo, modulo, limite = 100 } = req.query;
+    let sql = 'SELECT * FROM Auditoria WHERE 1=1';
+    const params = [];
+
+    if (tipo) {
+      sql += ' AND tipo_evento = ?';
+      params.push(tipo);
+    }
+    if (modulo) {
+      sql += ' AND modulo = ?';
+      params.push(modulo);
+    }
+
+    sql += ' ORDER BY id DESC LIMIT ?';
+    params.push(Number(limite));
+
+    const registros = await dbAll(sql, params);
+    res.json(registros);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/auditoria/registrar', async (req, res) => {
+  try {
+    const { usuarioNombre = 'Admin', accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado } = req.body;
+    if (!accion || !detalle) return res.status(400).json({ error: 'Acción y detalle requeridos' });
+
+    await registrarAuditoria({ usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado });
+    res.json({ message: 'Evento de auditoría registrado' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- DASHBOARD & MÉTRICAS EN TIEMPO REAL ---
+app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
+  try {
+    const hoyInicio = new Date();
+    hoyInicio.setHours(0, 0, 0, 0);
+    const hoyISO = hoyInicio.toISOString();
+
+    const ayerInicio = new Date(hoyInicio.getTime() - 24 * 60 * 60 * 1000);
+    const ayerISO = ayerInicio.toISOString();
+
+    // 1. Ventas de Hoy
+    const ventasHoyRow = await dbGet(`
+      SELECT 
+        COALESCE(SUM(monto), 0) as total_ventas,
+        COALESCE(SUM(propina), 0) as total_propinas,
+        COUNT(DISTINCT orden_id) as total_cuentas
+      FROM Pagos
+      WHERE fecha_hora >= ?
+    `, [hoyISO]);
+
+    // 2. Ventas de Ayer (para comparativa)
+    const ventasAyerRow = await dbGet(`
+      SELECT COALESCE(SUM(monto), 0) as total_ventas
+      FROM Pagos
+      WHERE fecha_hora >= ? AND fecha_hora < ?
+    `, [ayerISO, hoyISO]);
+
+    const totalVentasHoy = Number(ventasHoyRow ? ventasHoyRow.total_ventas : 0) || 0;
+    const totalVentasAyer = Number(ventasAyerRow ? ventasAyerRow.total_ventas : 0) || 0;
+    const cuentasHoy = Number(ventasHoyRow ? ventasHoyRow.total_cuentas : 0) || 0;
+    const ticketPromedio = cuentasHoy > 0 ? Math.round(totalVentasHoy / cuentasHoy) : 0;
+    const propinasHoy = Number(ventasHoyRow ? ventasHoyRow.total_propinas : 0) || 0;
+
+    // 3. Tiempo Promedio de Cocina Hoy (en minutos)
+    const tiemposCocina = await dbAll(`
+      SELECT hora_pedido, hora_listo
+      FROM DetalleOrden
+      WHERE hora_listo IS NOT NULL AND creado_en >= ?
+    `, [hoyISO]);
+
+    let sumaMinutos = 0;
+    let cantPlatosConTiempo = 0;
+    for (const t of tiemposCocina) {
+      if (t.hora_pedido && t.hora_listo) {
+        const diff = Math.max(0, new Date(t.hora_listo).getTime() - new Date(t.hora_pedido).getTime());
+        sumaMinutos += Math.floor(diff / 60000);
+        cantPlatosConTiempo++;
+      }
+    }
+    const tiempoPromedioCocinaMin = cantPlatosConTiempo > 0 ? Math.round(sumaMinutos / cantPlatosConTiempo) : 0;
+
+    // 4. Top 5 Productos Más Vendidos
+    const topProductos = await dbAll(`
+      SELECT 
+        d.nombre_producto, 
+        d.destino,
+        SUM(d.cantidad) as total_unidades,
+        SUM(d.subtotal) as total_recaudado
+      FROM DetalleOrden d
+      JOIN Ordenes o ON d.orden_id = o.id
+      WHERE d.estado_comanda != 'anulado' AND o.estado IN ('pagada', 'activa', 'abierta', 'cuenta')
+      GROUP BY d.nombre_producto
+      ORDER BY total_unidades DESC
+      LIMIT 5
+    `);
+
+    // 5. Ventas por Hora (Horas Pico)
+    const pagosHoras = await dbAll(`
+      SELECT strftime('%H', fecha_hora) as hora, SUM(monto) as total
+      FROM Pagos
+      WHERE fecha_hora >= ?
+      GROUP BY strftime('%H', fecha_hora)
+      ORDER BY hora ASC
+    `, [hoyISO]);
+
+    // Mapear de 10:00 a 23:00 para gráfico continuo
+    const ventasPorHora = [];
+    for (let h = 10; h <= 23; h++) {
+      const horaStr = String(h).padStart(2, '0');
+      const found = pagosHoras.find(p => p.hora === horaStr);
+      ventasPorHora.push({
+        hora: `${horaStr}:00`,
+        total: found ? Number(found.total) : 0
+      });
+    }
+
+    // 6. Desempeño por Mesero
+    const meseros = await dbAll(`
+      SELECT 
+        COALESCE(p.mesero, 'General') as nombre,
+        COUNT(DISTINCT p.orden_id) as cuentas,
+        SUM(p.monto) as ventas,
+        SUM(COALESCE(p.propina, 0)) as propinas
+      FROM Pagos p
+      WHERE p.fecha_hora >= ?
+      GROUP BY p.mesero
+      ORDER BY ventas DESC
+    `, [hoyISO]);
+
+    // 7. Alertas de Inventario Crítico
+    const alertasStock = await dbAll(`
+      SELECT id, nombre, stock_actual, stock_minimo, unidad_medida
+      FROM Inventario
+      WHERE stock_actual <= stock_minimo
+      ORDER BY stock_actual ASC
+      LIMIT 6
+    `);
+
+    res.json({
+      resumen: {
+        totalVentasHoy,
+        totalVentasAyer,
+        diferenciaAyer: totalVentasAyer > 0 ? Math.round(((totalVentasHoy - totalVentasAyer) / totalVentasAyer) * 100) : 0,
+        cuentasHoy,
+        ticketPromedio,
+        propinasHoy,
+        tiempoPromedioCocinaMin
+      },
+      topProductos,
+      ventasPorHora,
+      meseros,
+      alertasStock
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

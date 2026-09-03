@@ -218,6 +218,15 @@
         <button class="nav-pill" data-view="facturacion">
           <span class="pill-icon">⚡</span> Facturación Express
         </button>
+        <button class="nav-pill admin-only-tab" data-view="metricas" style="display:none;">
+          <span class="pill-icon">📊</span> Dashboard
+        </button>
+        <button class="nav-pill admin-only-tab" data-view="inventario" style="display:none;">
+          <span class="pill-icon">📦</span> Inventario
+        </button>
+        <button class="nav-pill admin-only-tab" data-view="auditoria" style="display:none;">
+          <span class="pill-icon">🛡️</span> Auditoría
+        </button>
       </nav>
 
       <!-- BOTONES DE ADMINISTRACIÓN (ADMIN & DEV) -->
@@ -414,6 +423,211 @@
             <div class="form-row-actions" style="margin-top:20px;">
               <button class="btn-emitir-fe" id="btnEmitirFacturaExpress">⚡ Emitir & Enviar Factura a Hacienda</button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISTA 6: DASHBOARD DE MÉTRICAS EN TIEMPO REAL (ADMIN) -->
+      <section id="view-metricas" class="pos-view">
+        <div class="view-subbar">
+          <div class="dashboard-header-title">
+            <h2 style="margin:0; font-size:1.25rem; color:#fff; display:flex; align-items:center; gap:8px;">
+              📊 Dashboard Ejecutivo & Métricas en Tiempo Real
+              <span class="kds-live-tag" style="font-size:0.75rem;">⚡ Datos en Vivo</span>
+            </h2>
+          </div>
+          <div class="dashboard-actions">
+            <button class="btn-tool" onclick="cargarDashboardMetricas()">🔄 Actualizar Métricas</button>
+          </div>
+        </div>
+
+        <div class="dashboard-content-wrapper">
+          <!-- KPIs PRINCIPALES -->
+          <div class="kpi-cards-grid">
+            <div class="kpi-card kpi-sales">
+              <div class="kpi-icon">💰</div>
+              <div class="kpi-info">
+                <span class="kpi-label">Ventas Totales Hoy</span>
+                <strong class="kpi-val" id="kpiVentasHoy">₡ 0.00</strong>
+                <small class="kpi-sub" id="kpiComparativaAyer">vs ayer: 0%</small>
+              </div>
+            </div>
+
+            <div class="kpi-card kpi-tickets">
+              <div class="kpi-icon">🧾</div>
+              <div class="kpi-info">
+                <span class="kpi-label">Cuentas Cobradas</span>
+                <strong class="kpi-val" id="kpiCuentasCobradas">0</strong>
+                <small class="kpi-sub">Mesas atendidas hoy</small>
+              </div>
+            </div>
+
+            <div class="kpi-card kpi-average">
+              <div class="kpi-icon">🎯</div>
+              <div class="kpi-info">
+                <span class="kpi-label">Ticket Promedio</span>
+                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0.00</strong>
+                <small class="kpi-sub">Gasto promedio por mesa</small>
+              </div>
+            </div>
+
+            <div class="kpi-card kpi-kitchen">
+              <div class="kpi-icon">⏱️</div>
+              <div class="kpi-info">
+                <span class="kpi-label">Tiempo Medio Cocina</span>
+                <strong class="kpi-val" id="kpiTiempoCocina">0 min</strong>
+                <small class="kpi-sub">Desde pedido a listo</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- ANALYTICS DETALLADOS (2 COLUMNAS) -->
+          <div class="dashboard-grids-row">
+            <!-- COLUMNA IZQUIERDA: HORAS PICO & TOP SELLERS -->
+            <div class="dash-col">
+              <div class="dash-panel-card">
+                <div class="panel-header">
+                  <h3>📈 Ventas por Hora (Horas Pico del Negocio)</h3>
+                </div>
+                <div class="panel-body">
+                  <div class="peak-hours-chart" id="peakHoursChartContainer">
+                    <!-- Barras dinámicas de horas pico -->
+                  </div>
+                </div>
+              </div>
+
+              <div class="dash-panel-card" style="margin-top:16px;">
+                <div class="panel-header">
+                  <h3>🏆 Top 5 Productos Más Vendidos</h3>
+                </div>
+                <div class="panel-body">
+                  <div class="top-sellers-list" id="topSellersContainer">
+                    <!-- Lista de productos top -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- COLUMNA DERECHA: RENDIMIENTO MESEROS & INVENTARIO CRÍTICO -->
+            <div class="dash-col">
+              <div class="dash-panel-card">
+                <div class="panel-header">
+                  <h3>👥 Rendimiento por Salonero / Mesero</h3>
+                </div>
+                <div class="panel-body">
+                  <div class="waiters-ranking-list" id="waitersRankingContainer">
+                    <!-- Lista de meseros -->
+                  </div>
+                </div>
+              </div>
+
+              <div class="dash-panel-card" style="margin-top:16px;">
+                <div class="panel-header">
+                  <h3 style="color:#f59e0b;">⚠️ Alertas de Inventario Crítico</h3>
+                </div>
+                <div class="panel-body">
+                  <div class="critical-stock-list" id="criticalStockContainer">
+                    <!-- Insumos agotados o con bajo stock -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISTA 7: CONTROL DE INVENTARIO & STOCK DE INSUMOS (ADMIN) -->
+      <section id="view-inventario" class="pos-view">
+        <div class="view-subbar">
+          <div class="inventory-top-info">
+            <h2 style="margin:0; font-size:1.25rem; color:#fff; display:flex; align-items:center; gap:8px;">
+              📦 Control de Inventario & Existencias
+            </h2>
+          </div>
+          <div class="inventory-actions">
+            <button class="btn-tool" onclick="abrirModalNuevoInsumo()">➕ Nuevo Insumo</button>
+            <button class="btn-tool" style="background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada')">📥 Entrada de Mercadería</button>
+            <button class="btn-tool" style="background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma')">⚠️ Registrar Merma / Pérdida</button>
+          </div>
+        </div>
+
+        <div class="inventory-container-wrapper">
+          <div class="inventory-filters-row">
+            <input type="text" id="txtBuscarInsumo" placeholder="🔎 Buscar insumo por nombre o categoría..." oninput="filtrarTablaInventario()" />
+            <select id="selectFiltroCatInventario" onchange="filtrarTablaInventario()">
+              <option value="todas">Todas las Categorías</option>
+            </select>
+            <select id="selectFiltroEstadoInventario" onchange="filtrarTablaInventario()">
+              <option value="todos">Todos los Estados</option>
+              <option value="bajo">⚠️ Stock Bajo</option>
+              <option value="agotado">⛔ Agotados</option>
+              <option value="normal">✅ Normal</option>
+            </select>
+          </div>
+
+          <div class="inventory-table-container">
+            <table class="inventory-table" id="tablaInventario">
+              <thead>
+                <tr>
+                  <th>Insumo / Artículo</th>
+                  <th>Categoría</th>
+                  <th>Stock Actual</th>
+                  <th>Stock Mínimo</th>
+                  <th>Costo Unitario</th>
+                  <th>Estado</th>
+                  <th style="text-align:right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyInventario">
+                <!-- Filas de inventario -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISTA 8: SISTEMA DE AUDITORÍA & SEGURIDAD (ADMIN) -->
+      <section id="view-auditoria" class="pos-view">
+        <div class="view-subbar">
+          <div class="audit-top-info">
+            <h2 style="margin:0; font-size:1.25rem; color:#fff; display:flex; align-items:center; gap:8px;">
+              🛡️ Bitácora de Auditoría & Seguridad
+              <span class="pill-counter" style="background:#3b82f6;" id="auditTotalCounter">0 eventos</span>
+            </h2>
+          </div>
+          <div class="audit-actions">
+            <button class="btn-tool" onclick="cargarAuditoriaAdmin()">🔄 Actualizar Bitácora</button>
+          </div>
+        </div>
+
+        <div class="audit-container-wrapper">
+          <div class="audit-filters-row">
+            <div class="audit-chips-tabs">
+              <button class="audit-chip active" data-filter="todos" onclick="filtrarAuditoriaPorChip('todos')">Todos</button>
+              <button class="audit-chip" data-filter="anulacion_comanda" onclick="filtrarAuditoriaPorChip('anulacion_comanda')">🚫 Anulaciones</button>
+              <button class="audit-chip" data-filter="merma_perdida" onclick="filtrarAuditoriaPorChip('merma_perdida')">⚠️ Mermas & Pérdidas</button>
+              <button class="audit-chip" data-filter="entrada_mercaderia" onclick="filtrarAuditoriaPorChip('entrada_mercaderia')">📥 Entradas</button>
+            </div>
+            <input type="text" id="txtBuscarAuditoria" placeholder="🔎 Buscar por usuario, mesa, motivo..." oninput="filtrarTablaAuditoria()" />
+          </div>
+
+          <div class="audit-table-container">
+            <table class="audit-table" id="tablaAuditoria">
+              <thead>
+                <tr>
+                  <th>Fecha & Hora</th>
+                  <th>Usuario</th>
+                  <th>Acción</th>
+                  <th>Módulo</th>
+                  <th>Detalle del Evento</th>
+                  <th>Motivo / Razón</th>
+                  <th>Monto</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyAuditoria">
+                <!-- Filas de auditoría -->
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1106,6 +1320,100 @@
       <div class="dialog-footer">
         <button class="btn-sec" id="btnCancelarCobro">Cancelar</button>
         <button class="btn-pri success" id="btnFinalizarCobro">✅ Liquidar, Imprimir & Liberar Mesa</button>
+      </div>
+    </div>
+  <!-- MODAL: AJUSTE DE INVENTARIO (ENTRADA / MERMA / CONTEO) -->
+  <div class="modal-backdrop" id="modalAjusteInventario">
+    <div class="modal-dialog" style="max-width:440px;">
+      <div class="dialog-header">
+        <h3 id="lblTituloAjusteInv">📦 Movimiento de Inventario</h3>
+        <button class="btn-close-modal" onclick="cerrarModalAjusteInventario()">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field-row">
+          <label>Insumo a Modificar:</label>
+          <select id="selectAjusteInsumo" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+            <!-- Opciones cargadas dinámicamente -->
+          </select>
+        </div>
+
+        <div class="field-row" style="margin-top:12px;">
+          <label>Tipo de Operación:</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;">
+            <button type="button" class="btn-tipo-ajuste active" id="btnAjusteTipoEntrada" onclick="seleccionarTipoAjuste('entrada')" style="padding:10px; border-radius:8px; border:1px solid #10b981; background:rgba(16,185,129,0.2); color:#34d399; font-weight:700; cursor:pointer;">
+              📥 Entrada Compra
+            </button>
+            <button type="button" class="btn-tipo-ajuste" id="btnAjusteTipoMerma" onclick="seleccionarTipoAjuste('merma')" style="padding:10px; border-radius:8px; border:1px solid #374151; background:#1f2937; color:#9ca3af; font-weight:700; cursor:pointer;">
+              ⚠️ Merma / Pérdida
+            </button>
+          </div>
+        </div>
+
+        <div class="field-row" style="margin-top:12px;">
+          <label id="lblAjusteCantidad">Cantidad a Ingresar (<span id="spanAjusteUnidad">unidades</span>):</label>
+          <input type="number" id="txtAjusteCantidad" min="0.1" step="any" placeholder="Ej: 12" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff; font-size:1.1rem; font-weight:700;" />
+        </div>
+
+        <div class="field-row" style="margin-top:12px;">
+          <label>Motivo / Observación del Ajuste:</label>
+          <input type="text" id="txtAjusteMotivo" placeholder="Ej: Factura Proveedor #4512 / Vencimiento / Rotura" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-sec" onclick="cerrarModalAjusteInventario()">Cancelar</button>
+        <button class="btn-pri" id="btnConfirmarAjusteInv" onclick="guardarAjusteInventario()">💾 Aplicar Movimiento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTRAR NUEVO INSUMO -->
+  <div class="modal-backdrop" id="modalNuevoInsumo">
+    <div class="modal-dialog" style="max-width:460px;">
+      <div class="dialog-header">
+        <h3>➕ Registrar Nuevo Insumo / Artículo</h3>
+        <button class="btn-close-modal" onclick="cerrarModalNuevoInsumo()">✕</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field-row">
+          <label>Nombre del Insumo / Producto:</label>
+          <input type="text" id="txtNuevoInsumoNombre" placeholder="Ej: Queso Mozzarella Rallado" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+        </div>
+
+        <div class="field-row" style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div>
+            <label>Categoría:</label>
+            <input type="text" id="txtNuevoInsumoCat" placeholder="Ej: Lácteos & Cocina" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+          </div>
+          <div>
+            <label>Unidad de Medida:</label>
+            <select id="selectNuevoInsumoUnidad" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+              <option value="unidades">Unidades</option>
+              <option value="botellas">Botellas</option>
+              <option value="kg">Kilogramos (kg)</option>
+              <option value="porciones">Porciones</option>
+              <option value="litros">Litros</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row" style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+          <div>
+            <label>Stock Inicial:</label>
+            <input type="number" id="txtNuevoInsumoStock" min="0" step="any" value="10" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+          </div>
+          <div>
+            <label>Stock Mínimo:</label>
+            <input type="number" id="txtNuevoInsumoMin" min="0" step="any" value="3" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+          </div>
+          <div>
+            <label>Costo Unitario:</label>
+            <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+          </div>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-sec" onclick="cerrarModalNuevoInsumo()">Cancelar</button>
+        <button class="btn-pri" onclick="guardarNuevoInsumo()">💾 Registrar Insumo</button>
       </div>
     </div>
   </div>

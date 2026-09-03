@@ -304,12 +304,20 @@ function aplicarEnrutamientoPorRol() {
   // Configurar Logo y Nombre del Negocio
   actualizarBrandingNegocio(estado.negocioActual);
 
-  // Visibilidad de herramientas de Admin
+  // Visibilidad de herramientas y pestañas exclusivas de Admin
   const adminTools = document.getElementById('adminExtraActions');
-  if (u.rol === 'admin' || u.rol === 'developer') {
-    adminTools.style.display = 'flex';
+  const esAdmin = u.rol === 'admin' || u.rol === 'developer';
+  if (esAdmin) {
+    if (adminTools) adminTools.style.display = 'flex';
+    document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
   } else {
-    adminTools.style.display = 'none';
+    if (adminTools) adminTools.style.display = 'none';
+    document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'none');
+    const activeNav = document.querySelector('.nav-pill.active');
+    if (activeNav && ['metricas', 'inventario', 'auditoria'].includes(activeNav.dataset.view)) {
+      const salonTab = document.querySelector('.nav-pill[data-view="salon"]');
+      if (salonTab) salonTab.click();
+    }
   }
 
   // Cargar datos operativos del restaurante
@@ -3058,6 +3066,9 @@ function initNavegacion() {
       if (btn.dataset.view === 'editor-plano') renderEditorPlano();
       if (btn.dataset.view === 'kds') cargarKDSDesdeBackend();
       if (btn.dataset.view === 'caja') cargarCajaDesdeBackend();
+      if (btn.dataset.view === 'metricas') cargarDashboardMetricas();
+      if (btn.dataset.view === 'inventario') cargarInventarioAdmin();
+      if (btn.dataset.view === 'auditoria') cargarAuditoriaAdmin();
     });
   });
 
@@ -3105,6 +3116,427 @@ if (typeof setInterval !== 'undefined') {
       renderSalón();
     }
   }, 30000);
+}
+
+// ============================================================================
+// MÓDULOS DE ADMINISTRADOR: DASHBOARD, INVENTARIO & AUDITORÍA
+// ============================================================================
+
+// 1. DASHBOARD DE MÉTRICAS
+async function cargarDashboardMetricas() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/metricas/dashboard', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('No se pudo cargar el dashboard de métricas');
+    const data = await res.json();
+
+    // KPIs
+    const r = data.resumen;
+    document.getElementById('kpiVentasHoy').textContent = formatCRC(r.totalVentasHoy || 0);
+    const diffSign = r.diferenciaAyer >= 0 ? '+' : '';
+    document.getElementById('kpiComparativaAyer').textContent = `vs ayer: ${diffSign}${r.diferenciaAyer}%`;
+    document.getElementById('kpiComparativaAyer').style.color = r.diferenciaAyer >= 0 ? '#10b981' : '#ef4444';
+    document.getElementById('kpiCuentasCobradas').textContent = r.cuentasHoy || 0;
+    document.getElementById('kpiTicketPromedio').textContent = formatCRC(r.ticketPromedio || 0);
+    document.getElementById('kpiTiempoCocina').textContent = `${r.tiempoPromedioCocinaMin || 0} min`;
+
+    // Gráfico de Horas Pico
+    const chartContainer = document.getElementById('peakHoursChartContainer');
+    chartContainer.innerHTML = '';
+    const maxVenta = Math.max(1, ...data.ventasPorHora.map(h => h.total));
+
+    data.ventasPorHora.forEach(h => {
+      const pct = Math.round((h.total / maxVenta) * 100);
+      const row = document.createElement('div');
+      row.className = 'peak-hour-row';
+      row.innerHTML = `
+        <span class="peak-hour-label">${h.hora}</span>
+        <div class="peak-hour-track">
+          <div class="peak-hour-bar" style="width:${pct}%;"></div>
+        </div>
+        <span class="peak-hour-val">${h.total > 0 ? formatCRC(h.total) : '—'}</span>
+      `;
+      chartContainer.appendChild(row);
+    });
+
+    // Top Sellers
+    const topContainer = document.getElementById('topSellersContainer');
+    topContainer.innerHTML = '';
+    if (!data.topProductos || !data.topProductos.length) {
+      topContainer.innerHTML = '<div style="color:#9ca3af; padding:12px; text-align:center;">Sin ventas registradas hoy todavía.</div>';
+    } else {
+      data.topProductos.forEach((p, idx) => {
+        const item = document.createElement('div');
+        item.className = 'top-seller-item';
+        item.innerHTML = `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong style="color:#f59e0b; font-size:1rem; width:20px;">#${idx + 1}</strong>
+            <div>
+              <span class="top-seller-name">${escapeHtml(p.nombre_producto)}</span>
+              <div style="font-size:0.75rem; color:#9ca3af;">${formatCRC(p.total_recaudado)}</div>
+            </div>
+          </div>
+          <span class="top-seller-count">${p.total_unidades} ordenados</span>
+        `;
+        topContainer.appendChild(item);
+      });
+    }
+
+    // Ranking de Meseros
+    const waitersContainer = document.getElementById('waitersRankingContainer');
+    waitersContainer.innerHTML = '';
+    if (!data.meseros || !data.meseros.length) {
+      waitersContainer.innerHTML = '<div style="color:#9ca3af; padding:12px; text-align:center;">Sin actividad de meseros hoy.</div>';
+    } else {
+      data.meseros.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'waiter-item';
+        item.innerHTML = `
+          <div>
+            <strong style="color:#f3f4f6;">👤 ${escapeHtml(m.nombre)}</strong>
+            <div style="font-size:0.75rem; color:#9ca3af;">${m.cuentas} cuentas cerradas</div>
+          </div>
+          <div style="text-align:right;">
+            <strong style="color:#34d399;">${formatCRC(m.ventas)}</strong>
+            <div style="font-size:0.75rem; color:#f59e0b;">Propina: ${formatCRC(m.propinas)}</div>
+          </div>
+        `;
+        waitersContainer.appendChild(item);
+      });
+    }
+
+    // Alertas de Stock Crítico
+    const stockContainer = document.getElementById('criticalStockContainer');
+    stockContainer.innerHTML = '';
+    if (!data.alertasStock || !data.alertasStock.length) {
+      stockContainer.innerHTML = '<div style="color:#34d399; padding:12px; text-align:center;">✅ Todos los insumos tienen stock óptimo.</div>';
+    } else {
+      data.alertasStock.forEach(s => {
+        const isAgotado = s.stock_actual <= 0;
+        const item = document.createElement('div');
+        item.className = 'critical-stock-item';
+        item.innerHTML = `
+          <div>
+            <strong style="color:${isAgotado ? '#ef4444' : '#f59e0b'};">${isAgotado ? '⛔' : '⚠️'} ${escapeHtml(s.nombre)}</strong>
+            <div style="font-size:0.75rem; color:#9ca3af;">Mínimo requerido: ${s.stock_minimo} ${s.unidad_medida}</div>
+          </div>
+          <span class="stock-pill ${isAgotado ? 'agotado' : 'bajo'}">${s.stock_actual} ${s.unidad_medida}</span>
+        `;
+        stockContainer.appendChild(item);
+      });
+    }
+  } catch (e) {
+    console.error('Error cargando métricas:', e);
+  }
+}
+
+// 2. CONTROL DE INVENTARIO
+estado.inventario = [];
+
+async function cargarInventarioAdmin() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/inventario', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al consultar inventario');
+    estado.inventario = await res.json();
+
+    // Llenar categorías en filtro
+    const catSelect = document.getElementById('selectFiltroCatInventario');
+    if (catSelect) {
+      const categorias = [...new Set(estado.inventario.map(i => i.categoria))].filter(Boolean);
+      catSelect.innerHTML = '<option value="todas">Todas las Categorías</option>';
+      categorias.forEach(c => {
+        catSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+      });
+    }
+
+    // Llenar select del modal de ajuste
+    const ajusteSelect = document.getElementById('selectAjusteInsumo');
+    if (ajusteSelect) {
+      ajusteSelect.innerHTML = '';
+      estado.inventario.forEach(i => {
+        ajusteSelect.innerHTML += `<option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>`;
+      });
+    }
+
+    renderTablaInventario(estado.inventario);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderTablaInventario(items) {
+  const tbody = document.getElementById('tbodyInventario');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
+    return;
+  }
+
+  items.forEach(ins => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(ins.nombre)}</strong></td>
+      <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
+      <td><strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
+      <td>${ins.stock_minimo} <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
+      <td>${formatCRC(ins.costo_unitario || 0)}</td>
+      <td>
+        <span class="stock-pill ${ins.estado_stock}">
+          ${ins.estado_stock === 'agotado' ? '⛔ Agotado' : ins.estado_stock === 'bajo' ? '⚠️ Bajo Stock' : '✅ Normal'}
+        </span>
+      </td>
+      <td style="text-align:right;">
+        <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>
+        <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma', ${ins.id})">- Merma</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filtrarTablaInventario() {
+  const q = (document.getElementById('txtBuscarInsumo')?.value || '').toLowerCase().trim();
+  const cat = document.getElementById('selectFiltroCatInventario')?.value || 'todas';
+  const est = document.getElementById('selectFiltroEstadoInventario')?.value || 'todos';
+
+  const filtrados = (estado.inventario || []).filter(i => {
+    const matchQ = !q || i.nombre.toLowerCase().includes(q) || (i.categoria && i.categoria.toLowerCase().includes(q));
+    const matchCat = cat === 'todas' || i.categoria === cat;
+    const matchEst = est === 'todos' || i.estado_stock === est;
+    return matchQ && matchCat && matchEst;
+  });
+
+  renderTablaInventario(filtrados);
+}
+
+// Modales de Inventario
+let tipoAjusteActivo = 'entrada';
+
+function abrirModalAjusteRapido(tipo = 'entrada', insumoId = null) {
+  tipoAjusteActivo = tipo;
+  seleccionarTipoAjuste(tipo);
+
+  if (insumoId) {
+    const sel = document.getElementById('selectAjusteInsumo');
+    if (sel) sel.value = insumoId;
+  }
+  actualizarEtiquetaUnidadAjuste();
+  const txtCant = document.getElementById('txtAjusteCantidad');
+  const txtMotivo = document.getElementById('txtAjusteMotivo');
+  if (txtCant) txtCant.value = '';
+  if (txtMotivo) txtMotivo.value = '';
+
+  document.getElementById('modalAjusteInventario')?.classList.add('active');
+}
+
+function cerrarModalAjusteInventario() {
+  document.getElementById('modalAjusteInventario')?.classList.remove('active');
+}
+
+function seleccionarTipoAjuste(tipo) {
+  tipoAjusteActivo = tipo;
+  const btnEntrada = document.getElementById('btnAjusteTipoEntrada');
+  const btnMerma = document.getElementById('btnAjusteTipoMerma');
+  const lblCant = document.getElementById('lblAjusteCantidad');
+
+  if (tipo === 'entrada') {
+    if (btnEntrada) {
+      btnEntrada.style.border = '1px solid #10b981';
+      btnEntrada.style.background = 'rgba(16,185,129,0.2)';
+      btnEntrada.style.color = '#34d399';
+    }
+    if (btnMerma) {
+      btnMerma.style.border = '1px solid #374151';
+      btnMerma.style.background = '#1f2937';
+      btnMerma.style.color = '#9ca3af';
+    }
+    if (lblCant) lblCant.innerHTML = 'Cantidad a Ingresar (<span id="spanAjusteUnidad">unidades</span>):';
+  } else {
+    if (btnMerma) {
+      btnMerma.style.border = '1px solid #ef4444';
+      btnMerma.style.background = 'rgba(239,68,68,0.2)';
+      btnMerma.style.color = '#f87171';
+    }
+    if (btnEntrada) {
+      btnEntrada.style.border = '1px solid #374151';
+      btnEntrada.style.background = '#1f2937';
+      btnEntrada.style.color = '#9ca3af';
+    }
+    if (lblCant) lblCant.innerHTML = 'Cantidad a Descontar por Merma/Pérdida (<span id="spanAjusteUnidad">unidades</span>):';
+  }
+  actualizarEtiquetaUnidadAjuste();
+}
+
+function actualizarEtiquetaUnidadAjuste() {
+  const sel = document.getElementById('selectAjusteInsumo');
+  if (!sel || !sel.options || sel.selectedIndex < 0) return;
+  const opt = sel.options[sel.selectedIndex];
+  const u = opt ? opt.dataset.unidad || 'unidades' : 'unidades';
+  const span = document.getElementById('spanAjusteUnidad');
+  if (span) span.textContent = u;
+}
+
+document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
+
+async function guardarAjusteInventario() {
+  const insumoId = document.getElementById('selectAjusteInsumo')?.value;
+  const cantidad = parseFloat(document.getElementById('txtAjusteCantidad')?.value);
+  const motivo = document.getElementById('txtAjusteMotivo')?.value.trim();
+
+  if (!cantidad || cantidad <= 0) {
+    alert('Ingresa una cantidad válida mayor a 0');
+    return;
+  }
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/inventario/${insumoId}/ajuste`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
+      body: JSON.stringify({
+        tipo: tipoAjusteActivo,
+        cantidad,
+        motivo: motivo || (tipoAjusteActivo === 'entrada' ? 'Entrada de compra' : 'Merma registrada'),
+        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    mostrarNotificacionCentro(`✅ Movimiento de inventario aplicado con éxito.`, 'success');
+    cerrarModalAjusteInventario();
+    cargarInventarioAdmin();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+function abrirModalNuevoInsumo() {
+  const n = document.getElementById('txtNuevoInsumoNombre');
+  const c = document.getElementById('txtNuevoInsumoCat');
+  const s = document.getElementById('txtNuevoInsumoStock');
+  const m = document.getElementById('txtNuevoInsumoMin');
+  const cs = document.getElementById('txtNuevoInsumoCosto');
+  if (n) n.value = '';
+  if (c) c.value = 'General';
+  if (s) s.value = '10';
+  if (m) m.value = '3';
+  if (cs) cs.value = '1000';
+  document.getElementById('modalNuevoInsumo')?.classList.add('active');
+}
+
+function cerrarModalNuevoInsumo() {
+  document.getElementById('modalNuevoInsumo')?.classList.remove('active');
+}
+
+async function guardarNuevoInsumo() {
+  const nombre = document.getElementById('txtNuevoInsumoNombre')?.value.trim();
+  const categoria = document.getElementById('txtNuevoInsumoCat')?.value.trim() || 'General';
+  const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
+  const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
+  const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 3;
+  const costo_unitario = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
+
+  if (!nombre) return alert('El nombre del insumo es obligatorio.');
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/inventario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
+      body: JSON.stringify({
+        nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario,
+        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    mostrarNotificacionCentro(`✅ Insumo "${nombre}" registrado correctamente.`, 'success');
+    cerrarModalNuevoInsumo();
+    cargarInventarioAdmin();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+}
+
+// 3. SISTEMA DE AUDITORÍA
+estado.auditoria = [];
+
+async function cargarAuditoriaAdmin() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/auditoria?limite=100', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al consultar bitácora de auditoría');
+    estado.auditoria = await res.json();
+
+    const counter = document.getElementById('auditTotalCounter');
+    if (counter) counter.textContent = `${estado.auditoria.length} eventos`;
+    renderTablaAuditoria(estado.auditoria);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderTablaAuditoria(eventos) {
+  const tbody = document.getElementById('tbodyAuditoria');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!eventos.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#9ca3af;">No hay eventos registrados en la bitácora.</td></tr>';
+    return;
+  }
+
+  eventos.forEach(ev => {
+    const tr = document.createElement('tr');
+    const badgeClass = ev.tipo_evento || 'operativo';
+    const fecha = ev.fecha_hora ? new Date(ev.fecha_hora).toLocaleString('es-CR') : 'Reciente';
+
+    tr.innerHTML = `
+      <td><span style="color:#9ca3af; font-size:0.8rem;">${fecha}</span></td>
+      <td><strong>👤 ${escapeHtml(ev.usuario_nombre)}</strong></td>
+      <td><span class="audit-action-badge ${badgeClass}">${escapeHtml((ev.accion || '').replace(/_/g, ' '))}</span></td>
+      <td><span style="color:#60a5fa; font-weight:600; text-transform:uppercase; font-size:0.75rem;">${escapeHtml(ev.modulo || 'general')}</span></td>
+      <td>${escapeHtml(ev.detalle || '')}</td>
+      <td><em style="color:#fbbf24;">${escapeHtml(ev.motivo || '—')}</em></td>
+      <td><strong>${ev.monto > 0 ? formatCRC(ev.monto) : '—'}</strong></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filtrarAuditoriaPorChip(tipo) {
+  document.querySelectorAll('.audit-chip').forEach(c => c.classList.remove('active'));
+  const btn = document.querySelector(`.audit-chip[data-filter="${tipo}"]`);
+  if (btn) btn.classList.add('active');
+
+  filtrarTablaAuditoria();
+}
+
+function filtrarTablaAuditoria() {
+  const chipActivo = document.querySelector('.audit-chip.active')?.dataset.filter || 'todos';
+  const q = (document.getElementById('txtBuscarAuditoria')?.value || '').toLowerCase().trim();
+
+  const filtrados = (estado.auditoria || []).filter(ev => {
+    const matchTipo = chipActivo === 'todos' || ev.accion === chipActivo;
+    const matchQ = !q || 
+      (ev.usuario_nombre && ev.usuario_nombre.toLowerCase().includes(q)) ||
+      (ev.detalle && ev.detalle.toLowerCase().includes(q)) ||
+      (ev.motivo && ev.motivo.toLowerCase().includes(q));
+    return matchTipo && matchQ;
+  });
+
+  renderTablaAuditoria(filtrados);
 }
 
 if (typeof module !== 'undefined' && module.exports) {

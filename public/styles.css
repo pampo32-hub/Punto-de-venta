@@ -3364,6 +3364,302 @@ textarea:focus, select:focus, input:focus {
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
 }
 
+/* ============================================================= */
+/* MÓDULOS DE ADMINISTRACIÓN: DASHBOARD, INVENTARIO & AUDITORÍA */
+/* ============================================================= */
+.admin-only-tab {
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  background: rgba(30, 58, 138, 0.25) !important;
+}
+
+.admin-only-tab:hover {
+  background: rgba(37, 99, 235, 0.35) !important;
+}
+
+/* 1. DASHBOARD & KPIS */
+.dashboard-content-wrapper {
+  padding: 16px 20px;
+  height: calc(100vh - 165px);
+  overflow-y: auto;
+}
+
+.kpi-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.kpi-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 4px;
+}
+
+.kpi-card.kpi-sales::before { background: #10b981; }
+.kpi-card.kpi-tickets::before { background: #3b82f6; }
+.kpi-card.kpi-average::before { background: #f59e0b; }
+.kpi-card.kpi-kitchen::before { background: #8b5cf6; }
+
+.kpi-icon {
+  font-size: 2.2rem;
+  background: rgba(255,255,255,0.05);
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.kpi-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-val {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #f9fafb;
+  margin: 3px 0;
+}
+
+.kpi-sub {
+  font-size: 0.75rem;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.dashboard-grids-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grids-row { grid-template-columns: 1fr; }
+}
+
+.dash-panel-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.panel-header h3 {
+  margin: 0 0 14px 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #e5e7eb;
+}
+
+/* Gráfico de horas pico con barras CSS */
+.peak-hours-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.peak-hour-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+}
+
+.peak-hour-label {
+  width: 50px;
+  color: #9ca3af;
+  font-weight: 700;
+}
+
+.peak-hour-track {
+  flex: 1;
+  background: #1f2937;
+  height: 18px;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.peak-hour-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+.peak-hour-val {
+  width: 85px;
+  text-align: right;
+  font-weight: 700;
+  color: #f9fafb;
+}
+
+/* Top Sellers & Rankings */
+.top-sellers-list, .waiters-ranking-list, .critical-stock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.top-seller-item, .waiter-item, .critical-stock-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #182234;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.top-seller-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #f3f4f6;
+}
+
+.top-seller-count {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+}
+
+/* 2. TABLA DE INVENTARIO */
+.inventory-container-wrapper, .audit-container-wrapper {
+  padding: 16px 20px;
+  height: calc(100vh - 165px);
+  overflow-y: auto;
+}
+
+.inventory-filters-row, .audit-filters-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.inventory-filters-row input, .inventory-filters-row select,
+.audit-filters-row input {
+  padding: 10px 14px;
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.88rem;
+}
+
+.inventory-filters-row input { flex: 1; min-width: 200px; }
+
+.inventory-table, .audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #111827;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.inventory-table th, .audit-table th {
+  background: #1f2937;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.inventory-table td, .audit-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #1f2937;
+  font-size: 0.88rem;
+  color: #e5e7eb;
+}
+
+.inventory-table tr:hover, .audit-table tr:hover {
+  background: #162032;
+}
+
+.stock-pill {
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stock-pill.normal { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+.stock-pill.bajo { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+.stock-pill.agotado { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+/* 3. AUDITORÍA CHIPS & BADGES */
+.audit-chips-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.audit-chip {
+  padding: 8px 14px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  color: #9ca3af;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.audit-chip.active {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #60a5fa;
+}
+
+.audit-action-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.audit-action-badge.seguridad { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+.audit-action-badge.operativo { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); }
+.audit-action-badge.financiero { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
+
 .btn-separar-mini:active {
   transform: translateY(1px);
 }
