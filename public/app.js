@@ -906,26 +906,26 @@ function renderSalón(filtroZona = 'todas') {
       let headerText = '';
       let listItems = [];
 
-      if (tienePendientes) {
+      // El temporizador de espera aplica única y exclusivamente si hay platillos de cocina pendientes
+      const tieneCocinaPendiente = Boolean(tienePendientes && (m.estado === 'esperando' || m.estado === 'esperando_parcial'));
+
+      if (tieneCocinaPendiente) {
         headerText = `⏱️ Esperando hace ${minutosEspera} min (${platosPendientes.length} pendiente${platosPendientes.length > 1 ? 's' : ''})`;
         listItems = platosPendientes;
-      } else if (m.todos_platillos && m.todos_platillos.length > 0) {
-        headerText = `✅ Pedidos entregados (${minutosEspera > 0 ? minutosEspera + ' min' : 'Mesa Activa'})`;
-        listItems = m.todos_platillos;
-      } else if (m.estado === 'activa') {
-        headerText = `✅ Todos los platillos servidos (Activa)`;
-        listItems = ['Comanda despachada por cocina'];
-      } else {
-        headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'En consumo'})`;
-        listItems = ['Mesa atendida por salonero'];
-      }
-
-      if (tienePendientes || m.primera_comanda_hora) {
         waitChipHtml = `
           <div class="m-wait-chip" title="Ver platillos pendientes de entrega">
             ⏱️ ${minutosEspera}m
           </div>
         `;
+      } else if (m.estado === 'activa') {
+        headerText = `✅ Todos los platillos servidos (Activa)`;
+        listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Comanda despachada por cocina'];
+      } else if (m.todos_platillos && m.todos_platillos.length > 0) {
+        headerText = `✅ Pedidos entregados (${m.estado === 'libre' ? 'Libre' : 'Mesa Activa'})`;
+        listItems = m.todos_platillos;
+      } else {
+        headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'En consumo'})`;
+        listItems = ['Mesa atendida por salonero'];
       }
 
       tooltipHtml = `
@@ -1892,7 +1892,7 @@ window.despacharKDSBackend = async function(detalleId) {
       body: JSON.stringify({ estado: 'listo' })
     });
     sonarCampanaCocina();
-    alert('🍽️ Comanda marcada como lista.');
+    mostrarNotificacionCentro('🍽️ Platillo marcado como listo y servido.', 'success');
     cargarKDSDesdeBackend();
     cargarMesasDesdeBackend();
   } catch (e) {

@@ -486,19 +486,21 @@ app.get('/api/mesas', async (req, res) => {
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
       const cocinaItems = items.filter(
-        it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
+        it => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
       );
       const pendientes = cocinaItems.filter(
         it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
       );
 
       let primeraComandaHora = null;
-      if (items.length > 0) {
-        primeraComandaHora = items[0].hora_pedido || items[0].creado_en || null;
+      if (pendientes.length > 0) {
+        primeraComandaHora = pendientes[0].hora_pedido || pendientes[0].creado_en || null;
+      } else if (cocinaItems.length > 0) {
+        primeraComandaHora = cocinaItems[0].hora_pedido || cocinaItems[0].creado_en || null;
       }
 
       let minutosEspera = 0;
-      if (primeraComandaHora) {
+      if (pendientes.length > 0 && primeraComandaHora) {
         const diffMs = Math.max(0, ahora - new Date(primeraComandaHora).getTime());
         minutosEspera = Math.floor(diffMs / 60000);
       }
