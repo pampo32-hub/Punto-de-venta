@@ -910,10 +910,13 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    if (m.es_mesa_secundaria_unida) {
-      mergedBadgeHtml = `<small class="m-merged-badge" style="background:rgba(239,68,68,0.25); color:#fca5a5; border-color:#ef4444; cursor:pointer;" title="Mesa unida a ${m.unida_a_numero || 'Mesa Principal'} (Clic para separar)">🔗 Unida</small>`;
+    if (m.grupo_mesas || m.es_mesa_agrupada) {
+      const otros = (m.mesas_unidas && m.mesas_unidas.length > 0) ? m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join('+') : 'Grupo';
+      mergedBadgeHtml = `<small class="m-merged-badge" style="background:rgba(14,165,233,0.25); color:#38bdf8; border-color:#0284c7; cursor:pointer;" title="Mesa en grupo con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : 'otras mesas'} (Pulsación larga para Restaurar)">🔗 G:${otros}</small>`;
+    } else if (m.es_mesa_secundaria_unida) {
+      mergedBadgeHtml = `<small class="m-merged-badge" style="background:rgba(239,68,68,0.25); color:#fca5a5; border-color:#ef4444; cursor:pointer;" title="Mesa unida a ${m.unida_a_numero || 'Mesa Principal'} (Pulsación larga para Restaurar)">🔗 Unida</small>`;
     } else if (m.es_mesa_unida && m.mesas_unidas && m.mesas_unidas.length > 0) {
-      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Mesa unida con ${m.mesas_unidas.join(', ')} (Clic para separar)">🔗 +${m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join(',')}</small>`;
+      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Mesa unida con ${m.mesas_unidas.join(', ')} (Pulsación larga para Restaurar)">🔗 +${m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join(',')}</small>`;
     }
 
     card.innerHTML = `
@@ -970,7 +973,7 @@ function renderSalón(filtroZona = 'todas') {
     if (badgeSepararEl) {
       badgeSepararEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        solicitarSepararMesas(m.id);
+        solicitarRestaurarMesas(m.id);
       });
     }
 
@@ -1088,18 +1091,18 @@ function finalizarDrop(clientX, clientY) {
 
   const isTargetLibre = targetMesa.estado === 'libre';
   if (isTargetLibre) {
-    const opcion = confirm(`Has soltado la ${sourceMesa.numero} sobre la ${targetMesa.numero}.\n\n• [Aceptar] = 🔗 UNIR / FUSIONAR ambas mesas en una sola cuenta\n• [Cancelar] = 🔁 MOVER la orden a la ${targetMesa.numero}`);
+    const opcion = confirm(`Has soltado la ${sourceMesa.numero} sobre la ${targetMesa.numero}.\n\n• [Aceptar] = 🔗 UNIR EN GRUPO DE MESAS (Conserva cada mesa intacta sin mezclar datos)\n• [Cancelar] = 🔁 MOVER la orden a la ${targetMesa.numero}`);
     if (opcion) {
-      ejecutarUnirMesas(sourceMesa.id, targetMesa.id);
+      ejecutarAgruparMesas(sourceMesa.id, targetMesa.id);
     } else {
       ejecutarMoverMesa(sourceMesa.id, targetMesa.id);
     }
   } else {
     const totalOrigen = sourceMesa.orden_total > 0 ? formatCRC(sourceMesa.orden_total) : 'cuenta activa';
     const totalDestino = targetMesa.orden_total > 0 ? formatCRC(targetMesa.orden_total) : 'cuenta activa';
-    const confirmar = confirm(`🔗 ¿Deseas UNIR y FUSIONAR las cuentas de la ${sourceMesa.numero} (${totalOrigen}) y la ${targetMesa.numero} (${totalDestino})?\n\nLos consumos se unificarán en una sola orden identificando el origen de cada platillo.`);
+    const confirmar = confirm(`🔗 ¿Deseas UNIR estas dos mesas en un GRUPO DE MESAS?\n\n• ${sourceMesa.numero} (${totalOrigen})\n• ${targetMesa.numero} (${totalDestino})\n\nSe creará una unión visual en grupo conservando cada mesa con sus productos, totales y observaciones intactas.`);
     if (confirmar) {
-      ejecutarUnirMesas(targetMesa.id, sourceMesa.id);
+      ejecutarAgruparMesas(sourceMesa.id, targetMesa.id);
     }
   }
 }
@@ -1146,16 +1149,16 @@ function agregarDragMesa(card, mesaData, canvas) {
     dragState.timer = setTimeout(() => {
       if (!isTouchDown) return;
       
-      const estaUnida = mesaData.es_mesa_unida || mesaData.es_mesa_secundaria_unida || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.estado === 'unida';
+      const estaUnida = mesaData.grupo_mesas || mesaData.es_mesa_agrupada || mesaData.es_mesa_unida || mesaData.es_mesa_secundaria_unida || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.estado === 'unida';
       if (estaUnida) {
         const nombreUnidas = (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0)
           ? mesaData.mesas_unidas.join(', ')
-          : (mesaData.unida_a_numero || 'otra mesa');
+          : (mesaData.unida_a_numero || 'otras mesas');
         
         isTouchDown = false;
-        const separar = confirm(`✂️ La ${mesaData.numero} está unida con ${nombreUnidas}.\n\n¿Deseas SEPARAR las mesas y devolver las cuentas y montos a su estado original antes de la unión?`);
-        if (separar) {
-          ejecutarSepararMesas(mesaData.id);
+        const restaurar = confirm(`🔄 RESTAURAR MESAS\n\nLa ${mesaData.numero} está en grupo con ${nombreUnidas}.\n\n¿Deseas RESTAURAR las mesas a su estado original y eliminar el grupo?\n\n(Cada mesa conservará sus productos, totales y observaciones exactamente como estaban sin alterar nada)`);
+        if (restaurar) {
+          ejecutarRestaurarMesas(mesaData.id);
           return;
         }
       }
@@ -1260,27 +1263,43 @@ async function ejecutarUnirMesas(mesaPrincipalId, mesaSecundariaId) {
   }
 }
 
-async function solicitarSepararMesas(mesaId) {
+async function ejecutarAgruparMesas(mesa1Id, mesa2Id) {
+  try {
+    const res = await fetch('/api/mesas/agrupar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mesa1Id, mesa2Id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    alert(`🔗 ${data.message}`);
+    cargarMesasDesdeBackend();
+  } catch (e) {
+    alert('❌ Error al agrupar mesas: ' + e.message);
+  }
+}
+
+async function solicitarRestaurarMesas(mesaId) {
   const mesa = estado.mesas.find(m => m.id === mesaId);
   const numTxt = mesa ? mesa.numero : 'esta mesa';
 
-  const confirmar = confirm(`✂️ ¿Deseas SEPARAR la ${numTxt} y restaurar las cuentas originales de cada mesa?\n\nLos consumos volverán a dividirse según su mesa de procedencia original.`);
+  const confirmar = confirm(`🔄 RESTAURAR MESAS\n\n¿Deseas RESTAURAR la ${numTxt} a su estado original?\n\nSe eliminará el grupo visual conservando cada mesa con sus productos, totales y observaciones intactas.`);
   if (!confirmar) return;
 
-  await ejecutarSepararMesas(mesaId);
+  await ejecutarRestaurarMesas(mesaId);
 }
 
-async function ejecutarSepararMesas(mesaId) {
+async function ejecutarRestaurarMesas(mesaId) {
   try {
-    const res = await fetch('/api/mesas/separar', {
+    const res = await fetch('/api/mesas/restaurar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mesaId })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al separar mesas');
+    if (!res.ok) throw new Error(data.error || 'Error al restaurar mesas');
     
-    alert(`✂️ ${data.message}`);
+    alert(`🔄 ${data.message}`);
     document.getElementById('modalComandero').classList.remove('active');
     const modalMoverUnir = document.getElementById('modalMoverUnir');
     if (modalMoverUnir) modalMoverUnir.classList.remove('active');
@@ -1288,8 +1307,16 @@ async function ejecutarSepararMesas(mesaId) {
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
-    alert('❌ Error al separar mesas: ' + e.message);
+    alert('❌ Error al restaurar mesas: ' + e.message);
   }
+}
+
+async function solicitarSepararMesas(mesaId) {
+  return solicitarRestaurarMesas(mesaId);
+}
+
+async function ejecutarSepararMesas(mesaId) {
+  return ejecutarRestaurarMesas(mesaId);
 }
 
 document.querySelectorAll('.zone-tab').forEach(tab => {
@@ -1339,13 +1366,19 @@ async function abrirComanderoMesa(mesaId) {
 
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
-        if (origenesUnidos.length > 0 || mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
+        if (mesa.grupo_mesas || mesa.es_mesa_agrupada || origenesUnidos.length > 0 || mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
           bannerEl.style.display = 'flex';
-          const txt = mesa.es_mesa_secundaria_unida 
-            ? `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`
-            : `🔗 Mesa Unida con ` + (origenesUnidos.length > 0 ? origenesUnidos.join(', ') : 'otra mesa');
+          const txt = (mesa.grupo_mesas || mesa.es_mesa_agrupada)
+            ? `🔗 Mesa en Grupo con ` + (mesa.mesas_unidas && mesa.mesas_unidas.length > 0 ? mesa.mesas_unidas.join(', ') : 'otras mesas')
+            : (mesa.es_mesa_secundaria_unida 
+                ? `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`
+                : `🔗 Mesa Unida con ` + (origenesUnidos.length > 0 ? origenesUnidos.join(', ') : 'otra mesa'));
           document.getElementById('comMergedBannerTxt').textContent = txt;
-          document.getElementById('btnSepararComandero').onclick = () => solicitarSepararMesas(mesa.id);
+          const btnSep = document.getElementById('btnSepararComandero');
+          if (btnSep) {
+            btnSep.textContent = '🔄 Restaurar Mesas';
+            btnSep.onclick = () => solicitarRestaurarMesas(mesa.id);
+          }
         } else {
           bannerEl.style.display = 'none';
         }
@@ -1356,10 +1389,17 @@ async function abrirComanderoMesa(mesaId) {
       mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
-        if (mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
+        if (mesa.grupo_mesas || mesa.es_mesa_agrupada || mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
           bannerEl.style.display = 'flex';
-          document.getElementById('comMergedBannerTxt').textContent = `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`;
-          document.getElementById('btnSepararComandero').onclick = () => solicitarSepararMesas(mesa.id);
+          const txt = (mesa.grupo_mesas || mesa.es_mesa_agrupada)
+            ? `🔗 Mesa en Grupo con ` + (mesa.mesas_unidas && mesa.mesas_unidas.length > 0 ? mesa.mesas_unidas.join(', ') : 'otras mesas')
+            : `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`;
+          document.getElementById('comMergedBannerTxt').textContent = txt;
+          const btnSep = document.getElementById('btnSepararComandero');
+          if (btnSep) {
+            btnSep.textContent = '🔄 Restaurar Mesas';
+            btnSep.onclick = () => solicitarRestaurarMesas(mesa.id);
+          }
         } else {
           bannerEl.style.display = 'none';
         }
@@ -1851,9 +1891,9 @@ function initMoverUnirMesas() {
     btnEjecutarSepararEl.addEventListener('click', async () => {
       const selSep = document.getElementById('selSepararMesa');
       const mesaId = Number(selSep ? selSep.value : 0);
-      if (!mesaId) return alert('Selecciona una mesa fusionada para separar.');
+      if (!mesaId) return alert('Selecciona una mesa en grupo o unida para restaurar.');
 
-      await solicitarSepararMesas(mesaId);
+      await solicitarRestaurarMesas(mesaId);
     });
   }
 }
@@ -1869,7 +1909,7 @@ function cargarSelectoresMoverUnir() {
 
   const ocupadas = estado.mesas.filter(m => m.estado !== 'libre');
   const libres = estado.mesas.filter(m => m.estado === 'libre');
-  const fusionadas = estado.mesas.filter(m => m.es_mesa_unida || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida || m.estado === 'unida');
+  const fusionadas = estado.mesas.filter(m => m.grupo_mesas || m.es_mesa_agrupada || m.es_mesa_unida || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida || m.estado === 'unida');
 
   if (ocupadas.length === 0) {
     selOrig.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';
@@ -1878,7 +1918,7 @@ function cargarSelectoresMoverUnir() {
   } else {
     selOrig.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Total: ${m.orden_total > 0 ? formatCRC(m.orden_total) : '₡0'}</option>`).join('');
     selU1.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Principal</option>`).join('');
-    selU2.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Secundaria (a fusionar)</option>`).join('');
+    selU2.innerHTML = ocupadas.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Secundaria (a agrupar/unir)</option>`).join('');
     if (ocupadas.length > 1) {
       selU2.selectedIndex = 1;
     }
@@ -1892,12 +1932,14 @@ function cargarSelectoresMoverUnir() {
 
   if (selSep) {
     if (fusionadas.length === 0) {
-      selSep.innerHTML = '<option value="">⚠️ No hay mesas fusionadas actualmente</option>';
+      selSep.innerHTML = '<option value="">⚠️ No hay mesas agrupadas ni unidas actualmente</option>';
     } else {
       selSep.innerHTML = fusionadas.map(m => {
-        const desc = m.es_mesa_secundaria_unida 
-          ? `(Unida a ${m.unida_a_numero || 'Mesa Principal'})` 
-          : `(Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : 'otra mesa'})`;
+        const desc = (m.grupo_mesas || m.es_mesa_agrupada)
+          ? `(En Grupo con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : 'otras'})`
+          : (m.es_mesa_secundaria_unida 
+              ? `(Unida a ${m.unida_a_numero || 'Mesa Principal'})` 
+              : `(Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : 'otra mesa'})`);
         return `<option value="${m.id}">${m.numero} ${desc} • Total: ${formatCRC(m.orden_total)}</option>`;
       }).join('');
     }

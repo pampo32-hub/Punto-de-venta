@@ -51,6 +51,7 @@ db.serialize(() => {
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_id INTEGER", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN unida_a_mesa_id INTEGER", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN unida_con TEXT", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN grupo_mesas TEXT", () => {});
 });
 
 // Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
@@ -517,7 +518,12 @@ app.get('/api/mesas', async (req, res) => {
         .filter(sec => sec.unida_a_mesa_id === m.id)
         .map(sec => sec.numero);
 
-      const todasUnidas = [...new Set([...origenesFusionados, ...secundariasEnlazadas])];
+      // Detectar mesas en el mismo grupo visual
+      const mesasEnMismoGrupo = m.grupo_mesas
+        ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas).map(other => other.numero)
+        : [];
+
+      const todasUnidas = [...new Set([...origenesFusionados, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
 
       if (m.unida_a_mesa_id) {
         const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
@@ -528,13 +534,15 @@ app.get('/api/mesas', async (req, res) => {
         m.unida_a_numero = null;
       }
 
+      m.es_mesa_agrupada = Boolean(m.grupo_mesas);
+      m.grupo_mesas_nombre = m.grupo_mesas || null;
       m.platos_pendientes = platosPendientes;
       m.items_pendientes = platosPendientes;
       m.todos_platillos = todosPlatillos;
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
       m.mesas_unidas = todasUnidas;
-      m.es_mesa_unida = todasUnidas.length > 0;
+      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas);
     }
 
     res.json({ zonas, mesas });
@@ -691,6 +699,69 @@ app.post('/api/mesas/unir', async (req, res) => {
   }
 });
 
+// Agrupar mesas para unión visual conservando cada mesa intacta (sin mezclar permanentemente datos)
+app.post('/api/mesas/agrupar', async (req, res) => {
+  try {
+    const { mesa1Id, mesa2Id } = req.body;
+    if (!mesa1Id || !mesa2Id) {
+      return res.status(400).json({ error: 'Debes especificar ambas mesas a agrupar' });
+    }
+    if (mesa1Id === mesa2Id) {
+      return res.status(400).json({ error: 'Debes seleccionar dos mesas distintas' });
+    }
+
+    const mesa1 = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesa1Id]);
+    const mesa2 = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesa2Id]);
+    if (!mesa1 || !mesa2) {
+      return res.status(404).json({ error: 'Mesa no encontrada' });
+    }
+
+    // Conservar datos y órdenes intactos: solo crear/asignar el grupo visual
+    const grupoNombre = mesa1.grupo_mesas || mesa2.grupo_mesas || `Grupo ${mesa1.numero} + ${mesa2.numero}`;
+    await dbRun('UPDATE Mesas SET grupo_mesas = ? WHERE id IN (?, ?)', [grupoNombre, mesa1Id, mesa2Id]);
+
+    io.emit('mesas_agrupadas', { grupo: grupoNombre, mesas: [mesa1Id, mesa2Id] });
+    io.emit('mesa_actualizada', { mesaId: mesa1Id });
+    io.emit('mesa_actualizada', { mesaId: mesa2Id });
+
+    res.json({ message: `Mesas agrupadas visualmente con éxito (${grupoNombre})`, grupo: grupoNombre });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Restaurar mesas: elimina solo el grupo y restaura cada mesa a su estado original sin recalcular ni repartir productos
+app.post('/api/mesas/restaurar', async (req, res) => {
+  try {
+    const { mesaId } = req.body;
+    if (!mesaId) return res.status(400).json({ error: 'ID de mesa requerido' });
+
+    const mesaTarget = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesaTarget) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    if (mesaTarget.grupo_mesas) {
+      const grupo = mesaTarget.grupo_mesas;
+      const mesasEnGrupo = await dbAll('SELECT * FROM Mesas WHERE grupo_mesas = ?', [grupo]);
+      await dbRun('UPDATE Mesas SET grupo_mesas = NULL WHERE grupo_mesas = ?', [grupo]);
+
+      for (const m of mesasEnGrupo) {
+        io.emit('mesa_actualizada', { mesaId: m.id });
+      }
+      io.emit('mesas_restauradas', { grupo, mesas: mesasEnGrupo.map(m => m.id) });
+      io.emit('mesas_separadas', { grupo, mesaPrincipalId: mesaTarget.id });
+
+      return res.json({
+        message: 'Grupo de mesas eliminado. Cada mesa conservó sus productos, totales y observaciones intactas.',
+        mesasRestauradas: mesasEnGrupo.map(m => ({ id: m.id, numero: m.numero }))
+      });
+    }
+
+    return await separarMesasFusionadas(mesaTarget, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Separar mesas previamente unidas (deshacer fusión restaurando cuentas originales)
 app.post('/api/mesas/separar', async (req, res) => {
   try {
@@ -700,6 +771,32 @@ app.post('/api/mesas/separar', async (req, res) => {
     const mesaTarget = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesaTarget) return res.status(404).json({ error: 'Mesa no encontrada' });
 
+    if (mesaTarget.grupo_mesas) {
+      const grupo = mesaTarget.grupo_mesas;
+      const mesasEnGrupo = await dbAll('SELECT * FROM Mesas WHERE grupo_mesas = ?', [grupo]);
+      await dbRun('UPDATE Mesas SET grupo_mesas = NULL WHERE grupo_mesas = ?', [grupo]);
+
+      for (const m of mesasEnGrupo) {
+        io.emit('mesa_actualizada', { mesaId: m.id });
+      }
+      io.emit('mesas_restauradas', { grupo, mesas: mesasEnGrupo.map(m => m.id) });
+      io.emit('mesas_separadas', { grupo, mesaPrincipalId: mesaTarget.id });
+
+      return res.json({
+        message: 'Grupo de mesas eliminado. Cada mesa conservó sus productos, totales y observaciones intactas.',
+        mesasRestauradas: mesasEnGrupo.map(m => ({ id: m.id, numero: m.numero }))
+      });
+    }
+
+    return await separarMesasFusionadas(mesaTarget, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+async function separarMesasFusionadas(mesaTarget, res) {
+  try {
+    const mesaId = mesaTarget.id;
     // Determinar mesa principal (si mesaTarget es secundaria, su principal es unida_a_mesa_id)
     let mesaPrincipalId = mesaTarget.unida_a_mesa_id || mesaTarget.id;
     let mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaPrincipalId]);
@@ -852,7 +949,7 @@ app.post('/api/mesas/separar', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+}
 
 
 
