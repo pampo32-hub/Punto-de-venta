@@ -49,10 +49,7 @@ function initDb() {
     db.run("ALTER TABLE Mesas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN ancho INTEGER DEFAULT 130", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN alto INTEGER DEFAULT 120", () => {});
-    db.run("ALTER TABLE Mesas ADD COLUMN unida_con TEXT", () => {});
-    db.run("ALTER TABLE Mesas ADD COLUMN unida_a_mesa_id INTEGER", () => {});
-    db.run("ALTER TABLE Mesas ADD COLUMN grupo_mesas TEXT", () => {});
-    db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN transferida_de TEXT", () => {});
 
     // 3. Categorías
     db.run(`CREATE TABLE IF NOT EXISTS Categorias (
@@ -141,6 +138,7 @@ function initDb() {
     )`);
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_happy_hour REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN transferida_de TEXT", () => {});
 
     // 8. Detalle de Órdenes (Comandas)
     db.run(`CREATE TABLE IF NOT EXISTS DetalleOrden (
@@ -165,7 +163,6 @@ function initDb() {
     db.run("ALTER TABLE DetalleOrden ADD COLUMN curso INTEGER DEFAULT 2", () => {});
     db.run("ALTER TABLE DetalleOrden ADD COLUMN creado_en TEXT", () => {});
     db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero INTEGER", () => {});
-    db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_id INTEGER", () => {});
     db.run("ALTER TABLE DetalleOrden ADD COLUMN comanda_numero INTEGER DEFAULT 1", () => {});
 
     // 9. Pagos

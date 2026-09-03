@@ -110,14 +110,13 @@ const dbRun = (sql, params = []) => new Promise((res, rej) => db.run(sql, params
 // HELPERS DE DOMINIO: ESTADOS KDS, TIEMPOS DE ESPERA Y TRAZABILIDAD
 // ============================================================================
 function evaluarEstadoMesaKDS(detalles = []) {
-  // A comanda solo va lo que es comida (destino === 'cocina'), las bebidas no van a comanda ni generan espera
   const cocinaItems = detalles.filter(
-    (it) => it.destino === 'cocina' && it.destino !== 'barra' && it.estado_comanda !== 'anulado'
+    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
   );
 
   if (!cocinaItems.length) return 'abierta';
 
-  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo' || it.estado_comanda === 'servido');
+  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo');
   const pendientes = cocinaItems.filter(
     (it) => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
   );
@@ -463,7 +462,8 @@ app.get('/api/mesas', async (req, res) => {
     const zonas = await dbAll('SELECT * FROM Zonas ORDER BY id ASC');
     const mesas = await dbAll(`
       SELECT m.*, o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
-             o.servicio_10, o.iva_13, o.total as orden_total, o.mesero as orden_mesero, o.cliente
+             o.servicio_10, o.iva_13, o.total as orden_total, o.mesero as orden_mesero, o.cliente,
+             o.transferida_de as orden_transferida_de
       FROM Mesas m
       LEFT JOIN Ordenes o ON m.id = o.mesa_id AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
       ORDER BY m.id ASC
@@ -494,13 +494,23 @@ app.get('/api/mesas', async (req, res) => {
       );
 
       // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos
-      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'libre') {
+      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta' && m.estado !== 'libre') {
         const estadoCalculado = evaluarEstadoMesaKDS(items);
         if (m.estado !== estadoCalculado) {
           m.estado = estadoCalculado;
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
+      } else if (!m.orden_activa_id || m.estado === 'libre') {
+        m.transferida_de = null;
+        m.unida_con = null;
+        m.mesas_unidas = [];
+        m.es_mesa_unida = false;
+        m.orden_total = 0;
+        m.orden_activa_id = null;
+        m.platos_pendientes = [];
+        m.items_pendientes = [];
+        m.minutos_espera = 0;
       }
 
       let primeraComandaHora = null;
@@ -551,36 +561,37 @@ app.get('/api/mesas', async (req, res) => {
       );
 
       let todasUnidas = [];
-      if (m.unida_con) {
+      const transferOrigen = (m.orden_activa_id && m.estado !== 'libre') ? (m.transferida_de || m.orden_transferida_de || null) : null;
+      m.transferida_de = transferOrigen;
+
+      if (transferOrigen) {
+        todasUnidas.push(transferOrigen);
+      }
+      if (m.unida_con && m.estado !== 'libre') {
         todasUnidas.push(m.unida_con);
       }
-      if (mergeActivo) {
+      if (mergeActivo && m.estado !== 'libre') {
         if (Number(m.id) === Number(mergeActivo.mesa_principal_id)) {
           try {
             const sA = JSON.parse(mergeActivo.snapshot_a);
             if (sA && sA.mesa_numero) todasUnidas.push(sA.mesa_numero);
           } catch (_) {}
-        } else if (Number(m.id) === Number(mergeActivo.mesa_secundaria_id)) {
-          try {
-            const sB = JSON.parse(mergeActivo.snapshot_b);
-            if (sB && sB.mesa_numero) todasUnidas.push(sB.mesa_numero);
-          } catch (_) {}
         }
       }
 
       // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
-      const secundariasEnlazadas = mesas
-        .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
-        .map(sec => sec.numero);
+      const secundariasEnlazadas = (m.estado !== 'libre' && m.orden_activa_id)
+        ? mesas.filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id)).map(sec => sec.numero)
+        : [];
 
       // Detectar mesas en el mismo grupo visual
-      const mesasEnMismoGrupo = m.grupo_mesas
+      const mesasEnMismoGrupo = (m.grupo_mesas && m.estado !== 'libre' && m.orden_activa_id)
         ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas).map(other => other.numero)
         : [];
 
       todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
 
-      if (m.unida_a_mesa_id) {
+      if (m.unida_a_mesa_id && m.estado !== 'libre' && m.orden_activa_id) {
         const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
         m.unida_a_numero = princMesa ? princMesa.numero : 'Mesa Principal';
         m.es_mesa_secundaria_unida = true;
@@ -589,15 +600,15 @@ app.get('/api/mesas', async (req, res) => {
         m.unida_a_numero = null;
       }
 
-      m.es_mesa_agrupada = Boolean(m.grupo_mesas);
-      m.grupo_mesas_nombre = m.grupo_mesas || null;
+      m.es_mesa_agrupada = Boolean(m.grupo_mesas && m.estado !== 'libre' && m.orden_activa_id);
+      m.grupo_mesas_nombre = m.es_mesa_agrupada ? m.grupo_mesas : null;
       m.platos_pendientes = platosPendientes;
       m.items_pendientes = platosPendientes;
       m.todos_platillos = todosPlatillos;
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
-      m.mesas_unidas = todasUnidas;
-      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo) || Boolean(m.unida_con);
+      m.mesas_unidas = (m.estado === 'libre' || !m.orden_activa_id) ? [] : todasUnidas;
+      m.es_mesa_unida = m.mesas_unidas.length > 0;
       if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
         m.unida_con = todasUnidas[0];
       } else if (!m.es_mesa_unida) {
@@ -704,12 +715,35 @@ app.post('/api/mesas/mover', async (req, res) => {
     const orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [origenMesaId]);
     if (!orden) return res.status(400).json({ error: 'La mesa de origen no tiene una orden activa' });
 
-    await dbRun('UPDATE Ordenes SET mesa_id = ? WHERE id = ?', [destinoMesaId, orden.id]);
-    await dbRun('UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?', [mesaOrig.estado, mesaOrig.mesero, destinoMesaId]);
-    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL WHERE id = ?", [origenMesaId]);
+    // Table B must display that it received the order from Table A (+A)
+    const origenLabel = mesaOrig.numero;
 
-    io.emit('mesa_transferida', { origenMesaId, destinoMesaId, ordenId: orden.id });
-    res.json({ message: `Orden transferida con éxito de ${mesaOrig.numero} a ${mesaDest.numero}` });
+    // 1. Transfer active order to Table B and record transfer origin
+    await dbRun('UPDATE Ordenes SET mesa_id = ?, transferida_de = ? WHERE id = ?', [destinoMesaId, origenLabel, orden.id]);
+
+    // 2. Table B inherits status, waiter, and stores transfer origin
+    await dbRun(
+      'UPDATE Mesas SET estado = ?, mesero = ?, transferida_de = ? WHERE id = ?',
+      [mesaOrig.estado, mesaOrig.mesero, origenLabel, destinoMesaId]
+    );
+
+    // 3. Table A is emptied and returns to a normal empty state with no residual labels
+    await dbRun(
+      "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+      [origenMesaId]
+    );
+
+    // 4. Deactivate any prior table merges involving Table A
+    await dbRun(
+      'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+      [origenMesaId, origenMesaId]
+    );
+
+    io.emit('mesa_transferida', { origenMesaId, destinoMesaId, ordenId: orden.id, transferida_de: origenLabel });
+    io.emit('mesa_actualizada', { mesaId: origenMesaId, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+    io.emit('mesa_actualizada', { mesaId: destinoMesaId, estado: mesaOrig.estado, total: orden.total || 0, transferida_de: origenLabel, mesas_unidas: [origenLabel] });
+
+    res.json({ message: `Orden transferida con éxito de ${mesaOrig.numero} a ${mesaDest.numero}`, transferida_de: origenLabel });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1373,9 +1407,9 @@ app.post('/api/comandas/enviar', async (req, res) => {
       });
     }
 
-    // 3. Evaluar si algún nuevo item va a cocina (solo comida va a comanda de cocina)
+    // 3. Evaluar si algún nuevo item va a cocina
     const tieneNuevosCocina = itemsProcesados.some(it => 
-      it.destino === 'cocina' && it.destino !== 'barra'
+      it.destino === 'cocina' || (it.destino !== 'barra' && it.curso && it.curso <= 3)
     );
 
     // 4. Buscar orden activa o crear una nueva
@@ -1402,7 +1436,7 @@ app.post('/api/comandas/enviar', async (req, res) => {
       }
     }
 
-    // 5. Determinar estado preliminar de mesa
+    // 5. Determinar nuevo estado de mesa
     let nuevoEstadoMesa;
     if (tieneNuevosCocina) {
       nuevoEstadoMesa = 'esperando';
@@ -1412,22 +1446,17 @@ app.post('/api/comandas/enviar', async (req, res) => {
 
     await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesa, mesero, mesaId]);
 
-    // 6. Insertar items nuevos en DetalleOrden
-    // Bebidas no van a comanda de cocina: se marcan inmediatamente como 'servido'
+    // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
     const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
     const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
 
     const nuevasComandas = [];
     for (const it of itemsProcesados) {
       const subtotal = it.precio * it.cantidad;
-      const esComida = it.destino === 'cocina' && it.destino !== 'barra';
-      const estadoComandaItem = esComida ? 'pendiente' : 'servido';
-      const horaListoItem = esComida ? null : ahora;
-
       const rItem = await dbRun(
-        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, estadoComandaItem, ahora, horaListoItem, ahora, it.origen_mesa_numero, comandaNumero]
+        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero]
       );
       nuevasComandas.push({
         id: rItem.lastID,
@@ -1440,7 +1469,6 @@ app.post('/api/comandas/enviar', async (req, res) => {
         notas: it.notas,
         curso: it.curso,
         destino: it.destino,
-        estado_comanda: estadoComandaItem,
         hora_pedido: ahora
       });
     }
@@ -1448,7 +1476,7 @@ app.post('/api/comandas/enviar', async (req, res) => {
     // Descontar existencias de inventario en tiempo real
     await descontarInventarioPorItems(itemsProcesados);
 
-    // 7. Recalcular totales y estado real KDS de la orden
+    // 7. Recalcular totales de orden
     const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
     let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
 
@@ -1468,28 +1496,25 @@ app.post('/api/comandas/enviar', async (req, res) => {
     const iva = Math.round(subNeto * 0.13);
     const total = subNeto + servicio + iva;
 
-    const nuevoEstadoMesaFinal = evaluarEstadoMesaKDS(rows);
-
     await dbRun(
-      "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?",
-      [subtotal, descuentoHH, servicio, iva, total, nuevoEstadoMesaFinal, ordenId]
+      "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+      [subtotal, descuentoHH, servicio, iva, total, ordenId]
     );
-    await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesaFinal, mesero, mesaId]);
 
-    // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay comanda de comida
-    const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina' && c.destino !== 'barra');
-    if (tieneNuevosCocina && comandasCocina.length > 0) {
-      io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina, tieneCocina: true });
+    // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
+    const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
+    if (comandasCocina.length > 0) {
+      io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina });
     }
 
     // Notificar siempre al salón de mesa actualizada
-    io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesaFinal, total });
+    io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesa, total });
 
     res.json({
-      message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Pedido guardado con éxito',
+      message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Comanda guardada con éxito',
       ordenId,
       total,
-      estado: nuevoEstadoMesaFinal,
+      estado: nuevoEstadoMesa,
       tieneCocina: tieneNuevosCocina
     });
   } catch (e) {
@@ -1584,11 +1609,9 @@ app.get('/api/kds', async (req, res) => {
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
     `;
     const params = [];
-    if (destino === 'barra') {
-      query += " AND d.destino = 'barra'";
-    } else {
-      // A comanda solo va lo que es comida (destino cocina, nunca bebidas)
-      query += " AND d.destino = 'cocina' AND d.destino != 'barra'";
+    if (destino !== 'todos') {
+      query += ' AND d.destino = ?';
+      params.push(destino);
     }
     query += ' ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC';
 
@@ -1643,7 +1666,7 @@ app.get('/api/mesas/:id/espera', async (req, res) => {
     );
 
     const cocinaItems = items.filter(
-      it => it.destino === 'cocina' && it.destino !== 'barra'
+      it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
     );
     const pendientes = cocinaItems.filter(
       it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
@@ -1766,11 +1789,18 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
       [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
     );
 
-    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE id = ?", [ahora, ordenId]);
+    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
 
     if (orden.mesa_id) {
-      await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL WHERE id = ?", [orden.mesa_id]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0 });
+      await dbRun(
+        "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+        [orden.mesa_id]
+      );
+      await dbRun(
+        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+        [orden.mesa_id, orden.mesa_id]
+      );
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
     }
 
     res.json({ message: 'Cobro completado y mesa liberada', ordenId });
