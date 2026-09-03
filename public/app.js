@@ -836,6 +836,29 @@ async function cargarMesasDesdeBackend() {
   } catch (e) {}
 }
 
+function aplicarEscalaTextoMesa(el, w, h, esSilla) {
+  if (!el) return;
+  const minDim = Math.min(w || 100, h || 100);
+  const numFontSize = Math.max(9, Math.min(22, Math.round(minDim * 0.13))) + 'px';
+  const subFontSize = Math.max(8, Math.min(13, Math.round(minDim * 0.088))) + 'px';
+  const totalFontSize = Math.max(9, Math.min(18, Math.round(minDim * 0.115))) + 'px';
+  const iconFontSize = Math.max(12, Math.min(28, Math.round(minDim * 0.18))) + 'px';
+
+  el.style.setProperty('--mesa-num-size', numFontSize);
+  el.style.setProperty('--mesa-sub-size', subFontSize);
+  el.style.setProperty('--mesa-total-size', totalFontSize);
+  el.style.setProperty('--mesa-icon-size', iconFontSize);
+
+  const numSpan = el.querySelector('.mesa-nombre-label, .m-num');
+  if (numSpan) numSpan.style.fontSize = numFontSize;
+
+  const capSmall = el.querySelector('.mesa-cap-label, .m-footer span');
+  if (capSmall) capSmall.style.fontSize = subFontSize;
+
+  const totalEl = el.querySelector('.m-total');
+  if (totalEl) totalEl.style.fontSize = totalFontSize;
+}
+
 function renderSalón(filtroZona = 'todas') {
   const canvas = document.getElementById('mesasCanvasView');
   if (!canvas) return;
@@ -918,14 +941,12 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    const tieneFusiónActiva = Boolean((m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas) && m.estado !== 'libre');
+    const tieneFusiónActiva = Boolean(m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas);
     if (tieneFusiónActiva) {
       const otros = (m.mesas_unidas && m.mesas_unidas.length > 0)
         ? m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join('+')
         : (m.unida_con ? m.unida_con.toString().replace(/mesa\s*/i, '') : '');
-      if (otros) {
-        mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
-      }
+      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
     }
 
     card.innerHTML = `
@@ -941,6 +962,8 @@ function renderSalón(filtroZona = 'todas') {
       </div>
       ${tooltipHtml}
     `;
+
+    aplicarEscalaTextoMesa(card, m.ancho || (esSilla ? 95 : 130), m.alto || (esSilla ? 105 : 120), esSilla);
 
     // Eventos hover garantizados por JS
     card.addEventListener('mouseenter', () => {
@@ -2575,11 +2598,12 @@ function renderEditorPlano() {
         <button class="btn-mesa-size" title="Aumentar tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, 15)">+</button>
         <button class="btn-mesa-size" title="Eliminar mesa o silla" style="color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); eliminarMesaDesdeEditor(${m.id}, '${m.numero}')">🗑️</button>
       </div>
-      <span>${m.numero}</span>
-      <small>👥 ${m.capacidad}p</small>
-      <small class="mesa-dim-label">${m.ancho || 130}x${m.alto || 120}</small>
+      <span class="mesa-nombre-label">${m.numero}</span>
+      <small class="mesa-cap-label">👥 ${m.capacidad}p</small>
       <div class="mesa-resize-handle" title="Arrastrar para cambiar tamaño">↘</div>
     `;
+
+    aplicarEscalaTextoMesa(el, m.ancho || (esSilla ? 95 : 130), m.alto || (esSilla ? 105 : 120), esSilla);
 
     // Movimiento por arrastre
     let isDragging = false;
@@ -2589,8 +2613,8 @@ function renderEditorPlano() {
       if (e.target.closest('.mesa-size-controls') || e.target.closest('.mesa-resize-handle')) return;
 
       isDragging = true;
-      startX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
-      startY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+      startX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+      startY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
       origX = m.x;
       origY = m.y;
       el.style.zIndex = 1000;
@@ -2598,8 +2622,8 @@ function renderEditorPlano() {
 
       const onMouseMove = (ev) => {
         if (!isDragging) return;
-        const curX = ev.clientX || (ev.touches ? ev.touches[0].clientX : startX);
-        const curY = ev.clientY || (ev.touches ? ev.touches[0].clientY : startY);
+        const curX = ev.clientX ?? (ev.touches ? ev.touches[0].clientX : startX);
+        const curY = ev.clientY ?? (ev.touches ? ev.touches[0].clientY : startY);
         m.x = Math.max(10, origX + (curX - startX));
         m.y = Math.max(10, origY + (curY - startY));
         el.style.left = m.x + 'px';
@@ -2623,37 +2647,66 @@ function renderEditorPlano() {
     };
 
     el.addEventListener('mousedown', onMouseDown);
-    el.addEventListener('touchstart', onMouseDown);
+    el.addEventListener('touchstart', onMouseDown, { passive: true });
 
-    // Resize por arrastre del handle
+    // Resize por arrastre del handle (compatible con ratón y pantallas táctiles)
     const resizeHandle = el.querySelector('.mesa-resize-handle');
     if (resizeHandle) {
-      resizeHandle.addEventListener('mousedown', (e) => {
+      const iniciarResize = (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        const startX = e.clientX;
-        const startY = e.clientY;
+        if (resizeHandle.setPointerCapture && e.pointerId != null) {
+          try { resizeHandle.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        const startX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+        const startY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
         const startW = m.ancho || (esSilla ? 95 : 130);
         const startH = m.alto || (esSilla ? 105 : 120);
 
+        el.style.zIndex = 1001;
+
         const onResizeMove = (ev) => {
-          const deltaX = ev.clientX - startX;
-          const deltaY = ev.clientY - startY;
-          m.ancho = Math.max(70, Math.min(300, Math.round(startW + deltaX)));
-          m.alto = Math.max(70, Math.min(300, Math.round(startH + deltaY)));
+          const curX = ev.clientX ?? (ev.touches ? ev.touches[0].clientX : startX);
+          const curY = ev.clientY ?? (ev.touches ? ev.touches[0].clientY : startY);
+          const deltaX = curX - startX;
+          const deltaY = curY - startY;
+
+          // Permite redimensionar tanto mesas como sillas
+          m.ancho = Math.max(60, Math.min(350, Math.round(startW + deltaX)));
+          m.alto = Math.max(60, Math.min(350, Math.round(startH + deltaY)));
           el.style.width = m.ancho + 'px';
           el.style.height = m.alto + 'px';
-          const dimLabel = el.querySelector('.mesa-dim-label');
-          if (dimLabel) dimLabel.textContent = `${m.ancho}x${m.alto}`;
+
+          // Adaptar texto proporcionalmente en tiempo real para que siempre sea visible
+          aplicarEscalaTextoMesa(el, m.ancho, m.alto, esSilla);
         };
 
-        const onResizeUp = () => {
+        const onResizeUp = (ev) => {
+          el.style.zIndex = '';
+          if (resizeHandle.releasePointerCapture && e.pointerId != null) {
+            try { resizeHandle.releasePointerCapture(e.pointerId); } catch (_) {}
+          }
+          window.removeEventListener('pointermove', onResizeMove);
+          window.removeEventListener('pointerup', onResizeUp);
+          window.removeEventListener('pointercancel', onResizeUp);
           window.removeEventListener('mousemove', onResizeMove);
           window.removeEventListener('mouseup', onResizeUp);
+          window.removeEventListener('touchmove', onResizeMove);
+          window.removeEventListener('touchend', onResizeUp);
         };
 
+        window.addEventListener('pointermove', onResizeMove);
+        window.addEventListener('pointerup', onResizeUp);
+        window.addEventListener('pointercancel', onResizeUp);
         window.addEventListener('mousemove', onResizeMove);
         window.addEventListener('mouseup', onResizeUp);
-      });
+        window.addEventListener('touchmove', onResizeMove);
+        window.addEventListener('touchend', onResizeUp);
+      };
+
+      resizeHandle.addEventListener('pointerdown', iniciarResize);
+      resizeHandle.addEventListener('mousedown', iniciarResize);
+      resizeHandle.addEventListener('touchstart', iniciarResize, { passive: false });
     }
 
     canvas.appendChild(el);
@@ -2663,23 +2716,36 @@ function renderEditorPlano() {
 window.cambiarTamanoMesa = function(mesaId, delta) {
   const m = estado.mesas.find(item => item.id === mesaId);
   if (!m) return;
-  m.ancho = Math.max(70, Math.min(300, (m.ancho || 130) + delta));
-  m.alto = Math.max(70, Math.min(300, (m.alto || 120) + delta));
+  const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+  const currentW = m.ancho || (esSilla ? 95 : 130);
+  const currentH = m.alto || (esSilla ? 105 : 120);
+
+  m.ancho = Math.max(60, Math.min(350, currentW + delta));
+  m.alto = Math.max(60, Math.min(350, currentH + delta));
   renderEditorPlano();
 };
 
 
 document.getElementById('btnGuardarPlano').addEventListener('click', async () => {
-  const posiciones = estado.mesas.map(m => ({ id: m.id, x: m.x, y: m.y, ancho: m.ancho || 130, alto: m.alto || 120 }));
+  const posiciones = estado.mesas.map(m => {
+    const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+    return {
+      id: m.id,
+      x: m.x,
+      y: m.y,
+      ancho: m.ancho || (esSilla ? 95 : 130),
+      alto: m.alto || (esSilla ? 105 : 120)
+    };
+  });
   try {
     const res = await fetch('/api/mesas/posiciones', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ posiciones })
     });
-    alert('💾 ¡Distribución física guardada en la base de datos!');
+    mostrarNotificacionCentro('💾 ¡Distribución física guardada en la base de datos!', 'success');
   } catch (e) {
-    alert('💾 ¡Distribución guardada!');
+    mostrarNotificacionCentro('💾 ¡Distribución guardada!', 'info');
   }
   document.querySelector('.nav-pill[data-view="salon"]').click();
 });

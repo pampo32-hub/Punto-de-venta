@@ -47,6 +47,8 @@ function initDb() {
     db.run("ALTER TABLE Mesas ADD COLUMN y INTEGER DEFAULT 40", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN forma TEXT DEFAULT 'square'", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN ancho INTEGER DEFAULT 130", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN alto INTEGER DEFAULT 120", () => {});
 
     // 3. Categorías
     db.run(`CREATE TABLE IF NOT EXISTS Categorias (

@@ -2476,8 +2476,10 @@ textarea:focus, select:focus, input:focus {
    SILLAS DE BARRA (FORMA DE SILLA / TABURETE CON RESPALDO Y ASIENTO)
    ============================================================================ */
 .mesa-render-card.silla {
-  width: 95px !important;
-  height: 105px !important;
+  min-width: 60px;
+  min-height: 60px;
+  width: 95px;
+  height: 105px;
   border-radius: 18px 18px 50% 50% !important;
   background: radial-gradient(circle at center, #1e293b 20%, #0f172a 100%) !important;
   border: 2px solid #38bdf8 !important;
@@ -2493,7 +2495,7 @@ textarea:focus, select:focus, input:focus {
 /* Respaldo curvado de la silla de barra */
 .mesa-render-card.silla::before {
   content: '🪑';
-  font-size: 1.1rem;
+  font-size: var(--mesa-icon-size, 1.1rem);
   display: block;
   line-height: 1;
 }
@@ -2506,10 +2508,14 @@ textarea:focus, select:focus, input:focus {
 }
 
 .mesa-render-card.silla .m-num {
-  font-size: 0.78rem !important;
+  font-size: var(--mesa-num-size, 0.78rem) !important;
   font-weight: 800;
   color: #38bdf8;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 92%;
 }
 
 .mesa-render-card.silla .m-badge {
@@ -2517,20 +2523,22 @@ textarea:focus, select:focus, input:focus {
 }
 
 .mesa-render-card.silla .m-total {
-  font-size: 0.75rem !important;
+  font-size: var(--mesa-total-size, 0.75rem) !important;
   font-weight: 800;
   color: #10b981;
 }
 
 .mesa-render-card.silla .m-footer {
-  font-size: 0.65rem !important;
+  font-size: var(--mesa-sub-size, 0.65rem) !important;
   color: #94a3b8;
 }
 
 /* SILLA DE BARRA EN EL EDITOR */
 .drag-mesa.silla {
-  width: 95px !important;
-  height: 105px !important;
+  min-width: 60px;
+  min-height: 60px;
+  width: 95px;
+  height: 105px;
   border-radius: 18px 18px 50% 50% !important;
   background: radial-gradient(circle at center, #1e293b 20%, #0f172a 100%) !important;
   border: 2px dashed #38bdf8 !important;
@@ -2539,7 +2547,7 @@ textarea:focus, select:focus, input:focus {
 
 .drag-mesa.silla::before {
   content: '🪑';
-  font-size: 1.2rem;
+  font-size: var(--mesa-icon-size, 1.2rem);
   margin-bottom: 2px;
 }
 
@@ -2600,28 +2608,33 @@ textarea:focus, select:focus, input:focus {
 /* HANDLE DE REDIMENSIÓN POR ARRASTRE EN ESQUINA INFERIOR DERECHA */
 .mesa-resize-handle {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 16px;
-  height: 16px;
+  bottom: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
   cursor: nwse-resize;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #94a3b8;
-  font-size: 0.65rem;
-  z-index: 10;
+  font-size: 0.95rem;
+  z-index: 50;
+  touch-action: none;
+  user-select: none;
+  background: rgba(15, 23, 42, 0.7);
+  border-top-left-radius: 8px;
+  border-bottom-right-radius: inherit;
+  transition: all 0.15s ease;
 }
 
-.mesa-resize-handle:hover {
+.mesa-resize-handle:hover, .mesa-resize-handle:active {
   color: #38bdf8;
-  transform: scale(1.2);
+  background: rgba(2, 132, 199, 0.5);
+  transform: scale(1.15);
 }
 
 .mesa-dim-label {
-  font-size: 0.68rem;
-  color: #94a3b8;
-  margin-top: 2px;
+  display: none !important;
 }
 
 
