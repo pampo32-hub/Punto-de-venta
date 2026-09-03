@@ -3,111 +3,211 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Punto de Venta | Restaurante & Bar</title>
+  <title>PUNTO DE VENTA | Restaurante & Bar</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="/socket.io/socket.io.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="pos-app">
-    <!-- BARRA SUPERIOR -->
+    
+    <!-- BARRA SUPERIOR EJECUTIVA -->
     <header class="top-nav">
       <div class="brand">
-        <span class="logo-icon">🍻</span>
-        <div class="brand-text">
-          <h1>PUNTO DE VENTA</h1>
-          <small>Restaurante & Bar POS</small>
+        <span class="brand-logo">🔥</span>
+        <div class="brand-info">
+          <h2>PUNTO DE VENTA</h2>
+          <span class="badge-tag">GastroBar Pro</span>
         </div>
       </div>
 
-      <nav class="nav-tabs">
-        <button class="tab-btn active" data-view="mesas">🗺️ Salón & Mesas</button>
-        <button class="tab-btn" data-view="comandas">🍳 Cocina (KDS)</button>
-        <button class="tab-btn" data-view="barra">🍸 Barra (KDS)</button>
-        <button class="tab-btn" data-view="caja">💵 Caja & Cierres</button>
-        <button class="tab-btn" data-view="reportes">📊 Reportes</button>
+      <!-- BUSCADOR RÁPIDO ONE-TAP -->
+      <div class="quick-search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="globalSearchInput" placeholder="Buscar platillo, bebida o código... (Presiona /)" autocomplete="off" />
+        <span class="search-shortcut">/</span>
+        <div class="search-dropdown" id="searchDropdown"></div>
+      </div>
+
+      <!-- MENÚS DE NAVEGACIÓN -->
+      <nav class="nav-pills">
+        <button class="nav-pill active" data-view="salon">
+          <span class="pill-icon">🗺️</span> Salón & Mesas
+        </button>
+        <button class="nav-pill" data-view="editor-plano">
+          <span class="pill-icon">📐</span> Editor de Salón
+        </button>
+        <button class="nav-pill" data-view="kds">
+          <span class="pill-icon">🍳</span> Cocina & Barra
+          <span class="pill-counter" id="kdsCounter">3</span>
+        </button>
+        <button class="nav-pill" data-view="caja">
+          <span class="pill-icon">💵</span> Caja & Turno
+        </button>
+        <button class="nav-pill" data-view="facturacion">
+          <span class="pill-icon">⚡</span> Facturación Express
+        </button>
       </nav>
 
-      <div class="user-pill">
-        <span class="badge-status online"></span>
-        <span class="user-name">Mesero / Caja</span>
+      <!-- PERFIL DE USUARIO / TURNO -->
+      <div class="user-status-pill">
+        <div class="status-indicator online"></div>
+        <div class="user-details">
+          <span class="user-title">Juan (Cajero/Mesero)</span>
+          <small class="user-subtitle">Turno #1 • Caja Abierta</small>
+        </div>
       </div>
     </header>
 
-    <!-- CONTENIDO DINÁMICO -->
-    <main class="main-workspace">
-      
-      <!-- VISTA 1: SALÓN Y MESAS -->
-      <section id="view-mesas" class="view-section active">
-        <div class="section-header">
-          <div class="legend">
-            <span class="legend-item"><span class="dot libre"></span> Libre</span>
-            <span class="legend-item"><span class="dot ocupada"></span> Ocupada</span>
-            <span class="legend-item"><span class="dot cuenta"></span> Cuenta Pedida</span>
+    <!-- ÁREA PRINCIPAL DINÁMICA -->
+    <main class="main-viewport">
+
+      <!-- =================================================================== -->
+      <!-- VISTA 1: SALÓN Y MAPA DE MESAS -->
+      <!-- =================================================================== -->
+      <section id="view-salon" class="pos-view active">
+        <div class="view-subbar">
+          <div class="legend-group">
+            <span class="legend-badge libre"><span class="dot"></span> Libre</span>
+            <span class="legend-badge ocupada"><span class="dot"></span> Ocupada</span>
+            <span class="legend-badge esperando"><span class="dot"></span> Esperando Comida</span>
+            <span class="legend-badge cuenta"><span class="dot"></span> Cuenta Pedida</span>
           </div>
-          <div class="zona-filters" id="zonaFilters">
-            <button class="btn-filter active" data-zona="todas">Todas las Áreas</button>
+
+          <div class="zone-selector" id="zoneFilterTabs">
+            <button class="zone-tab active" data-zona="todas">Todas las Zonas</button>
+            <button class="zone-tab" data-zona="salon">Salón Principal</button>
+            <button class="zone-tab" data-zona="barra">Barra / Bar</button>
+            <button class="zone-tab" data-zona="terraza">Terraza al Aire Libre</button>
+            <button class="zone-tab" data-zona="vip">Zona VIP</button>
           </div>
+
+          <button class="btn-quick-action" id="btnIrEditorSalon">
+            ✏️ Mover / Organizar Mesas
+          </button>
         </div>
 
-        <div class="mesas-grid" id="mesasGrid">
-          <!-- Se cargan dinámicamente -->
-        </div>
-      </section>
-
-      <!-- VISTA 2: COCINA KDS -->
-      <section id="view-comandas" class="view-section">
-        <div class="section-header">
-          <h2>🍳 Pantalla de Cocina (KDS en Vivo)</h2>
-          <span class="auto-refresh-pill">⚡ Conexión en Tiempo Real</span>
-        </div>
-        <div class="kds-grid" id="kdsCocinaGrid"></div>
-      </section>
-
-      <!-- VISTA 3: BARRA KDS -->
-      <section id="view-barra" class="view-section">
-        <div class="section-header">
-          <h2>🍸 Pantalla de Barra / Tragos</h2>
-          <span class="auto-refresh-pill">⚡ Conexión en Tiempo Real</span>
-        </div>
-        <div class="kds-grid" id="kdsBarraGrid"></div>
-      </section>
-
-      <!-- VISTA 4: CAJA Y CIERRES -->
-      <section id="view-caja" class="view-section">
-        <div class="caja-dashboard">
-          <div class="card caja-info-card">
-            <h3>💰 Turno Actual de Caja</h3>
-            <div id="cajaStatusContent">Cargando datos de caja...</div>
-          </div>
-          <div class="card caja-cierres-card">
-            <h3>🔒 Cierre de Turno / Arqueo (Corte Z)</h3>
-            <p>Genera el reporte oficial de ventas del turno y cuadre de efectivo.</p>
-            <button class="btn-primary" id="btnCorteZ" style="margin-top:15px; width:100%; padding:14px; font-size:1.05rem;">
-              📋 Generar Reporte de Cierre (Corte Z)
-            </button>
+        <div class="salon-container" id="salonContainer">
+          <div class="mesas-canvas-view" id="mesasCanvasView">
+            <!-- Renderizado dinámico de mesas según posición X/Y -->
           </div>
         </div>
       </section>
 
-      <!-- VISTA 5: REPORTES -->
-      <section id="view-reportes" class="view-section">
-        <div class="card">
-          <h2>📊 Reporte de Ventas y Rendimiento</h2>
-          <p>Métricas de consumo, platillos más vendidos y balance del restaurante.</p>
-          <div id="reportesContent" style="margin-top:20px;">
-            <div class="stat-boxes">
-              <div class="stat-box">
-                <span class="stat-label">Total Ventas Hoy</span>
-                <span class="stat-val" id="repTotalVentas">₡0.00</span>
+      <!-- =================================================================== -->
+      <!-- VISTA 2: EDITOR VISUAL DE SALÓN (DRAG & DROP) -->
+      <!-- =================================================================== -->
+      <section id="view-editor-plano" class="pos-view">
+        <div class="view-subbar">
+          <div class="editor-help-text">
+            <strong>📐 Diseñador del Local:</strong> Arrastra y suelta las mesas a su posición física real. Agrega nuevas mesas y guarda el diseño.
+          </div>
+          <div class="editor-actions">
+            <button class="btn-tool" id="btnAgregarMesaCuadrada">➕ Mesa Cuadrada</button>
+            <button class="btn-tool" id="btnAgregarMesaRedonda">➕ Mesa Redonda</button>
+            <button class="btn-tool" id="btnAgregarBarra">➕ Silla de Barra</button>
+            <button class="btn-save-plan" id="btnGuardarPlano">💾 Guardar Distribución</button>
+          </div>
+        </div>
+
+        <div class="editor-board" id="editorBoard">
+          <div class="grid-backdrop"></div>
+          <div class="editor-canvas" id="editorCanvas">
+            <!-- Mesas arrastrables -->
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- VISTA 3: PANTALLA DE COCINA Y BARRA (KDS) -->
+      <!-- =================================================================== -->
+      <section id="view-kds" class="pos-view">
+        <div class="view-subbar">
+          <div class="kds-filter-tabs">
+            <button class="kds-tab active" data-kds-dest="cocina">🍳 Cocina Caliente</button>
+            <button class="kds-tab" data-kds-dest="barra">🍸 Barra & Bebidas</button>
+            <button class="kds-tab" data-kds-dest="todos">📋 Todas las Comandas</button>
+          </div>
+          <span class="kds-live-tag">⚡ Enlace en tiempo real activo</span>
+        </div>
+
+        <div class="kds-tickets-container" id="kdsTicketsContainer">
+          <!-- Tarjetas KDS con cronómetro -->
+        </div>
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- VISTA 4: CAJA Y TURNOS -->
+      <!-- =================================================================== -->
+      <section id="view-caja" class="pos-view">
+        <div class="caja-grid-layout">
+          <div class="caja-card">
+            <h3>💰 Turno Actual de Operación</h3>
+            <div class="caja-stat-rows">
+              <div class="stat-row"><span>Cajero Responsable:</span><strong>Juan Jival</strong></div>
+              <div class="stat-row"><span>Hora de Apertura:</span><strong>Hoy, 11:30 AM</strong></div>
+              <div class="stat-row"><span>Fondo Inicial de Caja:</span><strong>₡ 50,000.00</strong></div>
+              <div class="stat-row"><span>Ventas en Efectivo:</span><strong id="cajaVentasEfectivo">₡ 84,200.00</strong></div>
+              <div class="stat-row"><span>Ventas con Tarjeta (Datáfono):</span><strong id="cajaVentasTarjeta">₡ 142,500.00</strong></div>
+              <div class="stat-row"><span>Ventas con SINPE Móvil:</span><strong id="cajaVentasSinpe">₡ 38,000.00</strong></div>
+              <div class="stat-row total"><span>Total Esperado en Efectivo:</span><strong id="cajaTotalEfectivo">₡ 134,200.00</strong></div>
+            </div>
+            
+            <div class="caja-actions-grid">
+              <button class="btn-caja-op" id="btnEntradaEfectivo">📥 Entrada de Efectivo</button>
+              <button class="btn-caja-op" id="btnSalidaEfectivo">📤 Salida / Gasto Menor</button>
+              <button class="btn-caja-op corte-x" id="btnCorteX">📑 Corte X (Parcial)</button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ">🔒 Cierre Z (Final de Día)</button>
+            </div>
+          </div>
+
+          <div class="caja-card">
+            <h3>📊 Resumen de Comandas del Día</h3>
+            <div class="history-list" id="cajaHistoryList">
+              <!-- Historial de cobros recientes -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================================== -->
+      <!-- VISTA 5: FACTURACIÓN EXPRESS (QR Y CÉDULA) -->
+      <!-- =================================================================== -->
+      <section id="view-facturacion" class="pos-view">
+        <div class="facturacion-layout">
+          <div class="facturacion-card">
+            <div class="card-title-row">
+              <h3>⚡ Facturación Electrónica Express</h3>
+              <span class="hacienda-badge">🇨🇷 Validación Hacienda v4.3</span>
+            </div>
+            <p class="card-desc">Emite facturas a clientes en segundos buscando su cédula o escaneando su QR tributario.</p>
+
+            <div class="express-search-row">
+              <div class="input-with-label">
+                <label>Identificación del Cliente:</label>
+                <div class="search-input-group">
+                  <select id="expressTipoId">
+                    <option value="01">Cédula Física</option>
+                    <option value="02">Cédula Jurídica</option>
+                    <option value="03">DIMEX</option>
+                  </select>
+                  <input type="text" id="expressNumeroId" placeholder="Ej: 115240391 o 3101894234" />
+                  <button class="btn-lookup" id="btnBuscarClienteExpress">🔎 Consultar</button>
+                </div>
               </div>
-              <div class="stat-box">
-                <span class="stat-label">Comandas Atendidas</span>
-                <span class="stat-val" id="repTotalComandas">0</span>
-              </div>
-              <div class="stat-box">
-                <span class="stat-label">Ticket Promedio</span>
-                <span class="stat-val" id="repTicketPromedio">₡0.00</span>
-              </div>
+              <button class="btn-qr-scan" id="btnSimularQrScan">📷 Escanear QR</button>
+            </div>
+
+            <div class="cliente-encontrado-box" id="clienteEncontradoBox">
+              <div class="data-row"><span>Razón Social / Nombre:</span><strong id="expClienteNombre">—</strong></div>
+              <div class="data-row"><span>Correo Electrónico:</span><strong id="expClienteCorreo">—</strong></div>
+              <div class="data-row"><span>Condición de Venta:</span><strong>Contado Inmediato</strong></div>
+              <div class="data-row"><span>Actividad Económica:</span><strong>561001 - Restaurantes y Bares</strong></div>
+            </div>
+
+            <div class="form-row-actions" style="margin-top:20px;">
+              <button class="btn-emitir-fe" id="btnEmitirFacturaExpress">⚡ Emitir & Enviar Factura a Hacienda</button>
             </div>
           </div>
         </div>
@@ -116,46 +216,62 @@
     </main>
   </div>
 
-  <!-- MODAL DE PEDIDOS / COMANDERO TÁCTIL (AL TOCAR UNA MESA) -->
-  <div class="pos-modal-overlay" id="orderModal">
-    <div class="order-modal-container">
+  <!-- ===================================================================== -->
+  <!-- MODAL 1: COMANDERO TÁCTIL PRINCIPAL (AL ABRIR UNA MESA) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalComandero">
+    <div class="comandero-window">
       
-      <!-- Lado Izquierdo: Catálogo de Menú -->
-      <div class="order-menu-side">
-        <div class="order-menu-header">
-          <div class="mesa-badge" id="modalMesaTitulo">Mesa 1</div>
-          <div class="category-tabs" id="categoryTabs">
-            <!-- Categorías dinámicas -->
+      <!-- COLUMNA IZQUIERDA: MENÚ Y PRODUCTOS ONE-TAP -->
+      <div class="comandero-catalog">
+        <div class="catalog-topbar">
+          <div class="mesa-tag-header">
+            <span class="mesa-title-tag" id="comMesaNumero">Mesa 1</span>
+            <span class="mesa-sub-tag" id="comMesaZona">Salón Principal</span>
+          </div>
+
+          <div class="category-chips" id="comCategoryChips">
+            <!-- Chips de categorías -->
           </div>
         </div>
-        <div class="products-grid" id="productsGrid">
-          <!-- Productos dinámicos -->
+
+        <div class="products-one-tap-grid" id="comProductsGrid">
+          <!-- Cuadrícula de platillos con precio -->
         </div>
       </div>
 
-      <!-- Lado Derecho: Comanda de la Mesa -->
-      <div class="order-ticket-side">
-        <div class="ticket-header">
-          <h3>🧾 Comanda de la Mesa</h3>
-          <button class="btn-close-modal" id="btnCloseOrderModal">✕</button>
+      <!-- COLUMNA DERECHA: TICKET DE COMANDA DE LA MESA -->
+      <div class="comandero-ticket">
+        <div class="ticket-topbar">
+          <div>
+            <h3>🧾 Comanda Actual</h3>
+            <small id="comTicketOrdenId">Orden #ORD-0000</small>
+          </div>
+          <button class="btn-icon-close" id="btnCloseComandero">✕</button>
         </div>
 
-        <div class="ticket-items" id="ticketItemsList">
-          <div class="empty-ticket">Agregue productos tocando el menú</div>
+        <div class="ticket-body" id="comTicketItemsList">
+          <!-- Items del pedido -->
         </div>
 
-        <div class="ticket-footer">
-          <div class="ticket-totals">
-            <div class="row"><span>Subtotal:</span><strong id="ticketSubtotal">₡0</strong></div>
-            <div class="row"><span>Servicio (10%):</span><strong id="ticketServicio">₡0</strong></div>
-            <div class="row"><span>I.V.A (13%):</span><strong id="ticketIva">₡0</strong></div>
-            <div class="row total"><span>TOTAL:</span><strong id="ticketTotal">₡0</strong></div>
+        <div class="ticket-bottom">
+          <div class="ticket-calc-box">
+            <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0.00</span></div>
+            <div class="calc-line"><span>Servicio Salón (10%):</span><span id="comServicio">₡ 0.00</span></div>
+            <div class="calc-line"><span>I.V.A (13%):</span><span id="comIva">₡ 0.00</span></div>
+            <div class="calc-line total"><span>TOTAL GENERAL:</span><span id="comTotal">₡ 0.00</span></div>
           </div>
 
-          <div class="ticket-actions">
-            <button class="btn-action cocina" id="btnEnviarComanda">🔥 Enviar a Cocina / Barra</button>
-            <button class="btn-action cuenta" id="btnPedirCuenta">🧾 Pedir Cuenta</button>
-            <button class="btn-action cobrar" id="btnCobrarMesa">💵 Cobrar Mesa</button>
+          <div class="ticket-action-buttons">
+            <button class="btn-btn-cmd cocina" id="btnEnviarComandaCocina">
+              🔥 Enviar a Cocina
+            </button>
+            <button class="btn-btn-cmd split" id="btnAbrirSplitBill">
+              ✂️ Dividir Cuenta (Split)
+            </button>
+            <button class="btn-btn-cmd cobrar" id="btnAbrirCobroModal">
+              💵 Cobrar Cuenta
+            </button>
           </div>
         </div>
       </div>
@@ -163,35 +279,207 @@
     </div>
   </div>
 
-  <!-- MODAL DE COBRO RÁPIDO -->
-  <div class="pos-modal-overlay" id="checkoutModal">
-    <div class="checkout-card">
-      <div class="checkout-header">
-        <h3>💵 Cobrar Cuenta</h3>
-        <button class="btn-close-modal" id="btnCloseCheckoutModal">✕</button>
+  <!-- ===================================================================== -->
+  <!-- MODAL 2: MODIFICADORES DINÁMICOS Y NOTAS ABIERTAS -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalModificadores">
+    <div class="modal-dialog modif-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3 id="modifProdNombre">Hamburguesa Bacon-Cheese</h3>
+          <small>Personalización y notas de cocina</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseModifModal">✕</button>
       </div>
-      <div class="checkout-body">
-        <div class="checkout-total-display">
-          <span>Total a Pagar:</span>
-          <h2 id="checkoutMontoTotal">₡0</h2>
+
+      <div class="dialog-body">
+        <label class="section-label">Modificadores Rápidos Comunes (Toca para activar):</label>
+        <div class="quick-chips-grid" id="quickModifChips">
+          <button class="chip-modif" data-text="Sin cebolla">🚫 Sin cebolla</button>
+          <button class="chip-modif" data-text="Extra queso (+₡500)">🧀 Extra queso (+₡500)</button>
+          <button class="chip-modif" data-text="Salsa por separado">🥣 Salsa por separado</button>
+          <button class="chip-modif" data-text="Término medio">🥩 Término medio</button>
+          <button class="chip-modif" data-text="Bien cocido">🔥 Bien cocido</button>
+          <button class="chip-modif" data-text="Poco hielo">🧊 Poco hielo</button>
+          <button class="chip-modif" data-text="Sin hielo">🥤 Sin hielo</button>
+          <button class="chip-modif" data-text="Sin picante">🌶️ Sin picante</button>
+          <button class="chip-modif" data-text="Extra picante">🔥 Extra picante</button>
         </div>
 
-        <label style="font-weight:700; margin-top:10px; display:block;">Método de Pago:</label>
-        <div class="pay-methods-grid">
-          <button class="pay-method-btn active" data-metodo="Efectivo">💵 Efectivo</button>
-          <button class="pay-method-btn" data-metodo="Tarjeta">💳 Tarjeta</button>
-          <button class="pay-method-btn" data-metodo="SINPE">📱 SINPE Móvil</button>
+        <label class="section-label" style="margin-top:16px;">Nota Abierta Especial (Instrucciones exactas):</label>
+        <textarea id="txtNotaAbiertaModif" rows="3" placeholder="Ej: Extra queso en la mitad, bien tostado el pan y la salsa por separado en un vaso..."></textarea>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-sec" id="btnCancelarModif">Cancelar</button>
+        <button class="btn-pri" id="btnGuardarModif">✅ Aplicar al Platillo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 3: SEPARACIÓN Y COMBINACIÓN DE CUENTAS (SPLIT BILLS) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalSplitBill">
+    <div class="modal-dialog split-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>✂️ Separar y Dividir Cuenta (Split Bills)</h3>
+          <small id="splitMesaTitulo">Mesa 1 • Total de la cuenta: ₡ 32,500.00</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseSplitModal">✕</button>
+      </div>
+
+      <div class="split-mode-selector">
+        <button class="split-mode-btn active" data-mode="items">Por Ítems / Consumos Individuales</button>
+        <button class="split-mode-btn" data-mode="equal">En Partes Iguales (Split Equitativo)</button>
+      </div>
+
+      <!-- MODO 1: POR ÍTEMS -->
+      <div class="split-body-items active" id="splitModeItemsBody">
+        <div class="split-columns-wrapper" id="splitPersonsContainer">
+          <!-- Columna Cuenta Origen y Columnas de Personas -->
+        </div>
+      </div>
+
+      <!-- MODO 2: PARTES IGUALES -->
+      <div class="split-body-equal" id="splitModeEqualBody">
+        <div class="equal-split-controls">
+          <label style="font-weight:700; font-size:1.1rem;">¿Entre cuántas personas dividen la cuenta?</label>
+          <div class="counter-input-row">
+            <button class="btn-count" id="btnDisminuirPersonas">-</button>
+            <span class="count-val" id="splitNumPersonas">4</span>
+            <button class="btn-count" id="btnAumentarPersonas">+</button>
+          </div>
+
+          <div class="equal-result-box">
+            <span>Cada persona debe pagar exactamente:</span>
+            <h2 id="splitMontoPorPersona">₡ 8,125.00</h2>
+            <small>Incluye 10% servicio y 13% IVA</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-sec" id="btnCancelarSplit">Cancelar</button>
+        <button class="btn-pri" id="btnProcederCobroSplit">💵 Proceder al Cobro Separado</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 4: ANULACIONES Y CANCELACIONES CON PIN DE SEGURIDAD -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalAnulacion">
+    <div class="modal-dialog anula-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>⚠️ Anular Platillo / Comanda</h3>
+          <small id="anulaItemNombre">Imperial Regular x 1</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseAnulaModal">✕</button>
+      </div>
+
+      <div class="dialog-body">
+        <div class="anula-warning-box">
+          Esta comanda ya fue enviada a cocina/barra. Para anularla y notificar al cocinero, selecciona el motivo y digita el PIN del supervisor.
         </div>
 
-        <div class="form-field" id="pagoEfectivoField" style="margin-top:12px;">
-          <label style="font-weight:700;">Efectivo Recibido:</label>
-          <input type="number" id="inputEfectivoRecibido" placeholder="Ej: 10000" style="font-size:1.2rem; font-weight:700;" />
-          <div id="vueltoDisplay" style="font-size:1rem; font-weight:800; color:#16a34a; margin-top:6px;">Vuelto / Cambio: ₡0</div>
+        <label class="section-label">Motivo de Anulación:</label>
+        <select id="anulaMotivoSelect">
+          <option value="cambio">Cliente cambió de opinión</option>
+          <option value="error">Error de digitación del mesero</option>
+          <option value="demora">Demora excesiva en preparación</option>
+          <option value="calidad">Problema de preparación / calidad</option>
+        </select>
+
+        <label class="section-label" style="margin-top:16px;">PIN de Administrador / Supervisor:</label>
+        <div class="pin-display-row">
+          <input type="password" id="txtPinSupervisor" maxlength="4" placeholder="••••" readonly />
+        </div>
+        <div class="numeric-keypad">
+          <button class="num-btn" data-val="1">1</button>
+          <button class="num-btn" data-val="2">2</button>
+          <button class="num-btn" data-val="3">3</button>
+          <button class="num-btn" data-val="4">4</button>
+          <button class="num-btn" data-val="5">5</button>
+          <button class="num-btn" data-val="6">6</button>
+          <button class="num-btn" data-val="7">7</button>
+          <button class="num-btn" data-val="8">8</button>
+          <button class="num-btn" data-val="9">9</button>
+          <button class="num-btn clear" id="btnPinClear">C</button>
+          <button class="num-btn" data-val="0">0</button>
+          <button class="num-btn del" id="btnPinDel">⌫</button>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-sec" id="btnCancelarAnula">Cancelar</button>
+        <button class="btn-pri danger" id="btnConfirmarAnulacion">🗑️ Confirmar Anulación</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 5: COBRO RÁPIDO Y FACTURACIÓN -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalCobro">
+    <div class="modal-dialog cobro-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3>💵 Cobrar y Liquidar Cuenta</h3>
+          <small id="cobroMesaTitulo">Mesa 1</small>
+        </div>
+        <button class="btn-icon-close" id="btnCloseCobroModal">✕</button>
+      </div>
+
+      <div class="dialog-body">
+        <div class="cobro-total-banner">
+          <span>Monto Total a Cancelar:</span>
+          <h1 id="cobroTotalDisplay">₡ 32,500.00</h1>
         </div>
 
-        <button class="btn-primary" id="btnConfirmarCobro" style="width:100%; margin-top:20px; padding:15px; font-size:1.1rem;">
-          ✅ Confirmar Cobro & Liberar Mesa
-        </button>
+        <label class="section-label">Selecciona el Método de Pago:</label>
+        <div class="pay-methods-tabs">
+          <button class="pay-method-tab active" data-method="Efectivo">💵 Efectivo</button>
+          <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta / Datáfono</button>
+          <button class="pay-method-tab" data-method="SINPE">📱 SINPE Móvil</button>
+          <button class="pay-method-tab" data-method="Mixto">🔀 Pago Mixto</button>
+        </div>
+
+        <div id="cobroEfectivoPanel" class="pay-panel active">
+          <div class="field-row">
+            <label>Efectivo Recibido del Cliente:</label>
+            <div class="cash-input-wrapper">
+              <span class="currency-prefix">₡</span>
+              <input type="text" id="txtEfectivoRecibido" placeholder="0.00" />
+            </div>
+          </div>
+          <div class="quick-cash-chips">
+            <button class="cash-chip" data-amt="5000">₡ 5,000</button>
+            <button class="cash-chip" data-amt="10000">₡ 10,000</button>
+            <button class="cash-chip" data-amt="20000">₡ 20,000</button>
+            <button class="cash-chip" data-amt="50000">₡ 50,000</button>
+            <button class="cash-chip exact" id="btnPagoExacto">Monto Exacto</button>
+          </div>
+          <div class="vuelto-box">
+            <span>Cambio / Vuelto a Entregar:</span>
+            <strong id="cobroVueltoDisplay">₡ 0.00</strong>
+          </div>
+        </div>
+
+        <div class="fe-opt-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="chkEmitirFacturaElectronica" />
+            <span class="checkmark"></span>
+            ¿El cliente requiere Factura Electrónica con Cédula?
+          </label>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-sec" id="btnCancelarCobro">Cancelar</button>
+        <button class="btn-pri success" id="btnFinalizarCobro">✅ Liquidar, Imprimir & Liberar Mesa</button>
       </div>
     </div>
   </div>
