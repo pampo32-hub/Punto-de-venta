@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Punto de Venta | Restaurante & Bar</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="pos-app">
+    <!-- BARRA SUPERIOR -->
+    <header class="top-nav">
+      <div class="brand">
+        <span class="logo-icon">🍻</span>
+        <div class="brand-text">
+          <h1>PUNTO DE VENTA</h1>
+          <small>Restaurante & Bar POS</small>
+        </div>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="tab-btn active" data-view="mesas">🗺️ Salón & Mesas</button>
+        <button class="tab-btn" data-view="comandas">🍳 Cocina (KDS)</button>
+        <button class="tab-btn" data-view="barra">🍸 Barra (KDS)</button>
+        <button class="tab-btn" data-view="caja">💵 Caja & Cierres</button>
+        <button class="tab-btn" data-view="reportes">📊 Reportes</button>
+      </nav>
+
+      <div class="user-pill">
+        <span class="badge-status online"></span>
+        <span class="user-name">Mesero / Caja</span>
+      </div>
+    </header>
+
+    <!-- CONTENIDO DINÁMICO -->
+    <main class="main-workspace">
+      
+      <!-- VISTA 1: SALÓN Y MESAS -->
+      <section id="view-mesas" class="view-section active">
+        <div class="section-header">
+          <div class="legend">
+            <span class="legend-item"><span class="dot libre"></span> Libre</span>
+            <span class="legend-item"><span class="dot ocupada"></span> Ocupada</span>
+            <span class="legend-item"><span class="dot cuenta"></span> Cuenta Pedida</span>
+          </div>
+          <div class="zona-filters" id="zonaFilters">
+            <button class="btn-filter active" data-zona="todas">Todas las Áreas</button>
+          </div>
+        </div>
+
+        <div class="mesas-grid" id="mesasGrid">
+          <!-- Se cargan dinámicamente -->
+        </div>
+      </section>
+
+      <!-- VISTA 2: COCINA KDS -->
+      <section id="view-comandas" class="view-section">
+        <div class="section-header">
+          <h2>🍳 Pantalla de Cocina (KDS en Vivo)</h2>
+          <span class="auto-refresh-pill">⚡ Conexión en Tiempo Real</span>
+        </div>
+        <div class="kds-grid" id="kdsCocinaGrid"></div>
+      </section>
+
+      <!-- VISTA 3: BARRA KDS -->
+      <section id="view-barra" class="view-section">
+        <div class="section-header">
+          <h2>🍸 Pantalla de Barra / Tragos</h2>
+          <span class="auto-refresh-pill">⚡ Conexión en Tiempo Real</span>
+        </div>
+        <div class="kds-grid" id="kdsBarraGrid"></div>
+      </section>
+
+      <!-- VISTA 4: CAJA Y CIERRES -->
+      <section id="view-caja" class="view-section">
+        <div class="caja-dashboard">
+          <div class="card caja-info-card">
+            <h3>💰 Turno Actual de Caja</h3>
+            <div id="cajaStatusContent">Cargando datos de caja...</div>
+          </div>
+          <div class="card caja-cierres-card">
+            <h3>🔒 Cierre de Turno / Arqueo (Corte Z)</h3>
+            <p>Genera el reporte oficial de ventas del turno y cuadre de efectivo.</p>
+            <button class="btn-primary" id="btnCorteZ" style="margin-top:15px; width:100%; padding:14px; font-size:1.05rem;">
+              📋 Generar Reporte de Cierre (Corte Z)
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISTA 5: REPORTES -->
+      <section id="view-reportes" class="view-section">
+        <div class="card">
+          <h2>📊 Reporte de Ventas y Rendimiento</h2>
+          <p>Métricas de consumo, platillos más vendidos y balance del restaurante.</p>
+          <div id="reportesContent" style="margin-top:20px;">
+            <div class="stat-boxes">
+              <div class="stat-box">
+                <span class="stat-label">Total Ventas Hoy</span>
+                <span class="stat-val" id="repTotalVentas">₡0.00</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Comandas Atendidas</span>
+                <span class="stat-val" id="repTotalComandas">0</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">Ticket Promedio</span>
+                <span class="stat-val" id="repTicketPromedio">₡0.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL DE PEDIDOS / COMANDERO TÁCTIL (AL TOCAR UNA MESA) -->
+  <div class="pos-modal-overlay" id="orderModal">
+    <div class="order-modal-container">
+      
+      <!-- Lado Izquierdo: Catálogo de Menú -->
+      <div class="order-menu-side">
+        <div class="order-menu-header">
+          <div class="mesa-badge" id="modalMesaTitulo">Mesa 1</div>
+          <div class="category-tabs" id="categoryTabs">
+            <!-- Categorías dinámicas -->
+          </div>
+        </div>
+        <div class="products-grid" id="productsGrid">
+          <!-- Productos dinámicos -->
+        </div>
+      </div>
+
+      <!-- Lado Derecho: Comanda de la Mesa -->
+      <div class="order-ticket-side">
+        <div class="ticket-header">
+          <h3>🧾 Comanda de la Mesa</h3>
+          <button class="btn-close-modal" id="btnCloseOrderModal">✕</button>
+        </div>
+
+        <div class="ticket-items" id="ticketItemsList">
+          <div class="empty-ticket">Agregue productos tocando el menú</div>
+        </div>
+
+        <div class="ticket-footer">
+          <div class="ticket-totals">
+            <div class="row"><span>Subtotal:</span><strong id="ticketSubtotal">₡0</strong></div>
+            <div class="row"><span>Servicio (10%):</span><strong id="ticketServicio">₡0</strong></div>
+            <div class="row"><span>I.V.A (13%):</span><strong id="ticketIva">₡0</strong></div>
+            <div class="row total"><span>TOTAL:</span><strong id="ticketTotal">₡0</strong></div>
+          </div>
+
+          <div class="ticket-actions">
+            <button class="btn-action cocina" id="btnEnviarComanda">🔥 Enviar a Cocina / Barra</button>
+            <button class="btn-action cuenta" id="btnPedirCuenta">🧾 Pedir Cuenta</button>
+            <button class="btn-action cobrar" id="btnCobrarMesa">💵 Cobrar Mesa</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL DE COBRO RÁPIDO -->
+  <div class="pos-modal-overlay" id="checkoutModal">
+    <div class="checkout-card">
+      <div class="checkout-header">
+        <h3>💵 Cobrar Cuenta</h3>
+        <button class="btn-close-modal" id="btnCloseCheckoutModal">✕</button>
+      </div>
+      <div class="checkout-body">
+        <div class="checkout-total-display">
+          <span>Total a Pagar:</span>
+          <h2 id="checkoutMontoTotal">₡0</h2>
+        </div>
+
+        <label style="font-weight:700; margin-top:10px; display:block;">Método de Pago:</label>
+        <div class="pay-methods-grid">
+          <button class="pay-method-btn active" data-metodo="Efectivo">💵 Efectivo</button>
+          <button class="pay-method-btn" data-metodo="Tarjeta">💳 Tarjeta</button>
+          <button class="pay-method-btn" data-metodo="SINPE">📱 SINPE Móvil</button>
+        </div>
+
+        <div class="form-field" id="pagoEfectivoField" style="margin-top:12px;">
+          <label style="font-weight:700;">Efectivo Recibido:</label>
+          <input type="number" id="inputEfectivoRecibido" placeholder="Ej: 10000" style="font-size:1.2rem; font-weight:700;" />
+          <div id="vueltoDisplay" style="font-size:1rem; font-weight:800; color:#16a34a; margin-top:6px;">Vuelto / Cambio: ₡0</div>
+        </div>
+
+        <button class="btn-primary" id="btnConfirmarCobro" style="width:100%; margin-top:20px; padding:15px; font-size:1.1rem;">
+          ✅ Confirmar Cobro & Liberar Mesa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
