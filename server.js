@@ -1311,6 +1311,56 @@ app.get('/api/menu', async (req, res) => {
   }
 });
 
+// Agregar nuevo producto y precio al menú
+app.post('/api/productos', async (req, res) => {
+  try {
+    const { nombre, precio, categoria_id, destino, curso, imagen_url } = req.body;
+    const nombreLimpio = (nombre || '').trim();
+    const precioNum = parseFloat(precio);
+
+    if (!nombreLimpio) {
+      return res.status(400).json({ error: 'El nombre del producto es obligatorio.' });
+    }
+    if (isNaN(precioNum) || precioNum < 0) {
+      return res.status(400).json({ error: 'El precio debe ser un número válido mayor o igual a 0.' });
+    }
+
+    let catId = categoria_id ? Number(categoria_id) : null;
+    let destinoFinal = (destino || '').trim().toLowerCase();
+
+    if (catId) {
+      const cat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+      if (cat && !destinoFinal) {
+        destinoFinal = cat.destino || 'cocina';
+      }
+    } else {
+      const primeraCat = await dbGet('SELECT * FROM Categorias ORDER BY id ASC LIMIT 1');
+      catId = primeraCat ? primeraCat.id : 1;
+      if (!destinoFinal) destinoFinal = primeraCat ? (primeraCat.destino || 'cocina') : 'cocina';
+    }
+
+    if (!destinoFinal || (destinoFinal !== 'barra' && destinoFinal !== 'cocina')) {
+      destinoFinal = 'cocina';
+    }
+
+    const cursoNum = Number(curso) || (destinoFinal === 'barra' ? 1 : 2);
+
+    const result = await dbRun(
+      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, agotado, activo)
+       VALUES (1, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
+      [catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
+    );
+
+    const nuevoProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [result.lastID]);
+    io.emit('producto_creado', nuevoProd);
+    io.emit('menu_actualizado');
+
+    res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/productos/:id/toggle-86', async (req, res) => {
   try {
     const prodId = req.params.id;

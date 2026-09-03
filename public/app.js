@@ -18,9 +18,105 @@ window.abrirModalRenombrarMesa = function(mesaId, nombreActual) {
   if (modal) modal.classList.add('active');
 };
 
-window.renombrarMesaDesdeComandero = function() {
-  if (!estado.mesaActiva) return;
-  window.abrirModalRenombrarMesa(estado.mesaActiva.id, estado.mesaActiva.numero);
+window.abrirModalNuevoProducto = function() {
+  const modal = document.getElementById('modalAgregarProducto');
+  const txtNombre = document.getElementById('txtNuevoProdNombre');
+  const txtPrecio = document.getElementById('txtNuevoProdPrecio');
+  const selCat = document.getElementById('selectNuevoProdCategoria');
+  const selDest = document.getElementById('selectNuevoProdDestino');
+  const txtImg = document.getElementById('txtNuevoProdImagen');
+  const selCurso = document.getElementById('selectNuevoProdCurso');
+
+  if (txtNombre) txtNombre.value = '';
+  if (txtPrecio) txtPrecio.value = '';
+  if (txtImg) txtImg.value = '';
+  if (selCurso) selCurso.value = '2';
+
+  if (selCat) {
+    selCat.innerHTML = (estado.categorias || []).map(c => 
+      `<option value="${c.id}" data-destino="${c.destino || 'cocina'}">${c.icono || '🍽️'} ${c.nombre}</option>`
+    ).join('');
+
+    // Ajustar destino y curso automáticamente según la categoría elegida
+    selCat.onchange = function() {
+      const opt = selCat.options[selCat.selectedIndex];
+      const dest = opt ? opt.getAttribute('data-destino') : 'cocina';
+      if (selDest) selDest.value = dest || 'cocina';
+      if (selCurso) selCurso.value = (dest === 'barra' ? '1' : '2');
+    };
+    if (selCat.options.length > 0) {
+      selCat.dispatchEvent(new Event('change'));
+    }
+  }
+
+  if (modal) modal.classList.add('active');
+  setTimeout(() => {
+    if (txtNombre) txtNombre.focus();
+  }, 100);
+};
+
+window.cerrarModalNuevoProducto = function() {
+  const modal = document.getElementById('modalAgregarProducto');
+  if (modal) modal.classList.remove('active');
+};
+
+window.guardarNuevoProducto = async function() {
+  const txtNombre = document.getElementById('txtNuevoProdNombre');
+  const txtPrecio = document.getElementById('txtNuevoProdPrecio');
+  const selCat = document.getElementById('selectNuevoProdCategoria');
+  const selDest = document.getElementById('selectNuevoProdDestino');
+  const txtImg = document.getElementById('txtNuevoProdImagen');
+  const selCurso = document.getElementById('selectNuevoProdCurso');
+
+  const nombre = (txtNombre ? txtNombre.value : '').trim();
+  const precioVal = txtPrecio ? txtPrecio.value : '';
+  const precio = parseFloat(precioVal);
+
+  if (!nombre) {
+    alert('Por favor ingresa el nombre del producto.');
+    if (txtNombre) txtNombre.focus();
+    return;
+  }
+
+  if (isNaN(precio) || precio < 0) {
+    alert('Por favor ingresa un precio válido mayor o igual a 0.');
+    if (txtPrecio) txtPrecio.focus();
+    return;
+  }
+
+  const categoria_id = selCat ? selCat.value : null;
+  const destino = selDest ? selDest.value : 'cocina';
+  const imagen_url = (txtImg ? txtImg.value : '').trim();
+  const curso = selCurso ? selCurso.value : 2;
+
+  try {
+    const res = await fetch('/api/productos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombre,
+        precio,
+        categoria_id,
+        destino,
+        curso,
+        imagen_url
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo registrar el producto'));
+      return;
+    }
+
+    window.cerrarModalNuevoProducto();
+    mostrarNotificacionCentro(`✅ Producto "${nombre}" (₡${precio}) agregado exitosamente`, 'success');
+
+    // Recargar catálogo y menú
+    await cargarMenuDesdeBackend();
+  } catch (e) {
+    alert('❌ Error al agregar producto: ' + e.message);
+  }
 };
 
 window.guardarNuevoNombreMesa = async function() {
@@ -190,6 +286,8 @@ try {
     socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
     socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
     socket.on('mesa_renombrada', () => cargarMesasDesdeBackend());
+    socket.on('producto_creado', () => cargarMenuDesdeBackend());
+    socket.on('menu_actualizado', () => cargarMenuDesdeBackend());
     socket.on('cliente_pidio_cuenta', (d) => {
       sonarCampanaCocina();
       if (typeof mostrarNotificacionCentro === 'function') {
@@ -865,7 +963,7 @@ window.filtrarCatalogo = function(catId, elBtn) {
 
 function renderGridProductos(prods) {
   const grid = document.getElementById('comProductsGrid');
-  grid.innerHTML = prods.map(p => {
+  const prodsHtml = prods.map(p => {
     const isPromo = estado.happyHourActivo && p.happyHour;
     const imgHtml = p.imagen_url 
       ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />`
@@ -882,6 +980,16 @@ function renderGridProductos(prods) {
       </div>
     `;
   }).join('');
+
+  const btnAddHtml = `
+    <div class="prod-card-one-tap" onclick="abrirModalNuevoProducto()" style="border: 2px dashed rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 100px; border-radius: 12px; transition: all 0.2s ease;" title="Agregar nuevo producto y precio">
+      <span style="font-size: 1.6rem; margin-bottom: 4px;">➕</span>
+      <span style="font-weight: 700; font-size: 0.85rem; color: #10b981; text-align: center;">+ Producto</span>
+      <small style="color: #94a3b8; font-size: 0.72rem;">Nuevo precio</small>
+    </div>
+  `;
+
+  grid.innerHTML = prodsHtml + btnAddHtml;
 }
 
 window.agregarAlTicketOneTap = function(prodId) {
@@ -3236,6 +3344,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initHappyHour();
   initQrCliente();
   initRenombrarMesas();
+  initNuevoProducto();
 
   // Verificar si hay sesión previa guardada en sessionStorage
   const userGuardado = sessionStorage.getItem('pos_usuario');
@@ -3262,10 +3371,20 @@ function initRenombrarMesas() {
       }
     });
   }
-  const btnEditComandero = document.getElementById('btnEditarNombreMesaComandero');
-  if (btnEditComandero) {
-    btnEditComandero.addEventListener('click', window.renombrarMesaDesdeComandero);
-  }
+}
+
+function initNuevoProducto() {
+  const txtNombre = document.getElementById('txtNuevoProdNombre');
+  const txtPrecio = document.getElementById('txtNuevoProdPrecio');
+  [txtNombre, txtPrecio].forEach(inp => {
+    if (inp) {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          window.guardarNuevoProducto();
+        }
+      });
+    }
+  });
 }
 
 // Dismiss touch tooltips when tapping outside
