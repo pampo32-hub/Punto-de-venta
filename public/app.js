@@ -901,15 +901,12 @@ function renderSalón(filtroZona = 'todas') {
 
     if (isOccupied) {
       const isNearTop = (m.y || 0) < 130;
-      const tienePendientes = platosPendientes.length > 0;
-      
+      const estaEsperandoCocina = Boolean((m.estado === 'esperando' || m.estado === 'esperando_parcial') && platosPendientes.length > 0);
+
       let headerText = '';
       let listItems = [];
 
-      // El temporizador de espera aplica única y exclusivamente si hay platillos de cocina pendientes
-      const tieneCocinaPendiente = Boolean(tienePendientes && (m.estado === 'esperando' || m.estado === 'esperando_parcial'));
-
-      if (tieneCocinaPendiente) {
+      if (estaEsperandoCocina) {
         headerText = `⏱️ Esperando hace ${minutosEspera} min (${platosPendientes.length} pendiente${platosPendientes.length > 1 ? 's' : ''})`;
         listItems = platosPendientes;
         waitChipHtml = `
@@ -917,11 +914,14 @@ function renderSalón(filtroZona = 'todas') {
             ⏱️ ${minutosEspera}m
           </div>
         `;
+      } else if (m.estado === 'abierta') {
+        headerText = `🍽️ Mesa Abierta (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'Sin pedidos pendientes'})`;
+        listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Mesa abierta sin pedidos de cocina pendientes'];
       } else if (m.estado === 'activa') {
         headerText = `✅ Todos los platillos servidos (Activa)`;
         listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Comanda despachada por cocina'];
       } else if (m.todos_platillos && m.todos_platillos.length > 0) {
-        headerText = `✅ Pedidos entregados (${m.estado === 'libre' ? 'Libre' : 'Mesa Activa'})`;
+        headerText = `✅ Pedidos entregados (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'Mesa Activa'})`;
         listItems = m.todos_platillos;
       } else {
         headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'En consumo'})`;
@@ -1853,31 +1853,75 @@ function renderKDS() {
   const container = document.getElementById('kdsTicketsContainer');
   container.innerHTML = '';
 
-  if (!estado.comandasKDS.length) {
-    container.innerHTML = '<div style="color:#9ca3af; font-size:1.1rem; grid-column:1/-1; padding:40px; text-align:center;">✨ No hay comandas pendientes. Todo está despachado.</div>';
+  if (!estado.comandasKDS || !estado.comandasKDS.length) {
+    container.innerHTML = '<div style="color:#9ca3af; font-size:1.05rem; grid-column:1/-1; padding:40px; text-align:center;">✨ No hay comandas pendientes en cocina. Todo está servido.</div>';
     return;
   }
 
+  // Agrupar por orden y número de comanda / tanda para que cada pedido genere su propia comanda
+  const ticketsMap = {};
+  const ticketsOrder = [];
+
   estado.comandasKDS.forEach((c) => {
-    const cursoLabels = { 1: 'Entrada', 2: 'Plato Fuerte', 3: 'Postre' };
-    const cursoClasses = { 1: 'c1', 2: 'c2', 3: 'c3' };
-    const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c2'}">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
+    const comandaNum = c.comanda_numero || 1;
+    const key = `${c.orden_id}_${comandaNum}`;
+    if (!ticketsMap[key]) {
+      ticketsMap[key] = {
+        key,
+        ordenId: c.orden_id,
+        comandaNumero: comandaNum,
+        mesaId: c.mesa_id,
+        mesaNumero: c.mesa_numero || c.mesa || 'Mesa',
+        horaPedido: c.hora_pedido,
+        items: []
+      };
+      ticketsOrder.push(key);
+    }
+    ticketsMap[key].items.push(c);
+  });
 
-    const originTag = (c.origen_mesa_numero && String(c.origen_mesa_numero) !== String(c.mesa_numero))
-      ? `<span class="mesa-origin-badge" style="font-size:0.75rem; margin-right:4px;" title="Platillo pedido originalmente en ${c.origen_mesa_numero}">[${c.origen_mesa_numero.toString().toLowerCase().includes('mesa') ? c.origen_mesa_numero : 'Mesa ' + c.origen_mesa_numero}]</span>`
-      : '';
+  const cursoLabels = { 1: 'Entrada', 2: 'Plato Fuerte', 3: 'Postre' };
+  const cursoClasses = { 1: 'c1', 2: 'c2', 3: 'c3' };
 
+  ticketsOrder.forEach((key) => {
+    const t = ticketsMap[key];
     const card = document.createElement('div');
     card.className = 'kds-card';
+
+    const itemIdsJson = JSON.stringify(t.items.map(i => i.id));
+
     card.innerHTML = `
       <div class="kds-top">
-        <span class="kds-mesa-label">${c.mesa_numero || c.mesa || 'Mesa'}</span>
-        <span class="kds-stopwatch">⏱️ ${c.hora_pedido ? c.hora_pedido.slice(11, 16) : 'Ahora'}</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="kds-mesa-label">${escapeHtml(t.mesaNumero)}</span>
+          <span class="badge-comanda-num" style="background:rgba(59,130,246,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">Comanda #${t.comandaNumero}</span>
+        </div>
+        <span class="kds-stopwatch">⏱️ ${t.horaPedido ? t.horaPedido.slice(11, 16) : 'Ahora'}</span>
       </div>
-      <div class="kds-item-line">${c.cantidad}x ${originTag}${c.nombre_producto || c.platillo} ${badge}</div>
-      ${c.notas ? `<div class="kds-modif-box">⚠️ ${c.notas}</div>` : ''}
-      <button class="btn-kds-ready" onclick="despacharKDSBackend(${c.id})">
-        ✅ Marcar como Listo & Servir
+
+      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+        ${t.items.map(c => {
+          const originTag = (c.origen_mesa_numero && String(c.origen_mesa_numero) !== String(t.mesaNumero))
+            ? `<span class="mesa-origin-badge" style="font-size:0.72rem; margin-right:4px;" title="Pedido originalmente en ${escapeHtml(c.origen_mesa_numero)}">[${escapeHtml(c.origen_mesa_numero)}]</span>`
+            : '';
+          const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c2'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
+          return `
+            <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
+              <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); line-height:1.25; flex:1;">
+                <span style="color:#f59e0b; font-weight:800; margin-right:4px;">${c.cantidad}x</span>
+                ${originTag}${escapeHtml(c.nombre_producto || c.platillo)} ${badge}
+                ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
+              </div>
+              <button class="btn-kds-item-ready" title="Marcar este platillo listo" style="background:transparent; border:1px solid rgba(16,185,129,0.4); color:#34d399; border-radius:6px; padding:3px 8px; font-size:0.75rem; cursor:pointer; font-weight:800; margin-left:8px;" onclick="despacharKDSBackend(${c.id})">
+                ✓
+              </button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <button class="btn-kds-ready" onclick='despacharComandaCompletaBackend(${itemIdsJson})'>
+        ✅ Servir Comanda (${t.items.length})
       </button>
     `;
     container.appendChild(card);
@@ -1893,6 +1937,24 @@ window.despacharKDSBackend = async function(detalleId) {
     });
     sonarCampanaCocina();
     mostrarNotificacionCentro('🍽️ Platillo marcado como listo y servido.', 'success');
+    cargarKDSDesdeBackend();
+    cargarMesasDesdeBackend();
+  } catch (e) {
+    sonarCampanaCocina();
+  }
+};
+
+window.despacharComandaCompletaBackend = async function(itemIds) {
+  try {
+    for (const id of itemIds) {
+      await fetch(`/api/kds/${id}/estado`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'listo' })
+      });
+    }
+    sonarCampanaCocina();
+    mostrarNotificacionCentro('🍽️ Comanda marcada como lista y servida.', 'success');
     cargarKDSDesdeBackend();
     cargarMesasDesdeBackend();
   } catch (e) {

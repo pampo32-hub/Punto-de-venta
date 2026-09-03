@@ -492,11 +492,19 @@ app.get('/api/mesas', async (req, res) => {
         it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
       );
 
+      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos
+      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'libre') {
+        const estadoCalculado = evaluarEstadoMesaKDS(items);
+        if (m.estado !== estadoCalculado) {
+          m.estado = estadoCalculado;
+          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
+          dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
+        }
+      }
+
       let primeraComandaHora = null;
       if (pendientes.length > 0) {
         primeraComandaHora = pendientes[0].hora_pedido || pendientes[0].creado_en || null;
-      } else if (cocinaItems.length > 0) {
-        primeraComandaHora = cocinaItems[0].hora_pedido || cocinaItems[0].creado_en || null;
       }
 
       let minutosEspera = 0;
@@ -1403,18 +1411,22 @@ app.post('/api/comandas/enviar', async (req, res) => {
 
     await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesa, mesero, mesaId]);
 
-    // 6. Insertar items nuevos en DetalleOrden
+    // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
+    const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
+    const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
+
     const nuevasComandas = [];
     for (const it of itemsProcesados) {
       const subtotal = it.precio * it.cantidad;
       const rItem = await dbRun(
-        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero]
+        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero]
       );
       nuevasComandas.push({
         id: rItem.lastID,
         orden_id: ordenId,
+        comanda_numero: comandaNumero,
         producto_id: it.id,
         nombre_producto: it.nombre,
         precio_unitario: it.precio,
@@ -1552,7 +1564,7 @@ app.get('/api/kds', async (req, res) => {
       query += ' AND d.destino = ?';
       params.push(destino);
     }
-    query += ' ORDER BY d.id ASC';
+    query += ' ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC';
 
     const comandas = await dbAll(query, params);
     res.json(comandas);
@@ -1569,7 +1581,7 @@ app.get('/api/comandas/activas', async (req, res) => {
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
-      ORDER BY d.hora_pedido ASC, d.id ASC
+      ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC
     `);
     res.json(comandas);
   } catch (e) {
