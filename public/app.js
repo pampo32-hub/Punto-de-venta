@@ -1,4 +1,25 @@
 
+window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
+  if (!confirm(`¿Estás seguro de que deseas eliminar "${mesaNumero}" del salón?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/mesas/' + mesaId, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo eliminar la mesa'));
+      return;
+    }
+    alert(`🗑️ "${mesaNumero}" eliminada correctamente del salón.`);
+    await cargarMesasDesdeBackend();
+    renderEditorPlano();
+  } catch (e) {
+    alert('Error al eliminar la mesa');
+  }
+};
+
+
 function actualizarBotonEnviarComanda() {
   const btn = document.getElementById('btnEnviarComandaCocina');
   if (!btn) return;
@@ -1518,47 +1539,110 @@ document.getElementById('btnGuardarModif').addEventListener('click', () => {
 });
 
 // QR Cliente
-function initQrCliente() {
-  document.getElementById('btnVerQrMesaCliente').addEventListener('click', async () => {
-    if (!estado.mesaActiva) return;
-    document.getElementById('qrMesaNombre').textContent = estado.mesaActiva.numero;
 
-    try {
-      const res = await fetch('/api/cliente/mesa/' + estado.mesaActiva.id);
-      const data = await res.json();
-      const container = document.getElementById('phoneClientItems');
-      if (!data.items || !data.items.length) {
-        container.innerHTML = '<div style="text-align:center; color:#9ca3af; padding:20px;">Sin consumos registrados aún</div>';
+function initQrCliente() {
+  // Botón en subbar del salón: Ver Códigos QR Mesas
+  const btnTodosQRs = document.getElementById('btnVerTodosQRs');
+  if (btnTodosQRs) {
+    btnTodosQRs.addEventListener('click', () => {
+      poblarSelectorMesasQR();
+      if (estado.mesas.length > 0) {
+        document.getElementById('qrSelectMesa').value = estado.mesas[0].id;
+        cargarQrMesaSeleccionada();
+      }
+      document.getElementById('modalQrCliente').classList.add('active');
+    });
+  }
+
+  // Botón en el comandero: QR Cliente de la mesa activa
+  const btnQrMesa = document.getElementById('btnVerQrMesaCliente');
+  if (btnQrMesa) {
+    btnQrMesa.addEventListener('click', () => {
+      if (!estado.mesaActiva) return;
+      poblarSelectorMesasQR();
+      document.getElementById('qrSelectMesa').value = estado.mesaActiva.id;
+      cargarQrMesaSeleccionada();
+      document.getElementById('modalQrCliente').classList.add('active');
+    });
+  }
+
+  const btnClose = document.getElementById('btnCloseQrModal');
+  if (btnClose) {
+    btnClose.addEventListener('click', () => document.getElementById('modalQrCliente').classList.remove('active'));
+  }
+
+  const btnPideCuentaWeb = document.getElementById('btnClientePideCuentaWeb');
+  if (btnPideCuentaWeb) {
+    btnPideCuentaWeb.addEventListener('click', async () => {
+      const mesaId = Number(document.getElementById('qrSelectMesa').value) || (estado.mesaActiva ? estado.mesaActiva.id : 1);
+      try {
+        await fetch('/api/cliente/mesa/' + mesaId + '/pedir-cuenta', { method: 'POST' });
+      } catch (e) {}
+      sonarCampanaCocina();
+      alert('📱 ¡Aviso enviado al mesero! La mesa solicitó la cuenta.');
+      document.getElementById('modalQrCliente').classList.remove('active');
+      if (document.getElementById('modalComandero')) {
+        document.getElementById('modalComandero').classList.remove('active');
+      }
+      cargarMesasDesdeBackend();
+    });
+  }
+}
+
+function poblarSelectorMesasQR() {
+  const sel = document.getElementById('qrSelectMesa');
+  if (!sel) return;
+  sel.innerHTML = estado.mesas.map(m => `
+    <option value="${m.id}">${m.numero} (${m.zonaNombre || 'SALÓN'}) - ${m.estado === 'libre' ? 'Libre' : 'Cuenta Activa'}</option>
+  `).join('');
+}
+
+window.cargarQrMesaSeleccionada = async function() {
+  const sel = document.getElementById('qrSelectMesa');
+  if (!sel) return;
+  const mesaId = sel.value;
+  const mesa = estado.mesas.find(m => m.id === Number(mesaId));
+  if (mesa) {
+    document.getElementById('qrMesaNombre').textContent = `Código QR de ${mesa.numero}`;
+  }
+
+  try {
+    const res = await fetch('/api/mesas/' + mesaId + '/qr');
+    const data = await res.json();
+    if (data.qrDataUrl) {
+      document.getElementById('qrRealImg').src = data.qrDataUrl;
+      document.getElementById('qrUrlDisplay').textContent = data.url;
+    }
+
+    // Cargar datos en el mockup del teléfono
+    const resCliente = await fetch('/api/cliente/mesa/' + mesaId);
+    const dataCliente = await resCliente.json();
+    const phoneItems = document.getElementById('phoneClientItems');
+    if (phoneItems) {
+      if (!dataCliente.items || !dataCliente.items.length) {
+        phoneItems.innerHTML = '<div style="text-align:center; color:#9ca3af; padding:20px;">Sin consumos activos (Mesa Libre)</div>';
         document.getElementById('phoneClientTotal').textContent = '₡ 0.00';
       } else {
-        container.innerHTML = data.items.map(it => `
+        phoneItems.innerHTML = dataCliente.items.map(it => `
           <div class="phone-item-row">
             <span>${it.cantidad}x ${it.nombre_producto}</span>
             <strong>${formatCRC(it.precio_unitario * it.cantidad)}</strong>
           </div>
         `).join('');
-        document.getElementById('phoneClientTotal').textContent = formatCRC(data.orden ? data.orden.total : 0);
+        document.getElementById('phoneClientTotal').textContent = formatCRC(dataCliente.orden ? dataCliente.orden.total : 0);
       }
-    } catch (e) {}
-
-    document.getElementById('modalQrCliente').classList.add('active');
-  });
-
-  document.getElementById('btnCloseQrModal').addEventListener('click', () => document.getElementById('modalQrCliente').classList.remove('active'));
-
-  document.getElementById('btnClientePideCuentaWeb').addEventListener('click', async () => {
-    if (estado.mesaActiva) {
-      try {
-        await fetch('/api/cliente/mesa/' + estado.mesaActiva.id + '/pedir-cuenta', { method: 'POST' });
-      } catch (e) {}
-      sonarCampanaCocina();
-      alert('📱 ¡Aviso enviado al mesero y cajero! La mesa solicitó la cuenta.');
-      document.getElementById('modalQrCliente').classList.remove('active');
-      document.getElementById('modalComandero').classList.remove('active');
-      cargarMesasDesdeBackend();
     }
-  });
-}
+  } catch (e) {
+    console.error('Error cargando QR:', e);
+  }
+};
+
+window.abrirQrMesaEnNuevaPestana = function() {
+  const sel = document.getElementById('qrSelectMesa');
+  const mesaId = sel ? sel.value : 1;
+  window.open('/m/' + mesaId, '_blank');
+};
+
 
 // Buscador Rápido
 function initBuscadorRapido() {
@@ -1631,6 +1715,7 @@ function renderEditorPlano() {
       <div class="mesa-size-controls">
         <button class="btn-mesa-size" title="Reducir tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, -15)">-</button>
         <button class="btn-mesa-size" title="Aumentar tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, 15)">+</button>
+        <button class="btn-mesa-size" title="Eliminar mesa o silla" style="color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); eliminarMesaDesdeEditor(${m.id}, '${m.numero}')">🗑️</button>
       </div>
       <span>${m.numero}</span>
       <small>👥 ${m.capacidad}p</small>

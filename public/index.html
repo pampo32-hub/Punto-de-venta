@@ -263,6 +263,9 @@
           </div>
 
           <div class="salon-quick-tools">
+            <button class="btn-quick-action" id="btnVerTodosQRs">
+              📱 Códigos QR Mesas
+            </button>
             <button class="btn-quick-action" id="btnAbrirMoverUnirModal">
               🔄 Mover / Unir Mesas
             </button>
@@ -750,31 +753,38 @@
     </div>
   </div>
 
-  <!-- QR CLIENTE -->
+  <!-- QR CLIENTE CON QR REAL ESCANEABLE -->
   <div class="modal-backdrop" id="modalQrCliente">
     <div class="modal-dialog qr-dialog">
       <div class="dialog-header">
         <div>
-          <h3>📱 Autoservicio en Mesa (QR para el Cliente)</h3>
-          <small id="qrMesaNombre">Mesa 1</small>
+          <h3>📱 Código QR para Mesa (Autoservicio)</h3>
+          <small id="qrMesaNombre">Escanea con tu celular para ver la cuenta o menú</small>
         </div>
         <button class="btn-icon-close" id="btnCloseQrModal">✕</button>
       </div>
       <div class="dialog-body qr-modal-body">
-        <div class="qr-code-box">
-          <div class="fake-qr-code">
-            <div class="qr-pixel-grid"></div>
-            <span class="qr-scan-label">ESCANÉAME</span>
-          </div>
-          <small style="color:#9ca3af; display:block; margin-top:8px;">
-            URL: <code>https://mirestaurante.com/m/mesa-1</code>
-          </small>
+        <div class="field-group" style="margin-bottom:12px; width:100%;">
+          <label>Seleccionar Mesa / Silla:</label>
+          <select id="qrSelectMesa" class="select-lg" onchange="cargarQrMesaSeleccionada()"></select>
         </div>
+
+        <div class="qr-code-box">
+          <img id="qrRealImg" class="real-qr-image" src="" alt="Código QR" style="width:200px; height:200px; border-radius:12px; border:2px solid #38bdf8; background:#fff; padding:6px; display:block; margin:0 auto;" />
+          <span class="qr-scan-label" style="margin-top:8px; display:block; text-align:center;">📲 Escanea con tu cámara</span>
+          <small style="color:#94a3b8; display:block; margin-top:6px; text-align:center;">
+            Enlace: <code id="qrUrlDisplay">http://localhost:4000/m/1</code>
+          </small>
+          <button class="btn-pri" id="btnAbrirQrEnPestana" style="margin-top:10px; width:100%; padding:10px;" onclick="abrirQrMesaEnNuevaPestana()">
+            🌐 Probar Vista del Cliente en Nueva Pestaña
+          </button>
+        </div>
+
         <div class="mobile-phone-mockup">
           <div class="phone-screen">
             <div class="phone-header">
-              <strong>🍺 Mi Bar & Restaurante</strong>
-              <small>Tu Comanda en Vivo</small>
+              <strong id="phoneMockupRestName">🍺 Mi Restaurante & Bar</strong>
+              <small id="phoneMockupStatus">Vista Previa de Celular</small>
             </div>
             <div class="phone-ticket-list" id="phoneClientItems"></div>
             <div class="phone-footer">

@@ -1,3 +1,4 @@
+const QRCode = require('qrcode');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -17,6 +18,12 @@ const SUPERVISOR_PIN = process.env.SUPERVISOR_PIN || '1234';
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Ruta amigable para escaneo de QR en mesa
+app.get('/m/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'cliente.html'));
+});
+
 
 // WebSockets para tiempo real (KDS Cocina / Barra / Meseros / Admin)
 io.on('connection', (socket) => {
@@ -361,6 +368,53 @@ app.post('/api/mesas/posiciones', async (req, res) => {
     }
     io.emit('mesas_reorganizadas', { posiciones });
     res.json({ message: 'Distribución física del salón guardada exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+// Eliminar Mesa o Silla de Barra
+app.delete('/api/mesas/:id', async (req, res) => {
+  try {
+    const mesaId = req.params.id;
+    // Verificar si la mesa tiene orden activa con consumos
+    const ordenActiva = await dbGet('SELECT * FROM Ordenes WHERE mesa_id = ? AND estado = "activa"', [mesaId]);
+    if (ordenActiva) {
+      return res.status(400).json({ error: 'No se puede eliminar la mesa porque tiene una cuenta activa pendiente de cobro.' });
+    }
+    await dbRun('DELETE FROM Mesas WHERE id = ?', [mesaId]);
+    io.emit('mesa_eliminada', { id: Number(mesaId) });
+    res.json({ message: 'Mesa o silla eliminada exitosamente', id: mesaId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Generar Código QR Real para la Mesa
+app.get('/api/mesas/:id/qr', async (req, res) => {
+  try {
+    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [req.params.id]);
+    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+    
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const url = `${protocol}://${host}/m/${mesa.id}`;
+    
+    const qrDataUrl = await QRCode.toDataURL(url, {
+      width: 320,
+      margin: 2,
+      color: {
+        dark: '#030712',
+        light: '#ffffff'
+      }
+    });
+
+    res.json({
+      mesa,
+      url,
+      qrDataUrl
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -787,4 +841,48 @@ server.listen(PORT, () => {
   console.log('🌐 URL Local: http://localhost:' + PORT);
   console.log('📱 Acceso Móvil / Tablet: http://<IP-DE-TU-PC>:' + PORT);
   console.log('========================================================');
+});
+
+
+// ============================================================================
+// ENDPOINTS PARA EL CLIENTE (ESCANEÓ QR EN MESA)
+// ============================================================================
+app.get('/api/cliente/mesa/:id', async (req, res) => {
+  try {
+    const mesaId = req.params.id;
+    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [mesa.negocio_id || 1]);
+    const orden = await dbGet('SELECT * FROM Ordenes WHERE mesa_id = ? AND estado = "activa"', [mesaId]);
+
+    let items = [];
+    if (orden) {
+      items = await dbAll('SELECT * FROM DetalleOrden WHERE orden_id = ? ORDER BY id ASC', [orden.id]);
+    }
+
+    res.json({
+      mesa,
+      negocio: negocio || { nombre: 'GastroBar Fuego & Brasas', moneda: 'CRC' },
+      orden: orden || null,
+      items
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/cliente/mesa/:id/pedir-cuenta', async (req, res) => {
+  try {
+    const mesaId = req.params.id;
+    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    await dbRun('UPDATE Mesas SET estado = "cuenta" WHERE id = ?', [mesaId]);
+    io.emit('cliente_pidio_cuenta', { mesaId, mesaNumero: mesa.numero });
+    io.emit('mesa_actualizada', { id: mesaId, estado: 'cuenta' });
+    res.json({ message: 'Cuenta solicitada exitosamente al salonero' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
