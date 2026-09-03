@@ -84,6 +84,7 @@
       </div>
 
       <div class="dev-user-panel">
+        <button class="btn-pri" style="margin-right:12px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border:none; padding:8px 16px; border-radius:8px; font-weight:700; color:#fff; cursor:pointer;" onclick="irAPuntoDeVentaAdmin()">🏪 Ir a Salón / POS (Modo Admin)</button>
         <span class="dev-user-name">Juan Developer (Desarrollador Global)</span>
         <button class="btn-dev-logout" onclick="cerrarSesion()">🚪 Cerrar Sesión</button>
       </div>
@@ -100,6 +101,21 @@
         </button>
         <button class="dev-nav-btn" data-dev-tab="db">
           💾 Monitor de Base de Datos
+        </button>
+        <div style="margin:16px 0 8px; border-top:1px solid #374151; padding-top:12px; font-size:0.75rem; color:#9ca3af; font-weight:700; text-transform:uppercase;">
+          ⚡ Módulos GastroBar POS
+        </div>
+        <button class="dev-nav-btn" onclick="abrirModuloAdmin('metricas')">
+          📊 Dashboard & Métricas
+        </button>
+        <button class="dev-nav-btn" onclick="abrirModuloAdmin('inventario')">
+          📦 Control de Inventario
+        </button>
+        <button class="dev-nav-btn" onclick="abrirModuloAdmin('auditoria')">
+          🛡️ Bitácora de Auditoría
+        </button>
+        <button class="dev-nav-btn" style="background:rgba(37,99,235,0.2); border:1px solid #2563eb; color:#60a5fa; font-weight:800; margin-top:8px;" onclick="irAPuntoDeVentaAdmin()">
+          🏪 Abrir Punto de Venta
         </button>
       </aside>
 
@@ -218,19 +234,28 @@
         <button class="nav-pill" data-view="facturacion">
           <span class="pill-icon">⚡</span> Facturación Express
         </button>
-        <button class="nav-pill admin-only-tab" data-view="metricas" style="display:none;">
+        <button class="nav-pill admin-only-tab" data-view="metricas">
           <span class="pill-icon">📊</span> Dashboard
         </button>
-        <button class="nav-pill admin-only-tab" data-view="inventario" style="display:none;">
+        <button class="nav-pill admin-only-tab" data-view="inventario">
           <span class="pill-icon">📦</span> Inventario
         </button>
-        <button class="nav-pill admin-only-tab" data-view="auditoria" style="display:none;">
+        <button class="nav-pill admin-only-tab" data-view="auditoria">
           <span class="pill-icon">🛡️</span> Auditoría
         </button>
       </nav>
 
       <!-- BOTONES DE ADMINISTRACIÓN (ADMIN & DEV) -->
       <div class="admin-extra-actions" id="adminExtraActions">
+        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('metricas')" title="Ver Métricas y Dashboard en tiempo real">
+          📊 Dashboard
+        </button>
+        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('inventario')" title="Control de Inventario y Existencias">
+          📦 Inventario
+        </button>
+        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('auditoria')" title="Bitácora de Auditoría y Seguridad">
+          🛡️ Auditoría
+        </button>
         <button class="btn-topbar-tool" id="btnAdminPersonal" title="Gestionar meseros y cajeros">
           👥 Personal
         </button>

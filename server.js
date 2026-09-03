@@ -493,7 +493,7 @@ app.get('/api/mesas', async (req, res) => {
       );
 
       // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos
-      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'libre') {
+      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta' && m.estado !== 'libre') {
         const estadoCalculado = evaluarEstadoMesaKDS(items);
         if (m.estado !== estadoCalculado) {
           m.estado = estadoCalculado;

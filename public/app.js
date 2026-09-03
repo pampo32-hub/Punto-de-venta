@@ -115,6 +115,13 @@ try {
       cargarMesasDesdeBackend();
     });
     socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
+    socket.on('cliente_pidio_cuenta', (d) => {
+      sonarCampanaCocina();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`📱 ¡La ${d.mesaNumero || 'Mesa'} ha solicitado la cuenta por QR!`, 'warning');
+      }
+      cargarMesasDesdeBackend();
+    });
     socket.on('comanda_estado_cambiado', () => {
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
@@ -307,9 +314,14 @@ function aplicarEnrutamientoPorRol() {
   // Visibilidad de herramientas y pestañas exclusivas de Admin
   const adminTools = document.getElementById('adminExtraActions');
   const esAdmin = u.rol === 'admin' || u.rol === 'developer';
+  document.body.classList.toggle('is-admin', esAdmin);
+
   if (esAdmin) {
     if (adminTools) adminTools.style.display = 'flex';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+    if (perfilBadge && u.rol === 'admin') {
+      perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(Admin)</small>`;
+    }
   } else {
     if (adminTools) adminTools.style.display = 'none';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'none');
@@ -326,6 +338,42 @@ function aplicarEnrutamientoPorRol() {
   cargarKDSDesdeBackend();
   cargarCajaDesdeBackend();
 }
+
+// Helpers globales para acceso directo a módulos de Admin desde cualquier vista
+window.irAPuntoDeVentaAdmin = function() {
+  document.getElementById('developerPortalView')?.classList.remove('active');
+  document.getElementById('posMainView')?.classList.add('active');
+  document.body.classList.add('is-admin');
+  const adminTools = document.getElementById('adminExtraActions');
+  if (adminTools) adminTools.style.display = 'flex';
+  document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+  cargarMesasDesdeBackend();
+  cargarMenuDesdeBackend();
+  cargarKDSDesdeBackend();
+  cargarCajaDesdeBackend();
+};
+
+window.abrirModuloAdmin = function(modulo) {
+  document.getElementById('developerPortalView')?.classList.remove('active');
+  document.getElementById('posMainView')?.classList.add('active');
+  document.body.classList.add('is-admin');
+  const adminTools = document.getElementById('adminExtraActions');
+  if (adminTools) adminTools.style.display = 'flex';
+  document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+
+  const navBtn = document.querySelector(`.nav-pill[data-view="${modulo}"]`);
+  if (navBtn) {
+    navBtn.click();
+  } else {
+    document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
+    const target = document.getElementById('view-' + modulo);
+    if (target) target.classList.add('active');
+    if (modulo === 'metricas') cargarDashboardMetricas();
+    if (modulo === 'inventario') cargarInventarioAdmin();
+    if (modulo === 'auditoria') cargarAuditoriaAdmin();
+  }
+};
 
 function actualizarBrandingNegocio(negocio) {
   if (!negocio) return;
@@ -879,7 +927,8 @@ function renderSalón(filtroZona = 'todas') {
   mesasFiltradas.forEach(m => {
     const card = document.createElement('div');
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
-    card.className = `mesa-render-card ${m.estado} ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
+    const esCuenta = m.estado === 'cuenta';
+    card.className = `mesa-render-card ${m.estado} ${esCuenta ? 'cuenta-qr' : ''} ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
     card.style.left = m.x + 'px';
     card.style.top = m.y + 'px';
     card.style.width = (m.ancho || (esSilla ? 95 : 130)) + 'px';
@@ -957,12 +1006,23 @@ function renderSalón(filtroZona = 'todas') {
       mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
     }
 
+    let cuentaQrHtml = '';
+    if (m.estado === 'cuenta') {
+      cuentaQrHtml = `
+        <div class="mesa-qr-alert-halo">
+          <div class="mesa-qr-alert-icon">🧾</div>
+          <span class="mesa-qr-alert-tag">🔔 PIDE CUENTA</span>
+        </div>
+      `;
+    }
+
     card.innerHTML = `
       <div class="m-header">
         <span class="m-num">${m.numero} ${mergedBadgeHtml}</span>
         <span class="m-badge">${estadoEtiqueta}</span>
       </div>
       <div class="m-total">${m.orden_total > 0 ? formatCRC(m.orden_total) : '—'}</div>
+      ${cuentaQrHtml}
       ${waitChipHtml}
       <div class="m-footer">
         <span>👥 ${m.capacidad}p</span>

@@ -191,5 +191,29 @@ describe('Tier 6: Admin Modules (Inventory, Audit & Real-Time Metrics)', () => {
       assert.ok(Array.isArray(rMetricas.data.ventasPorHora));
       assert.ok(Array.isArray(rMetricas.data.alertasStock));
     });
+
+    it('T6.7: requesting bill via QR transitions table state to "cuenta" for illuminated blinking alert', async () => {
+      // 1. Abrir mesa y agregar ítems
+      await server.request('/api/comandas/enviar', {
+        method: 'POST',
+        body: {
+          mesaId: 3,
+          items: [{ id: 1, nombre: 'Imperial', precio: 1800, cantidad: 2, destino: 'barra' }]
+        }
+      });
+
+      // 2. Cliente solicita cuenta por QR
+      const rQr = await server.request('/api/cliente/mesa/3/pedir-cuenta', {
+        method: 'POST'
+      });
+      assert.strictEqual(rQr.status, 200);
+      assert.match(rQr.data.message, /enviada|exitosa/i);
+
+      // 3. Verificar que la mesa 3 pasa a estado 'cuenta'
+      const rMesas = await server.request('/api/mesas');
+      const mesa3 = rMesas.data.mesas.find(m => m.id === 3);
+      assert.ok(mesa3);
+      assert.strictEqual(mesa3.estado, 'cuenta');
+    });
   });
 });
