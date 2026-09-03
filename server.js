@@ -110,13 +110,14 @@ const dbRun = (sql, params = []) => new Promise((res, rej) => db.run(sql, params
 // HELPERS DE DOMINIO: ESTADOS KDS, TIEMPOS DE ESPERA Y TRAZABILIDAD
 // ============================================================================
 function evaluarEstadoMesaKDS(detalles = []) {
+  // A comanda solo va lo que es comida (destino === 'cocina'), las bebidas no van a comanda ni generan espera
   const cocinaItems = detalles.filter(
-    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
+    (it) => it.destino === 'cocina' && it.destino !== 'barra' && it.estado_comanda !== 'anulado'
   );
 
   if (!cocinaItems.length) return 'abierta';
 
-  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo');
+  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo' || it.estado_comanda === 'servido');
   const pendientes = cocinaItems.filter(
     (it) => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
   );
@@ -486,24 +487,19 @@ app.get('/api/mesas', async (req, res) => {
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
       const cocinaItems = items.filter(
-        it => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
+        it => it.destino === 'cocina' && it.destino !== 'barra' && it.estado_comanda !== 'anulado'
       );
       const pendientes = cocinaItems.filter(
         it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
       );
 
-      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos o desfasados
-      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta') {
+      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos
+      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'libre') {
         const estadoCalculado = evaluarEstadoMesaKDS(items);
         if (m.estado !== estadoCalculado) {
           m.estado = estadoCalculado;
-          await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
-          await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
-        }
-      } else if (!m.orden_activa_id) {
-        if (m.estado !== 'libre') {
-          m.estado = 'libre';
-          await dbRun('UPDATE Mesas SET estado = "libre", mesero = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?', [m.id]).catch(() => {});
+          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
+          dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
       }
 
@@ -550,68 +546,62 @@ app.get('/api/mesas', async (req, res) => {
         activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1');
       } catch (_) {}
 
+      const mergeActivo = activeMerges.find(
+        am => Number(am.mesa_principal_id) === Number(m.id) || Number(am.mesa_secundaria_id) === Number(m.id)
+      );
+
       let todasUnidas = [];
-      const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
-
-      if (esLibre) {
-        m.estado = 'libre';
-        m.mesas_unidas = [];
-        m.es_mesa_unida = false;
-        m.unida_con = null;
-        m.unida_a_mesa_id = null;
-        m.unida_a_numero = null;
-        m.es_mesa_secundaria_unida = false;
-        m.es_mesa_agrupada = false;
-        m.grupo_mesas = null;
-        m.orden_activa_id = null;
-        m.orden_total = 0;
-        m.platos_pendientes = [];
-        m.items_pendientes = [];
-        m.todos_platillos = [];
-        m.primera_comanda_hora = null;
-        m.minutos_espera = 0;
-      } else {
-        // Solo las mesas receptoras (mesa_principal_id) que recibieron otra mesa muestran el +Mesa agregada
-        const mergesComoPrincipal = activeMerges.filter(
-          am => Number(am.mesa_principal_id) === Number(m.id)
-        );
-
-        for (const am of mergesComoPrincipal) {
+      if (m.unida_con) {
+        todasUnidas.push(m.unida_con);
+      }
+      if (mergeActivo) {
+        if (Number(m.id) === Number(mergeActivo.mesa_principal_id)) {
           try {
-            const sA = JSON.parse(am.snapshot_a);
+            const sA = JSON.parse(mergeActivo.snapshot_a);
             if (sA && sA.mesa_numero) todasUnidas.push(sA.mesa_numero);
           } catch (_) {}
+        } else if (Number(m.id) === Number(mergeActivo.mesa_secundaria_id)) {
+          try {
+            const sB = JSON.parse(mergeActivo.snapshot_b);
+            if (sB && sB.mesa_numero) todasUnidas.push(sB.mesa_numero);
+          } catch (_) {}
         }
+      }
 
-        if (m.unida_con && !todasUnidas.includes(m.unida_con)) {
-          todasUnidas.push(m.unida_con);
-        }
+      // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
+      const secundariasEnlazadas = mesas
+        .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
+        .map(sec => sec.numero);
 
-        // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
-        const secundariasEnlazadas = mesas
-          .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id) && sec.estado !== 'libre')
-          .map(sec => sec.numero);
+      // Detectar mesas en el mismo grupo visual
+      const mesasEnMismoGrupo = m.grupo_mesas
+        ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas).map(other => other.numero)
+        : [];
 
-        // Detectar mesas en el mismo grupo visual que no estén libres
-        const mesasEnMismoGrupo = m.grupo_mesas
-          ? mesas.filter(other => other.id !== m.id && other.grupo_mesas === m.grupo_mesas && other.estado !== 'libre').map(other => other.numero)
-          : [];
+      todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
 
-        todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
-
+      if (m.unida_a_mesa_id) {
+        const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
+        m.unida_a_numero = princMesa ? princMesa.numero : 'Mesa Principal';
+        m.es_mesa_secundaria_unida = true;
+      } else {
         m.es_mesa_secundaria_unida = false;
         m.unida_a_numero = null;
-        m.es_mesa_agrupada = Boolean(m.grupo_mesas);
-        m.grupo_mesas_nombre = m.grupo_mesas || null;
-        m.mesas_unidas = todasUnidas;
-        m.es_mesa_unida = todasUnidas.length > 0;
-        m.unida_con = todasUnidas.length > 0 ? todasUnidas[0] : null;
+      }
 
-        m.platos_pendientes = platosPendientes;
-        m.items_pendientes = platosPendientes;
-        m.todos_platillos = todosPlatillos;
-        m.primera_comanda_hora = primeraComandaHora;
-        m.minutos_espera = minutosEspera;
+      m.es_mesa_agrupada = Boolean(m.grupo_mesas);
+      m.grupo_mesas_nombre = m.grupo_mesas || null;
+      m.platos_pendientes = platosPendientes;
+      m.items_pendientes = platosPendientes;
+      m.todos_platillos = todosPlatillos;
+      m.primera_comanda_hora = primeraComandaHora;
+      m.minutos_espera = minutosEspera;
+      m.mesas_unidas = todasUnidas;
+      m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas) || Boolean(mergeActivo) || Boolean(m.unida_con);
+      if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
+        m.unida_con = todasUnidas[0];
+      } else if (!m.es_mesa_unida) {
+        m.unida_con = null;
       }
     }
 
@@ -1066,11 +1056,8 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
         [snapB.mesa_numero, snapB.mesa_id, snapB.orden_id]
       );
 
-      // Desactivar todas las fusiones activas entre estas mesas
-      await dbRun(
-        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ? OR mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-        [snapB.mesa_id, targetDestinoMesaId, targetDestinoMesaId, snapB.mesa_id]
-      );
+      // Desactivar merge
+      await dbRun('UPDATE TableMerges SET activo = 0 WHERE id = ?', [activeMerge.id]);
 
       io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: targetDestinoMesaId });
       io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB, unida_con: null, es_mesa_unida: false, mesas_unidas: [] });
@@ -1223,13 +1210,8 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
     }
 
     await dbRun(
-      'UPDATE Mesas SET estado = ?, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?',
+      'UPDATE Mesas SET estado = ?, unida_a_mesa_id = NULL, unida_con = NULL WHERE id = ?',
       [estadoPrinc, mesaPrincipal.id]
-    );
-
-    await dbRun(
-      'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-      [mesaPrincipal.id, mesaPrincipal.id]
     );
 
     io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id });
@@ -1391,9 +1373,9 @@ app.post('/api/comandas/enviar', async (req, res) => {
       });
     }
 
-    // 3. Evaluar si algún nuevo item va a cocina
+    // 3. Evaluar si algún nuevo item va a cocina (solo comida va a comanda de cocina)
     const tieneNuevosCocina = itemsProcesados.some(it => 
-      it.destino === 'cocina' || (it.destino !== 'barra' && it.curso && it.curso <= 3)
+      it.destino === 'cocina' && it.destino !== 'barra'
     );
 
     // 4. Buscar orden activa o crear una nueva
@@ -1420,7 +1402,7 @@ app.post('/api/comandas/enviar', async (req, res) => {
       }
     }
 
-    // 5. Determinar nuevo estado de mesa
+    // 5. Determinar estado preliminar de mesa
     let nuevoEstadoMesa;
     if (tieneNuevosCocina) {
       nuevoEstadoMesa = 'esperando';
@@ -1430,17 +1412,22 @@ app.post('/api/comandas/enviar', async (req, res) => {
 
     await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesa, mesero, mesaId]);
 
-    // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
+    // 6. Insertar items nuevos en DetalleOrden
+    // Bebidas no van a comanda de cocina: se marcan inmediatamente como 'servido'
     const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
     const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
 
     const nuevasComandas = [];
     for (const it of itemsProcesados) {
       const subtotal = it.precio * it.cantidad;
+      const esComida = it.destino === 'cocina' && it.destino !== 'barra';
+      const estadoComandaItem = esComida ? 'pendiente' : 'servido';
+      const horaListoItem = esComida ? null : ahora;
+
       const rItem = await dbRun(
-        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero]
+        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, estadoComandaItem, ahora, horaListoItem, ahora, it.origen_mesa_numero, comandaNumero]
       );
       nuevasComandas.push({
         id: rItem.lastID,
@@ -1453,6 +1440,7 @@ app.post('/api/comandas/enviar', async (req, res) => {
         notas: it.notas,
         curso: it.curso,
         destino: it.destino,
+        estado_comanda: estadoComandaItem,
         hora_pedido: ahora
       });
     }
@@ -1488,12 +1476,17 @@ app.post('/api/comandas/enviar', async (req, res) => {
     );
     await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesaFinal, mesero, mesaId]);
 
-    // 8. Sockets: Notificar a cocina / KDS y salón
-    io.emit('nueva_comanda', { mesaId, ordenId, comandas: nuevasComandas, tieneCocina: tieneNuevosCocina });
+    // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay comanda de comida
+    const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina' && c.destino !== 'barra');
+    if (tieneNuevosCocina && comandasCocina.length > 0) {
+      io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina, tieneCocina: true });
+    }
+
+    // Notificar siempre al salón de mesa actualizada
     io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesaFinal, total });
 
     res.json({
-      message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Comanda guardada con éxito',
+      message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Pedido guardado con éxito',
       ordenId,
       total,
       estado: nuevoEstadoMesaFinal,
@@ -1591,9 +1584,11 @@ app.get('/api/kds', async (req, res) => {
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
     `;
     const params = [];
-    if (destino !== 'todos') {
-      query += ' AND d.destino = ?';
-      params.push(destino);
+    if (destino === 'barra') {
+      query += " AND d.destino = 'barra'";
+    } else {
+      // A comanda solo va lo que es comida (destino cocina, nunca bebidas)
+      query += " AND d.destino = 'cocina' AND d.destino != 'barra'";
     }
     query += ' ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC';
 
@@ -1648,7 +1643,7 @@ app.get('/api/mesas/:id/espera', async (req, res) => {
     );
 
     const cocinaItems = items.filter(
-      it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
+      it => it.destino === 'cocina' && it.destino !== 'barra'
     );
     const pendientes = cocinaItems.filter(
       it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'

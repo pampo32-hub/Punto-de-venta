@@ -30,9 +30,9 @@ function actualizarBotonEnviarComanda() {
     return;
   }
 
-  // Verifica si hay algún alimento/platillo para cocina NO enviado aún
+  // A comanda solo va lo que es comida (destino === 'cocina', nunca bebidas ni licores)
   const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
-    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+    !it.enviado && it.destino === 'cocina' && it.destino !== 'barra'
   );
 
   if (tieneNuevosCocina) {
@@ -169,13 +169,14 @@ function escapeHtml(str) {
 }
 
 function evaluarEstadoMesaKDS(detalles = []) {
+  // A comanda solo va lo que es comida (destino === 'cocina'), las bebidas no van a comanda ni generan espera
   const cocinaItems = detalles.filter(
-    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
+    (it) => it.destino === 'cocina' && it.destino !== 'barra' && it.estado_comanda !== 'anulado'
   );
 
   if (!cocinaItems.length) return 'abierta';
 
-  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo');
+  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo' || it.estado_comanda === 'servido');
   const pendientes = cocinaItems.filter(
     (it) => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
   );
@@ -998,12 +999,12 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
-    if (!esLibre && m.mesas_unidas && m.mesas_unidas.length > 0) {
-      const otros = m.mesas_unidas.join(' + ');
-      if (otros) {
-        mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${otros} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
-      }
+    const tieneFusiónActiva = Boolean(m.es_mesa_unida || m.unida_con || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.grupo_mesas);
+    if (tieneFusiónActiva) {
+      const otros = (m.mesas_unidas && m.mesas_unidas.length > 0)
+        ? m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join('+')
+        : (m.unida_con ? m.unida_con.toString().replace(/mesa\s*/i, '') : '');
+      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : m.unida_con} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
     }
 
     let cuentaQrHtml = '';
@@ -1791,25 +1792,6 @@ function renderTicketItems() {
 
 window.modificarCantidadTicket = function(idx, delta) {
   const item = estado.mesaActiva.items[idx];
-  if (!item) return;
-
-  if (item.enviado && delta > 0) {
-    // Si el producto ya fue enviado anteriormente a cocina, agregar una nueva comanda pendiente
-    estado.mesaActiva.items.push({
-      id: item.id,
-      nombre: item.nombre,
-      precio: item.precio,
-      cantidad: delta,
-      notas: item.notas || '',
-      destino: item.destino,
-      curso: item.curso || 2,
-      happyHour: Boolean(item.happyHour),
-      enviado: false
-    });
-    renderTicketItems();
-    return;
-  }
-
   item.cantidad += delta;
   if (item.cantidad <= 0) {
     if (item.enviado) {
@@ -1869,8 +1851,9 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     return;
   }
 
+  // A comanda solo va lo que es comida (destino === 'cocina', nunca bebidas)
   const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
-    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+    !it.enviado && it.destino === 'cocina' && it.destino !== 'barra'
   );
 
   try {
@@ -1886,17 +1869,18 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     });
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ Error al enviar comanda: ' + (data.error || 'Error en el servidor'));
+      alert('❌ Error al procesar pedido: ' + (data.error || 'Error en el servidor'));
       return;
     }
 
-    if (tieneNuevosCocina || data.tieneCocina) {
+    if (tieneNuevosCocina && data.tieneCocina) {
       sonarCampanaCocina();
+      mostrarNotificacionCentro('🔔 ¡Comanda enviada a cocina!', 'success');
+    } else {
+      // Las bebidas no van a comanda, solo se guardan en la cuenta
+      mostrarNotificacionCentro('💾 ¡Bebidas guardadas en la cuenta!', 'success');
     }
-    mostrarNotificacionCentro(
-      (tieneNuevosCocina || data.tieneCocina) ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!',
-      'success'
-    );
+
     estado.mesaActiva.items.forEach(it => it.enviado = true);
     actualizarBotonEnviarComanda();
     
@@ -1904,9 +1888,11 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     document.getElementById('modalComandero').classList.remove('active');
     
     await cargarMesasDesdeBackend();
-    await cargarKDSDesdeBackend();
+    if (tieneNuevosCocina) {
+      await cargarKDSDesdeBackend();
+    }
   } catch (e) {
-    alert('❌ Error de conexión al enviar comanda: ' + e.message);
+    alert('❌ Error de conexión: ' + e.message);
   }
 });
 
