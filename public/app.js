@@ -998,14 +998,9 @@ function renderSalón(filtroZona = 'todas') {
     }
 
     let mergedBadgeHtml = '';
-    const esLibre = m.estado === 'libre';
-    const tieneFusiónActiva = !esLibre && Boolean(
-      (m.mesas_unidas && m.mesas_unidas.length > 0) || m.unida_con || m.grupo_mesas
-    );
-    if (tieneFusiónActiva) {
-      const otros = (m.mesas_unidas && m.mesas_unidas.length > 0)
-        ? m.mesas_unidas.join(' + ')
-        : (m.unida_con || '');
+    const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
+    if (!esLibre && m.mesas_unidas && m.mesas_unidas.length > 0) {
+      const otros = m.mesas_unidas.join(' + ');
       if (otros) {
         mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Unida con ${otros} (Clic o mantener presionado para Separar mesas)">🔗 +${otros}</small>`;
       }
@@ -1796,6 +1791,25 @@ function renderTicketItems() {
 
 window.modificarCantidadTicket = function(idx, delta) {
   const item = estado.mesaActiva.items[idx];
+  if (!item) return;
+
+  if (item.enviado && delta > 0) {
+    // Si el producto ya fue enviado anteriormente a cocina, agregar una nueva comanda pendiente
+    estado.mesaActiva.items.push({
+      id: item.id,
+      nombre: item.nombre,
+      precio: item.precio,
+      cantidad: delta,
+      notas: item.notas || '',
+      destino: item.destino,
+      curso: item.curso || 2,
+      happyHour: Boolean(item.happyHour),
+      enviado: false
+    });
+    renderTicketItems();
+    return;
+  }
+
   item.cantidad += delta;
   if (item.cantidad <= 0) {
     if (item.enviado) {
@@ -1871,25 +1885,28 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
       })
     });
     const data = await res.json();
-    if (tieneNuevosCocina) {
+    if (!res.ok) {
+      alert('❌ Error al enviar comanda: ' + (data.error || 'Error en el servidor'));
+      return;
+    }
+
+    if (tieneNuevosCocina || data.tieneCocina) {
       sonarCampanaCocina();
     }
-    alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
+    mostrarNotificacionCentro(
+      (tieneNuevosCocina || data.tieneCocina) ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!',
+      'success'
+    );
     estado.mesaActiva.items.forEach(it => it.enviado = true);
     actualizarBotonEnviarComanda();
     
     // CERRAR EL MENÚ DE UNA VEZ
     document.getElementById('modalComandero').classList.remove('active');
     
-    cargarMesasDesdeBackend();
-    cargarKDSDesdeBackend();
+    await cargarMesasDesdeBackend();
+    await cargarKDSDesdeBackend();
   } catch (e) {
-    if (tieneNuevosCocina) {
-      sonarCampanaCocina();
-    }
-    estado.mesaActiva.items.forEach(it => it.enviado = true);
-    actualizarBotonEnviarComanda();
-    document.getElementById('modalComandero').classList.remove('active');
+    alert('❌ Error de conexión al enviar comanda: ' + e.message);
   }
 });
 

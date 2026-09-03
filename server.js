@@ -492,13 +492,18 @@ app.get('/api/mesas', async (req, res) => {
         it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
       );
 
-      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos
-      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta' && m.estado !== 'libre') {
+      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos o desfasados
+      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta') {
         const estadoCalculado = evaluarEstadoMesaKDS(items);
         if (m.estado !== estadoCalculado) {
           m.estado = estadoCalculado;
-          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
-          dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
+          await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
+          await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
+        }
+      } else if (!m.orden_activa_id) {
+        if (m.estado !== 'libre') {
+          m.estado = 'libre';
+          await dbRun('UPDATE Mesas SET estado = "libre", mesero = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?', [m.id]).catch(() => {});
         }
       }
 
@@ -546,8 +551,10 @@ app.get('/api/mesas', async (req, res) => {
       } catch (_) {}
 
       let todasUnidas = [];
-      // Si la mesa está libre, no tiene fusiones, ni uniones, ni grupos activos
-      if (m.estado === 'libre') {
+      const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
+
+      if (esLibre) {
+        m.estado = 'libre';
         m.mesas_unidas = [];
         m.es_mesa_unida = false;
         m.unida_con = null;
@@ -558,15 +565,16 @@ app.get('/api/mesas', async (req, res) => {
         m.grupo_mesas = null;
         m.orden_activa_id = null;
         m.orden_total = 0;
+        m.platos_pendientes = [];
+        m.items_pendientes = [];
+        m.todos_platillos = [];
+        m.primera_comanda_hora = null;
+        m.minutos_espera = 0;
       } else {
         // Solo las mesas receptoras (mesa_principal_id) que recibieron otra mesa muestran el +Mesa agregada
         const mergesComoPrincipal = activeMerges.filter(
           am => Number(am.mesa_principal_id) === Number(m.id)
         );
-
-        if (m.unida_con) {
-          todasUnidas.push(m.unida_con);
-        }
 
         for (const am of mergesComoPrincipal) {
           try {
@@ -575,9 +583,13 @@ app.get('/api/mesas', async (req, res) => {
           } catch (_) {}
         }
 
+        if (m.unida_con && !todasUnidas.includes(m.unida_con)) {
+          todasUnidas.push(m.unida_con);
+        }
+
         // Detectar mesas secundarias enlazadas físicamente a esta mesa principal
         const secundariasEnlazadas = mesas
-          .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id))
+          .filter(sec => Number(sec.unida_a_mesa_id) === Number(m.id) && sec.estado !== 'libre')
           .map(sec => sec.numero);
 
         // Detectar mesas en el mismo grupo visual que no estén libres
@@ -587,31 +599,20 @@ app.get('/api/mesas', async (req, res) => {
 
         todasUnidas = [...new Set([...todasUnidas, ...secundariasEnlazadas, ...mesasEnMismoGrupo])];
 
-        if (m.unida_a_mesa_id) {
-          const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
-          m.unida_a_numero = princMesa ? princMesa.numero : 'Mesa Principal';
-          m.es_mesa_secundaria_unida = true;
-        } else {
-          m.es_mesa_secundaria_unida = false;
-          m.unida_a_numero = null;
-        }
-
+        m.es_mesa_secundaria_unida = false;
+        m.unida_a_numero = null;
         m.es_mesa_agrupada = Boolean(m.grupo_mesas);
         m.grupo_mesas_nombre = m.grupo_mesas || null;
         m.mesas_unidas = todasUnidas;
-        m.es_mesa_unida = todasUnidas.length > 0 || Boolean(m.grupo_mesas);
-        if (m.es_mesa_unida && !m.unida_con && todasUnidas.length > 0) {
-          m.unida_con = todasUnidas[0];
-        } else if (!m.es_mesa_unida) {
-          m.unida_con = null;
-        }
-      }
+        m.es_mesa_unida = todasUnidas.length > 0;
+        m.unida_con = todasUnidas.length > 0 ? todasUnidas[0] : null;
 
-      m.platos_pendientes = m.estado === 'libre' ? [] : platosPendientes;
-      m.items_pendientes = m.estado === 'libre' ? [] : platosPendientes;
-      m.todos_platillos = m.estado === 'libre' ? [] : todosPlatillos;
-      m.primera_comanda_hora = m.estado === 'libre' ? null : primeraComandaHora;
-      m.minutos_espera = m.estado === 'libre' ? 0 : minutosEspera;
+        m.platos_pendientes = platosPendientes;
+        m.items_pendientes = platosPendientes;
+        m.todos_platillos = todosPlatillos;
+        m.primera_comanda_hora = primeraComandaHora;
+        m.minutos_espera = minutosEspera;
+      }
     }
 
     res.json({ zonas, mesas });
@@ -1065,8 +1066,11 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
         [snapB.mesa_numero, snapB.mesa_id, snapB.orden_id]
       );
 
-      // Desactivar merge
-      await dbRun('UPDATE TableMerges SET activo = 0 WHERE id = ?', [activeMerge.id]);
+      // Desactivar todas las fusiones activas entre estas mesas
+      await dbRun(
+        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ? OR mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+        [snapB.mesa_id, targetDestinoMesaId, targetDestinoMesaId, snapB.mesa_id]
+      );
 
       io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: targetDestinoMesaId });
       io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB, unida_con: null, es_mesa_unida: false, mesas_unidas: [] });
@@ -1219,8 +1223,13 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
     }
 
     await dbRun(
-      'UPDATE Mesas SET estado = ?, unida_a_mesa_id = NULL, unida_con = NULL WHERE id = ?',
+      'UPDATE Mesas SET estado = ?, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?',
       [estadoPrinc, mesaPrincipal.id]
+    );
+
+    await dbRun(
+      'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+      [mesaPrincipal.id, mesaPrincipal.id]
     );
 
     io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id });
@@ -1451,7 +1460,7 @@ app.post('/api/comandas/enviar', async (req, res) => {
     // Descontar existencias de inventario en tiempo real
     await descontarInventarioPorItems(itemsProcesados);
 
-    // 7. Recalcular totales de orden
+    // 7. Recalcular totales y estado real KDS de la orden
     const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
     let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
 
@@ -1471,25 +1480,23 @@ app.post('/api/comandas/enviar', async (req, res) => {
     const iva = Math.round(subNeto * 0.13);
     const total = subNeto + servicio + iva;
 
+    const nuevoEstadoMesaFinal = evaluarEstadoMesaKDS(rows);
+
     await dbRun(
-      "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-      [subtotal, descuentoHH, servicio, iva, total, ordenId]
+      "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?",
+      [subtotal, descuentoHH, servicio, iva, total, nuevoEstadoMesaFinal, ordenId]
     );
+    await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesaFinal, mesero, mesaId]);
 
-    // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
-    const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
-    if (comandasCocina.length > 0) {
-      io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina });
-    }
-
-    // Notificar siempre al salón de mesa actualizada
-    io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesa, total });
+    // 8. Sockets: Notificar a cocina / KDS y salón
+    io.emit('nueva_comanda', { mesaId, ordenId, comandas: nuevasComandas, tieneCocina: tieneNuevosCocina });
+    io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesaFinal, total });
 
     res.json({
       message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Comanda guardada con éxito',
       ordenId,
       total,
-      estado: nuevoEstadoMesa,
+      estado: nuevoEstadoMesaFinal,
       tieneCocina: tieneNuevosCocina
     });
   } catch (e) {
