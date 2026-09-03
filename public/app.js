@@ -1,3 +1,29 @@
+
+function actualizarBotonEnviarComanda() {
+  const btn = document.getElementById('btnEnviarComandaCocina');
+  if (!btn) return;
+
+  if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
+    btn.innerHTML = '💾 Guardar';
+    btn.className = 'btn-btn-cmd guardar';
+    return;
+  }
+
+  // Verifica si hay algún alimento/platillo para cocina
+  const tieneComida = estado.mesaActiva.items.some(it => 
+    it.destino === 'cocina' || 
+    (it.curso && it.curso <= 3 && it.destino !== 'barra')
+  );
+
+  if (tieneComida) {
+    btn.innerHTML = '🔥 Enviar a Cocina';
+    btn.className = 'btn-btn-cmd cocina';
+  } else {
+    btn.innerHTML = '💾 Guardar';
+    btn.className = 'btn-btn-cmd guardar';
+  }
+}
+
 // ============================================================================
 // PUNTO DE VENTA - SISTEMA CON AUTENTICACIÓN, PORTAL DEV Y BOTONES CON FOTOS
 // ============================================================================
@@ -677,7 +703,9 @@ async function cargarMesasDesdeBackend() {
         estado: m.estado,
         x: m.x || 40,
         y: m.y || 40,
-        forma: m.forma || 'square',
+        ancho: m.ancho || ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 95 : 130),
+        alto: m.alto || ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 105 : 120),
+        forma: (m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 'silla' : (m.forma || 'square'),
         orden_activa_id: m.orden_activa_id,
         orden_total: m.orden_total || 0,
         mesero: m.mesero || m.orden_mesero || 'Juan Jival'
@@ -701,9 +729,12 @@ function renderSalón(filtroZona = 'todas') {
 
   mesasFiltradas.forEach(m => {
     const card = document.createElement('div');
-    card.className = `mesa-render-card ${m.estado} ${m.forma === 'round' ? 'round' : ''}`;
+    const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+    card.className = `mesa-render-card ${m.estado} ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
     card.style.left = m.x + 'px';
     card.style.top = m.y + 'px';
+    card.style.width = (m.ancho || (esSilla ? 95 : 130)) + 'px';
+    card.style.height = (m.alto || (esSilla ? 105 : 120)) + 'px';
 
     const estadoEtiqueta = {
       libre: 'Libre',
@@ -772,6 +803,7 @@ async function abrirComanderoMesa(mesaId) {
   }
 
   renderTicketItems();
+  actualizarBotonEnviarComanda();
   document.getElementById('modalComandero').classList.add('active');
 }
 
@@ -816,6 +848,7 @@ function renderTicketItems() {
   }).join('');
 
   recalcularTotalesTicket();
+  actualizarBotonEnviarComanda();
 }
 
 window.modificarCantidadTicket = function(idx, delta) {
@@ -872,12 +905,16 @@ function recalcularTotalesTicket() {
   document.getElementById('comTotal').textContent = formatCRC(total);
 }
 
-// Enviar Comanda a Cocina
+// Enviar Comanda a Cocina o Guardar (cierra el menú de una vez)
 document.getElementById('btnEnviarComandaCocina').addEventListener('click', async () => {
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
-    alert('No hay productos para enviar.');
+    alert('No hay productos en la comanda.');
     return;
   }
+
+  const tieneComida = estado.mesaActiva.items.some(it => 
+    it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
+  );
 
   try {
     const res = await fetch('/api/comandas/enviar', {
@@ -892,19 +929,23 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     });
     const data = await res.json();
     sonarCampanaCocina();
-    alert('🔔 ¡Comanda enviada a cocina/barra!');
+    alert(tieneComida ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
     estado.mesaActiva.items.forEach(it => it.enviado = true);
-    renderTicketItems();
+    
+    // CERRAR EL MENÚ DE UNA VEZ
+    document.getElementById('modalComandero').classList.remove('active');
+    
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
     sonarCampanaCocina();
     estado.mesaActiva.items.forEach(it => it.enviado = true);
-    renderTicketItems();
+    document.getElementById('modalComandero').classList.remove('active');
   }
 });
 
-document.getElementById('btnLanzarPlatosFuertes').addEventListener('click', async () => {
+const btnLanzarFuertesEl = document.getElementById('btnLanzarPlatosFuertes');
+if (btnLanzarFuertesEl) btnLanzarFuertesEl.addEventListener('click', async () => {
   if (!estado.mesaActiva) return;
   try {
     const res = await fetch('/api/comandas/lanzar-fuertes', {
@@ -1541,26 +1582,43 @@ window.seleccionarDelBuscador = function(prodId) {
   }
 };
 
-// Editor Visual Plano
+
+// Editor Visual Plano con Cambio de Tamaño y Sillas de Barra
 function renderEditorPlano() {
   const canvas = document.getElementById('editorCanvas');
   canvas.innerHTML = '';
 
   estado.mesas.forEach(m => {
     const el = document.createElement('div');
-    el.className = `drag-mesa ${m.forma === 'round' ? 'round' : ''}`;
+    const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+    el.className = `drag-mesa ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
     el.style.left = m.x + 'px';
     el.style.top = m.y + 'px';
+    el.style.width = (m.ancho || (esSilla ? 95 : 130)) + 'px';
+    el.style.height = (m.alto || (esSilla ? 105 : 120)) + 'px';
     el.dataset.mesaId = m.id;
-    el.innerHTML = `<span>${m.numero}</span><small>👥 ${m.capacidad}p</small>`;
 
+    el.innerHTML = `
+      <div class="mesa-size-controls">
+        <button class="btn-mesa-size" title="Reducir tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, -15)">-</button>
+        <button class="btn-mesa-size" title="Aumentar tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, 15)">+</button>
+      </div>
+      <span>${m.numero}</span>
+      <small>👥 ${m.capacidad}p</small>
+      <small class="mesa-dim-label">${m.ancho || 130}x${m.alto || 120}</small>
+      <div class="mesa-resize-handle" title="Arrastrar para cambiar tamaño">↘</div>
+    `;
+
+    // Movimiento por arrastre
     let isDragging = false;
     let startX, startY, origX, origY;
 
     const onMouseDown = (e) => {
+      if (e.target.closest('.mesa-size-controls') || e.target.closest('.mesa-resize-handle')) return;
+
       isDragging = true;
-      startX = e.clientX || e.touches[0].clientX;
-      startY = e.clientY || e.touches[0].clientY;
+      startX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+      startY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
       origX = m.x;
       origY = m.y;
       el.style.zIndex = 1000;
@@ -1579,7 +1637,7 @@ function renderEditorPlano() {
       const onMouseUp = () => {
         isDragging = false;
         el.style.zIndex = '';
-        el.style.borderColor = '#0284c7';
+        el.style.borderColor = esSilla ? '#38bdf8' : '#0284c7';
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
         window.removeEventListener('touchmove', onMouseMove);
@@ -1594,12 +1652,53 @@ function renderEditorPlano() {
 
     el.addEventListener('mousedown', onMouseDown);
     el.addEventListener('touchstart', onMouseDown);
+
+    // Resize por arrastre del handle
+    const resizeHandle = el.querySelector('.mesa-resize-handle');
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startW = m.ancho || (esSilla ? 95 : 130);
+        const startH = m.alto || (esSilla ? 105 : 120);
+
+        const onResizeMove = (ev) => {
+          const deltaX = ev.clientX - startX;
+          const deltaY = ev.clientY - startY;
+          m.ancho = Math.max(70, Math.min(300, Math.round(startW + deltaX)));
+          m.alto = Math.max(70, Math.min(300, Math.round(startH + deltaY)));
+          el.style.width = m.ancho + 'px';
+          el.style.height = m.alto + 'px';
+          const dimLabel = el.querySelector('.mesa-dim-label');
+          if (dimLabel) dimLabel.textContent = `${m.ancho}x${m.alto}`;
+        };
+
+        const onResizeUp = () => {
+          window.removeEventListener('mousemove', onResizeMove);
+          window.removeEventListener('mouseup', onResizeUp);
+        };
+
+        window.addEventListener('mousemove', onResizeMove);
+        window.addEventListener('mouseup', onResizeUp);
+      });
+    }
+
     canvas.appendChild(el);
   });
 }
 
+window.cambiarTamanoMesa = function(mesaId, delta) {
+  const m = estado.mesas.find(item => item.id === mesaId);
+  if (!m) return;
+  m.ancho = Math.max(70, Math.min(300, (m.ancho || 130) + delta));
+  m.alto = Math.max(70, Math.min(300, (m.alto || 120) + delta));
+  renderEditorPlano();
+};
+
+
 document.getElementById('btnGuardarPlano').addEventListener('click', async () => {
-  const posiciones = estado.mesas.map(m => ({ id: m.id, x: m.x, y: m.y }));
+  const posiciones = estado.mesas.map(m => ({ id: m.id, x: m.x, y: m.y, ancho: m.ancho || 130, alto: m.alto || 120 }));
   try {
     const res = await fetch('/api/mesas/posiciones', {
       method: 'POST',
@@ -1638,12 +1737,21 @@ document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async
 });
 
 document.getElementById('btnAgregarBarra').addEventListener('click', async () => {
-  const num = 'Barra ' + (estado.mesas.length + 1);
+  const num = 'Silla Barra ' + (estado.mesas.filter(m => m.numero.includes('Barra')).length + 1);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ numero: num, zona_id: 2, capacidad: 1, forma: 'round', x: 620, y: 80 })
+      body: JSON.stringify({ 
+        numero: num, 
+        zona_id: 2, 
+        capacidad: 1, 
+        forma: 'silla', 
+        x: 620, 
+        y: 80,
+        ancho: 95,
+        alto: 105
+      })
     });
     await cargarMesasDesdeBackend();
   } catch (e) {}

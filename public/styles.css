@@ -2324,3 +2324,156 @@ textarea:focus, select:focus, input:focus {
   width: 680px;
   max-width: 94vw;
 }
+
+
+/* ============================================================================
+   SILLAS DE BARRA (FORMA DE SILLA / TABURETE CON RESPALDO Y ASIENTO)
+   ============================================================================ */
+.mesa-render-card.silla {
+  width: 95px !important;
+  height: 105px !important;
+  border-radius: 18px 18px 50% 50% !important;
+  background: radial-gradient(circle at center, #1e293b 20%, #0f172a 100%) !important;
+  border: 2px solid #38bdf8 !important;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,255,255,0.2) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 6px !important;
+  position: absolute !important;
+}
+
+/* Respaldo curvado de la silla de barra */
+.mesa-render-card.silla::before {
+  content: '🪑';
+  font-size: 1.1rem;
+  display: block;
+  line-height: 1;
+}
+
+.mesa-render-card.silla .m-header {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.mesa-render-card.silla .m-num {
+  font-size: 0.78rem !important;
+  font-weight: 800;
+  color: #38bdf8;
+  text-align: center;
+}
+
+.mesa-render-card.silla .m-badge {
+  display: none !important;
+}
+
+.mesa-render-card.silla .m-total {
+  font-size: 0.75rem !important;
+  font-weight: 800;
+  color: #10b981;
+}
+
+.mesa-render-card.silla .m-footer {
+  font-size: 0.65rem !important;
+  color: #94a3b8;
+}
+
+/* SILLA DE BARRA EN EL EDITOR */
+.drag-mesa.silla {
+  width: 95px !important;
+  height: 105px !important;
+  border-radius: 18px 18px 50% 50% !important;
+  background: radial-gradient(circle at center, #1e293b 20%, #0f172a 100%) !important;
+  border: 2px dashed #38bdf8 !important;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.5) !important;
+}
+
+.drag-mesa.silla::before {
+  content: '🪑';
+  font-size: 1.2rem;
+  margin-bottom: 2px;
+}
+
+/* CONTROLES DE CAMBIO DE TAMAÑO EN EL EDITOR */
+.drag-mesa {
+  position: absolute;
+  background: #1f2937;
+  border: 2px dashed #0284c7;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.6);
+  font-weight: 800;
+  user-select: none;
+  touch-action: none;
+}
+
+.drag-mesa.round {
+  border-radius: 50% !important;
+}
+
+/* BOTONES FLOTANTES DE TAMAÑO +/- EN CADA MESA DEL EDITOR */
+.mesa-size-controls {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 3px;
+  z-index: 10;
+}
+
+.btn-mesa-size {
+  width: 22px;
+  height: 22px;
+  background: #0f172a;
+  border: 1px solid #38bdf8;
+  color: #38bdf8;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.btn-mesa-size:hover {
+  background: #0284c7;
+  color: #fff;
+  transform: scale(1.1);
+}
+
+/* HANDLE DE REDIMENSIÓN POR ARRASTRE EN ESQUINA INFERIOR DERECHA */
+.mesa-resize-handle {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 0.65rem;
+  z-index: 10;
+}
+
+.mesa-resize-handle:hover {
+  color: #38bdf8;
+  transform: scale(1.2);
+}
+
+.mesa-dim-label {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
