@@ -52,6 +52,19 @@ db.serialize(() => {
   db.run("ALTER TABLE Mesas ADD COLUMN unida_a_mesa_id INTEGER", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN unida_con TEXT", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN grupo_mesas TEXT", () => {});
+
+  db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mesa_principal_id INTEGER NOT NULL,
+    mesa_secundaria_id INTEGER NOT NULL,
+    orden_principal_id INTEGER,
+    orden_secundaria_id INTEGER,
+    snapshot_a TEXT,
+    snapshot_b TEXT,
+    items_transferidos_ids TEXT,
+    creado_en TEXT,
+    activo INTEGER DEFAULT 1
+  )`);
 });
 
 // Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
@@ -671,7 +684,53 @@ app.post('/api/mesas/unir', async (req, res) => {
 
     const meseroAsignado = mesaPrincipal.mesero || mesaSecundaria.mesero || 'Juan Jival';
 
-    // Ambas mesas tienen orden activa: fusionar los DetalleOrden preservando trazabilidad
+    // Obtener ítems originales de ambas mesas para el snapshot de TableMerges
+    const itemsA = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [orden2.id]);
+    const itemsB = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [orden1.id]);
+
+    const snapshotA = JSON.stringify({
+      mesa_id: mesaSecundaria.id,
+      mesa_numero: mesaSecundaria.numero,
+      mesa_estado: mesaSecundaria.estado,
+      mesa_mesero: mesaSecundaria.mesero,
+      orden_id: orden2.id,
+      numero_orden: orden2.numero_orden,
+      cliente: orden2.cliente,
+      subtotal: orden2.subtotal,
+      descuento_happy_hour: orden2.descuento_happy_hour,
+      servicio_10: orden2.servicio_10,
+      iva_13: orden2.iva_13,
+      total: orden2.total,
+      estado: orden2.estado,
+      items_ids: itemsA.map(i => i.id)
+    });
+
+    const snapshotB = JSON.stringify({
+      mesa_id: mesaPrincipal.id,
+      mesa_numero: mesaPrincipal.numero,
+      mesa_estado: mesaPrincipal.estado,
+      mesa_mesero: mesaPrincipal.mesero,
+      orden_id: orden1.id,
+      numero_orden: orden1.numero_orden,
+      cliente: orden1.cliente,
+      subtotal: orden1.subtotal,
+      descuento_happy_hour: orden1.descuento_happy_hour,
+      servicio_10: orden1.servicio_10,
+      iva_13: orden1.iva_13,
+      total: orden1.total,
+      estado: orden1.estado,
+      items_ids: itemsB.map(i => i.id)
+    });
+
+    await dbRun(`INSERT INTO TableMerges (
+      mesa_principal_id, mesa_secundaria_id, orden_principal_id, orden_secundaria_id,
+      snapshot_a, snapshot_b, items_transferidos_ids, creado_en, activo
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`, [
+      mesaPrincipal.id, mesaSecundaria.id, orden1.id, orden2.id,
+      snapshotA, snapshotB, JSON.stringify(itemsA.map(i => i.id)), new Date().toISOString()
+    ]);
+
+    // Transferir todos los productos, cantidades y observaciones hacia la orden de la Mesa Principal (B)
     await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaSecundaria.numero, mesaSecundaria.id, orden2.id]);
     await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaPrincipal.numero, mesaPrincipal.id, orden1.id]);
     await dbRun('UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ?', [orden1.id, orden2.id]);
@@ -686,12 +745,15 @@ app.post('/api/mesas/unir', async (req, res) => {
     const nuevoEstadoUnido = allMergedItems.length > 0 ? evaluarEstadoMesaKDS(allMergedItems) : 'abierta';
 
     await dbRun("UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?", [subtotal, servicio, iva, total, nuevoEstadoUnido, orden1.id]);
-    await dbRun("UPDATE Mesas SET estado = 'unida', unida_a_mesa_id = ?, mesero = ? WHERE id = ?", [mesaPrincipalId, meseroAsignado, mesaSecundariaId]);
+
+    // La Mesa A (secundaria) queda completamente libre y disponible en el salón
+    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?", [mesaSecundariaId]);
+    // La Mesa B (principal) recibe el estado y total combinado y queda marcada con unida_con
     await dbRun("UPDATE Mesas SET estado = ?, unida_con = ?, mesero = ? WHERE id = ?", [nuevoEstadoUnido, mesaSecundaria.numero, meseroAsignado, mesaPrincipalId]);
 
     io.emit('mesas_unidas', { mesaPrincipalId, mesaSecundariaId, ordenPrincipalId: orden1.id });
     io.emit('mesa_actualizada', { mesaId: mesaPrincipalId, estado: nuevoEstadoUnido, total });
-    io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'unida', total: 0 });
+    io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'libre', total: 0 });
 
     res.json({ message: `Mesas unidas correctamente (${mesaPrincipal.numero} + ${mesaSecundaria.numero})`, ordenId: orden1.id, total });
   } catch (e) {
@@ -796,6 +858,82 @@ app.post('/api/mesas/separar', async (req, res) => {
 
 async function separarMesasFusionadas(mesaTarget, res) {
   try {
+    // 1. Buscar si existe un snapshot de TableMerges activo para esta mesa
+    const activeMerge = await dbGet(
+      'SELECT * FROM TableMerges WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1 ORDER BY id DESC LIMIT 1',
+      [mesaTarget.id, mesaTarget.id]
+    );
+
+    if (activeMerge) {
+      const snapA = JSON.parse(activeMerge.snapshot_a);
+      const snapB = JSON.parse(activeMerge.snapshot_b);
+      const transferIds = JSON.parse(activeMerge.items_transferidos_ids || '[]');
+
+      // Devolver los productos originales de Mesa A a su orden original
+      if (transferIds.length > 0) {
+        const placeholders = transferIds.map(() => '?').join(',');
+        await dbRun(`UPDATE DetalleOrden SET orden_id = ? WHERE id IN (${placeholders})`, [snapA.orden_id, ...transferIds]);
+      }
+
+      // Restaurar Orden A con sus productos, totales, impuestos, observaciones y estado
+      await dbRun(
+        'UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+        [snapA.subtotal, snapA.descuento_happy_hour || 0, snapA.servicio_10, snapA.iva_13, snapA.total, snapA.estado, snapA.orden_id]
+      );
+
+      // Restaurar Mesa A a su estado y mesero original
+      await dbRun(
+        'UPDATE Mesas SET estado = ?, mesero = ?, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?',
+        [snapA.mesa_estado || 'abierta', snapA.mesa_mesero || 'Juan Jival', snapA.mesa_id]
+      );
+
+      // Restaurar Orden B con sus productos y totales originales
+      const itemsRestantesB = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [snapB.orden_id]);
+      let subB = snapB.subtotal;
+      let servB = snapB.servicio_10;
+      let ivaB = snapB.iva_13;
+      let totB = snapB.total;
+      let estB = snapB.estado;
+
+      const itemsBIds = snapB.items_ids || [];
+      const remainingIds = itemsRestantesB.map(i => i.id);
+      const tieneNuevos = remainingIds.some(id => !itemsBIds.includes(id));
+
+      if (tieneNuevos) {
+        subB = itemsRestantesB.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+        servB = Math.round(subB * 0.10);
+        ivaB = Math.round(subB * 0.13);
+        totB = subB + servB + ivaB;
+        estB = evaluarEstadoMesaKDS(itemsRestantesB);
+      }
+
+      await dbRun(
+        'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+        [subB, servB, ivaB, totB, estB, snapB.orden_id]
+      );
+
+      // Restaurar Mesa B
+      await dbRun(
+        'UPDATE Mesas SET estado = ?, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?',
+        [estB, snapB.mesa_id]
+      );
+
+      // Desactivar merge
+      await dbRun('UPDATE TableMerges SET activo = 0 WHERE id = ?', [activeMerge.id]);
+
+      io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: snapA.mesa_id });
+      io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB });
+      io.emit('mesa_actualizada', { mesaId: snapA.mesa_id, estado: snapA.mesa_estado || 'abierta', total: snapA.total });
+
+      return res.json({
+        message: `Mesas separadas con éxito. Se restauraron Mesa ${snapB.mesa_numero} y Mesa ${snapA.mesa_numero} con sus productos, totales y observaciones exactas.`,
+        mesaPrincipal: { id: snapB.mesa_id, numero: snapB.mesa_numero, total: totB, estado: estB },
+        mesasRestauradas: [
+          { id: snapA.mesa_id, numero: snapA.mesa_numero, total: snapA.total, estado: snapA.mesa_estado || 'abierta' }
+        ]
+      });
+    }
+
     const mesaId = mesaTarget.id;
     // Determinar mesa principal (si mesaTarget es secundaria, su principal es unida_a_mesa_id)
     let mesaPrincipalId = mesaTarget.unida_a_mesa_id || mesaTarget.id;
