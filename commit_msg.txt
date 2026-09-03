@@ -1,0 +1,20 @@
+feat: Happy Hour persistente con auto-expiracion + Drag Drop de mesas
+
+Hito 3 - Happy Hour:
+- Estado HH persistido en BD tabla ConfigNegocio
+- GET/POST /api/happy-hour para leer y escribir config
+- setInterval en backend que auto-desactiva HH al llegar hora fin
+- Calculo 2x1 usa flag happy_hour del producto, no nombres hardcoded
+- Frontend sincroniza estado con backend al cargar
+- Click corto: toggle activo/inactivo
+- Click largo 600ms: abre modal configurador de horario
+- Socket happy_hour_cambio sincroniza todas las terminales
+
+Hito 4 - Drag Drop Mesas:
+- Long-press 420ms en mesa activa modo arrastre
+- Soltar sobre mesa ocupada: dialogo Unir
+- Soltar sobre mesa libre: dialogo Mover
+- Ghost visual animado con vibracion haptica
+- Listeners globales unicos sin duplicados
+
+Tests: 58/58 E2E pasando

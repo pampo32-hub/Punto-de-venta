@@ -1,0 +1,33 @@
+# Progress - Milestone 2 Worker
+
+- **Status**: Implementation Complete & Verified. Preparing Handoff Report.
+- **Last visited**: 2026-09-03T12:01:10Z
+- **Completed Steps**:
+  - Initialized DISPATCH.md and BRIEFING.md.
+  - Analyzed ORIGINAL_REQUEST.md, PROJECT.md, and Explorer 1, 2, 3 reports.
+  - Updated `database.js`: added `creado_en` and `origen_mesa_numero` columns and migrations for `DetalleOrden`.
+  - Updated `server.js`:
+    - Implemented `evaluarEstadoMesaKDS`, `formatearTooltipEspera`, `formatearNombreItemConOrigen`.
+    - Harmonized all active order queries: `WHERE o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')`.
+    - Augmented `GET /api/mesas` with `platos_pendientes`, `items_pendientes`, `primera_comanda_hora`, `minutos_espera`.
+    - Implemented KDS state machine in `handleKdsEstadoUpdate` (`POST/PUT /api/kds/:detalleId/estado` and `POST/PUT /api/comandas/:id/estado`) recalculating order and table states.
+    - Updated `POST /api/comandas/anular-item` to recalculate table state upon cancellations.
+    - Implemented `GET /api/comandas/activas` and `GET /api/mesas/:id/espera`.
+    - Fixed product resolution when `id` is omitted in `POST /api/comandas/enviar`.
+  - Updated `public/styles.css`:
+    - Added `.mesa-render-card.activa` (blue `#2563eb`), `.mesa-render-card.esperando_parcial` (amber `#f59e0b`).
+    - Added `.legend-badge.activa` and `.legend-badge.esperando_parcial` dot indicators.
+    - Added `.m-wait-chip` and `.mesa-tooltip` with smart arrow positioning.
+  - Updated `public/index.html`: added "Esperando Parcial" and "Activa" badges to `.legend-group`.
+  - Updated `public/app.js`:
+    - Added `evaluarEstadoMesaKDS`, `formatearTooltipEspera`, and `escapeHtml`.
+    - Mapped `activa: 'Activa'` and `esperando_parcial: 'Esperando Parcial'` in `estadoEtiqueta`.
+    - Rendered `.m-wait-chip` and `.mesa-tooltip` with tap event listener (`e.stopPropagation()`) in `renderSalón()`.
+    - Added socket listeners for `comanda_estado_cambiado` and `comanda_actualizada`.
+    - Added table reload on `window.despacharKDSBackend`.
+  - Ran full test verification:
+    - `test/e2e/*.test.js`: 58/58 passing (100%).
+    - `test/challenger-m1.test.js`: 10/10 passing (100%).
+    - `test/challenger-m1.js`: 13/13 passing (100%).
+    - `test/challenger-m2-kds.test.js`: 8/8 passing (100%).
+- **Current Step**: Writing final handoff report (`handoff.md`) and messaging orchestrator.

@@ -278,6 +278,8 @@ body {
 .legend-badge.libre .dot { background: var(--success); }
 .legend-badge.ocupada .dot { background: var(--danger); }
 .legend-badge.esperando .dot { background: var(--accent); }
+.legend-badge.esperando_parcial .dot { background: #f59e0b; }
+.legend-badge.activa .dot { background: #2563eb; }
 .legend-badge.cuenta .dot { background: var(--warning); }
 
 .zone-selector {
@@ -377,9 +379,26 @@ body {
   background: linear-gradient(180deg, #111827 0%, #7f1d1d44 100%);
 }
 
+.mesa-render-card.abierta {
+  border-color: var(--primary);
+  background: linear-gradient(180deg, #111827 0%, #2563eb33 100%);
+}
+
 .mesa-render-card.esperando {
   border-color: var(--accent);
   background: linear-gradient(180deg, #111827 0%, #7c2d1244 100%);
+}
+
+.mesa-render-card.esperando_parcial {
+  border-color: #f59e0b;
+  background: linear-gradient(180deg, #111827 0%, #78350f44 100%);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+
+.mesa-render-card.activa {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #111827 0%, #1e40af44 100%);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.35);
 }
 
 .mesa-render-card.cuenta {
@@ -414,7 +433,10 @@ body {
 
 .mesa-render-card.libre .m-badge { background: #064e3b; color: #34d399; }
 .mesa-render-card.ocupada .m-badge { background: #7f1d1d; color: #f87171; }
+.mesa-render-card.abierta .m-badge { background: #1e3a8a; color: #60a5fa; }
 .mesa-render-card.esperando .m-badge { background: #7c2d12; color: #fb923c; }
+.mesa-render-card.esperando_parcial .m-badge { background: #78350f; color: #fde047; }
+.mesa-render-card.activa .m-badge { background: #1d4ed8; color: #93c5fd; }
 .mesa-render-card.cuenta .m-badge { background: #78350f; color: #fbbf24; }
 
 .m-total {
@@ -428,6 +450,121 @@ body {
   color: var(--text-muted);
   display: flex;
   justify-content: space-between;
+}
+
+/* Milestone 2: Chip de Espera y Tooltip de Tiempos y Platillos */
+.m-wait-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin: 3px auto;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  width: fit-content;
+}
+
+.m-wait-chip:hover {
+  background: rgba(245, 158, 11, 0.35);
+  border-color: #f59e0b;
+  transform: scale(1.05);
+}
+
+.mesa-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 180px;
+  max-width: 250px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.85), 0 0 15px rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  z-index: 200;
+  pointer-events: none;
+  text-align: left;
+}
+
+.mesa-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
+}
+
+.mesa-tooltip.tooltip-bottom {
+  bottom: auto;
+  top: calc(100% + 10px);
+}
+
+.mesa-tooltip.tooltip-bottom::after {
+  top: auto;
+  bottom: 100%;
+  border-color: transparent transparent #0f172a transparent;
+}
+
+.mesa-tooltip-header {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 4px;
+}
+
+.mesa-tooltip-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mesa-tooltip-list li {
+  font-size: 0.68rem;
+  color: #e2e8f0;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.mesa-tooltip-list li::before {
+  content: '•';
+  color: #f59e0b;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* Hover trigger for desktop */
+.mesa-render-card:hover .mesa-tooltip {
+  display: block;
+}
+
+/* Touch tap toggle */
+.mesa-tooltip.show-touch {
+  display: block !important;
+  pointer-events: auto;
 }
 
 /* ------------------------------------------------------------- */
@@ -844,6 +981,7 @@ body {
 }
 
 .btn-btn-cmd.cocina { background: var(--accent); color: #fff; }
+.btn-btn-cmd.guardar { background: var(--primary); color: #fff; }
 .btn-btn-cmd.split { background: #8b5cf6; color: #fff; }
 .btn-btn-cmd.cobrar { background: var(--success); color: #fff; }
 

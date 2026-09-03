@@ -151,10 +151,14 @@ function initDb() {
       estado_comanda TEXT DEFAULT 'pendiente',
       hora_pedido TEXT NOT NULL,
       hora_listo TEXT,
+      creado_en TEXT,
+      origen_mesa_numero INTEGER,
       FOREIGN KEY(orden_id) REFERENCES Ordenes(id),
       FOREIGN KEY(producto_id) REFERENCES Productos(id)
     )`);
     db.run("ALTER TABLE DetalleOrden ADD COLUMN curso INTEGER DEFAULT 2", () => {});
+    db.run("ALTER TABLE DetalleOrden ADD COLUMN creado_en TEXT", () => {});
+    db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero INTEGER", () => {});
 
     // 9. Pagos
     db.run(`CREATE TABLE IF NOT EXISTS Pagos (

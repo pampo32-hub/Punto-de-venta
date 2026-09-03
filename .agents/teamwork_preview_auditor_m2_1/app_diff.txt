@@ -1,0 +1,283 @@
+﻿diff --git a/public/app.js b/public/app.js
+index 438b58c..6ce7465 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -30,13 +30,12 @@ function actualizarBotonEnviarComanda() {
+     return;
+   }
+ 
+-  // Verifica si hay alg├║n alimento/platillo para cocina
+-  const tieneComida = estado.mesaActiva.items.some(it => 
+-    it.destino === 'cocina' || 
+-    (it.curso && it.curso <= 3 && it.destino !== 'barra')
++  // Verifica si hay alg├║n alimento/platillo para cocina NO enviado a├║n
++  const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
++    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+   );
+ 
+-  if (tieneComida) {
++  if (tieneNuevosCocina) {
+     btn.innerHTML = '­ƒöÑ Enviar a Cocina';
+     btn.className = 'btn-btn-cmd cocina';
+   } else {
+@@ -116,6 +115,14 @@ try {
+       cargarMesasDesdeBackend();
+     });
+     socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
++    socket.on('comanda_estado_cambiado', () => {
++      cargarKDSDesdeBackend();
++      cargarMesasDesdeBackend();
++    });
++    socket.on('comanda_actualizada', () => {
++      cargarKDSDesdeBackend();
++      cargarMesasDesdeBackend();
++    });
+     socket.on('lanzar_fuertes', (d) => {
+       sonarCampanaCocina();
+       alert(`­ƒÜÇ ┬íORDEN EN MARCHA!\n\nCocina notificada: Lanzar Platos Fuertes de ${d.mesaNumero}.`);
+@@ -140,6 +147,59 @@ try {
+   }
+ } catch (e) {}
+ 
++// Milestone 2 Domain Helpers
++function escapeHtml(str) {
++  if (!str) return '';
++  return String(str)
++    .replace(/&/g, '&amp;')
++    .replace(/</g, '&lt;')
++    .replace(/>/g, '&gt;')
++    .replace(/"/g, '&quot;')
++    .replace(/'/g, '&#039;');
++}
++
++function evaluarEstadoMesaKDS(detalles = []) {
++  const cocinaItems = detalles.filter(
++    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
++  );
++
++  if (!cocinaItems.length) return 'abierta';
++
++  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo');
++  const pendientes = cocinaItems.filter(
++    (it) => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
++  );
++
++  if (pendientes.length === 0 && listos.length > 0) {
++    return 'activa';
++  } else if (listos.length > 0 && pendientes.length > 0) {
++    return 'esperando_parcial';
++  } else {
++    return 'esperando';
++  }
++}
++
++function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora = new Date()) {
++  const fechaPedido = new Date(primeraComandaHora);
++  const diffMs = Math.max(0, ahora.getTime() - fechaPedido.getTime());
++  const minutos = Math.floor(diffMs / 60000);
++
++  const titulo = `ÔÅ▒´©Å Esperando hace ${minutos} min`;
++  const itemsList = itemsPendientes.map((it) => (typeof it === 'string' ? it : (it.nombre_producto || it.nombre)));
++
++  return {
++    minutos,
++    titulo,
++    items: itemsList,
++    tooltipText: `${titulo}\n${itemsList.map((i) => `ÔÇó ${i}`).join('\n')}`
++  };
++}
++
++if (typeof window !== 'undefined') {
++  window.evaluarEstadoMesaKDS = evaluarEstadoMesaKDS;
++  window.formatearTooltipEspera = formatearTooltipEspera;
++}
++
+ // Audio Campana
+ function formatCRC(num) {
+   return 'Ôéí ' + (Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+@@ -750,7 +810,11 @@ async function cargarMesasDesdeBackend() {
+         forma: (m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 'silla' : (m.forma || 'square'),
+         orden_activa_id: m.orden_activa_id,
+         orden_total: m.orden_total || 0,
+-        mesero: m.mesero || m.orden_mesero || 'Juan Jival'
++        mesero: m.mesero || m.orden_mesero || 'Juan Jival',
++        platos_pendientes: m.platos_pendientes || m.items_pendientes || [],
++        items_pendientes: m.items_pendientes || m.platos_pendientes || [],
++        primera_comanda_hora: m.primera_comanda_hora || null,
++        minutos_espera: m.minutos_espera != null ? m.minutos_espera : 0
+       };
+     });
+ 
+@@ -763,11 +827,12 @@ async function cargarMesasDesdeBackend() {
+ 
+ function renderSal├│n(filtroZona = 'todas') {
+   const canvas = document.getElementById('mesasCanvasView');
++  if (!canvas) return;
+   canvas.innerHTML = '';
+ 
+   const mesasFiltradas = filtroZona === 'todas' 
+     ? estado.mesas 
+-    : estado.mesas.filter(m => m.zona.includes(filtroZona));
++    : estado.mesas.filter(m => m.zona && m.zona.includes(filtroZona));
+ 
+   mesasFiltradas.forEach(m => {
+     const card = document.createElement('div');
+@@ -781,22 +846,71 @@ function renderSal├│n(filtroZona = 'todas') {
+     const estadoEtiqueta = {
+       libre: 'Libre',
+       ocupada: 'Ocupada',
++      abierta: 'Abierta',
+       esperando: 'Esperando',
++      esperando_parcial: 'Esperando Parcial',
++      activa: 'Activa',
+       cuenta: 'Cuenta Pedida'
+     }[m.estado] || 'Libre';
+ 
++    const platosPendientes = m.platos_pendientes || m.items_pendientes || [];
++    let minutosEspera = m.minutos_espera != null ? m.minutos_espera : 0;
++    if (m.primera_comanda_hora && m.minutos_espera == null) {
++      minutosEspera = Math.max(0, Math.floor((Date.now() - new Date(m.primera_comanda_hora).getTime()) / 60000));
++    }
++
++    let waitChipHtml = '';
++    let tooltipHtml = '';
++
++    if ((m.estado === 'esperando' || m.estado === 'esperando_parcial') && (platosPendientes.length > 0 || m.primera_comanda_hora)) {
++      const isNearTop = (m.y || 0) < 110;
++      waitChipHtml = `
++        <div class="m-wait-chip" title="Ver platillos pendientes de entrega">
++          ÔÅ▒´©Å ${minutosEspera}m
++        </div>
++      `;
++      tooltipHtml = `
++        <div class="mesa-tooltip ${isNearTop ? 'tooltip-bottom' : ''}">
++          <div class="mesa-tooltip-header">ÔÅ▒´©Å Esperando hace ${minutosEspera} min</div>
++          <ul class="mesa-tooltip-list">
++            ${platosPendientes.length > 0 
++              ? platosPendientes.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')
++              : '<li>Sin platillos pendientes</li>'}
++          </ul>
++        </div>
++      `;
++      card.title = `ÔÅ▒´©Å Esperando hace ${minutosEspera} min\n${platosPendientes.map(p => `ÔÇó ${typeof p === 'string' ? p : p.nombre_producto}`).join('\n')}`;
++    }
++
+     card.innerHTML = `
+       <div class="m-header">
+         <span class="m-num">${m.numero}</span>
+         <span class="m-badge">${estadoEtiqueta}</span>
+       </div>
+       <div class="m-total">${m.orden_total > 0 ? formatCRC(m.orden_total) : 'ÔÇö'}</div>
++      ${waitChipHtml}
+       <div class="m-footer">
+         <span>­ƒæÑ ${m.capacidad}p</span>
+         <span>${m.zonaNombre ? m.zonaNombre.toUpperCase() : 'SAL├ôN'}</span>
+       </div>
++      ${tooltipHtml}
+     `;
+ 
++    const chipEl = card.querySelector('.m-wait-chip');
++    if (chipEl) {
++      chipEl.addEventListener('click', (e) => {
++        e.stopPropagation();
++        const tip = card.querySelector('.mesa-tooltip');
++        if (tip) {
++          const isShown = tip.classList.contains('show-touch');
++          document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => t.classList.remove('show-touch'));
++          if (!isShown) {
++            tip.classList.add('show-touch');
++          }
++        }
++      });
++    }
++
+     card.addEventListener('click', () => abrirComanderoMesa(m.id));
+     canvas.appendChild(card);
+   });
+@@ -860,6 +974,9 @@ function renderTicketItems() {
+   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
+     list.innerHTML = '<div style="text-align:center; color:#9ca3af; margin-top:40px;">Toca cualquier platillo con foto para agregarlo con 1 toque.</div>';
+     recalcularTotalesTicket();
++    actualizarBotonEnviarComanda();
++    const mobCountEl = document.getElementById('mobTicketCount');
++    if (mobCountEl) mobCountEl.textContent = 0;
+     return;
+   }
+ 
+@@ -962,8 +1079,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
+     return;
+   }
+ 
+-  const tieneComida = estado.mesaActiva.items.some(it => 
+-    it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
++  const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
++    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+   );
+ 
+   try {
+@@ -978,9 +1095,12 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
+       })
+     });
+     const data = await res.json();
+-    sonarCampanaCocina();
+-    alert(tieneComida ? '­ƒöö ┬íComanda enviada a cocina!' : '­ƒÆ¥ ┬íComanda guardada con ├®xito!');
++    if (tieneNuevosCocina) {
++      sonarCampanaCocina();
++    }
++    alert(tieneNuevosCocina ? '­ƒöö ┬íComanda enviada a cocina!' : '­ƒÆ¥ ┬íComanda guardada con ├®xito!');
+     estado.mesaActiva.items.forEach(it => it.enviado = true);
++    actualizarBotonEnviarComanda();
+     
+     // CERRAR EL MEN├Ü DE UNA VEZ
+     document.getElementById('modalComandero').classList.remove('active');
+@@ -988,8 +1108,11 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
+     cargarMesasDesdeBackend();
+     cargarKDSDesdeBackend();
+   } catch (e) {
+-    sonarCampanaCocina();
++    if (tieneNuevosCocina) {
++      sonarCampanaCocina();
++    }
+     estado.mesaActiva.items.forEach(it => it.enviado = true);
++    actualizarBotonEnviarComanda();
+     document.getElementById('modalComandero').classList.remove('active');
+   }
+ });
+@@ -1064,6 +1187,7 @@ window.despacharKDSBackend = async function(detalleId) {
+     sonarCampanaCocina();
+     alert('­ƒì¢´©Å Comanda marcada como lista.');
+     cargarKDSDesdeBackend();
++    cargarMesasDesdeBackend();
+   } catch (e) {
+     sonarCampanaCocina();
+   }
+@@ -1977,3 +2101,29 @@ document.addEventListener('DOMContentLoaded', () => {
+     document.getElementById('landingLoginView').classList.add('active');
+   }
+ });
++
++// Dismiss touch tooltips when tapping outside
++if (typeof document !== 'undefined') {
++  document.addEventListener('click', (e) => {
++    if (e.target && !e.target.closest('.m-wait-chip') && !e.target.closest('.mesa-tooltip')) {
++      document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => t.classList.remove('show-touch'));
++    }
++  });
++}
++
++// Auto-actualizar minutos de espera cada 30 segundos si hay mesas esperando
++if (typeof setInterval !== 'undefined') {
++  setInterval(() => {
++    if (typeof estado !== 'undefined' && estado.mesas && estado.mesas.some(m => m.estado === 'esperando' || m.estado === 'esperando_parcial')) {
++      renderSal├│n();
++    }
++  }, 30000);
++}
++
++if (typeof module !== 'undefined' && module.exports) {
++  module.exports = {
++    evaluarEstadoMesaKDS,
++    formatearTooltipEspera
++  };
++}
++

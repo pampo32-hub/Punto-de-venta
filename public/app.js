@@ -30,13 +30,12 @@ function actualizarBotonEnviarComanda() {
     return;
   }
 
-  // Verifica si hay algún alimento/platillo para cocina
-  const tieneComida = estado.mesaActiva.items.some(it => 
-    it.destino === 'cocina' || 
-    (it.curso && it.curso <= 3 && it.destino !== 'barra')
+  // Verifica si hay algún alimento/platillo para cocina NO enviado aún
+  const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
+    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
   );
 
-  if (tieneComida) {
+  if (tieneNuevosCocina) {
     btn.innerHTML = '🔥 Enviar a Cocina';
     btn.className = 'btn-btn-cmd cocina';
   } else {
@@ -116,6 +115,14 @@ try {
       cargarMesasDesdeBackend();
     });
     socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
+    socket.on('comanda_estado_cambiado', () => {
+      cargarKDSDesdeBackend();
+      cargarMesasDesdeBackend();
+    });
+    socket.on('comanda_actualizada', () => {
+      cargarKDSDesdeBackend();
+      cargarMesasDesdeBackend();
+    });
     socket.on('lanzar_fuertes', (d) => {
       sonarCampanaCocina();
       alert(`🚀 ¡ORDEN EN MARCHA!\n\nCocina notificada: Lanzar Platos Fuertes de ${d.mesaNumero}.`);
@@ -137,8 +144,64 @@ try {
       alert(`📱 ¡Aviso de Cliente!\n\nEl cliente de la ${d.mesaNumero} ha solicitado la cuenta.`);
       cargarMesasDesdeBackend();
     });
+    socket.on('happy_hour_cambio', (data) => {
+      aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
+    });
   }
 } catch (e) {}
+
+// Milestone 2 Domain Helpers
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function evaluarEstadoMesaKDS(detalles = []) {
+  const cocinaItems = detalles.filter(
+    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
+  );
+
+  if (!cocinaItems.length) return 'abierta';
+
+  const listos = cocinaItems.filter((it) => it.estado_comanda === 'listo');
+  const pendientes = cocinaItems.filter(
+    (it) => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
+  );
+
+  if (pendientes.length === 0 && listos.length > 0) {
+    return 'activa';
+  } else if (listos.length > 0 && pendientes.length > 0) {
+    return 'esperando_parcial';
+  } else {
+    return 'esperando';
+  }
+}
+
+function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora = new Date()) {
+  const fechaPedido = new Date(primeraComandaHora);
+  const diffMs = Math.max(0, ahora.getTime() - fechaPedido.getTime());
+  const minutos = Math.floor(diffMs / 60000);
+
+  const titulo = `⏱️ Esperando hace ${minutos} min`;
+  const itemsList = itemsPendientes.map((it) => (typeof it === 'string' ? it : (it.nombre_producto || it.nombre)));
+
+  return {
+    minutos,
+    titulo,
+    items: itemsList,
+    tooltipText: `${titulo}\n${itemsList.map((i) => `• ${i}`).join('\n')}`
+  };
+}
+
+if (typeof window !== 'undefined') {
+  window.evaluarEstadoMesaKDS = evaluarEstadoMesaKDS;
+  window.formatearTooltipEspera = formatearTooltipEspera;
+}
 
 // Audio Campana
 function formatCRC(num) {
@@ -750,7 +813,11 @@ async function cargarMesasDesdeBackend() {
         forma: (m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 'silla' : (m.forma || 'square'),
         orden_activa_id: m.orden_activa_id,
         orden_total: m.orden_total || 0,
-        mesero: m.mesero || m.orden_mesero || 'Juan Jival'
+        mesero: m.mesero || m.orden_mesero || 'Juan Jival',
+        platos_pendientes: m.platos_pendientes || m.items_pendientes || [],
+        items_pendientes: m.items_pendientes || m.platos_pendientes || [],
+        primera_comanda_hora: m.primera_comanda_hora || null,
+        minutos_espera: m.minutos_espera != null ? m.minutos_espera : 0
       };
     });
 
@@ -763,11 +830,12 @@ async function cargarMesasDesdeBackend() {
 
 function renderSalón(filtroZona = 'todas') {
   const canvas = document.getElementById('mesasCanvasView');
+  if (!canvas) return;
   canvas.innerHTML = '';
 
   const mesasFiltradas = filtroZona === 'todas' 
     ? estado.mesas 
-    : estado.mesas.filter(m => m.zona.includes(filtroZona));
+    : estado.mesas.filter(m => m.zona && m.zona.includes(filtroZona));
 
   mesasFiltradas.forEach(m => {
     const card = document.createElement('div');
@@ -781,9 +849,41 @@ function renderSalón(filtroZona = 'todas') {
     const estadoEtiqueta = {
       libre: 'Libre',
       ocupada: 'Ocupada',
+      abierta: 'Abierta',
       esperando: 'Esperando',
+      esperando_parcial: 'Esperando Parcial',
+      activa: 'Activa',
       cuenta: 'Cuenta Pedida'
     }[m.estado] || 'Libre';
+
+    const platosPendientes = m.platos_pendientes || m.items_pendientes || [];
+    let minutosEspera = m.minutos_espera != null ? m.minutos_espera : 0;
+    if (m.primera_comanda_hora && m.minutos_espera == null) {
+      minutosEspera = Math.max(0, Math.floor((Date.now() - new Date(m.primera_comanda_hora).getTime()) / 60000));
+    }
+
+    let waitChipHtml = '';
+    let tooltipHtml = '';
+
+    if ((m.estado === 'esperando' || m.estado === 'esperando_parcial') && (platosPendientes.length > 0 || m.primera_comanda_hora)) {
+      const isNearTop = (m.y || 0) < 110;
+      waitChipHtml = `
+        <div class="m-wait-chip" title="Ver platillos pendientes de entrega">
+          ⏱️ ${minutosEspera}m
+        </div>
+      `;
+      tooltipHtml = `
+        <div class="mesa-tooltip ${isNearTop ? 'tooltip-bottom' : ''}">
+          <div class="mesa-tooltip-header">⏱️ Esperando hace ${minutosEspera} min</div>
+          <ul class="mesa-tooltip-list">
+            ${platosPendientes.length > 0 
+              ? platosPendientes.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')
+              : '<li>Sin platillos pendientes</li>'}
+          </ul>
+        </div>
+      `;
+      card.title = `⏱️ Esperando hace ${minutosEspera} min\n${platosPendientes.map(p => `• ${typeof p === 'string' ? p : p.nombre_producto}`).join('\n')}`;
+    }
 
     card.innerHTML = `
       <div class="m-header">
@@ -791,16 +891,239 @@ function renderSalón(filtroZona = 'todas') {
         <span class="m-badge">${estadoEtiqueta}</span>
       </div>
       <div class="m-total">${m.orden_total > 0 ? formatCRC(m.orden_total) : '—'}</div>
+      ${waitChipHtml}
       <div class="m-footer">
         <span>👥 ${m.capacidad}p</span>
         <span>${m.zonaNombre ? m.zonaNombre.toUpperCase() : 'SALÓN'}</span>
       </div>
+      ${tooltipHtml}
     `;
 
-    card.addEventListener('click', () => abrirComanderoMesa(m.id));
+    const chipEl = card.querySelector('.m-wait-chip');
+    if (chipEl) {
+      chipEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tip = card.querySelector('.mesa-tooltip');
+        if (tip) {
+          const isShown = tip.classList.contains('show-touch');
+          document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => t.classList.remove('show-touch'));
+          if (!isShown) {
+            tip.classList.add('show-touch');
+          }
+        }
+      });
+    }
+
+    // ── Drag & Drop: Long-press para mover/unir mesas ─────────────────────
+    agregarDragMesa(card, m, canvas);
     canvas.appendChild(card);
   });
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// DRAG & DROP DE MESAS — estado global, listeners de documento únicos
+// ────────────────────────────────────────────────────────────────────────────
+const dragState = {
+  dragging: false,
+  mesaId: null,
+  mesaData: null,
+  ghost: null,
+  longTimer: null,
+  offsetX: 0,
+  offsetY: 0,
+  canvas: null,
+  sourceCard: null,
+};
+
+// Listeners GLOBALES (una sola vez, fuera de cualquier loop)
+document.addEventListener('mousemove', (e) => {
+  if (!dragState.dragging || !dragState.ghost) return;
+  dragState.ghost.style.left = (e.clientX - dragState.offsetX) + 'px';
+  dragState.ghost.style.top  = (e.clientY - dragState.offsetY) + 'px';
+});
+
+document.addEventListener('mouseup', (e) => {
+  if (!dragState.dragging) return;
+  finalizarDrop(e.clientX, e.clientY);
+});
+
+function iniciarDrag(mesaData, card, cx, cy, ox, oy) {
+  dragState.dragging = true;
+  dragState.mesaId   = mesaData.id;
+  dragState.mesaData = mesaData;
+  dragState.offsetX  = ox;
+  dragState.offsetY  = oy;
+  dragState.sourceCard = card;
+
+  const ghost = card.cloneNode(true);
+  ghost.id = 'dragGhost';
+  Object.assign(ghost.style, {
+    position: 'fixed', opacity: '0.78', pointerEvents: 'none',
+    zIndex: '9999', transform: 'scale(1.07)',
+    boxShadow: '0 14px 44px rgba(245,158,11,0.55)',
+    border: '2px solid #f59e0b',
+    left: (cx - ox) + 'px', top: (cy - oy) + 'px'
+  });
+  document.body.appendChild(ghost);
+  dragState.ghost = ghost;
+
+  card.style.opacity = '0.3';
+  document.body.style.userSelect = 'none';
+  navigator.vibrate && navigator.vibrate(60);
+}
+
+function cancelarDrag() {
+  clearTimeout(dragState.longTimer);
+  dragState.longTimer = null;
+  if (!dragState.dragging) return;
+  dragState.dragging = false;
+  dragState.ghost && dragState.ghost.remove();
+  dragState.ghost = null;
+  if (dragState.sourceCard) dragState.sourceCard.style.opacity = '';
+  dragState.sourceCard = null;
+  document.body.style.userSelect = '';
+}
+
+function finalizarDrop(clientX, clientY) {
+  if (!dragState.dragging) return;
+  const canvas = document.getElementById('mesasCanvasView');
+  dragState.dragging = false;
+  dragState.ghost && dragState.ghost.remove();
+  dragState.ghost = null;
+  if (dragState.sourceCard) dragState.sourceCard.style.opacity = '';
+  dragState.sourceCard = null;
+  document.body.style.userSelect = '';
+
+  if (!canvas) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const relX = clientX - canvasRect.left;
+  const relY = clientY - canvasRect.top;
+
+  let mesaDestino = null;
+  estado.mesas.forEach(m2 => {
+    if (m2.id === dragState.mesaId) return;
+    const mx = m2.x || 40, my = m2.y || 40;
+    const mw = m2.ancho || 130, mh = m2.alto || 120;
+    if (relX >= mx && relX <= mx + mw && relY >= my && relY <= my + mh) {
+      mesaDestino = m2;
+    }
+  });
+
+  if (!mesaDestino) return;
+
+  if (dragState.mesaData.estado === 'libre') {
+    alert('⚠️ La mesa de origen está libre, no hay orden que mover.');
+    return;
+  }
+
+  if (mesaDestino.estado !== 'libre') {
+    const conf = confirm(`🔗 ¿Deseas UNIR la Mesa ${dragState.mesaData.numero} con la Mesa ${mesaDestino.numero}?\n\nLos consumos se fusionarán en la Mesa ${dragState.mesaData.numero}.`);
+    if (conf) ejecutarUnirMesas(dragState.mesaId, mesaDestino.id);
+  } else {
+    const conf = confirm(`🔁 ¿Deseas MOVER la Mesa ${dragState.mesaData.numero} a la Mesa ${mesaDestino.numero}?\n\nLa orden y consumos pasarán a la Mesa ${mesaDestino.numero}.`);
+    if (conf) ejecutarMoverMesa(dragState.mesaId, mesaDestino.id);
+  }
+}
+
+function agregarDragMesa(card, mesaData, canvas) {
+  let moved = false;
+  let ownLongTimer = null;
+
+  function startLong(cx, cy, ox, oy) {
+    moved = false;
+    ownLongTimer = setTimeout(() => {
+      if (moved) return;
+      iniciarDrag(mesaData, card, cx, cy, ox, oy);
+    }, 420);
+    dragState.longTimer = ownLongTimer;
+  }
+
+  // Mouse
+  card.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const r = card.getBoundingClientRect();
+    startLong(e.clientX, e.clientY, e.clientX - r.left, e.clientY - r.top);
+    e.preventDefault();
+  });
+
+  card.addEventListener('mousemove', () => { moved = true; });
+
+  card.addEventListener('mouseup', (e) => {
+    clearTimeout(ownLongTimer);
+    if (!dragState.dragging || dragState.mesaId !== mesaData.id) {
+      if (!moved) abrirComanderoMesa(mesaData.id);
+    }
+    // El mouseup global de document maneja el finalizarDrop
+  });
+
+  card.addEventListener('mouseleave', () => {
+    if (!dragState.dragging) clearTimeout(ownLongTimer);
+  });
+
+  // Touch
+  card.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    const r = card.getBoundingClientRect();
+    startLong(t.clientX, t.clientY, t.clientX - r.left, t.clientY - r.top);
+  }, { passive: true });
+
+  card.addEventListener('touchmove', (e) => {
+    moved = true;
+    if (!dragState.dragging || dragState.mesaId !== mesaData.id) return;
+    const t = e.touches[0];
+    if (dragState.ghost) {
+      dragState.ghost.style.left = (t.clientX - dragState.offsetX) + 'px';
+      dragState.ghost.style.top  = (t.clientY - dragState.offsetY) + 'px';
+    }
+  }, { passive: true });
+
+  card.addEventListener('touchend', (e) => {
+    clearTimeout(ownLongTimer);
+    if (!dragState.dragging || dragState.mesaId !== mesaData.id) {
+      if (!moved) abrirComanderoMesa(mesaData.id);
+      return;
+    }
+    const t = e.changedTouches[0];
+    finalizarDrop(t.clientX, t.clientY);
+  });
+
+  card.addEventListener('touchcancel', cancelarDrag);
+}
+
+
+
+async function ejecutarMoverMesa(origenId, destinoId, numOrigen, numDestino) {
+  try {
+    const res = await fetch('/api/mesas/mover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origenMesaId: origenId, destinoMesaId: destinoId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    alert(`✅ ${data.message}`);
+    cargarMesasDesdeBackend();
+  } catch (e) {
+    alert('❌ Error al mover mesa: ' + e.message);
+  }
+}
+
+async function ejecutarUnirMesas(mesa1Id, mesa2Id, num1, num2) {
+  try {
+    const res = await fetch('/api/mesas/unir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mesaPrincipalId: mesa1Id, mesaSecundariaId: mesa2Id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    alert(`✅ Mesas fusionadas. Total combinado: ${formatCRC(data.total)}`);
+    cargarMesasDesdeBackend();
+  } catch (e) {
+    alert('❌ Error al unir mesas: ' + e.message);
+  }
+}
+
 
 document.querySelectorAll('.zone-tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -860,6 +1183,9 @@ function renderTicketItems() {
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
     list.innerHTML = '<div style="text-align:center; color:#9ca3af; margin-top:40px;">Toca cualquier platillo con foto para agregarlo con 1 toque.</div>';
     recalcularTotalesTicket();
+    actualizarBotonEnviarComanda();
+    const mobCountEl = document.getElementById('mobTicketCount');
+    if (mobCountEl) mobCountEl.textContent = 0;
     return;
   }
 
@@ -962,8 +1288,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     return;
   }
 
-  const tieneComida = estado.mesaActiva.items.some(it => 
-    it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
+  const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
+    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
   );
 
   try {
@@ -978,9 +1304,12 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
       })
     });
     const data = await res.json();
-    sonarCampanaCocina();
-    alert(tieneComida ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
+    if (tieneNuevosCocina) {
+      sonarCampanaCocina();
+    }
+    alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
     estado.mesaActiva.items.forEach(it => it.enviado = true);
+    actualizarBotonEnviarComanda();
     
     // CERRAR EL MENÚ DE UNA VEZ
     document.getElementById('modalComandero').classList.remove('active');
@@ -988,8 +1317,11 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
-    sonarCampanaCocina();
+    if (tieneNuevosCocina) {
+      sonarCampanaCocina();
+    }
     estado.mesaActiva.items.forEach(it => it.enviado = true);
+    actualizarBotonEnviarComanda();
     document.getElementById('modalComandero').classList.remove('active');
   }
 });
@@ -1064,6 +1396,7 @@ window.despacharKDSBackend = async function(detalleId) {
     sonarCampanaCocina();
     alert('🍽️ Comanda marcada como lista.');
     cargarKDSDesdeBackend();
+    cargarMesasDesdeBackend();
   } catch (e) {
     sonarCampanaCocina();
   }
@@ -1912,26 +2245,151 @@ window.toggleProductoAgotadoBackend = async function(prodId, prodIdx) {
   }
 };
 
-// Happy Hour
-function initHappyHour() {
+// ============================================================================
+// HAPPY HOUR — Sincronización backend + configuración de horario
+// ============================================================================
+
+/** Aplica el estado de HH al UI sin hacer fetch */
+function aplicarEstadoHappyHour(activo, horaInicio, horaFin) {
+  estado.happyHourActivo = Boolean(activo);
+  const btnHH = document.getElementById('btnToggleHappyHour');
+  const txtHH = document.getElementById('hhStatusTxt');
+  if (!btnHH) return;
+
+  if (estado.happyHourActivo) {
+    btnHH.classList.remove('inactive');
+    txtHH.textContent = `Activo ${horaInicio || ''}–${horaFin || ''}`;
+  } else {
+    btnHH.classList.add('inactive');
+    txtHH.textContent = `Desactivado (${horaInicio || '16:00'}–${horaFin || '19:00'})`;
+  }
+  renderGridProductos(estado.productos);
+  if (estado.mesaActiva) recalcularTotalesTicket();
+}
+
+async function initHappyHour() {
   const btnHH = document.getElementById('btnToggleHappyHour');
   const txtHH = document.getElementById('hhStatusTxt');
 
-  btnHH.addEventListener('click', () => {
-    estado.happyHourActivo = !estado.happyHourActivo;
-    if (estado.happyHourActivo) {
-      btnHH.classList.remove('inactive');
-      txtHH.textContent = 'Activado (2x1 Cervezas)';
-      alert('🍸 ¡Modo Happy Hour ACTIVADO! 2x1 en cervezas participantes.');
-    } else {
-      btnHH.classList.add('inactive');
-      txtHH.textContent = 'Desactivado';
-      alert('Tarifas normales activadas.');
+  // 1. Cargar estado real desde el backend al iniciar
+  try {
+    const res = await fetch('/api/happy-hour');
+    if (res.ok) {
+      const data = await res.json();
+      aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
+      // Guardar horarios para el modal de config
+      btnHH.dataset.horaInicio = data.horaInicio || '16:00';
+      btnHH.dataset.horaFin = data.horaFin || '19:00';
     }
-    renderGridProductos(estado.productos);
-    if (estado.mesaActiva) recalcularTotalesTicket();
+  } catch (e) { /* servidor no disponible */ }
+
+  // 2. Click corto → alternar activo/inactivo
+  btnHH.addEventListener('click', async (e) => {
+    // Si hay modal de config abierto, no toggle
+    const modalCfg = document.getElementById('modalHHConfig');
+    if (modalCfg && modalCfg.classList.contains('active')) return;
+
+    const nuevoActivo = !estado.happyHourActivo;
+    try {
+      const res = await fetch('/api/happy-hour', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activo: nuevoActivo,
+          horaInicio: btnHH.dataset.horaInicio || '16:00',
+          horaFin: btnHH.dataset.horaFin || '19:00'
+        })
+      });
+      const data = await res.json();
+      aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
+      btnHH.dataset.horaInicio = data.horaInicio;
+      btnHH.dataset.horaFin = data.horaFin;
+    } catch (e) {
+      // Fallback local
+      estado.happyHourActivo = nuevoActivo;
+      renderGridProductos(estado.productos);
+      if (estado.mesaActiva) recalcularTotalesTicket();
+    }
+  });
+
+  // 3. Click largo (>600ms) → abrir configurador de horario
+  let hhLongTimer = null;
+  btnHH.addEventListener('mousedown', () => {
+    hhLongTimer = setTimeout(() => abrirConfigHappyHour(), 600);
+  });
+  ['mouseup', 'mouseleave'].forEach(ev => {
+    btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
+  });
+  btnHH.addEventListener('touchstart', () => {
+    hhLongTimer = setTimeout(() => abrirConfigHappyHour(), 600);
+  });
+  ['touchend', 'touchcancel'].forEach(ev => {
+    btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
   });
 }
+
+function abrirConfigHappyHour() {
+  const btnHH = document.getElementById('btnToggleHappyHour');
+  const horaInicio = btnHH.dataset.horaInicio || '16:00';
+  const horaFin = btnHH.dataset.horaFin || '19:00';
+
+  // Crear modal de configuración si no existe
+  let modal = document.getElementById('modalHHConfig');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modalHHConfig';
+    modal.className = 'modal-overlay active';
+    modal.innerHTML = `
+      <div class="modal-box" style="max-width:360px;padding:28px;">
+        <h3 style="margin:0 0 18px;color:#f59e0b;">🍸 Configurar Happy Hour</h3>
+        <label style="display:block;margin-bottom:10px;font-size:14px;">
+          Hora inicio (HH:MM 24h)
+          <input id="hhInputInicio" type="time" value="${horaInicio}" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f9fafb;font-size:16px;">
+        </label>
+        <label style="display:block;margin-bottom:20px;font-size:14px;">
+          Hora fin (HH:MM 24h) — se auto-desactiva al llegar
+          <input id="hhInputFin" type="time" value="${horaFin}" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f9fafb;font-size:16px;">
+        </label>
+        <div style="display:flex;gap:10px;">
+          <button id="btnGuardarHHConfig" style="flex:1;padding:12px;border-radius:10px;background:#f59e0b;color:#000;border:none;font-weight:700;cursor:pointer;">💾 Guardar</button>
+          <button id="btnCerrarHHConfig" style="flex:1;padding:12px;border-radius:10px;background:#374151;color:#f9fafb;border:none;cursor:pointer;">✕ Cancelar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('btnCerrarHHConfig').addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('active');
+    });
+
+    document.getElementById('btnGuardarHHConfig').addEventListener('click', async () => {
+      const ni = document.getElementById('hhInputInicio').value;
+      const nf = document.getElementById('hhInputFin').value;
+      if (!ni || !nf) return alert('Completa ambos horarios.');
+      try {
+        const res = await fetch('/api/happy-hour', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ horaInicio: ni, horaFin: nf, activo: estado.happyHourActivo })
+        });
+        const data = await res.json();
+        btnHH.dataset.horaInicio = data.horaInicio;
+        btnHH.dataset.horaFin = data.horaFin;
+        aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
+        modal.classList.remove('active');
+        alert(`✅ Happy Hour configurado: ${data.horaInicio}–${data.horaFin}`);
+      } catch (e) { alert('Error guardando config.'); }
+    });
+  } else {
+    document.getElementById('hhInputInicio').value = horaInicio;
+    document.getElementById('hhInputFin').value = horaFin;
+    modal.classList.add('active');
+  }
+}
+
 
 // Navegación General POS
 function initNavegacion() {
@@ -1977,3 +2435,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('landingLoginView').classList.add('active');
   }
 });
+
+// Dismiss touch tooltips when tapping outside
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    if (e.target && !e.target.closest('.m-wait-chip') && !e.target.closest('.mesa-tooltip')) {
+      document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => t.classList.remove('show-touch'));
+    }
+  });
+}
+
+// Auto-actualizar minutos de espera cada 30 segundos si hay mesas esperando
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    if (typeof estado !== 'undefined' && estado.mesas && estado.mesas.some(m => m.estado === 'esperando' || m.estado === 'esperando_parcial')) {
+      renderSalón();
+    }
+  }, 30000);
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    evaluarEstadoMesaKDS,
+    formatearTooltipEspera
+  };
+}
+
