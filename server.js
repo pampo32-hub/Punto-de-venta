@@ -450,7 +450,7 @@ app.get('/api/mesas', async (req, res) => {
       SELECT m.*, o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
              o.servicio_10, o.iva_13, o.total as orden_total, o.mesero as orden_mesero, o.cliente
       FROM Mesas m
-      LEFT JOIN Ordenes o ON m.id = o.mesa_id AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')
+      LEFT JOIN Ordenes o ON m.id = o.mesa_id AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
       ORDER BY m.id ASC
     `);
 
@@ -479,8 +479,8 @@ app.get('/api/mesas', async (req, res) => {
       );
 
       let primeraComandaHora = null;
-      if (cocinaItems.length > 0) {
-        primeraComandaHora = cocinaItems[0].hora_pedido || cocinaItems[0].creado_en || null;
+      if (items.length > 0) {
+        primeraComandaHora = items[0].hora_pedido || items[0].creado_en || null;
       }
 
       let minutosEspera = 0;
@@ -491,7 +491,14 @@ app.get('/api/mesas', async (req, res) => {
 
       const platosPendientes = pendientes.map(it => {
         if (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(m.numero)) {
-          return `[Mesa ${it.origen_mesa_numero}] ${it.nombre_producto}`;
+          return `[Mesa ${it.origen_mesa_numero.toString().replace(/mesa\s*/i, '')}] ${it.nombre_producto}`;
+        }
+        return it.nombre_producto;
+      });
+
+      const todosPlatillos = items.map(it => {
+        if (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(m.numero)) {
+          return `[Mesa ${it.origen_mesa_numero.toString().replace(/mesa\s*/i, '')}] ${it.nombre_producto}`;
         }
         return it.nombre_producto;
       });
@@ -505,12 +512,29 @@ app.get('/api/mesas', async (req, res) => {
         )
       ];
 
+      // Detectar mesas secundarias enlazadas a esta mesa principal
+      const secundariasEnlazadas = mesas
+        .filter(sec => sec.unida_a_mesa_id === m.id)
+        .map(sec => sec.numero);
+
+      const todasUnidas = [...new Set([...origenesFusionados, ...secundariasEnlazadas])];
+
+      if (m.unida_a_mesa_id) {
+        const princMesa = mesas.find(pm => pm.id === m.unida_a_mesa_id);
+        m.unida_a_numero = princMesa ? princMesa.numero : 'Mesa Principal';
+        m.es_mesa_secundaria_unida = true;
+      } else {
+        m.es_mesa_secundaria_unida = false;
+        m.unida_a_numero = null;
+      }
+
       m.platos_pendientes = platosPendientes;
       m.items_pendientes = platosPendientes;
+      m.todos_platillos = todosPlatillos;
       m.primera_comanda_hora = primeraComandaHora;
       m.minutos_espera = minutosEspera;
-      m.mesas_unidas = origenesFusionados;
-      m.es_mesa_unida = origenesFusionados.length > 0;
+      m.mesas_unidas = todasUnidas;
+      m.es_mesa_unida = todasUnidas.length > 0;
     }
 
     res.json({ zonas, mesas });
@@ -630,17 +654,20 @@ app.post('/api/mesas/unir', async (req, res) => {
       return res.status(404).json({ error: 'Mesa no encontrada' });
     }
 
-    const orden1 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [mesaPrincipalId]);
-    const orden2 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [mesaSecundariaId]);
+    let orden1 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaPrincipalId]);
+    let orden2 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaSecundariaId]);
 
     if (!orden1 || !orden2) {
       return res.status(400).json({ error: 'Ambas mesas deben tener órdenes activas' });
     }
 
-    // Ambas mesas tienen orden activa: fusionar los DetalleOrden
-    await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?) WHERE orden_id = ?", [mesaSecundaria.numero, orden2.id]);
-    await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?) WHERE orden_id = ?", [mesaPrincipal.numero, orden1.id]);
+    const meseroAsignado = mesaPrincipal.mesero || mesaSecundaria.mesero || 'Juan Jival';
+
+    // Ambas mesas tienen orden activa: fusionar los DetalleOrden preservando trazabilidad
+    await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaSecundaria.numero, mesaSecundaria.id, orden2.id]);
+    await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaPrincipal.numero, mesaPrincipal.id, orden1.id]);
     await dbRun('UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ?', [orden1.id, orden2.id]);
+    await dbRun("UPDATE Ordenes SET estado = 'fusionada', total = 0 WHERE id = ?", [orden2.id]);
 
     const allMergedItems = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [orden1.id]);
     const subtotal = allMergedItems.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
@@ -648,18 +675,17 @@ app.post('/api/mesas/unir', async (req, res) => {
     const iva = Math.round(subtotal * 0.13);
     const total = subtotal + servicio + iva;
 
-    const nuevoEstadoUnido = evaluarEstadoMesaKDS(allMergedItems);
+    const nuevoEstadoUnido = allMergedItems.length > 0 ? evaluarEstadoMesaKDS(allMergedItems) : 'abierta';
 
     await dbRun("UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?", [subtotal, servicio, iva, total, nuevoEstadoUnido, orden1.id]);
-    await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [nuevoEstadoUnido, mesaPrincipalId]);
-    await dbRun("UPDATE Ordenes SET estado = 'fusionada', total = 0 WHERE id = ?", [orden2.id]);
-    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL WHERE id = ?", [mesaSecundariaId]);
+    await dbRun("UPDATE Mesas SET estado = 'unida', unida_a_mesa_id = ?, mesero = ? WHERE id = ?", [mesaPrincipalId, meseroAsignado, mesaSecundariaId]);
+    await dbRun("UPDATE Mesas SET estado = ?, unida_con = ?, mesero = ? WHERE id = ?", [nuevoEstadoUnido, mesaSecundaria.numero, meseroAsignado, mesaPrincipalId]);
 
     io.emit('mesas_unidas', { mesaPrincipalId, mesaSecundariaId, ordenPrincipalId: orden1.id });
     io.emit('mesa_actualizada', { mesaId: mesaPrincipalId, estado: nuevoEstadoUnido, total });
-    io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'libre', total: 0 });
+    io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'unida', total: 0 });
 
-    res.json({ message: 'Cuentas fusionadas correctamente', ordenId: orden1.id, total });
+    res.json({ message: `Mesas unidas correctamente (${mesaPrincipal.numero} + ${mesaSecundaria.numero})`, ordenId: orden1.id, total });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -671,111 +697,151 @@ app.post('/api/mesas/separar', async (req, res) => {
     const { mesaId } = req.body;
     if (!mesaId) return res.status(400).json({ error: 'ID de mesa requerido' });
 
-    const mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    if (!mesaPrincipal) return res.status(404).json({ error: 'Mesa no encontrada' });
+    const mesaTarget = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesaTarget) return res.status(404).json({ error: 'Mesa no encontrada' });
 
-    const ordenPrincipal = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-      [mesaId]
+    // Determinar mesa principal (si mesaTarget es secundaria, su principal es unida_a_mesa_id)
+    let mesaPrincipalId = mesaTarget.unida_a_mesa_id || mesaTarget.id;
+    let mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaPrincipalId]);
+
+    // Buscar orden activa en la mesa principal
+    let ordenPrincipal = await dbGet(
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [mesaPrincipal.id]
     );
+
+    // Si no tiene orden directa, buscar si hay orden con consumos de esta mesa
     if (!ordenPrincipal) {
-      return res.status(400).json({ error: 'La mesa no tiene una cuenta activa para separar' });
-    }
-
-    // Buscar ítems que pertenezcan originalmente a otra mesa
-    const items = await dbAll(
-      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
-      [ordenPrincipal.id]
-    );
-
-    const origenesSecundarios = [
-      ...new Set(
-        items
-          .map(it => it.origen_mesa_numero)
-          .filter(num => num && String(num) !== String(mesaPrincipal.numero))
-      )
-    ];
-
-    if (origenesSecundarios.length === 0) {
-      return res.status(400).json({ error: 'Esta mesa no tiene consumos fusionados de otras mesas' });
+      const ordenConConsumos = await dbGet(
+        `SELECT o.* FROM Ordenes o 
+         JOIN DetalleOrden d ON d.orden_id = o.id 
+         WHERE (d.origen_mesa_numero = ? OR d.origen_mesa_id = ?) 
+           AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') 
+         LIMIT 1`,
+        [mesaTarget.numero, mesaTarget.id]
+      );
+      if (ordenConConsumos) {
+        ordenPrincipal = ordenConConsumos;
+        mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [ordenPrincipal.mesa_id]);
+        mesaPrincipalId = mesaPrincipal.id;
+      }
     }
 
     const mesasRestauradas = [];
 
-    for (const origenNum of origenesSecundarios) {
-      let mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero = ?', [origenNum]);
-      if (!mesaSec) {
-        mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero LIKE ?', [`%${origenNum}%`]);
-      }
-      if (!mesaSec) continue;
+    // Buscar mesas secundarias vinculadas
+    const mesasSecundariasEnBD = await dbAll(
+      'SELECT * FROM Mesas WHERE unida_a_mesa_id = ? OR id = ?',
+      [mesaPrincipal.id, mesaTarget.id !== mesaPrincipal.id ? mesaTarget.id : 0]
+    );
 
-      // Buscar orden previa 'fusionada' de esa mesa o crear una nueva
-      let ordenSec = await dbGet(
-        "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado = 'fusionada' ORDER BY id DESC LIMIT 1",
-        [mesaSec.id]
-      );
-
-      const ahora = new Date().toISOString();
-      if (!ordenSec) {
-        const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
-        const r = await dbRun(
-          "INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado) VALUES (?, ?, ?, ?, ?, 'abierta')",
-          [numOrden, mesaSec.id, 'Cliente General', mesaPrincipal.mesero || 'Juan Jival', ahora]
-        );
-        ordenSec = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
-      }
-
-      // Mover los ítems de esta mesa secundaria de vuelta a su orden
-      await dbRun(
-        'UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ? AND origen_mesa_numero = ?',
-        [ordenSec.id, ordenPrincipal.id, origenNum]
-      );
-
-      // Recalcular orden secundaria
-      const itemsSec = await dbAll(
+    let itemsOrden = [];
+    if (ordenPrincipal) {
+      itemsOrden = await dbAll(
         "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
-        [ordenSec.id]
+        [ordenPrincipal.id]
       );
-      const subSec = itemsSec.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-      const servSec = Math.round(subSec * 0.10);
-      const ivaSec = Math.round(subSec * 0.13);
-      const totSec = subSec + servSec + ivaSec;
-      const estadoSec = evaluarEstadoMesaKDS(itemsSec);
+    }
+
+    const origenesSecundariosNums = [
+      ...new Set([
+        ...itemsOrden
+          .map(it => it.origen_mesa_numero)
+          .filter(num => num && String(num) !== String(mesaPrincipal.numero)),
+        ...mesasSecundariasEnBD.map(m => m.numero).filter(num => String(num) !== String(mesaPrincipal.numero))
+      ])
+    ];
+
+    for (const origenNum of origenesSecundariosNums) {
+      let mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero = ?', [origenNum]);
+      if (!mesaSec) mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero LIKE ?', [`%${origenNum}%`]);
+      if (!mesaSec || mesaSec.id === mesaPrincipal.id) continue;
+
+      const itemsDeEstaSecundaria = itemsOrden.filter(it => 
+        String(it.origen_mesa_numero) === String(origenNum) || (it.origen_mesa_id && it.origen_mesa_id === mesaSec.id)
+      );
+
+      let totSec = 0;
+      let estadoSec = 'libre';
+
+      if (itemsDeEstaSecundaria.length > 0) {
+        let ordenSec = await dbGet(
+          "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado = 'fusionada' ORDER BY id DESC LIMIT 1",
+          [mesaSec.id]
+        );
+
+        const ahora = new Date().toISOString();
+        if (!ordenSec) {
+          const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+          const r = await dbRun(
+            "INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado) VALUES (?, ?, ?, ?, ?, 'abierta')",
+            [numOrden, mesaSec.id, 'Cliente General', mesaPrincipal.mesero || 'Juan Jival', ahora]
+          );
+          ordenSec = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
+        }
+
+        await dbRun(
+          'UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ? AND (origen_mesa_numero = ? OR origen_mesa_id = ?)',
+          [ordenSec.id, ordenPrincipal.id, origenNum, mesaSec.id]
+        );
+
+        const itemsSec = await dbAll(
+          "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+          [ordenSec.id]
+        );
+        const subSec = itemsSec.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+        const servSec = Math.round(subSec * 0.10);
+        const ivaSec = Math.round(subSec * 0.13);
+        totSec = subSec + servSec + ivaSec;
+        estadoSec = evaluarEstadoMesaKDS(itemsSec);
+
+        await dbRun(
+          'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+          [subSec, servSec, ivaSec, totSec, estadoSec, ordenSec.id]
+        );
+      }
 
       await dbRun(
-        'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
-        [subSec, servSec, ivaSec, totSec, estadoSec, ordenSec.id]
-      );
-      await dbRun(
-        'UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?',
-        [estadoSec, mesaPrincipal.mesero || 'Juan Jival', mesaSec.id]
+        'UPDATE Mesas SET estado = ?, unida_a_mesa_id = NULL, unida_con = NULL, mesero = ? WHERE id = ?',
+        [estadoSec, estadoSec === 'libre' ? null : (mesaPrincipal.mesero || 'Juan Jival'), mesaSec.id]
       );
 
       io.emit('mesa_actualizada', { mesaId: mesaSec.id, estado: estadoSec, total: totSec });
       mesasRestauradas.push({ id: mesaSec.id, numero: mesaSec.numero, total: totSec, estado: estadoSec });
     }
 
-    // Recalcular orden principal con los ítems restantes
-    const itemsRestantes = await dbAll(
-      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
-      [ordenPrincipal.id]
-    );
-    const subPrinc = itemsRestantes.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-    const servPrinc = Math.round(subPrinc * 0.10);
-    const ivaPrinc = Math.round(subPrinc * 0.13);
-    const totPrinc = subPrinc + servPrinc + ivaPrinc;
-    const estadoPrinc = evaluarEstadoMesaKDS(itemsRestantes);
+    let totPrinc = 0;
+    let estadoPrinc = 'libre';
+
+    if (ordenPrincipal) {
+      const itemsRestantes = await dbAll(
+        "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+        [ordenPrincipal.id]
+      );
+
+      if (itemsRestantes.length > 0) {
+        const subPrinc = itemsRestantes.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+        const servPrinc = Math.round(subPrinc * 0.10);
+        const ivaPrinc = Math.round(subPrinc * 0.13);
+        totPrinc = subPrinc + servPrinc + ivaPrinc;
+        estadoPrinc = evaluarEstadoMesaKDS(itemsRestantes);
+
+        await dbRun(
+          'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+          [subPrinc, servPrinc, ivaPrinc, totPrinc, estadoPrinc, ordenPrincipal.id]
+        );
+      } else {
+        await dbRun("UPDATE Ordenes SET estado = 'cerrada', total = 0 WHERE id = ?", [ordenPrincipal.id]);
+        estadoPrinc = 'libre';
+      }
+    }
 
     await dbRun(
-      'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
-      [subPrinc, servPrinc, ivaPrinc, totPrinc, estadoPrinc, ordenPrincipal.id]
-    );
-    await dbRun(
-      'UPDATE Mesas SET estado = ? WHERE id = ?',
+      'UPDATE Mesas SET estado = ?, unida_a_mesa_id = NULL, unida_con = NULL WHERE id = ?',
       [estadoPrinc, mesaPrincipal.id]
     );
 
-    io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id, ordenId: ordenPrincipal.id });
+    io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id });
     io.emit('mesa_actualizada', { mesaId: mesaPrincipal.id, estado: estadoPrinc, total: totPrinc });
 
     res.json({

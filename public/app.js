@@ -853,7 +853,8 @@ function renderSalón(filtroZona = 'todas') {
       esperando: 'Esperando',
       esperando_parcial: 'Esperando Parcial',
       activa: 'Activa',
-      cuenta: 'Cuenta Pedida'
+      cuenta: 'Cuenta Pedida',
+      unida: 'Unida'
     }[m.estado] || 'Libre';
 
     const platosPendientes = m.platos_pendientes || m.items_pendientes || [];
@@ -865,29 +866,55 @@ function renderSalón(filtroZona = 'todas') {
     let waitChipHtml = '';
     let tooltipHtml = '';
 
-    if ((m.estado === 'esperando' || m.estado === 'esperando_parcial') && (platosPendientes.length > 0 || m.primera_comanda_hora)) {
-      const isNearTop = (m.y || 0) < 110;
-      waitChipHtml = `
-        <div class="m-wait-chip" title="Ver platillos pendientes de entrega">
-          ⏱️ ${minutosEspera}m
-        </div>
-      `;
+    const isOccupied = m.estado !== 'libre' || (m.orden_total > 0) || Boolean(m.orden_activa_id);
+
+    if (isOccupied) {
+      const isNearTop = (m.y || 0) < 130;
+      const tienePendientes = platosPendientes.length > 0;
+      
+      let headerText = '';
+      let listItems = [];
+
+      if (tienePendientes) {
+        headerText = `⏱️ Esperando hace ${minutosEspera} min (${platosPendientes.length} pendiente${platosPendientes.length > 1 ? 's' : ''})`;
+        listItems = platosPendientes;
+      } else if (m.todos_platillos && m.todos_platillos.length > 0) {
+        headerText = `✅ Pedidos entregados (${minutosEspera > 0 ? minutosEspera + ' min' : 'Mesa Activa'})`;
+        listItems = m.todos_platillos;
+      } else if (m.estado === 'activa') {
+        headerText = `✅ Todos los platillos servidos (Activa)`;
+        listItems = ['Comanda despachada por cocina'];
+      } else {
+        headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'En consumo'})`;
+        listItems = ['Mesa atendida por salonero'];
+      }
+
+      if (tienePendientes || m.primera_comanda_hora) {
+        waitChipHtml = `
+          <div class="m-wait-chip" title="Ver platillos pendientes de entrega">
+            ⏱️ ${minutosEspera}m
+          </div>
+        `;
+      }
+
       tooltipHtml = `
         <div class="mesa-tooltip ${isNearTop ? 'tooltip-bottom' : ''}">
-          <div class="mesa-tooltip-header">⏱️ Esperando hace ${minutosEspera} min</div>
+          <div class="mesa-tooltip-header">${escapeHtml(headerText)}</div>
           <ul class="mesa-tooltip-list">
-            ${platosPendientes.length > 0 
-              ? platosPendientes.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')
-              : '<li>Sin platillos pendientes</li>'}
+            ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo'))}</li>`).join('')}
           </ul>
         </div>
       `;
-      card.title = `⏱️ Esperando hace ${minutosEspera} min\n${platosPendientes.map(p => `• ${typeof p === 'string' ? p : p.nombre_producto}`).join('\n')}`;
+
+      card.setAttribute('title', `${headerText}\n${listItems.map(p => `• ${typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo')}`).join('\n')}`);
     }
 
-    const mergedBadgeHtml = (m.es_mesa_unida && m.mesas_unidas && m.mesas_unidas.length > 0)
-      ? `<small class="m-merged-badge" title="Mesa unida con ${m.mesas_unidas.join(', ')} (Clic para abrir o separar)">🔗 +${m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join(',')}</small>`
-      : '';
+    let mergedBadgeHtml = '';
+    if (m.es_mesa_secundaria_unida) {
+      mergedBadgeHtml = `<small class="m-merged-badge" style="background:rgba(239,68,68,0.25); color:#fca5a5; border-color:#ef4444; cursor:pointer;" title="Mesa unida a ${m.unida_a_numero || 'Mesa Principal'} (Clic para separar)">🔗 Unida</small>`;
+    } else if (m.es_mesa_unida && m.mesas_unidas && m.mesas_unidas.length > 0) {
+      mergedBadgeHtml = `<small class="m-merged-badge" style="cursor:pointer;" title="Mesa unida con ${m.mesas_unidas.join(', ')} (Clic para separar)">🔗 +${m.mesas_unidas.map(n => n.toString().replace(/mesa\s*/i, '')).join(',')}</small>`;
+    }
 
     card.innerHTML = `
       <div class="m-header">
@@ -903,6 +930,27 @@ function renderSalón(filtroZona = 'todas') {
       ${tooltipHtml}
     `;
 
+    // Eventos hover garantizados por JS
+    card.addEventListener('mouseenter', () => {
+      const tip = card.querySelector('.mesa-tooltip');
+      if (tip) {
+        tip.style.display = 'block';
+        tip.style.opacity = '1';
+        tip.style.visibility = 'visible';
+        card.style.zIndex = '99999';
+      }
+    });
+
+    card.addEventListener('mouseleave', () => {
+      const tip = card.querySelector('.mesa-tooltip');
+      if (tip && !tip.classList.contains('show-touch')) {
+        tip.style.display = '';
+        tip.style.opacity = '';
+        tip.style.visibility = '';
+        card.style.zIndex = '';
+      }
+    });
+
     const chipEl = card.querySelector('.m-wait-chip');
     if (chipEl) {
       chipEl.addEventListener('click', (e) => {
@@ -915,6 +963,14 @@ function renderSalón(filtroZona = 'todas') {
             tip.classList.add('show-touch');
           }
         }
+      });
+    }
+
+    const badgeSepararEl = card.querySelector('.m-merged-badge');
+    if (badgeSepararEl) {
+      badgeSepararEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        solicitarSepararMesas(m.id);
       });
     }
 
@@ -1030,25 +1086,20 @@ function finalizarDrop(clientX, clientY) {
   if (!sourceMesa || !targetMesa) return;
   if (sourceMesa.id === targetMesa.id) return;
 
-  if (sourceMesa.estado === 'libre') {
-    alert('⚠️ La mesa de origen no tiene una orden activa para mover o fusionar.');
-    return;
-  }
-
   const isTargetLibre = targetMesa.estado === 'libre';
   if (isTargetLibre) {
-    // Diálogo Mover
-    const confirmar = confirm(`🔁 ¿Deseas MOVER la orden de la ${sourceMesa.numero} a la ${targetMesa.numero}?\n\nLa mesa ${sourceMesa.numero} quedará libre y la mesa ${targetMesa.numero} recibirá toda la comanda.`);
-    if (confirmar) {
+    const opcion = confirm(`Has soltado la ${sourceMesa.numero} sobre la ${targetMesa.numero}.\n\n• [Aceptar] = 🔗 UNIR / FUSIONAR ambas mesas en una sola cuenta\n• [Cancelar] = 🔁 MOVER la orden a la ${targetMesa.numero}`);
+    if (opcion) {
+      ejecutarUnirMesas(sourceMesa.id, targetMesa.id);
+    } else {
       ejecutarMoverMesa(sourceMesa.id, targetMesa.id);
     }
   } else {
-    // Diálogo Unir
     const totalOrigen = sourceMesa.orden_total > 0 ? formatCRC(sourceMesa.orden_total) : 'cuenta activa';
     const totalDestino = targetMesa.orden_total > 0 ? formatCRC(targetMesa.orden_total) : 'cuenta activa';
-    const confirmar = confirm(`🔗 ¿Deseas FUSIONAR / UNIR estas dos mesas?\n\n• ${sourceMesa.numero} (${totalOrigen})\n• ${targetMesa.numero} (${totalDestino})\n\nTodos los consumos se consolidarán en la ${targetMesa.numero} identificando el origen de cada platillo.`);
+    const confirmar = confirm(`🔗 ¿Deseas UNIR y FUSIONAR las cuentas de la ${sourceMesa.numero} (${totalOrigen}) y la ${targetMesa.numero} (${totalDestino})?\n\nLos consumos se unificarán en una sola orden identificando el origen de cada platillo.`);
     if (confirmar) {
-      ejecutarUnirMesas(targetMesa.id, sourceMesa.id); // targetMesa como principal
+      ejecutarUnirMesas(targetMesa.id, sourceMesa.id);
     }
   }
 }
@@ -1081,11 +1132,8 @@ function agregarDragMesa(card, mesaData, canvas) {
   let startY = 0;
 
   card.addEventListener('pointerdown', (e) => {
-    // Solo botón principal del mouse o touch
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    
-    // Ignorar clicks en chip de espera o tooltip
-    if (e.target.closest('.m-wait-chip') || e.target.closest('.mesa-tooltip')) return;
+    if (e.target.closest('.m-wait-chip') || e.target.closest('.mesa-tooltip') || e.target.closest('.m-merged-badge')) return;
 
     isTouchDown = true;
     startX = e.clientX;
@@ -1098,12 +1146,16 @@ function agregarDragMesa(card, mesaData, canvas) {
     dragState.timer = setTimeout(() => {
       if (!isTouchDown) return;
       
-      // Si la mesa está unida y se sostiene el clic/dedo, ofrecer separar mesas o arrastrar
-      if (mesaData.es_mesa_unida && mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) {
-        const accion = confirm(`🔗 La ${mesaData.numero} está unida con ${mesaData.mesas_unidas.join(', ')}.\n\n¿Deseas ✂️ SEPARAR las mesas y devolver las cuentas y montos a su estado original?\n\n• [Aceptar] = ✂️ Separar Mesas\n• [Cancelar] = Continuar arrastrando`);
-        if (accion) {
-          isTouchDown = false;
-          solicitarSepararMesas(mesaData.id);
+      const estaUnida = mesaData.es_mesa_unida || mesaData.es_mesa_secundaria_unida || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.estado === 'unida';
+      if (estaUnida) {
+        const nombreUnidas = (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0)
+          ? mesaData.mesas_unidas.join(', ')
+          : (mesaData.unida_a_numero || 'otra mesa');
+        
+        isTouchDown = false;
+        const separar = confirm(`✂️ La ${mesaData.numero} está unida con ${nombreUnidas}.\n\n¿Deseas SEPARAR las mesas y devolver las cuentas y montos a su estado original antes de la unión?`);
+        if (separar) {
+          ejecutarSepararMesas(mesaData.id);
           return;
         }
       }
@@ -1120,7 +1172,6 @@ function agregarDragMesa(card, mesaData, canvas) {
       card.classList.add('mesa-drag-source');
       document.body.style.userSelect = 'none';
 
-      // Crear Ghost visual
       const ghost = card.cloneNode(true);
       ghost.id = 'dragGhost';
       ghost.classList.remove('mesa-drag-source');
@@ -1276,20 +1327,24 @@ async function abrirComanderoMesa(mesaId) {
         enviado: true
       }));
 
-      // Detectar si hay ítems de otras mesas unidas
+      // Detectar si hay ítems de otras mesas unidas o si la mesa es secundaria unida
       const origenesUnidos = [
-        ...new Set(
-          mesa.items
+        ...new Set([
+          ...mesa.items
             .map(it => it.origen_mesa_numero)
-            .filter(num => num && String(num) !== String(mesa.numero))
-        )
+            .filter(num => num && String(num) !== String(mesa.numero)),
+          ...(mesa.mesas_unidas || [])
+        ])
       ];
 
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
-        if (origenesUnidos.length > 0) {
+        if (origenesUnidos.length > 0 || mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
           bannerEl.style.display = 'flex';
-          document.getElementById('comMergedBannerTxt').textContent = '🔗 Mesa Unida con ' + origenesUnidos.map(n => n.toString().toLowerCase().includes('mesa') ? n : 'Mesa ' + n).join(', ');
+          const txt = mesa.es_mesa_secundaria_unida 
+            ? `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`
+            : `🔗 Mesa Unida con ` + (origenesUnidos.length > 0 ? origenesUnidos.join(', ') : 'otra mesa');
+          document.getElementById('comMergedBannerTxt').textContent = txt;
           document.getElementById('btnSepararComandero').onclick = () => solicitarSepararMesas(mesa.id);
         } else {
           bannerEl.style.display = 'none';
@@ -1300,7 +1355,15 @@ async function abrirComanderoMesa(mesaId) {
       mesa.orden_id = null;
       mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
-      if (bannerEl) bannerEl.style.display = 'none';
+      if (bannerEl) {
+        if (mesa.es_mesa_secundaria_unida || mesa.estado === 'unida') {
+          bannerEl.style.display = 'flex';
+          document.getElementById('comMergedBannerTxt').textContent = `🔗 Mesa Unida a ${mesa.unida_a_numero || 'Mesa Principal'}`;
+          document.getElementById('btnSepararComandero').onclick = () => solicitarSepararMesas(mesa.id);
+        } else {
+          bannerEl.style.display = 'none';
+        }
+      }
     }
   } catch (e) {
     mesa.items = [];
@@ -1806,7 +1869,7 @@ function cargarSelectoresMoverUnir() {
 
   const ocupadas = estado.mesas.filter(m => m.estado !== 'libre');
   const libres = estado.mesas.filter(m => m.estado === 'libre');
-  const fusionadas = estado.mesas.filter(m => m.es_mesa_unida || (m.mesas_unidas && m.mesas_unidas.length > 0));
+  const fusionadas = estado.mesas.filter(m => m.es_mesa_unida || (m.mesas_unidas && m.mesas_unidas.length > 0) || m.es_mesa_secundaria_unida || m.estado === 'unida');
 
   if (ocupadas.length === 0) {
     selOrig.innerHTML = '<option value="">⚠️ No hay mesas ocupadas</option>';
@@ -1831,7 +1894,12 @@ function cargarSelectoresMoverUnir() {
     if (fusionadas.length === 0) {
       selSep.innerHTML = '<option value="">⚠️ No hay mesas fusionadas actualmente</option>';
     } else {
-      selSep.innerHTML = fusionadas.map(m => `<option value="${m.id}">${m.numero} (Unida con ${m.mesas_unidas.join(', ')}) • Total: ${formatCRC(m.orden_total)}</option>`).join('');
+      selSep.innerHTML = fusionadas.map(m => {
+        const desc = m.es_mesa_secundaria_unida 
+          ? `(Unida a ${m.unida_a_numero || 'Mesa Principal'})` 
+          : `(Unida con ${m.mesas_unidas ? m.mesas_unidas.join(', ') : 'otra mesa'})`;
+        return `<option value="${m.id}">${m.numero} ${desc} • Total: ${formatCRC(m.orden_total)}</option>`;
+      }).join('');
     }
   }
 }
