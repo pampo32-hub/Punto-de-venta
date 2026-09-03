@@ -177,9 +177,10 @@ async function startTestServer() {
       await dbRun(db, 'DELETE FROM DetalleOrden');
       await dbRun(db, 'DELETE FROM Ordenes');
       await dbRun(db, 'DELETE FROM Anulaciones');
-      await dbRun(db, "UPDATE Mesas SET estado = 'libre', mesero = NULL, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL");
+      await dbRun(db, "UPDATE Mesas SET estado = 'libre', mesero = NULL");
+      // Check if unida_a_mesa_id exists and reset
       try {
-        await dbRun(db, 'DELETE FROM TableMerges');
+        await dbRun(db, 'UPDATE Mesas SET unida_a_mesa_id = NULL');
       } catch (_) {}
       // Reset happy_hour flags if altered
       try {

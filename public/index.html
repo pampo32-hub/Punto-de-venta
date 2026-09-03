@@ -703,52 +703,6 @@
     </div>
   </div>
 
-  <!-- MOVER / UNIR -->
-  <div class="modal-backdrop" id="modalMoverUnir">
-    <div class="modal-dialog transfer-dialog">
-      <div class="dialog-header">
-        <div>
-          <h3>🔄 Mover, Transferir y Unir Mesas</h3>
-          <small>Reorganización rápida de cuentas en salón</small>
-        </div>
-        <button class="btn-icon-close" id="btnCloseMoverUnirModal">✕</button>
-      </div>
-      <div class="transfer-tabs">
-        <button class="transfer-tab active" data-tab="mover">🔁 Mover Mesa Completa</button>
-        <button class="transfer-tab" data-tab="unir">🔗 Unir Dos Mesas (Merge)</button>
-      </div>
-      <div class="dialog-body">
-        <div id="transferPanelMover" class="transfer-panel active">
-          <div class="field-group">
-            <label>Mesa de Origen:</label>
-            <select id="selMoverOrigen" class="select-lg"></select>
-          </div>
-          <div class="transfer-arrow-down">⬇️ Trasladar a</div>
-          <div class="field-group">
-            <label>Mesa de Destino:</label>
-            <select id="selMoverDestino" class="select-lg"></select>
-          </div>
-          <button class="btn-pri" id="btnEjecutarMoverMesa" style="margin-top:20px; width:100%; padding:14px;">
-            🔁 Mover Todos los Consumos a la Nueva Mesa
-          </button>
-        </div>
-        <div id="transferPanelUnir" class="transfer-panel">
-          <div class="field-group">
-            <label>Primera Mesa (Cuenta principal):</label>
-            <select id="selUnirMesa1" class="select-lg"></select>
-          </div>
-          <div class="transfer-arrow-down">➕ Combinar con</div>
-          <div class="field-group">
-            <label>Segunda Mesa (Se fusionará):</label>
-            <select id="selUnirMesa2" class="select-lg"></select>
-          </div>
-          <button class="btn-pri" id="btnEjecutarUnirMesas" style="margin-top:20px; width:100%; padding:14px;">
-            🔗 Unir Cuentas en una Sola Comanda
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- LISTA AGOTADOS (86) -->
   <div class="modal-backdrop" id="modalAgotados">
@@ -881,34 +835,66 @@
     </div>
   </div>
 
-  <!-- MODAL RESTAURAR EN OTRA MESA (SI LA ORIGINAL ESTÁ OCUPADA) -->
-  <div class="modal-backdrop" id="modalRestaurarMesaDestino">
-    <div class="modal-dialog mover-unir-dialog" style="max-width: 480px;">
+  <!-- MODAL CONFIRMAR SEPARACIÓN DE MESAS -->
+  <div class="modal-backdrop" id="modalConfirmarSeparar">
+    <div class="modal-dialog" style="width: 440px; max-width: 92vw;">
       <div class="dialog-header">
-        <div>
-          <h3>⚠️ Mesa Original Ocupada</h3>
-          <small id="txtAvisoMesaOcupada">La mesa original no está disponible</small>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">✂️</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem;">Separar Mesas</h3>
+            <small id="txtConfirmarMesaSub" style="color:var(--text-muted);">Restaurar consumos separados</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" id="btnCloseConfirmarSeparar">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 22px 20px;">
+        <p id="txtConfirmarSepararDesc" style="font-size: 0.95rem; line-height: 1.5; color: var(--text-main); margin: 0;">
+          ¿Deseas separar las cuentas y restaurar cada mesa a su estado original?
+        </p>
+      </div>
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px;">
+        <button class="btn-sec" id="btnCancelarConfirmarSeparar">Cancelar</button>
+        <button class="btn-pri danger" id="btnAceptarConfirmarSeparar" style="background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; font-weight:800;">
+          ✂️ Separar Mesas
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SELECCIONAR MESA DESTINO AL SEPARAR (SI LA ORIGINAL ESTÁ OCUPADA) -->
+  <div class="modal-backdrop" id="modalRestaurarMesaDestino">
+    <div class="modal-dialog" style="width: 500px; max-width: 94vw;">
+      <div class="dialog-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">⚠️</span>
+          <div>
+            <h3 style="color:#f59e0b; margin:0; font-size:1.2rem;">Mesa Original Ocupada</h3>
+            <small style="color:var(--text-muted);">Reasignación al separar mesas</small>
+          </div>
         </div>
         <button class="btn-icon-close" id="btnCloseRestaurarDestinoModal">✕</button>
       </div>
-      <div class="dialog-body">
-        <p class="panel-info-txt" id="txtDescMesaOcupada" style="border-left-color: #f59e0b; font-size: 0.95rem; line-height: 1.4;">
-          Original table is currently occupied. Would you like to restore the original order to another table?
-        </p>
-        <div id="contenedorSelectorMesaDestino" style="display:none; margin-top: 16px;">
-          <div class="field-group">
-            <label>Selecciona una mesa disponible (libres únicamente):</label>
-            <select id="selMesaDisponibleRestaurar" class="select-styled"></select>
-          </div>
-          <button class="btn-pri" id="btnConfirmarRestaurarEnMesa" style="margin-top:16px; width:100%; font-weight:800; background:linear-gradient(135deg, #10b981, #059669);">
-            ✅ Restaurar Orden en Mesa Seleccionada
-          </button>
+      <div class="dialog-body" style="padding: 22px 20px;">
+        <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+          <p id="txtDescMesaOcupada" style="font-size: 0.95rem; line-height: 1.5; color: #fde68a; margin: 0; font-weight: 600;">
+            La mesa original está actualmente ocupada. ¿Deseas restaurar la orden original en otra mesa disponible?
+          </p>
+        </div>
+        
+        <div class="field-group">
+          <label style="font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block; color: var(--text-main);">
+            Selecciona la nueva mesa de destino:
+          </label>
+          <select id="selMesaDisponibleRestaurar" class="select-styled" style="font-size: 0.95rem; padding: 12px; background: #090d16; border-color: var(--border-light); color: #fff; cursor: pointer; border-radius: 8px; width: 100%;">
+            <!-- Opciones con solo mesas libres -->
+          </select>
         </div>
       </div>
-      <div class="dialog-footer" style="display:flex; justify-content:space-between; gap:10px;">
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:12px; padding: 16px 20px;">
         <button class="btn-sec" id="btnCancelarRestaurarDestino">Cancelar</button>
-        <button class="btn-pri" id="btnElegirMesaRestaurar" style="background:linear-gradient(135deg, #0ea5e9, #0284c7); font-weight:800;">
-          Choose Table
+        <button class="btn-pri" id="btnConfirmarRestaurarEnMesa" style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 800; padding: 11px 22px;">
+          ✅ Restaurar en Esta Mesa
         </button>
       </div>
     </div>

@@ -1152,11 +1152,8 @@ function agregarDragMesa(card, mesaData, canvas) {
           : (mesaData.unida_con || 'otra mesa');
         
         isTouchDown = false;
-        const separar = confirm(`✂️ Separar mesas\n\nLa ${mesaData.numero} está unida con ${nombreUnidas}.\n\n¿Deseas SEPARAR las mesas?\n\nSe restaurarán exactamente los productos originales de cada mesa, con sus totales, impuestos, observaciones y estados originales.`);
-        if (separar) {
-          ejecutarSepararMesas(mesaData.id);
-          return;
-        }
+        mostrarModalConfirmarSeparar(mesaData, nombreUnidas);
+        return;
       }
 
       dragState.active = true;
@@ -1275,14 +1272,108 @@ async function ejecutarAgruparMesas(mesa1Id, mesa2Id) {
   }
 }
 
+function mostrarModalConfirmarSeparar(mesaData, nombreUnidas) {
+  const modal = document.getElementById('modalConfirmarSeparar');
+  if (!modal) {
+    ejecutarSepararMesas(mesaData.id);
+    return;
+  }
+
+  const subEl = document.getElementById('txtConfirmarMesaSub');
+  const descEl = document.getElementById('txtConfirmarSepararDesc');
+  const btnAceptar = document.getElementById('btnAceptarConfirmarSeparar');
+  const btnCancelar = document.getElementById('btnCancelarConfirmarSeparar');
+  const btnClose = document.getElementById('btnCloseConfirmarSeparar');
+
+  if (subEl) subEl.textContent = `Mesa ${mesaData.numero}`;
+  if (descEl) {
+    descEl.innerHTML = `La <strong>Mesa ${mesaData.numero}</strong> está actualmente unida con <strong>${nombreUnidas || 'otra mesa'}</strong>.<br><br>¿Deseas separar las mesas y restaurar cada cuenta con sus productos y totales a su estado original?`;
+  }
+
+  btnAceptar.onclick = () => {
+    modal.classList.remove('active');
+    ejecutarSepararMesas(mesaData.id);
+  };
+
+  btnCancelar.onclick = () => modal.classList.remove('active');
+  if (btnClose) btnClose.onclick = () => modal.classList.remove('active');
+
+  modal.classList.add('active');
+}
+
+function mostrarModalRestaurarMesaDestino(mesaPrincipalId, mesaOriginalNumero) {
+  const modal = document.getElementById('modalRestaurarMesaDestino');
+  if (!modal) return;
+
+  const descEl = document.getElementById('txtDescMesaOcupada');
+  const selDisponibles = document.getElementById('selMesaDisponibleRestaurar');
+  const btnConfirmar = document.getElementById('btnConfirmarRestaurarEnMesa');
+  const btnCancelar = document.getElementById('btnCancelarRestaurarDestino');
+  const btnClose = document.getElementById('btnCloseRestaurarDestinoModal');
+
+  descEl.innerHTML = `⚠️ <strong>La mesa original (${mesaOriginalNumero}) está actualmente ocupada.</strong><br><br>¿Deseas restaurar la orden original en otra mesa disponible?`;
+
+  // Filtrar mesas libres únicamente
+  const libres = (estado.mesas || []).filter(m => m.estado === 'libre');
+
+  if (libres.length === 0) {
+    selDisponibles.innerHTML = '<option value="">⚠️ No hay mesas libres disponibles en este momento</option>';
+    btnConfirmar.disabled = true;
+    btnConfirmar.style.opacity = '0.5';
+    btnConfirmar.style.cursor = 'not-allowed';
+  } else {
+    selDisponibles.innerHTML = libres.map(m => 
+      `<option value="${m.id}">Mesa ${m.numero} (${m.zonaNombre ? m.zonaNombre.toUpperCase() : 'SALÓN'}) • Disponible</option>`
+    ).join('');
+    btnConfirmar.disabled = false;
+    btnConfirmar.style.opacity = '1';
+    btnConfirmar.style.cursor = 'pointer';
+  }
+
+  btnConfirmar.onclick = async () => {
+    const destId = Number(selDisponibles.value);
+    if (!destId) return;
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = 'Restaurando...';
+    await ejecutarSepararMesas(mesaPrincipalId, destId);
+    btnConfirmar.disabled = false;
+    btnConfirmar.textContent = '✅ Restaurar en Esta Mesa';
+  };
+
+  if (btnCancelar) btnCancelar.onclick = () => modal.classList.remove('active');
+  if (btnClose) btnClose.onclick = () => modal.classList.remove('active');
+
+  modal.classList.add('active');
+}
+
+function mostrarToastNotificacion(mensaje, tipo = 'info') {
+  let toastContainer = document.getElementById('posToastContainer');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.id = 'posToastContainer';
+    toastContainer.style.cssText = 'position:fixed; top:24px; left:50%; transform:translateX(-50%); z-index:999999; display:flex; flex-direction:column; gap:10px; max-width:90vw; pointer-events:none;';
+    document.body.appendChild(toastContainer);
+  }
+
+  const toast = document.createElement('div');
+  const bg = tipo === 'error' ? 'linear-gradient(135deg, #ef4444, #991b1b)' : (tipo === 'success' ? 'linear-gradient(135deg, #10b981, #065f46)' : 'linear-gradient(135deg, #0284c7, #0369a1)');
+  toast.style.cssText = `background:${bg}; color:#fff; padding:14px 24px; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.6); font-weight:700; font-size:0.95rem; display:flex; align-items:center; gap:10px; pointer-events:auto; border: 1px solid rgba(255,255,255,0.25); text-align:center;`;
+  toast.textContent = mensaje;
+
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
 async function solicitarSepararMesas(mesaId) {
   const mesa = estado.mesas.find(m => m.id === mesaId);
-  const numTxt = mesa ? mesa.numero : 'esta mesa';
-
-  const confirmar = confirm(`✂️ Separar mesas\n\n¿Deseas SEPARAR la ${numTxt}?\n\nSe restaurarán exactamente los productos originales de cada mesa, con sus totales, impuestos, observaciones y estados originales.`);
-  if (!confirmar) return;
-
-  await ejecutarSepararMesas(mesaId);
+  if (!mesa) return;
+  const nombreUnidas = mesa.unida_con || 'otra mesa';
+  mostrarModalConfirmarSeparar(mesa, nombreUnidas);
 }
 
 async function solicitarRestaurarMesas(mesaId) {
@@ -1303,85 +1394,29 @@ async function ejecutarSepararMesas(mesaId, destinoMesaId = null) {
     if (!res.ok) throw new Error(data.error || 'Error al separar mesas');
 
     if (data.requiereDestino) {
-      mostrarDialogoMesaOcupadaAlSeparar(mesaId, data.mesaOriginalNumero || `Mesa ${data.mesaOriginalId}`);
+      mostrarModalRestaurarMesaDestino(mesaId, data.mesaOriginalNumero || `Mesa ${data.mesaOriginalId}`);
       return;
     }
-    
-    alert(`✂️ ${data.message}`);
+
     const modalRestaurar = document.getElementById('modalRestaurarMesaDestino');
     if (modalRestaurar) modalRestaurar.classList.remove('active');
+    const modalConfirm = document.getElementById('modalConfirmarSeparar');
+    if (modalConfirm) modalConfirm.classList.remove('active');
     const modalCom = document.getElementById('modalComandero');
     if (modalCom) modalCom.classList.remove('active');
     const modalMoverUnir = document.getElementById('modalMoverUnir');
     if (modalMoverUnir) modalMoverUnir.classList.remove('active');
-    
+
+    mostrarToastNotificacion(`✂️ ${data.message}`, 'success');
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
-    alert('❌ Error al separar mesas: ' + e.message);
+    mostrarToastNotificacion(`❌ Error al separar mesas: ${e.message}`, 'error');
   }
 }
 
 async function ejecutarRestaurarMesas(mesaId, destinoMesaId = null) {
   return ejecutarSepararMesas(mesaId, destinoMesaId);
-}
-
-function mostrarDialogoMesaOcupadaAlSeparar(mesaPrincipalId, mesaOriginalNumero) {
-  const modal = document.getElementById('modalRestaurarMesaDestino');
-  if (!modal) {
-    const opcion = confirm(`Original table ${mesaOriginalNumero} is currently occupied. Would you like to restore the original order to another table?`);
-    if (!opcion) return;
-    const disponibles = estado.mesas.filter(m => m.estado === 'libre');
-    if (disponibles.length === 0) return alert('⚠️ No available tables currently free');
-    const nombres = disponibles.map(m => m.numero).join(', ');
-    const elegida = prompt(`Mesas disponibles:\n${nombres}\n\nEscribe el número exacto de la mesa a la cual restaurar la orden:`);
-    if (!elegida) return;
-    const target = disponibles.find(m => m.numero.toLowerCase() === elegida.trim().toLowerCase() || String(m.id) === elegida.trim());
-    if (!target) return alert('Mesa no válida o no disponible.');
-    ejecutarSepararMesas(mesaPrincipalId, target.id);
-    return;
-  }
-
-  const descEl = document.getElementById('txtDescMesaOcupada');
-  const avisoEl = document.getElementById('txtAvisoMesaOcupada');
-  const selectorBox = document.getElementById('contenedorSelectorMesaDestino');
-  const btnElegir = document.getElementById('btnElegirMesaRestaurar');
-  const selDisponibles = document.getElementById('selMesaDisponibleRestaurar');
-  const btnConfirmar = document.getElementById('btnConfirmarRestaurarEnMesa');
-
-  avisoEl.textContent = `Original table ${mesaOriginalNumero} is currently occupied`;
-  descEl.textContent = `Original table ${mesaOriginalNumero} is currently occupied. Would you like to restore the original order to another table?`;
-  selectorBox.style.display = 'none';
-  btnElegir.style.display = 'inline-block';
-  btnElegir.textContent = 'Choose Table';
-
-  btnElegir.onclick = () => {
-    const disponibles = estado.mesas.filter(m => m.estado === 'libre');
-    if (disponibles.length === 0) {
-      selDisponibles.innerHTML = '<option value="">⚠️ No available tables currently free</option>';
-      btnConfirmar.disabled = true;
-    } else {
-      selDisponibles.innerHTML = disponibles.map(m => `<option value="${m.id}">${m.numero} (${m.zonaNombre || 'Salón'}) • Libre</option>`).join('');
-      btnConfirmar.disabled = false;
-    }
-    selectorBox.style.display = 'block';
-    btnElegir.style.display = 'none';
-  };
-
-  btnConfirmar.onclick = () => {
-    const destId = Number(selDisponibles.value);
-    if (!destId) return alert('Selecciona una mesa disponible.');
-    ejecutarSepararMesas(mesaPrincipalId, destId);
-  };
-
-  document.getElementById('btnCancelarRestaurarDestino').onclick = () => {
-    modal.classList.remove('active');
-  };
-  document.getElementById('btnCloseRestaurarDestinoModal').onclick = () => {
-    modal.classList.remove('active');
-  };
-
-  modal.classList.add('active');
 }
 
 document.querySelectorAll('.zone-tab').forEach(tab => {
