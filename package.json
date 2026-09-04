@@ -5,12 +5,11 @@
     "express": "^5.2.1",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
-    "sqlite3": "^6.0.1"
+    "sqlite3": "^5.1.7"
   },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test --test-concurrency=1 test/e2e/*.test.js"
   }
-
 }

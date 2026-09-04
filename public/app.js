@@ -2937,39 +2937,23 @@ window.solicitarAnulacionItem = function(idx) {
   document.getElementById('modalAnulacion').classList.add('active');
 };
 
-// ============================================================================
-// SPLIT BILLS INTERACTIVO: DRAG & DROP, ASIGNACIÓN UNITARIA Y COLA DE PERSONAS
-// ============================================================================
-
-let splitState = {
-  numPersonas: 2,
-  personaActivaIndex: 0,
-  itemsDisponibles: [],
-  personas: []
-};
-
+// Split Bills
 function initSplitBills() {
-  const btnAbrir = document.getElementById('btnAbrirSplitBill');
-  if (btnAbrir) {
-    btnAbrir.addEventListener('click', () => {
-      if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
-        alert('No hay consumos en esta mesa para dividir.');
-        return;
-      }
-      iniciarDivisionCuentas();
-    });
-  }
+  document.getElementById('btnAbrirSplitBill').addEventListener('click', () => {
+    if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
+      alert('No hay consumos en esta mesa para dividir.');
+      return;
+    }
+    const totalTxt = document.getElementById('comTotal').textContent;
+    document.getElementById('splitMesaTitulo').textContent = `${estado.mesaActiva.numero} • Total: ${totalTxt}`;
+    configurarColumnasSplit();
+    calcularSplitIgual();
+    document.getElementById('modalSplitBill').classList.add('active');
+  });
 
-  const btnClose = document.getElementById('btnCloseSplitModal');
-  if (btnClose) {
-    btnClose.addEventListener('click', () => document.getElementById('modalSplitBill').classList.remove('active'));
-  }
-  const btnCancelar = document.getElementById('btnCancelarSplit');
-  if (btnCancelar) {
-    btnCancelar.addEventListener('click', () => document.getElementById('modalSplitBill').classList.remove('active'));
-  }
+  document.getElementById('btnCloseSplitModal').addEventListener('click', () => document.getElementById('modalSplitBill').classList.remove('active'));
+  document.getElementById('btnCancelarSplit').addEventListener('click', () => document.getElementById('modalSplitBill').classList.remove('active'));
 
-  // Modos de división (Ítems vs Partes Iguales)
   document.querySelectorAll('.split-mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.split-mode-btn').forEach(b => b.classList.remove('active'));
@@ -2980,474 +2964,94 @@ function initSplitBills() {
       } else {
         document.getElementById('splitModeItemsBody').classList.remove('active');
         document.getElementById('splitModeEqualBody').classList.add('active');
-        calcularSplitIgual();
       }
     });
   });
 
-  // Contador de personas en header
-  const btnMenos = document.getElementById('btnSplitMenosPersonas');
-  if (btnMenos) {
-    btnMenos.addEventListener('click', () => cambiarCantidadPersonasSplit(-1));
-  }
-  const btnMas = document.getElementById('btnSplitMasPersonas');
-  if (btnMas) {
-    btnMas.addEventListener('click', () => cambiarCantidadPersonasSplit(1));
-  }
+  document.getElementById('btnAumentarPersonas').addEventListener('click', () => {
+    estado.splitPersonas++;
+    document.getElementById('splitNumPersonas').textContent = estado.splitPersonas;
+    calcularSplitIgual();
+  });
 
-  // Contador en modo Split Equitativo
-  const btnDisminuir = document.getElementById('btnDisminuirPersonas');
-  if (btnDisminuir) {
-    btnDisminuir.addEventListener('click', () => {
-      if (splitState.numPersonas > 2) {
-        cambiarCantidadPersonasSplit(-1);
-        calcularSplitIgual();
-      }
-    });
-  }
-  const btnAumentar = document.getElementById('btnAumentarPersonas');
-  if (btnAumentar) {
-    btnAumentar.addEventListener('click', () => {
-      cambiarCantidadPersonasSplit(1);
+  document.getElementById('btnDisminuirPersonas').addEventListener('click', () => {
+    if (estado.splitPersonas > 2) {
+      estado.splitPersonas--;
+      document.getElementById('splitNumPersonas').textContent = estado.splitPersonas;
       calcularSplitIgual();
-    });
-  }
-
-  // Botón "Guardar y Pasar al Siguiente"
-  const btnGuardarActiva = document.getElementById('btnGuardarPersonaActiva');
-  if (btnGuardarActiva) {
-    btnGuardarActiva.addEventListener('click', guardarPersonaSplitActiva);
-  }
-
-  // Dropzone Setup
-  configurarDropzonePersonaActiva();
-}
-
-function iniciarDivisionCuentas() {
-  const totalNum = estado.mesaActiva.total || (estado.mesaActiva.subtotal ? estado.mesaActiva.subtotal * 1.23 : 0);
-  const totalTxt = formatCRCSinDecimales(totalNum);
-  const mesaNombre = estado.mesaActiva.nombre 
-    ? (estado.mesaActiva.nombre.toLowerCase().startsWith('mesa') ? estado.mesaActiva.nombre : `Mesa ${estado.mesaActiva.nombre}`)
-    : `Mesa ${estado.mesaActiva.numero}`;
-  document.getElementById('splitMesaTitulo').textContent = `${mesaNombre} • Total: ${totalTxt}`;
-
-  const numInicial = Math.max(2, estado.splitPersonas || 2);
-  splitState.numPersonas = numInicial;
-  splitState.personaActivaIndex = 0;
-
-  // Clonar ítems disponibles
-  splitState.itemsDisponibles = (estado.mesaActiva.items || []).map((it, idx) => ({
-    id: it.id || (idx + 1),
-    producto_id: it.producto_id || it.id,
-    nombre: it.nombre || it.nombre_producto || 'Platillo',
-    precio: Number(it.precio) || 0,
-    cantidad: Number(it.cantidad) || 1,
-    curso: it.curso || 2
-  }));
-
-  // Inicializar personas
-  splitState.personas = [];
-  for (let i = 1; i <= splitState.numPersonas; i++) {
-    splitState.personas.push({
-      id: i,
-      nombre: `Persona ${i}`,
-      items: [],
-      subtotal: 0,
-      impuestos: 0,
-      total: 0,
-      guardada: false,
-      pagada: false
-    });
-  }
-
-  actualizarContadorPersonasUI();
-  renderSplitDisponibles();
-  renderSplitPersonaActiva();
-  renderSplitColaPersonas();
-  calcularSplitIgual();
-
-  document.getElementById('modalSplitBill').classList.add('active');
-}
-
-function cambiarCantidadPersonasSplit(delta) {
-  const nuevoTotal = splitState.numPersonas + delta;
-  if (nuevoTotal < 2) return;
-  if (nuevoTotal > 20) return;
-
-  if (delta > 0) {
-    // Agregar nueva persona
-    splitState.numPersonas = nuevoTotal;
-    splitState.personas.push({
-      id: nuevoTotal,
-      nombre: `Persona ${nuevoTotal}`,
-      items: [],
-      subtotal: 0,
-      impuestos: 0,
-      total: 0,
-      guardada: false,
-      pagada: false
-    });
-  } else if (delta < 0) {
-    // Quitar última persona: si tenía ítems, devolverlos a la mesa
-    const removedPersona = splitState.personas.pop();
-    if (removedPersona && removedPersona.items && removedPersona.items.length > 0) {
-      removedPersona.items.forEach(rItem => {
-        const existente = splitState.itemsDisponibles.find(it => it.nombre === rItem.nombre && it.precio === rItem.precio);
-        if (existente) {
-          existente.cantidad += rItem.cantidad;
-        } else {
-          splitState.itemsDisponibles.push({ ...rItem });
-        }
-      });
-    }
-    splitState.numPersonas = nuevoTotal;
-    if (splitState.personaActivaIndex >= splitState.numPersonas) {
-      splitState.personaActivaIndex = splitState.numPersonas - 1;
-    }
-  }
-
-  actualizarContadorPersonasUI();
-  renderSplitDisponibles();
-  renderSplitPersonaActiva();
-  renderSplitColaPersonas();
-  calcularSplitIgual();
-}
-
-function actualizarContadorPersonasUI() {
-  const lbl = document.getElementById('splitPersonasCountLabel');
-  if (lbl) lbl.textContent = `${splitState.numPersonas} Personas`;
-  const numEq = document.getElementById('splitNumPersonas');
-  if (numEq) numEq.textContent = splitState.numPersonas;
-}
-
-function renderSplitDisponibles() {
-  const container = document.getElementById('splitAvailableItemsList');
-  const badge = document.getElementById('splitItemsRemainingBadge');
-  if (!container) return;
-
-  container.innerHTML = '';
-  const itemsConSaldo = splitState.itemsDisponibles.filter(it => it.cantidad > 0);
-  const totalPendientes = itemsConSaldo.reduce((acc, it) => acc + it.cantidad, 0);
-
-  if (badge) {
-    badge.textContent = `${totalPendientes} pendiente${totalPendientes !== 1 ? 's' : ''}`;
-    if (totalPendientes === 0) {
-      badge.style.background = 'rgba(16, 185, 129, 0.2)';
-      badge.style.color = '#34d399';
-      badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-      badge.textContent = '✅ Todo asignado';
-    } else {
-      badge.style.background = '';
-      badge.style.color = '';
-      badge.style.borderColor = '';
-    }
-  }
-
-  if (itemsConSaldo.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center; padding:35px 15px; color:#94a3b8;">
-        <span style="font-size:2rem; display:block; margin-bottom:6px;">🎉</span>
-        <strong>¡Todos los consumos han sido asignados!</strong>
-        <p style="font-size:0.8rem; margin:4px 0 0 0; color:#64748b;">Guarda a las personas o cobra cada cuenta.</p>
-      </div>
-    `;
-    return;
-  }
-
-  splitState.itemsDisponibles.forEach((it, idx) => {
-    if (it.cantidad <= 0) return;
-    const card = document.createElement('div');
-    card.className = 'split-draggable-item';
-    card.draggable = true;
-    card.dataset.itemIndex = idx;
-
-    card.innerHTML = `
-      <div class="split-item-info">
-        <span class="split-qty-badge">${it.cantidad}x</span>
-        <span class="split-item-name">${escapeHtml(it.nombre)}</span>
-      </div>
-      <div class="split-item-actions">
-        <span class="split-item-price">${formatCRCSinDecimales(it.precio)}</span>
-        <button type="button" class="split-btn-quick-move" title="Asignar 1 unidad a la persona activa">➡️</button>
-      </div>
-    `;
-
-    // Drag events
-    card.addEventListener('dragstart', (e) => {
-      card.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', JSON.stringify({ itemIndex: idx }));
-      e.dataTransfer.effectAllowed = 'move';
-    });
-
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-    });
-
-    // Touch & Quick click transfer
-    card.querySelector('.split-btn-quick-move').addEventListener('click', (e) => {
-      e.stopPropagation();
-      transferirItemAPersonaActiva(idx);
-    });
-
-    card.addEventListener('click', () => {
-      transferirItemAPersonaActiva(idx);
-    });
-
-    container.appendChild(card);
-  });
-}
-
-function configurarDropzonePersonaActiva() {
-  const dropzone = document.getElementById('splitActivePersonDropzone');
-  if (!dropzone) return;
-
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    dropzone.classList.add('drag-over');
-  });
-
-  dropzone.addEventListener('dragleave', (e) => {
-    if (!dropzone.contains(e.relatedTarget)) {
-      dropzone.classList.remove('drag-over');
     }
   });
 
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.classList.remove('drag-over');
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      if (data && data.itemIndex !== undefined) {
-        transferirItemAPersonaActiva(data.itemIndex);
-      }
-    } catch (_) {}
+  document.getElementById('btnProcederCobroSplit').addEventListener('click', () => {
+    alert('✂️ División lista. Procediendo al cobro individual.');
+    document.getElementById('modalSplitBill').classList.remove('active');
+    document.getElementById('btnAbrirCobroModal').click();
   });
 }
-
-function transferirItemAPersonaActiva(itemIndex) {
-  const itemDisp = splitState.itemsDisponibles[itemIndex];
-  if (!itemDisp || itemDisp.cantidad <= 0) return;
-
-  const personaActiva = splitState.personas[splitState.personaActivaIndex];
-  if (!personaActiva) return;
-
-  // Restar 1 unidad del disponible
-  itemDisp.cantidad--;
-
-  // Sumar 1 unidad a la persona activa
-  const itemAsignado = personaActiva.items.find(it => it.nombre === itemDisp.nombre && it.precio === itemDisp.precio);
-  if (itemAsignado) {
-    itemAsignado.cantidad++;
-  } else {
-    personaActiva.items.push({
-      nombre: itemDisp.nombre,
-      precio: itemDisp.precio,
-      cantidad: 1,
-      producto_id: itemDisp.producto_id
-    });
-  }
-
-  recalcularPersona(personaActiva);
-  renderSplitDisponibles();
-  renderSplitPersonaActiva();
-  renderSplitColaPersonas();
-}
-
-function devolverItemAMesa(assignedItemIndex) {
-  const personaActiva = splitState.personas[splitState.personaActivaIndex];
-  if (!personaActiva || !personaActiva.items[assignedItemIndex]) return;
-
-  const itemAsignado = personaActiva.items[assignedItemIndex];
-  itemAsignado.cantidad--;
-
-  // Regresar 1 unidad a itemsDisponibles
-  const existente = splitState.itemsDisponibles.find(it => it.nombre === itemAsignado.nombre && it.precio === itemAsignado.precio);
-  if (existente) {
-    existente.cantidad++;
-  } else {
-    splitState.itemsDisponibles.push({
-      nombre: itemAsignado.nombre,
-      precio: itemAsignado.precio,
-      cantidad: 1,
-      producto_id: itemAsignado.producto_id
-    });
-  }
-
-  if (itemAsignado.cantidad <= 0) {
-    personaActiva.items.splice(assignedItemIndex, 1);
-  }
-
-  recalcularPersona(personaActiva);
-  renderSplitDisponibles();
-  renderSplitPersonaActiva();
-  renderSplitColaPersonas();
-}
-
-function recalcularPersona(p) {
-  if (!p) return;
-  const sub = p.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-  const imp = sub * 0.23; // 10% servicio + 13% IVA
-  const tot = Math.round(sub * 1.23);
-  p.subtotal = sub;
-  p.impuestos = imp;
-  p.total = tot;
-}
-
-function renderSplitPersonaActiva() {
-  const p = splitState.personas[splitState.personaActivaIndex];
-  if (!p) return;
-
-  const titleEl = document.getElementById('splitActivePersonTitle');
-  if (titleEl) titleEl.textContent = `👤 ${p.nombre}`;
-
-  const hintEl = document.getElementById('splitDropzoneHint');
-  const listEl = document.getElementById('splitAssignedItemsList');
-  if (listEl) listEl.innerHTML = '';
-
-  if (!p.items || p.items.length === 0) {
-    if (hintEl) hintEl.style.display = 'flex';
-  } else {
-    if (hintEl) hintEl.style.display = 'none';
-    p.items.forEach((it, idx) => {
-      const itemEl = document.createElement('div');
-      itemEl.className = 'split-assigned-item';
-      itemEl.innerHTML = `
-        <div class="split-item-info">
-          <span class="split-qty-badge" style="background:#059669;">${it.cantidad}x</span>
-          <span class="split-item-name">${escapeHtml(it.nombre)}</span>
-        </div>
-        <div class="split-item-actions">
-          <span class="split-item-price" style="color:#34d399;">${formatCRCSinDecimales(it.precio * it.cantidad)}</span>
-          <button type="button" class="split-btn-remove" title="Devolver 1 unidad a la mesa">✕</button>
-        </div>
-      `;
-
-      itemEl.querySelector('.split-btn-remove').addEventListener('click', (e) => {
-        e.stopPropagation();
-        devolverItemAMesa(idx);
-      });
-
-      listEl.appendChild(itemEl);
-    });
-  }
-
-  // Totales
-  recalcularPersona(p);
-  const subEl = document.getElementById('splitActiveSubtotal');
-  if (subEl) subEl.textContent = formatCRCSinDecimales(p.subtotal);
-  const impEl = document.getElementById('splitActiveImpuestos');
-  if (impEl) impEl.textContent = formatCRCSinDecimales(p.impuestos);
-  const totEl = document.getElementById('splitActiveTotal');
-  if (totEl) totEl.textContent = formatCRCSinDecimales(p.total);
-
-  // Botón guardar
-  const btnGuardar = document.getElementById('btnGuardarPersonaActiva');
-  if (btnGuardar) {
-    const sigIndex = (splitState.personaActivaIndex + 1) % splitState.personas.length;
-    const sigNombre = splitState.personas[sigIndex]?.nombre || 'Siguiente';
-    btnGuardar.innerHTML = `💾 Guardar ${p.nombre} y Pasar a ${sigNombre} ➡️`;
-  }
-}
-
-function guardarPersonaSplitActiva() {
-  const p = splitState.personas[splitState.personaActivaIndex];
-  if (!p) return;
-
-  p.guardada = true;
-  mostrarNotificacionCentro(`💾 ${p.nombre} guardada con éxito (${formatCRCSinDecimales(p.total)})`, 'success');
-
-  // Buscar siguiente persona no completada o avanzar circularmente
-  let nextIdx = -1;
-  for (let i = 1; i <= splitState.personas.length; i++) {
-    const candidateIdx = (splitState.personaActivaIndex + i) % splitState.personas.length;
-    if (!splitState.personas[candidateIdx].guardada) {
-      nextIdx = candidateIdx;
-      break;
-    }
-  }
-
-  if (nextIdx !== -1) {
-    splitState.personaActivaIndex = nextIdx;
-  } else {
-    // Si todas están guardadas, pasar a la siguiente circular
-    splitState.personaActivaIndex = (splitState.personaActivaIndex + 1) % splitState.personas.length;
-  }
-
-  renderSplitPersonaActiva();
-  renderSplitColaPersonas();
-}
-
-function renderSplitColaPersonas() {
-  const carousel = document.getElementById('splitSavedPersonsQueue');
-  const progressEl = document.getElementById('splitQueueProgress');
-  if (!carousel) return;
-
-  carousel.innerHTML = '';
-  const guardadasCount = splitState.personas.filter(p => p.guardada).length;
-  if (progressEl) progressEl.textContent = `${guardadasCount} de ${splitState.personas.length} listas`;
-
-  splitState.personas.forEach((p, idx) => {
-    recalcularPersona(p);
-    const card = document.createElement('div');
-    const esActiva = (idx === splitState.personaActivaIndex);
-    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''}`;
-
-    const totalItems = (p.items || []).reduce((acc, it) => acc + it.cantidad, 0);
-    const summaryTxt = totalItems > 0 
-      ? p.items.map(it => `${it.cantidad}x ${it.nombre}`).join(', ')
-      : 'Sin consumos asignados';
-
-    card.innerHTML = `
-      <div class="card-head">
-        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''}</span>
-        <span class="card-total">${formatCRCSinDecimales(p.total)}</span>
-      </div>
-      <div class="card-items-summary" title="${escapeHtml(summaryTxt)}">
-        ${escapeHtml(summaryTxt)}
-      </div>
-      <div class="card-actions">
-        <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
-        <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
-      </div>
-    `;
-
-    carousel.appendChild(card);
-  });
-}
-
-window.seleccionarPersonaSplitParaEditar = function(index) {
-  if (index >= 0 && index < splitState.personas.length) {
-    splitState.personaActivaIndex = index;
-    renderSplitPersonaActiva();
-    renderSplitColaPersonas();
-  }
-};
-
-window.cobrarPersonaSplit = function(personaIndex) {
-  const p = splitState.personas[personaIndex];
-  if (!p || !p.items || p.items.length === 0) {
-    alert('Esta persona no tiene productos asignados para cobrar.');
-    return;
-  }
-  document.getElementById('modalSplitBill').classList.remove('active');
-
-  document.getElementById('cobroMesaTitulo').textContent = `${estado.mesaActiva.numero} - ${p.nombre}`;
-  document.getElementById('cobroTotalDisplay').textContent = formatCRCSinDecimales(p.total);
-  document.getElementById('txtEfectivoRecibido').value = '';
-  document.getElementById('cobroVueltoDisplay').textContent = '₡ 0';
-  document.getElementById('modalCobro').classList.add('active');
-};
 
 function calcularSplitIgual() {
-  if (!estado.mesaActiva || !estado.mesaActiva.items) return;
   const sub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
   const total = (sub * 1.23);
-  const numP = splitState.numPersonas || estado.splitPersonas || 2;
-  const porPersona = Math.round(total / numP);
-  const el = document.getElementById('splitMontoPorPersona');
-  if (el) el.textContent = formatCRCSinDecimales(porPersona);
+  const porPersona = Math.round(total / estado.splitPersonas);
+  document.getElementById('splitMontoPorPersona').textContent = formatCRC(porPersona);
 }
+
+function configurarColumnasSplit() {
+  const container = document.getElementById('splitPersonsContainer');
+  container.innerHTML = '';
+
+  const colPrincipal = document.createElement('div');
+  colPrincipal.className = 'split-col';
+  colPrincipal.innerHTML = `
+    <div class="split-col-header">
+      <span>📦 Consumo Mesa</span>
+      <span>Total</span>
+    </div>
+    <div class="split-col-items">
+      ${estado.mesaActiva.items.map((it, idx) => `
+        <div class="split-item-pill" onclick="moverItemSplit(${idx}, 1)">
+          <span>${it.cantidad}x ${it.nombre}</span>
+          <strong>${formatCRC(it.precio * it.cantidad)}</strong>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  container.appendChild(colPrincipal);
+
+  for (let i = 1; i <= 3; i++) {
+    const col = document.createElement('div');
+    col.className = 'split-col';
+    col.innerHTML = `
+      <div class="split-col-header">
+        <span>👤 Persona ${i}</span>
+        <span id="splitSubP${i}">₡ 0.00</span>
+      </div>
+      <div class="split-col-items" id="splitColP${i}">
+        <small style="color:#64748b; display:block; text-align:center; margin-top:20px;">Toca un ítem para asignarlo</small>
+      </div>
+      <div class="split-col-footer">
+        <span>Subtotal:</span>
+        <strong id="splitTotalP${i}">₡ 0.00</strong>
+      </div>
+    `;
+    container.appendChild(col);
+  }
+}
+
+window.moverItemSplit = function(itemIdx, targetPersona) {
+  const item = estado.mesaActiva.items[itemIdx];
+  const colTarget = document.getElementById('splitColP' + targetPersona);
+  if (!colTarget) return;
+
+  const pill = document.createElement('div');
+  pill.className = 'split-item-pill';
+  pill.innerHTML = `<span>${item.nombre}</span><strong>${formatCRC(item.precio)}</strong>`;
+  colTarget.appendChild(pill);
+
+  const monto = item.precio * 1.23;
+  document.getElementById('splitTotalP' + targetPersona).textContent = formatCRC(monto);
+  document.getElementById('splitSubP' + targetPersona).textContent = formatCRC(monto);
+};
 
 // Modificadores
 window.abrirModalModificadores = function(itemIdx) {
