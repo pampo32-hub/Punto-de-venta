@@ -5917,6 +5917,7 @@ async function cargarDashboardMetricas() {
   }
 }
 
+// 2. CONTROL DE INVENTARIO
 // 2. CONTROL DE INVENTARIO INTELIGENTE & ESCANDALLOS 2026
 estado.inventario = [];
 window.subTabInventarioActiva = 'existencias';
@@ -6013,12 +6014,33 @@ function renderTablaInventario(items) {
   items.forEach(ins => {
     const tr = document.createElement('tr');
     const valorTotal = (ins.stock_actual || 0) * (ins.costo_unitario || 0);
+
+    let nombreHtml = `<strong>${escapeHtml(ins.nombre)}</strong>`;
+    let stockExtraHtml = '';
+    let costoExtraHtml = '';
+
+    if (ins.es_licor) {
+      nombreHtml += ` <span class="licor-tag">🍾 ${ins.capacidad_ml || 750}ml (${ins.rendimiento_shots || 25} shots)</span>`;
+      const enteras = ins.botellas_enteras !== null && ins.botellas_enteras !== undefined ? ins.botellas_enteras : Math.floor(ins.stock_actual || 0);
+      const remanentes = ins.shots_remanentes !== null && ins.shots_remanentes !== undefined ? ins.shots_remanentes : Math.round(((ins.stock_actual || 0) - enteras) * (ins.rendimiento_shots || 25));
+      stockExtraHtml = `<span class="licor-shots-pill">🍸 ${enteras} bot. y ${remanentes} shots</span>`;
+      if (ins.costo_por_shot) {
+        costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(ins.costo_por_shot)}/shot)</span>`;
+      }
+    }
+
     tr.innerHTML = `
-      <td><strong>${escapeHtml(ins.nombre)}</strong></td>
+      <td>${nombreHtml}</td>
       <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
-      <td><strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
+      <td>
+        <strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small>
+        ${stockExtraHtml}
+      </td>
       <td>${ins.stock_minimo} <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
-      <td>${formatCRC(ins.costo_unitario || 0)}</td>
+      <td>
+        ${formatCRC(ins.costo_unitario || 0)}
+        ${costoExtraHtml}
+      </td>
       <td style="color:#38bdf8; font-weight:700;">${formatCRC(valorTotal)}</td>
       <td>
         <span class="stock-pill ${ins.estado_stock}">
@@ -6026,6 +6048,7 @@ function renderTablaInventario(items) {
         </span>
       </td>
       <td style="text-align:right; white-space:nowrap;">
+        <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#374151; border-color:#6b7280;" onclick="abrirModalEditarInsumo(${ins.id})" title="Editar Insumo">✏️</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma', ${ins.id})">- Merma</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#1e293b; border-color:#475569;" onclick="abrirModalKardex(${ins.id})">📜 Kardex</button>
@@ -6152,17 +6175,68 @@ async function guardarAjusteInventario() {
   }
 }
 
+// CONTROL DE LICORES Y SHOTS - MODAL NUEVO INSUMO
+window.toggleConfigLicorNuevo = function(checked) {
+  const sec = document.getElementById('seccionConfigLicorNuevo');
+  if (sec) sec.style.display = checked ? 'block' : 'none';
+  const selUnidad = document.getElementById('selectNuevoInsumoUnidad');
+  if (checked && selUnidad) {
+    selUnidad.value = 'botellas';
+  }
+  actualizarCalculoShotsNuevo();
+};
+
+window.actualizarCalculoShotsNuevo = function() {
+  const selCap = document.getElementById('selNuevoInsumoCapacidad');
+  const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
+  let cap = 750;
+  if (selCap && selCap.value === 'custom') {
+    if (txtCapCustom) txtCapCustom.style.display = 'block';
+    cap = parseFloat(txtCapCustom?.value) || 750;
+  } else {
+    if (txtCapCustom) txtCapCustom.style.display = 'none';
+    cap = parseFloat(selCap?.value) || 750;
+  }
+
+  const selShot = document.getElementById('selNuevoInsumoMedidaShot');
+  const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
+  let shot = 30;
+  if (selShot && selShot.value === 'custom') {
+    if (txtShotCustom) txtShotCustom.style.display = 'block';
+    shot = parseFloat(txtShotCustom?.value) || 30;
+  } else {
+    if (txtShotCustom) txtShotCustom.style.display = 'none';
+    shot = parseFloat(selShot?.value) || 30;
+  }
+
+  const costo = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
+  const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
+  const costoShot = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
+
+  const lblRend = document.getElementById('lblRendimientoShotsNuevo');
+  const lblCosto = document.getElementById('lblCostoPorShotNuevo');
+  if (lblRend) lblRend.textContent = rendimiento;
+  if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
+};
+
 function abrirModalNuevoInsumo() {
   const n = document.getElementById('txtNuevoInsumoNombre');
   const c = document.getElementById('txtNuevoInsumoCat');
   const s = document.getElementById('txtNuevoInsumoStock');
   const m = document.getElementById('txtNuevoInsumoMin');
   const cs = document.getElementById('txtNuevoInsumoCosto');
+  const chkL = document.getElementById('chkNuevoInsumoEsLicor');
+  const selCap = document.getElementById('selNuevoInsumoCapacidad');
+  const selShot = document.getElementById('selNuevoInsumoMedidaShot');
   if (n) n.value = '';
   if (c) c.value = 'General';
   if (s) s.value = '10';
   if (m) m.value = '3';
   if (cs) cs.value = '1000';
+  if (chkL) chkL.checked = false;
+  if (selCap) selCap.value = '750';
+  if (selShot) selShot.value = '30';
+  toggleConfigLicorNuevo(false);
   document.getElementById('modalNuevoInsumo')?.classList.add('active');
 }
 
@@ -6180,6 +6254,24 @@ async function guardarNuevoInsumo() {
 
   if (!nombre) return alert('El nombre del insumo es obligatorio.');
 
+  const es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+  let capacidad_ml = 750;
+  let medida_shot_ml = 30;
+
+  if (es_licor) {
+    const selCap = document.getElementById('selNuevoInsumoCapacidad');
+    const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
+    capacidad_ml = (selCap && selCap.value === 'custom') 
+      ? (parseFloat(txtCapCustom?.value) || 750) 
+      : (parseFloat(selCap?.value) || 750);
+
+    const selShot = document.getElementById('selNuevoInsumoMedidaShot');
+    const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
+    medida_shot_ml = (selShot && selShot.value === 'custom') 
+      ? (parseFloat(txtShotCustom?.value) || 30) 
+      : (parseFloat(selShot?.value) || 30);
+  }
+
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch('/api/admin/inventario', {
@@ -6187,6 +6279,7 @@ async function guardarNuevoInsumo() {
       headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
       body: JSON.stringify({
         nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario,
+        es_licor, capacidad_ml, medida_shot_ml,
         usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
       })
     });
@@ -6201,6 +6294,175 @@ async function guardarNuevoInsumo() {
   }
 }
 
+// CONTROL DE EDICIÓN DE INSUMO / LICOR
+window.abrirModalEditarInsumo = async function(id) {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/inventario/${id}`, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('No se pudo obtener el insumo');
+    const insumo = await res.json();
+
+    const elId = document.getElementById('txtEditarInsumoId');
+    const elNom = document.getElementById('txtEditarInsumoNombre');
+    const elCat = document.getElementById('txtEditarInsumoCat');
+    const elUni = document.getElementById('selectEditarInsumoUnidad');
+    const elMin = document.getElementById('txtEditarInsumoMin');
+    const elCos = document.getElementById('txtEditarInsumoCosto');
+
+    if (elId) elId.value = insumo.id;
+    if (elNom) elNom.value = insumo.nombre || '';
+    if (elCat) elCat.value = insumo.categoria || 'General';
+    if (elUni) elUni.value = insumo.unidad_medida || 'unidades';
+    if (elMin) elMin.value = insumo.stock_minimo ?? 3;
+    if (elCos) elCos.value = insumo.costo_unitario ?? 0;
+
+    const chkLicor = document.getElementById('chkEditarInsumoEsLicor');
+    if (chkLicor) chkLicor.checked = Boolean(insumo.es_licor);
+
+    // Preset capacidad
+    const selCap = document.getElementById('selEditarInsumoCapacidad');
+    const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
+    const capVal = String(insumo.capacidad_ml || 750);
+    if (selCap) {
+      if (['750', '1000', '1500', '1750', '375'].includes(capVal)) {
+        selCap.value = capVal;
+        if (txtCapCustom) txtCapCustom.style.display = 'none';
+      } else {
+        selCap.value = 'custom';
+        if (txtCapCustom) {
+          txtCapCustom.style.display = 'block';
+          txtCapCustom.value = insumo.capacidad_ml || 750;
+        }
+      }
+    }
+
+    // Preset medida shot
+    const selShot = document.getElementById('selEditarInsumoMedidaShot');
+    const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
+    const shotVal = String(insumo.medida_shot_ml || 30);
+    if (selShot) {
+      if (['30', '37', '45', '60'].includes(shotVal)) {
+        selShot.value = shotVal;
+        if (txtShotCustom) txtShotCustom.style.display = 'none';
+      } else {
+        selShot.value = 'custom';
+        if (txtShotCustom) {
+          txtShotCustom.style.display = 'block';
+          txtShotCustom.value = insumo.medida_shot_ml || 30;
+        }
+      }
+    }
+
+    toggleConfigLicorEditar(Boolean(insumo.es_licor));
+    actualizarCalculoShotsEditar();
+
+    document.getElementById('modalEditarInsumo')?.classList.add('active');
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
+window.cerrarModalEditarInsumo = function() {
+  document.getElementById('modalEditarInsumo')?.classList.remove('active');
+};
+
+window.toggleConfigLicorEditar = function(checked) {
+  const sec = document.getElementById('seccionConfigLicorEditar');
+  if (sec) sec.style.display = checked ? 'block' : 'none';
+  const selUnidad = document.getElementById('selectEditarInsumoUnidad');
+  if (checked && selUnidad) {
+    selUnidad.value = 'botellas';
+  }
+  actualizarCalculoShotsEditar();
+};
+
+window.actualizarCalculoShotsEditar = function() {
+  const selCap = document.getElementById('selEditarInsumoCapacidad');
+  const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
+  let cap = 750;
+  if (selCap && selCap.value === 'custom') {
+    if (txtCapCustom) txtCapCustom.style.display = 'block';
+    cap = parseFloat(txtCapCustom?.value) || 750;
+  } else {
+    if (txtCapCustom) txtCapCustom.style.display = 'none';
+    cap = parseFloat(selCap?.value) || 750;
+  }
+
+  const selShot = document.getElementById('selEditarInsumoMedidaShot');
+  const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
+  let shot = 30;
+  if (selShot && selShot.value === 'custom') {
+    if (txtShotCustom) txtShotCustom.style.display = 'block';
+    shot = parseFloat(txtShotCustom?.value) || 30;
+  } else {
+    if (txtShotCustom) txtShotCustom.style.display = 'none';
+    shot = parseFloat(selShot?.value) || 30;
+  }
+
+  const costo = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
+  const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
+  const costoShot = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
+
+  const lblRend = document.getElementById('lblRendimientoShotsEditar');
+  const lblCosto = document.getElementById('lblCostoPorShotEditar');
+  if (lblRend) lblRend.textContent = rendimiento;
+  if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
+};
+
+window.guardarEdicionInsumo = async function() {
+  const id = document.getElementById('txtEditarInsumoId')?.value;
+  const nombre = document.getElementById('txtEditarInsumoNombre')?.value.trim();
+  const categoria = document.getElementById('txtEditarInsumoCat')?.value.trim() || 'General';
+  const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
+  const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
+  const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
+
+  if (!id || !nombre) {
+    return alert('Nombre del insumo es obligatorio.');
+  }
+
+  const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+  let capacidad_ml = 750;
+  let medida_shot_ml = 30;
+
+  if (es_licor) {
+    const selCap = document.getElementById('selEditarInsumoCapacidad');
+    const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
+    capacidad_ml = (selCap && selCap.value === 'custom') 
+      ? (parseFloat(txtCapCustom?.value) || 750) 
+      : (parseFloat(selCap?.value) || 750);
+
+    const selShot = document.getElementById('selEditarInsumoMedidaShot');
+    const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
+    medida_shot_ml = (selShot && selShot.value === 'custom') 
+      ? (parseFloat(txtShotCustom?.value) || 30) 
+      : (parseFloat(selShot?.value) || 30);
+  }
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/inventario/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
+      body: JSON.stringify({
+        nombre, categoria, unidad_medida, stock_minimo, costo_unitario,
+        es_licor, capacidad_ml, medida_shot_ml,
+        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    mostrarNotificacionCentro(`✅ Insumo "${nombre}" actualizado correctamente.`, 'success');
+    cerrarModalEditarInsumo();
+    cargarInventarioAdmin();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
 // -------------------------------------------------------------
 // FICHAS TÉCNICAS & ESCANDALLOS
 // -------------------------------------------------------------
@@ -6214,6 +6476,8 @@ async function inicializarPanelRecetas() {
     selectInsumo.innerHTML = estado.inventario.map(i => `
       <option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.unidad_medida)} - Costo: ${formatCRC(i.costo_unitario)})</option>
     `).join('');
+    selectInsumo.onchange = window.actualizarPlaceholderCantidadReceta;
+    window.actualizarPlaceholderCantidadReceta();
   }
 
   // Cargar lista resumida de productos con ficha
@@ -6307,11 +6571,37 @@ window.recargarFichaTecnicaActual = function() {
   if (pid) window.cargarFichaTecnica(pid);
 };
 
+window.actualizarPlaceholderCantidadReceta = function() {
+  const selInsumo = document.getElementById('selectNuevoIngredienteInsumo');
+  const selTipo = document.getElementById('selNuevoIngredienteUnidadTipo');
+  const txtCant = document.getElementById('txtNuevoIngredienteCant');
+  if (!selInsumo || !selTipo || !txtCant) return;
+
+  const insId = parseInt(selInsumo.value);
+  const ins = (estado.inventario || []).find(i => i.id === insId);
+
+  // Auto switch unit selector if liquor is selected
+  if (ins && ins.es_licor && selTipo.value === 'estandar') {
+    selTipo.value = 'shots';
+  }
+
+  if (selTipo.value === 'shots') {
+    if (ins && ins.es_licor && ins.rendimiento_shots > 0) {
+      txtCant.placeholder = `Ej: 1 shot (~${ins.medida_shot_ml || 30}ml = ${(1 / ins.rendimiento_shots).toFixed(4)} bot.)`;
+    } else {
+      txtCant.placeholder = 'Ej: 1 shot / trago';
+    }
+  } else {
+    txtCant.placeholder = ins ? `Ej: 0.5 (${ins.unidad_medida})` : 'Ej: 1';
+  }
+};
+
 window.guardarIngredienteReceta = async function() {
   const productoId = document.getElementById('selectProductoEscandallo')?.value;
   const insumoId = document.getElementById('selectNuevoIngredienteInsumo')?.value;
-  const cantidad = parseFloat(document.getElementById('txtNuevoIngredienteCant')?.value);
+  let cantidad = parseFloat(document.getElementById('txtNuevoIngredienteCant')?.value);
   const merma = parseFloat(document.getElementById('txtNuevoIngredienteMerma')?.value) || 0;
+  const unidadTipo = document.getElementById('selNuevoIngredienteUnidadTipo')?.value || 'estandar';
 
   if (!productoId || !insumoId) {
     alert('Selecciona un platillo y un insumo.');
@@ -6320,6 +6610,14 @@ window.guardarIngredienteReceta = async function() {
   if (!cantidad || cantidad <= 0) {
     alert('Ingresa una cantidad válida mayor a 0.');
     return;
+  }
+
+  const insumo = (estado.inventario || []).find(i => i.id === parseInt(insumoId));
+  if (unidadTipo === 'shots') {
+    if (insumo && insumo.es_licor && insumo.rendimiento_shots > 0) {
+      // Fracción proporcional de la botella
+      cantidad = parseFloat((cantidad / insumo.rendimiento_shots).toFixed(4));
+    }
   }
 
   try {
@@ -6379,12 +6677,26 @@ window.abrirModalKardex = async function(insumoId) {
     const elStock = document.getElementById('kardexChipStock');
     const elCosto = document.getElementById('kardexChipCosto');
     const elMovs = document.getElementById('kardexChipTotalMovs');
+    const chipLicor = document.getElementById('kardexChipLicorInfo');
+    const detalleLicor = document.getElementById('kardexChipLicorDetalle');
 
     if (elTitulo) elTitulo.textContent = `📜 Historial Kardex: ${insumo.nombre || 'Insumo'}`;
     if (elSub) elSub.textContent = `Categoría: ${insumo.categoria || 'General'} | Unidad: ${insumo.unidad_medida || 'unidades'}`;
     if (elStock) elStock.textContent = `${insumo.stock_actual} ${insumo.unidad_medida || ''}`;
     if (elCosto) elCosto.textContent = formatCRC(insumo.costo_unitario || 0);
     if (elMovs) elMovs.textContent = (data.movimientos || []).length;
+
+    if (chipLicor && detalleLicor) {
+      if (insumo.es_licor) {
+        chipLicor.style.display = 'block';
+        const enteras = insumo.botellas_enteras !== null && insumo.botellas_enteras !== undefined ? insumo.botellas_enteras : Math.floor(insumo.stock_actual || 0);
+        const remanentes = insumo.shots_remanentes !== null && insumo.shots_remanentes !== undefined ? insumo.shots_remanentes : Math.round(((insumo.stock_actual || 0) - enteras) * (insumo.rendimiento_shots || 25));
+        const totalShots = insumo.total_shots_actual !== null && insumo.total_shots_actual !== undefined ? insumo.total_shots_actual : Math.round((insumo.stock_actual || 0) * (insumo.rendimiento_shots || 25));
+        detalleLicor.innerHTML = `<strong>${enteras}</strong> bot. y <strong>${remanentes}</strong> shots <small style="color:#a5b4fc;">(${totalShots} shots tot.)</small>`;
+      } else {
+        chipLicor.style.display = 'none';
+      }
+    }
 
     const tbody = document.getElementById('tbodyKardexMovimientos');
     if (!tbody) return;

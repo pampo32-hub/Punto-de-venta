@@ -68,8 +68,12 @@ db.serialize(() => {
   db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
   db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
-  db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
   db.run("ALTER TABLE InventarioRecetas ADD COLUMN merma_porcentaje REAL DEFAULT 0", () => {});
+  db.run("ALTER TABLE Inventario ADD COLUMN es_licor INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE Inventario ADD COLUMN capacidad_ml REAL DEFAULT 750", () => {});
+  db.run("ALTER TABLE Inventario ADD COLUMN medida_shot_ml REAL DEFAULT 30", () => {});
+  db.run("ALTER TABLE Inventario ADD COLUMN rendimiento_shots REAL DEFAULT 25", () => {});
+  db.run("UPDATE Inventario SET es_licor = 1, capacidad_ml = 750, medida_shot_ml = 30, rendimiento_shots = 25 WHERE es_licor = 0 AND (categoria LIKE '%licor%' OR LOWER(nombre) LIKE '%ron %' OR LOWER(nombre) LIKE '%tequila%' OR LOWER(nombre) LIKE '%gin %' OR LOWER(nombre) LIKE '%whisky%' OR LOWER(nombre) LIKE '%vodka%')", () => {});
   db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     negocio_id INTEGER DEFAULT 1,
@@ -2815,10 +2819,22 @@ async function descontarInventarioPorItems(items = []) {
               [stockNuevo, ahora, r.insumo_id]
             );
             const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
+            let motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
+            if (insumo.es_licor && insumo.rendimiento_shots > 0) {
+              const shotsDeducidos = Math.round(totalDesc * insumo.rendimiento_shots * 10) / 10;
+              const botEnteras = Math.floor(stockNuevo);
+              const shotsRem = Math.round((stockNuevo - botEnteras) * insumo.rendimiento_shots);
+              if (totalDesc < 1) {
+                motivoMov = `Consumo comanda: ${prodNombre} (-${shotsDeducidos} shot${shotsDeducidos === 1 ? '' : 's'} / ${Math.round(shotsDeducidos * (insumo.medida_shot_ml || 30))}ml) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
+              } else {
+                motivoMov = `Consumo comanda: ${prodNombre} (-${totalDesc} botella${totalDesc === 1 ? '' : 's'} / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
+              }
+            }
+
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
                VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-              [r.insumo_id, totalDesc, stockPrevio, stockNuevo, `Consumo comanda: ${prodNombre} (x${cant})`, costoMov, ahora]
+              [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
             );
             huboCambios = true;
             if (stockNuevo <= insumo.stock_minimo) {
@@ -2843,10 +2859,19 @@ async function descontarInventarioPorItems(items = []) {
             [stockNuevo, ahora, insumo.id]
           );
           const costoMov = Math.round(cant * (insumo.costo_unitario || 0));
+
+          let motivoDirecto = `Consumo directo: ${prodNombre} (x${cant})`;
+          if (insumo.es_licor && insumo.rendimiento_shots > 0) {
+            const shotsDeducidos = Math.round(cant * insumo.rendimiento_shots);
+            const botEnteras = Math.floor(stockNuevo);
+            const shotsRem = Math.round((stockNuevo - botEnteras) * insumo.rendimiento_shots);
+            motivoDirecto = `Consumo directo: ${prodNombre} (-${cant} bot. / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
+          }
+
           await dbRun(
             `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
              VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-            [insumo.id, cant, stockPrevio, stockNuevo, `Consumo directo: ${prodNombre} (x${cant})`, costoMov, ahora]
+            [insumo.id, cant, stockPrevio, stockNuevo, motivoDirecto, costoMov, ahora]
           );
           huboCambios = true;
           if (stockNuevo <= insumo.stock_minimo) {
@@ -2895,7 +2920,24 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
       let estado = 'normal';
       if (ins.stock_actual <= 0) estado = 'agotado';
       else if (ins.stock_actual <= ins.stock_minimo) estado = 'bajo';
-      return { ...ins, estado_stock: estado };
+
+      let botellas_enteras = null;
+      let shots_remanentes = null;
+      let total_shots_actual = null;
+      if (ins.es_licor && ins.rendimiento_shots > 0) {
+        botellas_enteras = Math.floor(ins.stock_actual);
+        shots_remanentes = Math.round((ins.stock_actual - botellas_enteras) * ins.rendimiento_shots);
+        total_shots_actual = Math.round(ins.stock_actual * ins.rendimiento_shots);
+      }
+
+      return {
+        ...ins,
+        estado_stock: estado,
+        botellas_enteras,
+        shots_remanentes,
+        total_shots_actual,
+        costo_por_shot: ins.rendimiento_shots > 0 ? Math.round((ins.costo_unitario / ins.rendimiento_shots) * 100) / 100 : null
+      };
     });
 
     res.json(insumosConEstado);
@@ -2906,14 +2948,31 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
 
 app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
   try {
-    const { nombre, categoria = 'General', unidad_medida = 'unidades', stock_actual = 0, stock_minimo = 5, costo_unitario = 0, producto_id = null, usuarioNombre = 'Administrador' } = req.body;
+    const {
+      nombre, categoria = 'General', unidad_medida = 'unidades',
+      stock_actual = 0, stock_minimo = 5, costo_unitario = 0,
+      producto_id = null, usuarioNombre = 'Administrador',
+      es_licor = 0, capacidad_ml = 750, medida_shot_ml = 30
+    } = req.body;
     if (!nombre) return res.status(400).json({ error: 'Nombre de insumo requerido' });
+
+    const esLic = es_licor ? 1 : 0;
+    const capMl = esLic ? (Number(capacidad_ml) || 750) : null;
+    const shotMl = esLic ? (Number(medida_shot_ml) || 30) : null;
+    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 10) / 10 : null;
 
     const ahora = new Date().toISOString();
     const result = await dbRun(
-      `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nombre.trim(), categoria.trim(), unidad_medida.trim(), Number(stock_actual), Number(stock_minimo), Number(costo_unitario), producto_id ? Number(producto_id) : null, ahora]
+      `INSERT INTO Inventario (
+        negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo,
+        costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nombre.trim(), categoria.trim(), unidad_medida.trim(),
+        Number(stock_actual), Number(stock_minimo), Number(costo_unitario),
+        producto_id ? Number(producto_id) : null, ahora,
+        esLic, capMl, shotMl, rendShots
+      ]
     );
 
     await registrarAuditoria({
@@ -2921,10 +2980,46 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       accion: 'crear_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Creación de nuevo insumo "${nombre}" con stock inicial de ${stock_actual} ${unidad_medida}`
+      detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida})${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
     });
 
-    res.status(201).json({ id: result.lastID, message: 'Insumo registrado correctamente' });
+    res.status(201).json({
+      id: result.lastID,
+      insumoId: result.lastID,
+      message: 'Insumo registrado correctamente',
+      es_licor: esLic,
+      capacidad_ml: capMl,
+      medida_shot_ml: shotMl,
+      rendimiento_shots: rendShots
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/inventario/:id', verificarAdmin, async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    if (isNaN(parseInt(id, 10))) return next();
+    const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
+    if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    let botellas_enteras = null;
+    let shots_remanentes = null;
+    let total_shots_actual = null;
+    if (insumo.es_licor && insumo.rendimiento_shots > 0) {
+      botellas_enteras = Math.floor(insumo.stock_actual);
+      shots_remanentes = Math.round((insumo.stock_actual - botellas_enteras) * insumo.rendimiento_shots);
+      total_shots_actual = Math.round(insumo.stock_actual * insumo.rendimiento_shots);
+    }
+
+    res.json({
+      ...insumo,
+      botellas_enteras,
+      shots_remanentes,
+      total_shots_actual,
+      costo_por_shot: insumo.rendimiento_shots > 0 ? Math.round((insumo.costo_unitario / insumo.rendimiento_shots) * 100) / 100 : null
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2933,8 +3028,19 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
 app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
   try {
     const id = req.params.id;
-    const { nombre, categoria, unidad_medida, stock_minimo, costo_unitario, producto_id, usuarioNombre = 'Administrador' } = req.body;
+    const {
+      nombre, categoria, unidad_medida, stock_minimo, costo_unitario, producto_id,
+      es_licor, capacidad_ml, medida_shot_ml, usuarioNombre = 'Administrador'
+    } = req.body;
     const ahora = new Date().toISOString();
+
+    const insumoActual = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
+    if (!insumoActual) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    const esLic = es_licor !== undefined ? (es_licor ? 1 : 0) : insumoActual.es_licor;
+    const capMl = esLic ? (Number(capacidad_ml) || insumoActual.capacidad_ml || 750) : null;
+    const shotMl = esLic ? (Number(medida_shot_ml) || insumoActual.medida_shot_ml || 30) : null;
+    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 10) / 10 : null;
 
     await dbRun(
       `UPDATE Inventario SET 
@@ -2944,9 +3050,17 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
         stock_minimo = COALESCE(?, stock_minimo),
         costo_unitario = COALESCE(?, costo_unitario),
         producto_id = ?,
+        es_licor = ?,
+        capacidad_ml = ?,
+        medida_shot_ml = ?,
+        rendimiento_shots = ?,
         actualizado_en = ?
        WHERE id = ?`,
-      [nombre, categoria, unidad_medida, stock_minimo, costo_unitario, producto_id !== undefined ? producto_id : null, ahora, id]
+      [
+        nombre, categoria, unidad_medida, stock_minimo, costo_unitario,
+        producto_id !== undefined ? producto_id : insumoActual.producto_id,
+        esLic, capMl, shotMl, rendShots, ahora, id
+      ]
     );
 
     await registrarAuditoria({
@@ -2954,10 +3068,10 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
       accion: 'actualizar_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Modificación de parámetros del insumo ID ${id}`
+      detalle: `Modificación de insumo ID ${id}: ${nombre || insumoActual.nombre}`
     });
 
-    res.json({ message: 'Insumo actualizado con éxito' });
+    res.json({ message: 'Insumo actualizado con éxito', id, es_licor: esLic, rendimiento_shots: rendShots });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3222,12 +3336,66 @@ app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdm
   }
 });
 
+app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
+  try {
+    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
+    const recetas = await dbAll(`
+      SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
+      FROM InventarioRecetas r
+      JOIN Inventario i ON r.insumo_id = i.id
+    `);
+
+    const costosMap = {};
+    const cantIngredientesMap = {};
+    recetas.forEach(r => {
+      const mermaFactor = 1 + (Number(r.merma_porcentaje) / 100);
+      const subtotal = Number(r.cantidad) * Number(r.costo_unitario) * mermaFactor;
+      costosMap[r.producto_id] = (costosMap[r.producto_id] || 0) + subtotal;
+      cantIngredientesMap[r.producto_id] = (cantIngredientesMap[r.producto_id] || 0) + 1;
+    });
+
+    const resumen = productos.map(p => {
+      const costo = Math.round((costosMap[p.id] || 0) * 100) / 100;
+      const pvp = Number(p.precio || 0);
+      const margenBruto = Math.round((pvp - costo) * 100) / 100;
+      const margenPorc = pvp > 0 ? Math.round((margenBruto / pvp) * 1000) / 10 : 0;
+      const foodCostPorc = pvp > 0 ? Math.round((costo / pvp) * 1000) / 10 : 0;
+
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        categoria_id: p.categoria_id,
+        precio_venta: pvp,
+        costo_receta: costo,
+        margen_bruto: margenBruto,
+        margen_porcentaje: margenPorc,
+        food_cost_porcentaje: foodCostPorc,
+        total_ingredientes: cantIngredientesMap[p.id] || 0,
+        tiene_receta: Boolean(cantIngredientesMap[p.id])
+      };
+    });
+
+    res.json(resumen);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- KARDEX DE INVENTARIO ---
 app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => {
   try {
     const id = req.params.id;
-    const insumo = await dbGet('SELECT id, nombre, unidad_medida, stock_actual, stock_minimo, costo_unitario FROM Inventario WHERE id = ?', [id]);
+    const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    let botellas_enteras = null;
+    let shots_remanentes = null;
+    let total_shots_actual = null;
+    if (insumo.es_licor && insumo.rendimiento_shots > 0) {
+      botellas_enteras = Math.floor(insumo.stock_actual);
+      shots_remanentes = Math.round((insumo.stock_actual - botellas_enteras) * insumo.rendimiento_shots);
+      total_shots_actual = Math.round(insumo.stock_actual * insumo.rendimiento_shots);
+    }
 
     const movimientos = await dbAll(
       'SELECT * FROM InventarioMovimientos WHERE insumo_id = ? ORDER BY id DESC LIMIT 100',
@@ -3235,7 +3403,13 @@ app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => 
     );
 
     res.json({
-      insumo,
+      insumo: {
+        ...insumo,
+        botellas_enteras,
+        shots_remanentes,
+        total_shots_actual,
+        costo_por_shot: insumo.rendimiento_shots > 0 ? Math.round((insumo.costo_unitario / insumo.rendimiento_shots) * 100) / 100 : null
+      },
       movimientos
     });
   } catch (e) {
