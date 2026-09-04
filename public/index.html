@@ -247,15 +247,6 @@
 
       <!-- BOTONES DE ADMINISTRACIÓN (ADMIN & DEV) -->
       <div class="admin-extra-actions" id="adminExtraActions">
-        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('metricas')" title="Ver Métricas y Dashboard en tiempo real">
-          📊 Dashboard
-        </button>
-        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('inventario')" title="Control de Inventario y Existencias">
-          📦 Inventario
-        </button>
-        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('auditoria')" title="Bitácora de Auditoría y Seguridad">
-          🛡️ Auditoría
-        </button>
         <button class="btn-topbar-tool" id="btnAdminPersonal" title="Gestionar meseros y cajeros">
           👥 Personal
         </button>
@@ -274,7 +265,10 @@
           <span class="user-title" id="userProfileBadge">Usuario (Salonero)</span>
           <small class="user-subtitle">Turno Activo</small>
         </div>
-        <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión">🚪</button>
+        <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión">
+          <span>🚪</span>
+          <span>Salir</span>
+        </button>
       </div>
     </header>
 
