@@ -579,6 +579,27 @@ try {
         }
       }
     });
+    socket.on('inventario_actualizado', () => {
+      if (document.getElementById('view-inventario')?.classList.contains('active')) {
+        cargarInventarioAdmin();
+        if (window.subTabInventarioActiva === 'recetas') {
+          if (typeof window.recargarFichaTecnicaActual === 'function') window.recargarFichaTecnicaActual();
+        } else if (window.subTabInventarioActiva === 'compras') {
+          if (typeof window.cargarSugerenciaCompras === 'function') window.cargarSugerenciaCompras();
+        }
+      }
+      if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
+    });
+    socket.on('inventario_alerta_stock', (d) => {
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`⚠️ ¡Alerta de Inventario! ${d.insumo} alcanzó stock crítico (${d.stock_actual} ${d.unidad}).`, 'warning');
+      }
+    });
+    socket.on('receta_actualizada', () => {
+      if (document.getElementById('view-inventario')?.classList.contains('active') && window.subTabInventarioActiva === 'recetas') {
+        if (typeof window.recargarFichaTecnicaActual === 'function') window.recargarFichaTecnicaActual();
+      }
+    });
   }
 } catch (e) {}
 
@@ -1483,6 +1504,10 @@ window.aplicarRestriccionesModulos = function() {
   document.querySelectorAll('.admin-panel-card.card-inventario, .admin-view-tab[data-view="inventario"], .admin-only-tab[onclick*="inventario"], button[onclick*="abrirModuloAdmin(\'inventario\')"]').forEach(el => {
     el.style.display = tieneInventario ? '' : 'none';
   });
+  const btnSubRecetas = document.getElementById('tabBtnInvRecetas');
+  const btnSubCompras = document.getElementById('tabBtnInvCompras');
+  if (btnSubRecetas) btnSubRecetas.style.display = tieneInventario ? '' : 'none';
+  if (btnSubCompras) btnSubCompras.style.display = tieneInventario ? '' : 'none';
 
   // 5. Menú QR & Auto-Pago
   const btnVerQRs = document.getElementById('btnVerTodosQRs');
@@ -5892,8 +5917,32 @@ async function cargarDashboardMetricas() {
   }
 }
 
-// 2. CONTROL DE INVENTARIO
+// 2. CONTROL DE INVENTARIO INTELIGENTE & ESCANDALLOS 2026
 estado.inventario = [];
+window.subTabInventarioActiva = 'existencias';
+window.listaComprasActual = [];
+
+window.cambiarSubTabInventario = function(tab) {
+  window.subTabInventarioActiva = tab;
+  document.querySelectorAll('.inv-subnav-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.inv-tab-panel').forEach(p => p.style.display = 'none');
+
+  if (tab === 'existencias') {
+    document.getElementById('tabBtnInvExistencias')?.classList.add('active');
+    const panel = document.getElementById('invPanelExistencias');
+    if (panel) panel.style.display = 'block';
+  } else if (tab === 'recetas') {
+    document.getElementById('tabBtnInvRecetas')?.classList.add('active');
+    const panel = document.getElementById('invPanelRecetas');
+    if (panel) panel.style.display = 'block';
+    inicializarPanelRecetas();
+  } else if (tab === 'compras') {
+    document.getElementById('tabBtnInvCompras')?.classList.add('active');
+    const panel = document.getElementById('invPanelCompras');
+    if (panel) panel.style.display = 'block';
+    cargarSugerenciaCompras();
+  }
+};
 
 async function cargarInventarioAdmin() {
   try {
@@ -5903,6 +5952,27 @@ async function cargarInventarioAdmin() {
     });
     if (!res.ok) throw new Error('Error al consultar inventario');
     estado.inventario = await res.json();
+
+    // Actualizar KPIs de Bodega
+    let valorBodegaTotal = 0;
+    let totalBajos = 0;
+    let totalAgotados = 0;
+
+    estado.inventario.forEach(i => {
+      valorBodegaTotal += (i.stock_actual || 0) * (i.costo_unitario || 0);
+      if (i.estado_stock === 'bajo') totalBajos++;
+      if (i.estado_stock === 'agotado') totalAgotados++;
+    });
+
+    const elTotal = document.getElementById('kpiTotalInsumos');
+    const elValor = document.getElementById('kpiValorBodega');
+    const elBajo = document.getElementById('kpiStockBajo');
+    const elAgotado = document.getElementById('kpiAgotados');
+
+    if (elTotal) elTotal.textContent = estado.inventario.length;
+    if (elValor) elValor.textContent = formatCRC(valorBodegaTotal);
+    if (elBajo) elBajo.textContent = totalBajos;
+    if (elAgotado) elAgotado.textContent = totalAgotados;
 
     // Llenar categorías en filtro
     const catSelect = document.getElementById('selectFiltroCatInventario');
@@ -5924,6 +5994,7 @@ async function cargarInventarioAdmin() {
     }
 
     renderTablaInventario(estado.inventario);
+    cargarSugerenciaComprasBadge();
   } catch (e) {
     console.error(e);
   }
@@ -5935,26 +6006,29 @@ function renderTablaInventario(items) {
   tbody.innerHTML = '';
 
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
     return;
   }
 
   items.forEach(ins => {
     const tr = document.createElement('tr');
+    const valorTotal = (ins.stock_actual || 0) * (ins.costo_unitario || 0);
     tr.innerHTML = `
       <td><strong>${escapeHtml(ins.nombre)}</strong></td>
       <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
       <td><strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
       <td>${ins.stock_minimo} <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
       <td>${formatCRC(ins.costo_unitario || 0)}</td>
+      <td style="color:#38bdf8; font-weight:700;">${formatCRC(valorTotal)}</td>
       <td>
         <span class="stock-pill ${ins.estado_stock}">
           ${ins.estado_stock === 'agotado' ? '⛔ Agotado' : ins.estado_stock === 'bajo' ? '⚠️ Bajo Stock' : '✅ Normal'}
         </span>
       </td>
-      <td style="text-align:right;">
+      <td style="text-align:right; white-space:nowrap;">
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma', ${ins.id})">- Merma</button>
+        <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#1e293b; border-color:#475569;" onclick="abrirModalKardex(${ins.id})">📜 Kardex</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -6126,6 +6200,332 @@ async function guardarNuevoInsumo() {
     alert('❌ ' + e.message);
   }
 }
+
+// -------------------------------------------------------------
+// FICHAS TÉCNICAS & ESCANDALLOS
+// -------------------------------------------------------------
+async function inicializarPanelRecetas() {
+  const selectProd = document.getElementById('selectProductoEscandallo');
+  const selectInsumo = document.getElementById('selectNuevoIngredienteInsumo');
+  if (!selectProd) return;
+
+  // Llenar selector de insumos disponibles en bodega
+  if (selectInsumo && estado.inventario && estado.inventario.length) {
+    selectInsumo.innerHTML = estado.inventario.map(i => `
+      <option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.unidad_medida)} - Costo: ${formatCRC(i.costo_unitario)})</option>
+    `).join('');
+  }
+
+  // Cargar lista resumida de productos con ficha
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/recetas/resumen', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (res.ok) {
+      const recetas = await res.json();
+      if (recetas && recetas.length > 0) {
+        selectProd.innerHTML = recetas.map(r => `
+          <option value="${r.producto_id}">${escapeHtml(r.producto_nombre)} - PVP: ${formatCRC(r.precio_venta)} (${r.total_ingredientes} ingredientes)</option>
+        `).join('');
+        cargarFichaTecnica(recetas[0].producto_id);
+        return;
+      }
+    }
+
+    // Fallback a productos locales
+    if (estado.productos && estado.productos.length) {
+      selectProd.innerHTML = estado.productos.map(p => `
+        <option value="${p.id}">${escapeHtml(p.nombre)} - PVP: ${formatCRC(p.precio)}</option>
+      `).join('');
+      cargarFichaTecnica(estado.productos[0].id);
+    }
+  } catch (e) {
+    console.error('Error al inicializar recetas:', e);
+  }
+}
+
+window.cargarFichaTecnica = async function(productoId) {
+  if (!productoId) return;
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/recetas/${productoId}`, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al consultar ficha técnica');
+    const data = await res.json();
+
+    const elCosto = document.getElementById('rkCostoReceta');
+    const elFoodCost = document.getElementById('rkFoodCostPorc');
+    const elPrecio = document.getElementById('rkPrecioVenta');
+    const elMargenBruto = document.getElementById('rkMargenBruto');
+    const elMargenPorc = document.getElementById('rkMargenPorc');
+    const elPorciones = document.getElementById('rkPorcionesDisponibles');
+    const elCount = document.getElementById('recetaItemsCount');
+
+    if (elCosto) elCosto.textContent = formatCRC(data.costo_receta || 0);
+    if (elFoodCost) elFoodCost.textContent = `${data.food_cost_porc || 0}% del PVP`;
+    if (elPrecio) elPrecio.textContent = formatCRC(data.precio_venta || 0);
+    if (elMargenBruto) elMargenBruto.textContent = formatCRC(data.margen_bruto || 0);
+    if (elMargenPorc) elMargenPorc.textContent = `${data.margen_porc || 0}% margen bruto`;
+    if (elPorciones) elPorciones.textContent = `${data.porciones_disponibles || 0} platos`;
+    if (elCount) elCount.textContent = `${(data.ingredientes || []).length} ingredientes vinculados`;
+
+    const tbody = document.getElementById('tbodyIngredientesReceta');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!data.ingredientes || !data.ingredientes.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:#9ca3af;">Este platillo aún no tiene ingredientes vinculados en su escandallo. Agrega insumos abajo.</td></tr>';
+      return;
+    }
+
+    data.ingredientes.forEach(ing => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(ing.insumo_nombre)}</strong></td>
+        <td><span style="color:#9ca3af;">${escapeHtml(ing.categoria || 'General')}</span></td>
+        <td><strong>${ing.cantidad_bruta}</strong></td>
+        <td><small style="color:#9ca3af;">${escapeHtml(ing.unidad_medida)}</small></td>
+        <td>${formatCRC(ing.costo_unitario || 0)}</td>
+        <td>${ing.merma_porcentaje ? ing.merma_porcentaje + '%' : '0%'}</td>
+        <td style="color:#38bdf8; font-weight:700;">${formatCRC(ing.subtotal_costo || 0)}</td>
+        <td><span class="stock-pill ${ing.rendimiento_porciones <= 5 ? 'bajo' : 'normal'}">${ing.rendimiento_porciones} platos (Stock: ${ing.stock_actual})</span></td>
+        <td style="text-align:right;">
+          <button class="btn-tool" style="background:#7f1d1d; border-color:#ef4444; padding:3px 8px; font-size:0.75rem;" onclick="eliminarIngredienteReceta(${data.producto_id}, ${ing.insumo_id})">🗑️</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    console.error('Error en cargarFichaTecnica:', e);
+  }
+};
+
+window.recargarFichaTecnicaActual = function() {
+  const pid = document.getElementById('selectProductoEscandallo')?.value;
+  if (pid) window.cargarFichaTecnica(pid);
+};
+
+window.guardarIngredienteReceta = async function() {
+  const productoId = document.getElementById('selectProductoEscandallo')?.value;
+  const insumoId = document.getElementById('selectNuevoIngredienteInsumo')?.value;
+  const cantidad = parseFloat(document.getElementById('txtNuevoIngredienteCant')?.value);
+  const merma = parseFloat(document.getElementById('txtNuevoIngredienteMerma')?.value) || 0;
+
+  if (!productoId || !insumoId) {
+    alert('Selecciona un platillo y un insumo.');
+    return;
+  }
+  if (!cantidad || cantidad <= 0) {
+    alert('Ingresa una cantidad válida mayor a 0.');
+    return;
+  }
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/recetas/${productoId}/ingredientes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
+      body: JSON.stringify({ insumo_id: insumoId, cantidad, merma_porcentaje: merma })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    mostrarNotificacionCentro('✅ Ingrediente vinculado al escandallo.', 'success');
+    const txtC = document.getElementById('txtNuevoIngredienteCant');
+    const txtM = document.getElementById('txtNuevoIngredienteMerma');
+    if (txtC) txtC.value = '';
+    if (txtM) txtM.value = '0';
+    window.cargarFichaTecnica(productoId);
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
+window.eliminarIngredienteReceta = async function(productoId, insumoId) {
+  if (!confirm('¿Deseas desvincular este insumo de la ficha técnica?')) return;
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/recetas/${productoId}/ingredientes/${insumoId}`, {
+      method: 'DELETE',
+      headers: { 'x-user-rol': rol }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    mostrarNotificacionCentro('✅ Ingrediente removido de la ficha técnica.', 'success');
+    window.cargarFichaTecnica(productoId);
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
+// -------------------------------------------------------------
+// HISTORIAL KARDEX
+// -------------------------------------------------------------
+window.abrirModalKardex = async function(insumoId) {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch(`/api/admin/inventario/${insumoId}/kardex`, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al consultar Kardex');
+    const data = await res.json();
+
+    const insumo = data.insumo || {};
+    const elTitulo = document.getElementById('lblTituloKardex');
+    const elSub = document.getElementById('lblSubtituloKardex');
+    const elStock = document.getElementById('kardexChipStock');
+    const elCosto = document.getElementById('kardexChipCosto');
+    const elMovs = document.getElementById('kardexChipTotalMovs');
+
+    if (elTitulo) elTitulo.textContent = `📜 Historial Kardex: ${insumo.nombre || 'Insumo'}`;
+    if (elSub) elSub.textContent = `Categoría: ${insumo.categoria || 'General'} | Unidad: ${insumo.unidad_medida || 'unidades'}`;
+    if (elStock) elStock.textContent = `${insumo.stock_actual} ${insumo.unidad_medida || ''}`;
+    if (elCosto) elCosto.textContent = formatCRC(insumo.costo_unitario || 0);
+    if (elMovs) elMovs.textContent = (data.movimientos || []).length;
+
+    const tbody = document.getElementById('tbodyKardexMovimientos');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!data.movimientos || !data.movimientos.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#9ca3af;">No hay movimientos registrados aún en el Kardex para este insumo.</td></tr>';
+    } else {
+      data.movimientos.forEach(m => {
+        const tr = document.createElement('tr');
+        const badgeClass = m.tipo === 'venta' ? 'badge-kardex-venta' : m.tipo === 'entrada' ? 'badge-kardex-entrada' : m.tipo === 'merma' ? 'badge-kardex-merma' : 'badge-kardex-fijar';
+        const tipoIcon = m.tipo === 'venta' ? '🛒 Venta' : m.tipo === 'entrada' ? '📥 Entrada' : m.tipo === 'merma' ? '⚠️ Merma' : '🔧 Ajuste';
+        const signo = m.tipo === 'entrada' ? '+' : '-';
+
+        tr.innerHTML = `
+          <td style="font-size:0.8rem; color:#94a3b8;">${m.fecha_hora || '-'}</td>
+          <td><span class="${badgeClass}">${tipoIcon}</span></td>
+          <td><strong>${signo}${m.cantidad}</strong></td>
+          <td><span style="color:#94a3b8;">${m.stock_previo}</span> → <strong style="color:#38bdf8;">${m.stock_nuevo}</strong></td>
+          <td style="color:#34d399; font-weight:700;">${formatCRC(m.costo_total || 0)}</td>
+          <td style="font-size:0.85rem;">${escapeHtml(m.motivo || '-')}</td>
+          <td style="font-size:0.8rem; color:#9ca3af;">${escapeHtml(m.usuario_nombre || 'Sistema')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('modalKardexInsumo')?.classList.add('active');
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
+window.cerrarModalKardex = function() {
+  document.getElementById('modalKardexInsumo')?.classList.remove('active');
+};
+
+// -------------------------------------------------------------
+// SUGERENCIA DE REABASTECIMIENTO & COMPRAS
+// -------------------------------------------------------------
+window.cargarSugerenciaComprasBadge = async function() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/inventario/sugerencia-compras', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const badge = document.getElementById('badgeComprasCriticas');
+      if (badge) {
+        if (data.articulos_a_comprar > 0) {
+          badge.textContent = data.articulos_a_comprar;
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+    }
+  } catch (e) {}
+};
+
+window.cargarSugerenciaCompras = async function() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/inventario/sugerencia-compras', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al consultar sugerencia de compras');
+    const data = await res.json();
+    window.listaComprasActual = data.items || [];
+
+    const elItems = document.getElementById('comprasTotalItems');
+    const elPresupuesto = document.getElementById('comprasTotalPresupuesto');
+    if (elItems) elItems.textContent = `${data.articulos_a_comprar} insumos`;
+    if (elPresupuesto) elPresupuesto.textContent = formatCRC(data.presupuesto_total_estimado || 0);
+
+    const badge = document.getElementById('badgeComprasCriticas');
+    if (badge) {
+      badge.textContent = data.articulos_a_comprar;
+      badge.style.display = data.articulos_a_comprar > 0 ? 'inline-block' : 'none';
+    }
+
+    const tbody = document.getElementById('tbodySugerenciaCompras');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!data.items || !data.items.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#34d399; font-weight:700;">🎉 ¡Excelente! Todos los insumos tienen stock por encima del umbral mínimo.</td></tr>';
+      return;
+    }
+
+    data.items.forEach(it => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(it.nombre)}</strong></td>
+        <td><span style="color:#9ca3af;">${escapeHtml(it.categoria || 'General')}</span></td>
+        <td><span style="color:${it.stock_actual === 0 ? '#ef4444' : '#f59e0b'}; font-weight:700;">${it.stock_actual}</span> <small>${escapeHtml(it.unidad_medida)}</small></td>
+        <td>${it.stock_minimo} <small>${escapeHtml(it.unidad_medida)}</small></td>
+        <td>${it.stock_objetivo} <small>${escapeHtml(it.unidad_medida)}</small></td>
+        <td style="color:#38bdf8; font-weight:800; font-size:1.05rem;">+${it.cantidad_sugerida} <small>${escapeHtml(it.unidad_medida)}</small></td>
+        <td style="color:#34d399; font-weight:700;">${formatCRC(it.costo_estimado)}</td>
+        <td><span class="stock-pill ${it.estado}">${it.estado === 'agotado' ? '⛔ Agotado' : '⚠️ Bajo Stock'}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    console.error('Error al cargar compras:', e);
+  }
+};
+
+window.copiarListaComprasTexto = function() {
+  if (!window.listaComprasActual || !window.listaComprasActual.length) {
+    alert('No hay insumos pendientes de compra para copiar.');
+    return;
+  }
+  let txt = `🛒 ORDEN DE REABASTECIMIENTO - GASTROBAR PRO 2026\n`;
+  txt += `Fecha: ${new Date().toLocaleString()}\n`;
+  txt += `--------------------------------------------------\n`;
+  let totalPresupuesto = 0;
+  window.listaComprasActual.forEach((it, idx) => {
+    txt += `${idx + 1}. ${it.nombre}: Comprar ${it.cantidad_sugerida} ${it.unidad_medida} (Stock actual: ${it.stock_actual}, Est: ${formatCRC(it.costo_estimado)})\n`;
+    totalPresupuesto += it.costo_estimado;
+  });
+  txt += `--------------------------------------------------\n`;
+  txt += `Total Artículos: ${window.listaComprasActual.length}\n`;
+  txt += `Presupuesto Estimado: ${formatCRC(totalPresupuesto)}\n`;
+
+  navigator.clipboard.writeText(txt).then(() => {
+    mostrarNotificacionCentro('📋 ¡Lista de compras copiada al portapapeles!', 'success');
+  }).catch(() => {
+    alert('No se pudo copiar automáticamente. Por favor imprima la orden.');
+  });
+};
+
+window.imprimirListaCompras = function() {
+  if (!window.listaComprasActual || !window.listaComprasActual.length) {
+    alert('No hay insumos pendientes de compra para imprimir.');
+    return;
+  }
+  window.print();
+};
 
 // 3. SISTEMA DE AUDITORÍA
 estado.auditoria = [];

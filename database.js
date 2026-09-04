@@ -270,7 +270,24 @@ function initDb() {
       producto_id INTEGER NOT NULL,
       insumo_id INTEGER NOT NULL,
       cantidad REAL NOT NULL DEFAULT 1,
+      merma_porcentaje REAL DEFAULT 0,
       FOREIGN KEY(producto_id) REFERENCES Productos(id),
+      FOREIGN KEY(insumo_id) REFERENCES Inventario(id)
+    )`);
+
+    // 15b. Kardex de Movimientos de Inventario
+    db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      insumo_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL, -- 'entrada', 'merma', 'venta', 'ajuste'
+      cantidad REAL NOT NULL,
+      stock_previo REAL NOT NULL,
+      stock_nuevo REAL NOT NULL,
+      motivo TEXT,
+      usuario_nombre TEXT DEFAULT 'Sistema',
+      costo_total REAL DEFAULT 0,
+      fecha_hora TEXT NOT NULL,
       FOREIGN KEY(insumo_id) REFERENCES Inventario(id)
     )`);
 
@@ -326,6 +343,41 @@ function initDb() {
            VALUES (1, 1, 'Sistema', 'inicio_inventario', 'operativo', 'inventario', 'Carga inicial de inventario base y existencias del restaurante', ?)`,
           [ahora]
         );
+      }
+    });
+
+    // Sembrar Recetas Iniciales (Escandallos)
+    db.get('SELECT COUNT(*) as count FROM InventarioRecetas', (err, row) => {
+      if (!err && (!row || row.count === 0)) {
+        db.all('SELECT id, nombre FROM Productos', (errP, prods) => {
+          if (!errP && prods) {
+            db.all('SELECT id, nombre FROM Inventario', (errI, insumos) => {
+              if (!errI && insumos) {
+                const mapProd = {};
+                prods.forEach(p => mapProd[p.nombre.toLowerCase().trim()] = p.id);
+                const mapIns = {};
+                insumos.forEach(i => mapIns[i.nombre.toLowerCase().trim()] = i.id);
+
+                const recetasSeed = [
+                  { prod: 'hamburguesa de la casa con plátano maduro', ins: 'pan brioche artesanal', cant: 1 },
+                  { prod: 'hamburguesa de la casa con plátano maduro', ins: 'tortas de carne angus 200g', cant: 1 },
+                  { prod: 'hamburguesa de la casa con plátano maduro', ins: 'queso cheddar madurado', cant: 1 },
+                  { prod: 'chicharrón de cerdo con yuca', ins: 'chicharrón de cerdo criollo', cant: 0.35 },
+                  { prod: 'ceviche de pescado blanco', ins: 'pescado corvina fresca (ceviche)', cant: 1 }
+                ];
+
+                recetasSeed.forEach(r => {
+                  const pId = mapProd[r.prod];
+                  const iId = mapIns[r.ins];
+                  if (pId && iId) {
+                    db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)', [pId, iId, r.cant]);
+                  }
+                });
+                console.log('🌱 Escandallos y recetas iniciales sembrados.');
+              }
+            });
+          }
+        });
       }
     });
 

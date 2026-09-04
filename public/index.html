@@ -872,47 +872,206 @@
         <div class="view-subbar">
           <div class="inventory-top-info">
             <h2 style="margin:0; font-size:1.25rem; color:#fff; display:flex; align-items:center; gap:8px;">
-              📦 Control de Inventario & Existencias
+              📦 Control de Inventario & Escandallos 2026
             </h2>
           </div>
           <div class="inventory-actions">
             <button class="btn-tool" onclick="abrirModalNuevoInsumo()">➕ Nuevo Insumo</button>
             <button class="btn-tool" style="background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada')">📥 Entrada de Mercadería</button>
-            <button class="btn-tool" style="background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma')">⚠️ Registrar Merma / Pérdida</button>
+            <button class="btn-tool" style="background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma')">⚠️ Registrar Merma</button>
           </div>
         </div>
 
+        <!-- Sub-barra de Pestañas de Inventario -->
+        <div class="inv-subnav-tabs">
+          <button class="inv-subnav-btn active" id="tabBtnInvExistencias" onclick="cambiarSubTabInventario('existencias')">
+            📦 Existencias en Bodega
+          </button>
+          <button class="inv-subnav-btn" id="tabBtnInvRecetas" onclick="cambiarSubTabInventario('recetas')">
+            👨‍🍳 Fichas Técnicas & Escandallos
+          </button>
+          <button class="inv-subnav-btn" id="tabBtnInvCompras" onclick="cambiarSubTabInventario('compras')">
+            🛒 Sugerencia de Compras
+            <span class="inv-counter-pill" id="badgeComprasCriticas" style="display:none;">0</span>
+          </button>
+        </div>
+
         <div class="inventory-container-wrapper">
-          <div class="inventory-filters-row">
-            <input type="text" id="txtBuscarInsumo" placeholder="🔎 Buscar insumo por nombre o categoría..." oninput="filtrarTablaInventario()" />
-            <select id="selectFiltroCatInventario" onchange="filtrarTablaInventario()">
-              <option value="todas">Todas las Categorías</option>
-            </select>
-            <select id="selectFiltroEstadoInventario" onchange="filtrarTablaInventario()">
-              <option value="todos">Todos los Estados</option>
-              <option value="bajo">⚠️ Stock Bajo</option>
-              <option value="agotado">⛔ Agotados</option>
-              <option value="normal">✅ Normal</option>
-            </select>
+          <!-- PANEL 1: EXISTENCIAS -->
+          <div class="inv-tab-panel active" id="invPanelExistencias">
+            <div class="inventory-metrics-banner" id="invMetricsBanner">
+              <div class="inv-metric-chip"><span>Total Insumos:</span> <strong id="kpiTotalInsumos">0</strong></div>
+              <div class="inv-metric-chip"><span>Valor en Bodega:</span> <strong id="kpiValorBodega" style="color:#38bdf8;">₡0</strong></div>
+              <div class="inv-metric-chip warning"><span>Stock Bajo:</span> <strong id="kpiStockBajo" style="color:#f59e0b;">0</strong></div>
+              <div class="inv-metric-chip danger"><span>Agotados:</span> <strong id="kpiAgotados" style="color:#ef4444;">0</strong></div>
+            </div>
+
+            <div class="inventory-filters-row">
+              <input type="text" id="txtBuscarInsumo" placeholder="🔎 Buscar insumo por nombre o categoría..." oninput="filtrarTablaInventario()" />
+              <select id="selectFiltroCatInventario" onchange="filtrarTablaInventario()">
+                <option value="todas">Todas las Categorías</option>
+              </select>
+              <select id="selectFiltroEstadoInventario" onchange="filtrarTablaInventario()">
+                <option value="todos">Todos los Estados</option>
+                <option value="bajo">⚠️ Stock Bajo</option>
+                <option value="agotado">⛔ Agotados</option>
+                <option value="normal">✅ Normal</option>
+              </select>
+            </div>
+
+            <div class="inventory-table-container">
+              <table class="inventory-table" id="tablaInventario">
+                <thead>
+                  <tr>
+                    <th>Insumo / Artículo</th>
+                    <th>Categoría</th>
+                    <th>Stock Actual</th>
+                    <th>Stock Mínimo</th>
+                    <th>Costo Unitario</th>
+                    <th>Valor Total</th>
+                    <th>Estado</th>
+                    <th style="text-align:right;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyInventario">
+                  <!-- Filas de inventario -->
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div class="inventory-table-container">
-            <table class="inventory-table" id="tablaInventario">
-              <thead>
-                <tr>
-                  <th>Insumo / Artículo</th>
-                  <th>Categoría</th>
-                  <th>Stock Actual</th>
-                  <th>Stock Mínimo</th>
-                  <th>Costo Unitario</th>
-                  <th>Estado</th>
-                  <th style="text-align:right;">Acciones</th>
-                </tr>
-              </thead>
-              <tbody id="tbodyInventario">
-                <!-- Filas de inventario -->
-              </tbody>
-            </table>
+          <!-- PANEL 2: FICHAS TÉCNICAS & ESCANDALLOS -->
+          <div class="inv-tab-panel" id="invPanelRecetas" style="display:none;">
+            <div class="receta-selector-bar">
+              <div style="flex:1; min-width:280px;">
+                <label style="display:block; font-size:0.8rem; font-weight:700; color:#94a3b8; margin-bottom:6px;">
+                  🍽️ Seleccionar Platillo o Bebida del Menú:
+                </label>
+                <select id="selectProductoEscandallo" class="select-styled" onchange="cargarFichaTecnica(this.value)" style="width:100%; padding:10px 14px; font-size:0.95rem; font-weight:700; background:#111827; border:1px solid #374151; color:#fff; border-radius:8px;">
+                  <!-- Opciones de productos cargadas dinámicamente -->
+                </select>
+              </div>
+              <div class="receta-actions-top">
+                <button class="btn-tool" onclick="recargarFichaTecnicaActual()">🔄 Refrescar Ficha</button>
+              </div>
+            </div>
+
+            <!-- KPIs de Rentabilidad del Platillo -->
+            <div class="receta-kpis-grid" id="recetaKpisContainer">
+              <div class="receta-kpi-card">
+                <span class="rk-label">Costo Receta (Food Cost)</span>
+                <strong class="rk-value" id="rkCostoReceta">₡0</strong>
+                <small class="rk-sub" id="rkFoodCostPorc">0% del PVP</small>
+              </div>
+              <div class="receta-kpi-card">
+                <span class="rk-label">Precio de Venta (PVP)</span>
+                <strong class="rk-value" id="rkPrecioVenta" style="color:#38bdf8;">₡0</strong>
+                <small class="rk-sub">Menú actual</small>
+              </div>
+              <div class="receta-kpi-card highlight">
+                <span class="rk-label">Margen de Ganancia Bruta</span>
+                <strong class="rk-value" id="rkMargenBruto" style="color:#34d399;">₡0</strong>
+                <small class="rk-sub" id="rkMargenPorc">0% rentabilidad</small>
+              </div>
+              <div class="receta-kpi-card">
+                <span class="rk-label">Raciones Posibles en Bodega</span>
+                <strong class="rk-value" id="rkPorcionesDisponibles" style="color:#fbbf24;">0 platos</strong>
+                <small class="rk-sub" id="rkPorcionesSub">según insumo crítico</small>
+              </div>
+            </div>
+
+            <!-- Tabla de Ingredientes de la Receta -->
+            <div class="receta-table-wrapper" style="margin-top:20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 style="margin:0; font-size:1.05rem; color:#f3f4f6;">🥗 Ingredientes e Insumos de la Ficha Técnica</h3>
+                <span style="font-size:0.8rem; color:#94a3b8;" id="recetaItemsCount">0 ingredientes vinculados</span>
+              </div>
+              <table class="inventory-table" id="tablaIngredientesReceta">
+                <thead>
+                  <tr>
+                    <th>Ingrediente / Insumo</th>
+                    <th>Categoría</th>
+                    <th>Cantidad</th>
+                    <th>Unidad</th>
+                    <th>Costo Unit.</th>
+                    <th>Merma %</th>
+                    <th>Subtotal Costo</th>
+                    <th>Rendimiento</th>
+                    <th style="text-align:right;">Quitar</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyIngredientesReceta">
+                  <!-- Filas de ingredientes -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Formulario para agregar ingrediente a la receta -->
+            <div class="receta-add-ingredient-box" style="margin-top:20px; background:#111827; border:1px solid #1f2937; border-radius:12px; padding:16px;">
+              <h4 style="margin:0 0 12px; color:#38bdf8; font-size:0.95rem;">➕ Agregar Ingrediente a este Platillo</h4>
+              <div style="display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:12px; align-items:flex-end;">
+                <div>
+                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Insumo de Bodega:</label>
+                  <select id="selectNuevoIngredienteInsumo" class="select-styled" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;">
+                    <!-- Opciones de insumos -->
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Cantidad en Receta:</label>
+                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" placeholder="Ej: 0.2 o 1" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
+                </div>
+                <div>
+                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Merma (%) [Opcional]:</label>
+                  <input type="number" id="txtNuevoIngredienteMerma" min="0" max="100" step="any" value="0" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;" />
+                </div>
+                <div>
+                  <button type="button" class="btn-pri" onclick="guardarIngredienteReceta()" style="padding:9px 18px; border-radius:8px; font-weight:700; white-space:nowrap;">
+                    💾 Vincular Ingrediente
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL 3: SUGERENCIA DE COMPRAS -->
+          <div class="inv-tab-panel" id="invPanelCompras" style="display:none;">
+            <div class="compras-header-banner">
+              <div>
+                <h3 style="margin:0 0 4px; color:#fff; font-size:1.1rem;">🛒 Orden de Reabastecimiento Sugerida</h3>
+                <p style="margin:0; font-size:0.82rem; color:#9ca3af;">
+                  Insumos que han alcanzado o superado el umbral de stock mínimo en bodega.
+                </p>
+              </div>
+              <div class="compras-actions-top">
+                <button class="btn-tool" onclick="copiarListaComprasTexto()">📋 Copiar Lista</button>
+                <button class="btn-tool" style="background:#2563eb; border-color:#3b82f6;" onclick="imprimirListaCompras()">🖨️ Imprimir Pedido</button>
+              </div>
+            </div>
+
+            <div class="compras-summary-bar">
+              <div><span>Artículos a Comprar:</span> <strong id="comprasTotalItems">0 insumos</strong></div>
+              <div><span>Presupuesto Estimado:</span> <strong id="comprasTotalPresupuesto" style="color:#38bdf8; font-size:1.2rem;">₡0</strong></div>
+            </div>
+
+            <div class="inventory-table-container" style="margin-top:16px;">
+              <table class="inventory-table" id="tablaSugerenciaCompras">
+                <thead>
+                  <tr>
+                    <th>Insumo a Reponer</th>
+                    <th>Categoría</th>
+                    <th>Stock Actual</th>
+                    <th>Stock Mínimo</th>
+                    <th>Stock Objetivo</th>
+                    <th>Cantidad Sugerida</th>
+                    <th>Costo Estimado</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodySugerenciaCompras">
+                  <!-- Filas de compras -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -2231,6 +2390,57 @@
       <div class="dialog-footer">
         <button class="btn-sec" onclick="cerrarModalNuevoInsumo()">Cancelar</button>
         <button class="btn-pri" onclick="guardarNuevoInsumo()">💾 Registrar Insumo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: KARDEX Y MOVIMIENTOS DE INSUMO -->
+  <div class="modal-backdrop" id="modalKardexInsumo">
+    <div class="modal-dialog" style="max-width:760px; width:95%;">
+      <div class="dialog-header">
+        <div>
+          <h3 id="lblTituloKardex" style="margin:0; font-size:1.15rem;">📜 Historial Kardex de Insumo</h3>
+          <small id="lblSubtituloKardex" style="color:#9ca3af;">Trazabilidad completa de entradas, salidas y recetas</small>
+        </div>
+        <button class="btn-close-modal" onclick="cerrarModalKardex()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding:16px 20px;">
+        <div id="kardexSummaryChips" style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+          <div style="background:#1f2937; padding:8px 14px; border-radius:8px; border:1px solid #374151;">
+            <span style="font-size:0.75rem; color:#9ca3af; display:block;">Stock Actual:</span>
+            <strong id="kardexChipStock" style="color:#38bdf8; font-size:1.1rem;">-</strong>
+          </div>
+          <div style="background:#1f2937; padding:8px 14px; border-radius:8px; border:1px solid #374151;">
+            <span style="font-size:0.75rem; color:#9ca3af; display:block;">Costo Unitario:</span>
+            <strong id="kardexChipCosto" style="color:#34d399; font-size:1.1rem;">-</strong>
+          </div>
+          <div style="background:#1f2937; padding:8px 14px; border-radius:8px; border:1px solid #374151;">
+            <span style="font-size:0.75rem; color:#9ca3af; display:block;">Total Movimientos:</span>
+            <strong id="kardexChipTotalMovs" style="color:#e2e8f0; font-size:1.1rem;">0</strong>
+          </div>
+        </div>
+
+        <div style="max-height:360px; overflow-y:auto; border:1px solid #1f2937; border-radius:8px;">
+          <table class="inventory-table" id="tablaKardexMovimientos" style="margin:0;">
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+                <th>Previo → Nuevo</th>
+                <th>Costo Impacto</th>
+                <th>Detalle / Motivo</th>
+                <th>Usuario</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyKardexMovimientos">
+              <!-- Filas de movimientos -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-sec" onclick="cerrarModalKardex()">Cerrar</button>
       </div>
     </div>
   </div>

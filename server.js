@@ -69,6 +69,21 @@ db.serialize(() => {
   db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
   db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
+  db.run("ALTER TABLE InventarioRecetas ADD COLUMN merma_porcentaje REAL DEFAULT 0", () => {});
+  db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    negocio_id INTEGER DEFAULT 1,
+    insumo_id INTEGER NOT NULL,
+    tipo TEXT NOT NULL,
+    cantidad REAL NOT NULL,
+    stock_previo REAL NOT NULL,
+    stock_nuevo REAL NOT NULL,
+    motivo TEXT,
+    usuario_nombre TEXT DEFAULT 'Sistema',
+    costo_total REAL DEFAULT 0,
+    fecha_hora TEXT NOT NULL,
+    FOREIGN KEY(insumo_id) REFERENCES Inventario(id)
+  )`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +103,50 @@ db.serialize(() => {
     accion TEXT,
     creado_en TEXT
   )`);
+
+  // Asegurar recetas iniciales (Escandallos) si la tabla está vacía
+  db.get('SELECT COUNT(*) as count FROM InventarioRecetas', (err, row) => {
+    if (!err && (!row || row.count === 0)) {
+      db.all('SELECT id, nombre FROM Productos', (errP, prods) => {
+        if (!errP && prods) {
+          db.all('SELECT id, nombre FROM Inventario', (errI, insumos) => {
+            if (!errI && insumos) {
+              const findProd = (pattern) => prods.find(p => p.nombre.toLowerCase().includes(pattern));
+              const findIns = (pattern) => insumos.find(i => i.nombre.toLowerCase().includes(pattern));
+
+              const h1 = findProd('hamburguesa doble') || findProd('hamburguesa');
+              const ch = findProd('chicharrón') || findProd('chifrijo');
+              const cev = findProd('ceviche');
+              const rib = findProd('rib eye');
+
+              const pan = findIns('pan brioche') || findIns('pan');
+              const torta = findIns('torta');
+              const queso = findIns('queso cheddar') || findIns('queso');
+              const chicha = findIns('chicharrón');
+              const corvina = findIns('corvina') || findIns('pescado');
+              const carne = findIns('rib eye');
+
+              if (h1 && pan && torta && queso) {
+                db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, 1, 0)', [h1.id, pan.id]);
+                db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, 2, 0)', [h1.id, torta.id]);
+                db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, 2, 0)', [h1.id, queso.id]);
+              }
+              if (ch && chicha) {
+                db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, 0.35, 5)', [ch.id, chicha.id]);
+              }
+              if (cev && corvina) {
+                db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, 1, 0)', [cev.id, corvina.id]);
+              }
+              if (rib && carne) {
+                db.run('INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, 1, 0)', [rib.id, carne.id]);
+              }
+              console.log('🌱 Fichas técnicas y recetas iniciales aseguradas.');
+            }
+          });
+        }
+      });
+    }
+  });
 });
 
 // Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
@@ -2733,29 +2792,77 @@ async function registrarAuditoria({ negocioId = 1, usuarioId = null, usuarioNomb
 
 async function descontarInventarioPorItems(items = []) {
   try {
+    let huboCambios = false;
     for (const it of items) {
       const prodId = it.id || it.producto_id;
       const cant = Number(it.cantidad || 1);
       if (!prodId || cant <= 0) continue;
 
       const ahora = new Date().toISOString();
+      const prodNombre = it.nombre || it.nombre_producto || 'Platillo';
+
       // 1. Revisar si hay recetas vinculadas en InventarioRecetas
       const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
       if (recetas && recetas.length > 0) {
         for (const r of recetas) {
           const totalDesc = r.cantidad * cant;
-          await dbRun(
-            'UPDATE Inventario SET stock_actual = MAX(0, stock_actual - ?), actualizado_en = ? WHERE id = ?',
-            [totalDesc, ahora, r.insumo_id]
-          );
+          const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
+          if (insumo) {
+            const stockPrevio = insumo.stock_actual;
+            const stockNuevo = Math.max(0, stockPrevio - totalDesc);
+            await dbRun(
+              'UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?',
+              [stockNuevo, ahora, r.insumo_id]
+            );
+            const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
+            await dbRun(
+              `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+               VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+              [r.insumo_id, totalDesc, stockPrevio, stockNuevo, `Consumo comanda: ${prodNombre} (x${cant})`, costoMov, ahora]
+            );
+            huboCambios = true;
+            if (stockNuevo <= insumo.stock_minimo) {
+              io.emit('inventario_alerta_stock', {
+                insumoId: insumo.id,
+                nombre: insumo.nombre,
+                stock_actual: stockNuevo,
+                stock_minimo: insumo.stock_minimo,
+                estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+              });
+            }
+          }
         }
       } else {
         // 2. Si no hay receta, descontar del insumo vinculado directamente al producto
-        await dbRun(
-          'UPDATE Inventario SET stock_actual = MAX(0, stock_actual - ?), actualizado_en = ? WHERE producto_id = ?',
-          [cant, ahora, prodId]
-        );
+        const insumo = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [prodId]);
+        if (insumo) {
+          const stockPrevio = insumo.stock_actual;
+          const stockNuevo = Math.max(0, stockPrevio - cant);
+          await dbRun(
+            'UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?',
+            [stockNuevo, ahora, insumo.id]
+          );
+          const costoMov = Math.round(cant * (insumo.costo_unitario || 0));
+          await dbRun(
+            `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+             VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+            [insumo.id, cant, stockPrevio, stockNuevo, `Consumo directo: ${prodNombre} (x${cant})`, costoMov, ahora]
+          );
+          huboCambios = true;
+          if (stockNuevo <= insumo.stock_minimo) {
+            io.emit('inventario_alerta_stock', {
+              insumoId: insumo.id,
+              nombre: insumo.nombre,
+              stock_actual: stockNuevo,
+              stock_minimo: insumo.stock_minimo,
+              estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+            });
+          }
+        }
       }
+    }
+    if (huboCambios) {
+      io.emit('inventario_actualizado');
     }
   } catch (e) {
     console.error('Error descontando inventario:', e.message);
@@ -2817,7 +2924,7 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       detalle: `Creación de nuevo insumo "${nombre}" con stock inicial de ${stock_actual} ${unidad_medida}`
     });
 
-    res.json({ id: result.lastID, message: 'Insumo registrado correctamente' });
+    res.status(201).json({ id: result.lastID, message: 'Insumo registrado correctamente' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2899,7 +3006,280 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
       monto: costoTotalAjuste
     });
 
-    res.json({ message: 'Ajuste de inventario aplicado', stock_actual: nuevoStock });
+    await dbRun(
+      `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
+    );
+
+    io.emit('inventario_actualizado');
+
+    res.json({
+      message: 'Ajuste de inventario aplicado',
+      stock_previo: insumo.stock_actual,
+      nuevo_stock: nuevoStock,
+      stock_actual: nuevoStock
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- RECETAS & ESCANDALLOS ---
+app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
+  try {
+    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
+    const recetas = await dbAll(`
+      SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
+      FROM InventarioRecetas r
+      JOIN Inventario i ON r.insumo_id = i.id
+    `);
+
+    const costosMap = {};
+    const cantIngredientesMap = {};
+    recetas.forEach(r => {
+      const mermaFactor = 1 + (Number(r.merma_porcentaje) / 100);
+      const subtotal = Number(r.cantidad) * Number(r.costo_unitario) * mermaFactor;
+      costosMap[r.producto_id] = (costosMap[r.producto_id] || 0) + subtotal;
+      cantIngredientesMap[r.producto_id] = (cantIngredientesMap[r.producto_id] || 0) + 1;
+    });
+
+    const resumen = productos.map(p => {
+      const costo = Math.round((costosMap[p.id] || 0) * 100) / 100;
+      const pvp = Number(p.precio || 0);
+      const margenBruto = Math.round((pvp - costo) * 100) / 100;
+      const margenPorc = pvp > 0 ? Math.round((margenBruto / pvp) * 1000) / 10 : 0;
+      const foodCostPorc = pvp > 0 ? Math.round((costo / pvp) * 1000) / 10 : 0;
+
+      return {
+        id: p.id,
+        producto_id: p.id,
+        nombre: p.nombre,
+        producto_nombre: p.nombre,
+        categoria_id: p.categoria_id,
+        precio_venta: pvp,
+        costo_receta: costo,
+        margen_bruto: margenBruto,
+        margen_porcentaje: margenPorc,
+        margen_porc: margenPorc,
+        food_cost_porcentaje: foodCostPorc,
+        food_cost_porc: foodCostPorc,
+        total_ingredientes: cantIngredientesMap[p.id] || 0,
+        tiene_receta: Boolean(cantIngredientesMap[p.id])
+      };
+    });
+
+    res.json(resumen);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
+  try {
+    const prodId = req.params.productoId;
+    const prod = await dbGet('SELECT id, nombre, precio, categoria_id FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const ingredientes = await dbAll(`
+      SELECT r.id as receta_id, r.producto_id, r.insumo_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje,
+             i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, 
+             i.costo_unitario, i.stock_actual, i.stock_minimo
+      FROM InventarioRecetas r
+      JOIN Inventario i ON r.insumo_id = i.id
+      WHERE r.producto_id = ?
+      ORDER BY i.nombre ASC
+    `, [prodId]);
+
+    let costoReceta = 0;
+    let porcionesDisponibles = ingredientes.length > 0 ? Infinity : 0;
+
+    const ingredientesDetalle = ingredientes.map(ing => {
+      const mermaFactor = 1 + (Number(ing.merma_porcentaje) / 100);
+      const subtotalCosto = Math.round(Number(ing.cantidad) * Number(ing.costo_unitario) * mermaFactor * 100) / 100;
+      costoReceta += subtotalCosto;
+
+      const porcionesIngrediente = Number(ing.cantidad) > 0 ? Math.floor(Number(ing.stock_actual) / Number(ing.cantidad)) : 0;
+      if (porcionesIngrediente < porcionesDisponibles) {
+        porcionesDisponibles = porcionesIngrediente;
+      }
+
+      return {
+        ...ing,
+        cantidad_bruta: ing.cantidad,
+        costo_subtotal: subtotalCosto,
+        subtotal_costo: subtotalCosto,
+        porciones_posibles: porcionesIngrediente,
+        rendimiento_porciones: porcionesIngrediente
+      };
+    });
+
+    if (porcionesDisponibles === Infinity) porcionesDisponibles = 0;
+
+    const pvp = Number(prod.precio || 0);
+    const margenBruto = Math.round((pvp - costoReceta) * 100) / 100;
+    const margenPorcentaje = pvp > 0 ? Math.round((margenBruto / pvp) * 1000) / 10 : 0;
+    const foodCostPorcentaje = pvp > 0 ? Math.round((costoReceta / pvp) * 1000) / 10 : 0;
+
+    res.json({
+      producto: prod,
+      producto_id: prod.id,
+      producto_nombre: prod.nombre,
+      ingredientes: ingredientesDetalle,
+      costo_receta: Math.round(costoReceta * 100) / 100,
+      precio_venta: pvp,
+      margen_bruto: margenBruto,
+      margen_porcentaje: margenPorcentaje,
+      margen_porc: margenPorcentaje,
+      food_cost_porcentaje: foodCostPorcentaje,
+      food_cost_porc: foodCostPorcentaje,
+      porciones_disponibles: porcionesDisponibles
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (req, res) => {
+  try {
+    const prodId = Number(req.params.productoId);
+    const { insumo_id, cantidad, merma_porcentaje = 0, usuarioNombre = 'Administrador' } = req.body;
+    const insId = Number(insumo_id);
+    const cantNum = Number(cantidad);
+
+    if (!insId || isNaN(cantNum) || cantNum <= 0) {
+      return res.status(400).json({ error: 'Insumo y cantidad válida mayor a 0 son requeridos' });
+    }
+
+    const prod = await dbGet('SELECT id, nombre FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const ins = await dbGet('SELECT id, nombre FROM Inventario WHERE id = ?', [insId]);
+    if (!ins) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    const existente = await dbGet('SELECT id FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
+    if (existente) {
+      await dbRun(
+        'UPDATE InventarioRecetas SET cantidad = ?, merma_porcentaje = ? WHERE id = ?',
+        [cantNum, Number(merma_porcentaje || 0), existente.id]
+      );
+    } else {
+      await dbRun(
+        'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, ?)',
+        [prodId, insId, cantNum, Number(merma_porcentaje || 0)]
+      );
+    }
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: 'modificar_escandallo',
+      tipoEvento: 'operativo',
+      modulo: 'inventario',
+      detalle: `Ingrediente ${ins.nombre} (${cantNum}) asignado a receta de ${prod.nombre}`
+    });
+
+    io.emit('receta_actualizada', { producto_id: prodId });
+    res.json({ ok: true, message: 'Ingrediente guardado en la receta' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdmin, async (req, res) => {
+  try {
+    const prodId = Number(req.params.productoId);
+    const insId = Number(req.params.insumoId);
+    const { cantidad, merma_porcentaje = 0 } = req.body;
+    const cantNum = Number(cantidad);
+
+    if (isNaN(cantNum) || cantNum <= 0) {
+      return res.status(400).json({ error: 'Cantidad válida mayor a 0 requerida' });
+    }
+
+    await dbRun(
+      'UPDATE InventarioRecetas SET cantidad = ?, merma_porcentaje = ? WHERE producto_id = ? AND insumo_id = ?',
+      [cantNum, Number(merma_porcentaje || 0), prodId, insId]
+    );
+
+    io.emit('receta_actualizada', { producto_id: prodId });
+    res.json({ ok: true, message: 'Ingrediente actualizado con éxito' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdmin, async (req, res) => {
+  try {
+    const prodId = Number(req.params.productoId);
+    const insId = Number(req.params.insumoId);
+
+    await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
+
+    io.emit('receta_actualizada', { producto_id: prodId });
+    res.json({ ok: true, message: 'Ingrediente eliminado de la receta' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- KARDEX DE INVENTARIO ---
+app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const insumo = await dbGet('SELECT id, nombre, unidad_medida, stock_actual, stock_minimo, costo_unitario FROM Inventario WHERE id = ?', [id]);
+    if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    const movimientos = await dbAll(
+      'SELECT * FROM InventarioMovimientos WHERE insumo_id = ? ORDER BY id DESC LIMIT 100',
+      [id]
+    );
+
+    res.json({
+      insumo,
+      movimientos
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- SUGERENCIA DE REABASTECIMIENTO / COMPRAS ---
+app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, res) => {
+  try {
+    const insumosCriticos = await dbAll(`
+      SELECT * FROM Inventario 
+      WHERE stock_actual <= stock_minimo 
+      ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
+    `);
+
+    let totalPresupuesto = 0;
+    const items = insumosCriticos.map(ins => {
+      const objetivo = Math.max(ins.stock_minimo * 2.5, ins.stock_minimo + 5);
+      const aPedir = Math.ceil((objetivo - ins.stock_actual) * 10) / 10;
+      const costoEstimado = Math.round(aPedir * (ins.costo_unitario || 0));
+      totalPresupuesto += costoEstimado;
+
+      return {
+        id: ins.id,
+        nombre: ins.nombre,
+        categoria: ins.categoria,
+        unidad_medida: ins.unidad_medida,
+        stock_actual: ins.stock_actual,
+        stock_minimo: ins.stock_minimo,
+        stock_objetivo: objetivo,
+        cantidad_sugerida: aPedir,
+        costo_unitario: ins.costo_unitario,
+        costo_estimado: costoEstimado,
+        estado: ins.stock_actual <= 0 ? 'agotado' : 'bajo'
+      };
+    });
+
+    res.json({
+      articulos_a_comprar: items.length,
+      total_items: items.length,
+      presupuesto_total_estimado: totalPresupuesto,
+      items
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
