@@ -5599,14 +5599,297 @@ window.probarImpresoraBackend = async function(destino) {
   }
 };
 
-// Escuchar eventos en vivo de Socket.IO para impresiones
+// Escuchar eventos en vivo de Socket.IO para impresiones y piso de salón
 try {
   if (typeof socket !== 'undefined' && socket) {
     socket.on('ticket_impreso', (reg) => {
       cargarHistorialImpresoras();
     });
+    socket.on('salon_piso_fondo_cambiado', (data) => {
+      if (data && data.pisoFondo) {
+        aplicarClasePisoSalon(data.pisoFondo);
+      }
+    });
   }
 } catch (_) {}
+
+// ============================================================================
+// GESTOR DE PISOS Y FONDOS REALISTAS DEL SALÓN (PERSONALIZACIÓN ADMIN)
+// ============================================================================
+const CATALOGO_PISOS_SALON = [
+  // MADERAS Y DECKS
+  {
+    id: 'piso-madera-oscura',
+    nombre: 'Madera Roble Rústica',
+    categoria: 'madera',
+    badge: '🪵',
+    tag: 'Madera',
+    tagCls: 'piso-tag-madera',
+    desc: 'Tablones de roble oscuro con vetas cálidas. Ideal para gastrobares, asadores y pubs.'
+  },
+  {
+    id: 'piso-madera-clara',
+    nombre: 'Madera Roble Nórdica',
+    categoria: 'madera',
+    badge: '🌲',
+    tag: 'Madera',
+    tagCls: 'piso-tag-madera',
+    desc: 'Madera clara natural y luminosa. Estilo bistró escandinavo y cafeterías gourmet.'
+  },
+  {
+    id: 'piso-deck-terraza',
+    nombre: 'Deck de Madera Exterior',
+    categoria: 'madera',
+    badge: '🌿',
+    tag: 'Deck',
+    tagCls: 'piso-tag-madera',
+    desc: 'Listones de madera tropical para terrazas al aire libre, cervecerías y lounges.'
+  },
+  {
+    id: 'piso-ladrillo-rustico',
+    nombre: 'Ladrillo Rústico / Cava',
+    categoria: 'madera',
+    badge: '🧱',
+    tag: 'Rústico',
+    tagCls: 'piso-tag-madera',
+    desc: 'Ladrillos de terracota en espiga. Ambiente acogedor de cava de vinos o taberna.'
+  },
+
+  // MÁRMOLES Y BALDOSAS
+  {
+    id: 'piso-marmol-negro',
+    nombre: 'Mármol Negro Imperial',
+    categoria: 'marmol',
+    badge: '🏛️',
+    tag: 'Mármol',
+    tagCls: 'piso-tag-marmol',
+    desc: 'Piedra pulida negra con vetas doradas. Máxima elegancia para alta cocina y steakhouse.'
+  },
+  {
+    id: 'piso-marmol-blanco',
+    nombre: 'Mármol Blanco Carrara',
+    categoria: 'marmol',
+    badge: '⚪',
+    tag: 'Mármol',
+    tagCls: 'piso-tag-marmol',
+    desc: 'Mármol blanco luminoso con sutiles vetas grises. Moderno, limpio y exclusivo.'
+  },
+  {
+    id: 'piso-baldosas-vintage',
+    nombre: 'Baldosa Hidráulica / Mosaico',
+    categoria: 'marmol',
+    badge: '💠',
+    tag: 'Mosaico',
+    tagCls: 'piso-tag-marmol',
+    desc: 'Patrón ornamental clásico de bistró europeo, pizzería tradicional o trattoria.'
+  },
+  {
+    id: 'piso-ajedrez-diner',
+    nombre: 'Ajedrez Retro Diner',
+    categoria: 'marmol',
+    badge: '⬛',
+    tag: 'Ajedrez',
+    tagCls: 'piso-tag-marmol',
+    desc: 'Baldosas alternadas blancas y negras estilo retro diner americano o pub clásico.'
+  },
+  {
+    id: 'piso-cemento-pulido',
+    nombre: 'Cemento Pulido Industrial',
+    categoria: 'marmol',
+    badge: '🏢',
+    tag: 'Industrial',
+    tagCls: 'piso-tag-marmol',
+    desc: 'Microcemento alisado gris loft. Vanguardista para bares y locales contemporáneos.'
+  },
+
+  // COLORES SÓLIDOS
+  {
+    id: 'piso-solido-obsidian',
+    nombre: 'Obsidiana Profunda (Default)',
+    categoria: 'solidos',
+    badge: '🌑',
+    tag: 'Sólido',
+    tagCls: 'piso-tag-solido',
+    desc: 'Negro espacial neutro de máximo contraste para visualización nocturna en POS.'
+  },
+  {
+    id: 'piso-solido-navy',
+    nombre: 'Azul Medianoche / Navy',
+    categoria: 'solidos',
+    badge: '🌌',
+    tag: 'Sólido',
+    tagCls: 'piso-tag-solido',
+    desc: 'Azul oscuro ejecutivo y relajante. Excelente contraste para mesas y barras.'
+  },
+  {
+    id: 'piso-solido-burgundy',
+    nombre: 'Vino Borgoña / Velvet',
+    categoria: 'solidos',
+    badge: '🍷',
+    tag: 'Sólido',
+    tagCls: 'piso-tag-solido',
+    desc: 'Tono vino tinto profundo. Cálido, sofisticado e íntimo para restaurantes nocturnos.'
+  },
+  {
+    id: 'piso-solido-forest',
+    nombre: 'Verde Esmeralda / Forest',
+    categoria: 'solidos',
+    badge: '🌲',
+    tag: 'Sólido',
+    tagCls: 'piso-tag-solido',
+    desc: 'Verde bosque oscuro y fresco. Ideal para bares botánicos y locales temáticos.'
+  },
+  {
+    id: 'piso-solido-mocha',
+    nombre: 'Café Moca Tostado',
+    categoria: 'solidos',
+    badge: '☕',
+    tag: 'Sólido',
+    tagCls: 'piso-tag-solido',
+    desc: 'Café oscuro acogedor. Ideal para cafeterías de especialidad, creperías y panaderías.'
+  },
+  {
+    id: 'piso-solido-charcoal',
+    nombre: 'Gris Carbón Minimalista',
+    categoria: 'solidos',
+    badge: '🌫️',
+    tag: 'Sólido',
+    tagCls: 'piso-tag-solido',
+    desc: 'Gris mate elegante sin distracciones. Enfoque 100% en el estado de las mesas.'
+  }
+];
+
+let pisoSalonSeleccionadoTemporal = 'piso-madera-oscura';
+
+function aplicarClasePisoSalon(pisoId) {
+  if (!pisoId) return;
+  estado.pisoSalonActual = pisoId;
+  const salonEl = document.getElementById('salonContainer');
+  const editorEl = document.getElementById('editorBoard');
+
+  const todosPisos = CATALOGO_PISOS_SALON.map(p => p.id);
+  [salonEl, editorEl].forEach(el => {
+    if (el) {
+      todosPisos.forEach(cls => el.classList.remove(cls));
+      el.classList.add(pisoId);
+    }
+  });
+}
+
+async function cargarPisoSalonDesdeBackend() {
+  try {
+    const res = await fetch('/api/salon/piso-fondo');
+    const data = await res.json();
+    const pisoFondo = data.pisoFondo || 'piso-madera-oscura';
+    aplicarClasePisoSalon(pisoFondo);
+    pisoSalonSeleccionadoTemporal = pisoFondo;
+  } catch (e) {
+    aplicarClasePisoSalon('piso-madera-oscura');
+  }
+}
+
+window.abrirModalSelectorPiso = function() {
+  const modal = document.getElementById('modalSelectorPiso');
+  if (modal) {
+    modal.classList.add('active');
+    pisoSalonSeleccionadoTemporal = estado.pisoSalonActual || 'piso-madera-oscura';
+    filtrarCatalogoPisos('todos');
+  }
+};
+
+window.cerrarModalSelectorPiso = function() {
+  const modal = document.getElementById('modalSelectorPiso');
+  if (modal) {
+    modal.classList.remove('active');
+    // Restaurar piso oficial si el usuario canceló sin guardar
+    if (estado.pisoSalonActual) {
+      aplicarClasePisoSalon(estado.pisoSalonActual);
+    }
+  }
+};
+
+window.filtrarCatalogoPisos = function(categoria) {
+  document.querySelectorAll('#modalSelectorPiso .btn-tool').forEach(b => b.classList.remove('active'));
+  if (categoria === 'todos') document.getElementById('tabPisosTodos')?.classList.add('active');
+  if (categoria === 'madera') document.getElementById('tabPisosMadera')?.classList.add('active');
+  if (categoria === 'marmol') document.getElementById('tabPisosMarmol')?.classList.add('active');
+  if (categoria === 'solidos') document.getElementById('tabPisosSolidos')?.classList.add('active');
+
+  const filtrados = categoria === 'todos' 
+    ? CATALOGO_PISOS_SALON 
+    : CATALOGO_PISOS_SALON.filter(p => p.categoria === categoria);
+
+  renderPisosSelectionGrid(filtrados);
+};
+
+function renderPisosSelectionGrid(pisos) {
+  const grid = document.getElementById('pisosSelectionGrid');
+  if (!grid) return;
+
+  grid.innerHTML = pisos.map(p => {
+    const isSelected = p.id === pisoSalonSeleccionadoTemporal;
+    return `
+      <div class="piso-card-item ${isSelected ? 'selected' : ''}" onclick="seleccionarPisoPrevio('${p.id}')">
+        <div class="piso-preview-thumb ${p.id}">
+          <span class="piso-preview-badge">${p.badge}</span>
+        </div>
+        <div class="piso-card-info">
+          <h4 class="piso-card-title">${escapeHtml(p.nombre)}</h4>
+          <p class="piso-card-desc">${escapeHtml(p.desc)}</p>
+          <span class="piso-card-tag ${p.tagCls}">${escapeHtml(p.tag)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  actualizarTextoPisoSeleccionado();
+}
+
+window.seleccionarPisoPrevio = function(pisoId) {
+  pisoSalonSeleccionadoTemporal = pisoId;
+  // Previsualización en vivo mientras decide
+  aplicarClasePisoSalon(pisoId);
+
+  // Actualizar tarjetas seleccionadas en el modal
+  document.querySelectorAll('.piso-card-item').forEach(el => el.classList.remove('selected'));
+  const cards = document.querySelectorAll('.piso-card-item');
+  cards.forEach(card => {
+    if (card.querySelector(`.${pisoId}`)) {
+      card.classList.add('selected');
+    }
+  });
+
+  actualizarTextoPisoSeleccionado();
+};
+
+function actualizarTextoPisoSeleccionado() {
+  const txt = document.getElementById('txtPisoSeleccionadoInfo');
+  const found = CATALOGO_PISOS_SALON.find(p => p.id === pisoSalonSeleccionadoTemporal);
+  if (txt && found) {
+    txt.innerHTML = `Piso seleccionado: <strong>${found.badge} ${found.nombre}</strong> (${found.tag})`;
+  }
+}
+
+window.guardarPisoSalonSeleccionado = async function() {
+  try {
+    const res = await fetch('/api/salon/piso-fondo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pisoFondo: pisoSalonSeleccionadoTemporal })
+    });
+    const data = await res.json();
+    estado.pisoSalonActual = pisoSalonSeleccionadoTemporal;
+    aplicarClasePisoSalon(pisoSalonSeleccionadoTemporal);
+    mostrarNotificacionCentro(`🎨 ¡Piso del salón guardado exitosamente!`, 'success');
+    const modal = document.getElementById('modalSelectorPiso');
+    if (modal) modal.classList.remove('active');
+  } catch (e) {
+    alert('Error al guardar el piso: ' + e.message);
+  }
+};
+
+// Cargar piso de salón automáticamente al iniciar
+cargarPisoSalonDesdeBackend();
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {

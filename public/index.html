@@ -329,6 +329,7 @@
             <button class="btn-tool" id="btnAgregarMesaRedonda">➕ Mesa Redonda</button>
             <button class="btn-tool" id="btnAgregarBarra">➕ Silla de Barra</button>
             <button class="btn-tool" id="btnAutoOrganizarPlano" title="Reorganizar todas las mesas en una cuadrícula limpia sin solapes" style="background:rgba(16,185,129,0.18); border-color:#10b981; color:#6ee7b7; font-weight:700;">✨ Cuadrícula Automática</button>
+            <button type="button" class="btn-tool" id="btnAbrirSelectorPiso" onclick="abrirModalSelectorPiso()" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); border-color: #a855f7; color: #ffffff; font-weight: 700; box-shadow: 0 2px 8px rgba(124,58,237,0.35);">🎨 Piso del Salón</button>
             <button class="btn-save-plan" id="btnGuardarPlano">💾 Guardar Distribución</button>
           </div>
         </div>
@@ -1954,6 +1955,45 @@
       <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
         <span style="color:#94a3b8; font-size:0.8rem;">🟢 Servidor Socket TCP 9100 Escuchando en vivo</span>
         <button class="btn-sec" onclick="cerrarModalMonitorImpresoras()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SELECTOR DE PISO Y FONDO DEL SALÓN -->
+  <div class="modal-backdrop" id="modalSelectorPiso" style="z-index: 100030;">
+    <div class="modal-dialog" style="max-width: 860px; width: 95%;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border-bottom: 1px solid #334155;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-size:1.6rem; background:rgba(168,85,247,0.2); border:1px solid #a855f7; border-radius:10px; padding:6px 10px;">🎨</div>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#fff;">Personalizar Piso del Restaurante</h3>
+            <small style="color:#cbd5e1;">Selecciona una textura realista de piso o un color sólido elegante para el salón</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalSelectorPiso()">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 20px; background:#0b0f19;">
+        <!-- Pestañas de categoría de pisos -->
+        <div style="display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid #1e293b; padding-bottom:10px; flex-wrap:wrap;">
+          <button type="button" class="btn-tool active" id="tabPisosTodos" onclick="filtrarCatalogoPisos('todos')" style="font-weight:700;">🌟 Todos los Pisos (15)</button>
+          <button type="button" class="btn-tool" id="tabPisosMadera" onclick="filtrarCatalogoPisos('madera')">🪵 Maderas & Decks</button>
+          <button type="button" class="btn-tool" id="tabPisosMarmol" onclick="filtrarCatalogoPisos('marmol')">🏛️ Mármol & Baldosas</button>
+          <button type="button" class="btn-tool" id="tabPisosSolidos" onclick="filtrarCatalogoPisos('solidos')">🎨 Colores Sólidos</button>
+        </div>
+
+        <!-- Cuadrícula de opciones de piso -->
+        <div class="pisos-selection-grid" id="pisosSelectionGrid">
+          <!-- Renderizado dinámico de tarjetas de piso con miniaturas interactivas -->
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center; padding:14px 20px;">
+        <span style="font-size:0.85rem; color:#94a3b8;" id="txtPisoSeleccionadoInfo">Piso seleccionado: <strong>Madera Roble Rústica</strong></span>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-sec" onclick="cerrarModalSelectorPiso()">Cancelar</button>
+          <button class="btn-pri" onclick="guardarPisoSalonSeleccionado()" style="background: linear-gradient(135deg, #10b981, #059669); font-weight:800; padding:8px 18px;">💾 Aplicar y Guardar Piso</button>
+        </div>
       </div>
     </div>
   </div>
