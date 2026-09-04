@@ -25,13 +25,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
-  width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
-  box-sizing: border-box;
-}
-
 body {
   background: var(--bg-dark);
   color: var(--text-main);
@@ -43,29 +36,21 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
 }
 
 /* ------------------------------------------------------------- */
 /* BARRA SUPERIOR */
 /* ------------------------------------------------------------- */
 .top-nav {
-  min-height: 56px;
-  height: auto;
+  height: 64px;
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 14px;
-  gap: 8px 12px;
+  padding: 0 16px;
+  gap: 16px;
   z-index: 100;
-  width: 100%;
-  max-width: 100vw;
-  box-sizing: border-box;
 }
 
 .brand {
@@ -3026,114 +3011,6 @@ textarea:focus, select:focus, input:focus {
   .dev-nav-btn {
     width: auto;
   }
-
-  /* COMANDERO EN TABLETS Y PANTALLAS < 1024px: APILADO VERTICAL ESTRICTO RWD */
-  .modal-backdrop {
-    padding: 8px;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .comandero-window {
-    width: 98vw !important;
-    height: 96vh !important;
-    max-width: 100vw !important;
-    max-height: 98vh !important;
-    flex-direction: column !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-  }
-
-  .comandero-mobile-tabs {
-    display: none !important;
-  }
-
-  .comandero-catalog {
-    flex: 1 1 54% !important;
-    min-height: 0 !important;
-    width: 100% !important;
-    border-right: none !important;
-    border-bottom: 2px solid var(--border) !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-  }
-
-  .catalog-topbar {
-    padding: 8px 12px !important;
-    gap: 8px !important;
-    flex-shrink: 0 !important;
-  }
-
-  .category-chips {
-    display: flex !important;
-    gap: 6px !important;
-    overflow-x: auto !important;
-    flex-shrink: 0 !important;
-    padding-bottom: 4px !important;
-    flex-wrap: nowrap !important;
-  }
-
-  .products-one-tap-grid {
-    flex: 1 1 auto !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding: 8px !important;
-    gap: 8px !important;
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)) !important;
-  }
-
-  .prod-card-one-tap {
-    height: 100px !important;
-    padding: 10px !important;
-  }
-
-  .comandero-ticket {
-    flex: 0 0 46% !important;
-    min-height: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-    background: var(--bg-card) !important;
-  }
-
-  .ticket-topbar {
-    padding: 6px 12px !important;
-    flex-shrink: 0 !important;
-  }
-
-  .ticket-body {
-    flex: 1 1 auto !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding: 6px 12px !important;
-  }
-
-  .ticket-item-row {
-    padding: 6px 8px !important;
-    margin-bottom: 4px !important;
-  }
-
-  .ticket-bottom {
-    flex-shrink: 0 !important;
-    padding: 6px 12px !important;
-  }
-
-  .ticket-action-buttons {
-    display: grid !important;
-    grid-template-columns: 1.2fr 1fr 1fr !important;
-    gap: 6px !important;
-    margin-top: 6px !important;
-  }
-
-  .btn-btn-cmd {
-    padding: 8px 6px !important;
-    font-size: 0.82rem !important;
-    min-height: 38px !important;
-  }
 }
 
 /* ============================================================================
@@ -3230,7 +3107,7 @@ textarea:focus, select:focus, input:focus {
     text-align: center;
   }
 
-  /* COMANDERO EN MÓVIL (<= 768px): Apilado vertical con botones táctiles fluidos */
+  /* COMANDERO EN PANTALLA COMPLETA MÓVIL CON PESTAÑAS (MENÚ / COMANDA) */
   .comandero-window {
     width: 100vw !important;
     height: 100vh !important;
@@ -3240,82 +3117,41 @@ textarea:focus, select:focus, input:focus {
     position: fixed !important;
     inset: 0 !important;
     flex-direction: column !important;
-    margin: 0 !important;
   }
 
   .comandero-mobile-tabs {
-    display: none !important;
+    display: flex !important;
   }
 
   .comandero-catalog {
-    flex: 1 1 52% !important;
-    min-height: 0 !important;
+    flex: 1 !important;
     width: 100% !important;
     border-right: none !important;
-    border-bottom: 2px solid var(--border) !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
+    display: flex;
   }
 
-  .products-one-tap-grid {
-    flex: 1 1 auto !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding: 6px !important;
-    gap: 6px !important;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
-  }
-
-  .prod-card-one-tap {
-    height: 92px !important;
-    padding: 8px !important;
-  }
-
-  .prod-card-name {
-    font-size: 0.84rem !important;
-  }
-
-  .prod-card-price {
-    font-size: 0.88rem !important;
+  .comandero-catalog.mobile-hidden {
+    display: none !important;
   }
 
   .comandero-ticket {
-    flex: 0 0 48% !important;
-    min-height: 0 !important;
+    flex: 1 !important;
     width: 100% !important;
-    max-width: 100% !important;
+    display: none;
+  }
+
+  .comandero-ticket.mobile-active {
     display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-  }
-
-  .ticket-body {
-    flex: 1 1 auto !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding: 4px 8px !important;
-  }
-
-  .ticket-bottom {
-    flex-shrink: 0 !important;
-    padding: 6px 10px !important;
   }
 
   .ticket-action-buttons {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 6px !important;
-  }
-
-  .ticket-action-buttons .btn-btn-cmd:first-child {
-    grid-column: span 2 !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
 
   .btn-btn-cmd {
-    padding: 8px !important;
-    font-size: 0.85rem !important;
-    min-height: 38px !important;
+    padding: 12px !important;
+    font-size: 0.95rem !important;
   }
 
   /* LANDING & LOGIN MÓVIL */
@@ -3637,18 +3473,16 @@ body.is-admin .admin-only-tab {
   transform: translateY(-1px);
 }
 
-/* Barra superior adaptativa: los botones se ajustan y traslapan si la pantalla es compacta */
+/* Scroll horizontal suave en barra superior si la pantalla es estrecha */
 .top-nav {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  align-items: center !important;
-  overflow: visible !important;
-  height: auto !important;
-  min-height: 56px !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
 }
-.user-status-pill {
+.top-nav::-webkit-scrollbar {
+  display: none;
+}
+.nav-pills, .admin-extra-actions, .brand, .user-status-pill {
   flex-shrink: 0 !important;
-  margin-left: auto !important;
 }
 
 /* 1. DASHBOARD & KPIS */
@@ -3937,6 +3771,200 @@ body.is-admin .admin-only-tab {
 
 .btn-separar-mini:active {
   transform: translateY(1px);
+}
+
+/* ============================================================================
+   PANEL CENTRAL DE ADMINISTRACIÓN (ADMIN & DEVELOPER)
+   ============================================================================ */
+
+.btn-admin-panel-trigger {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.28)) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+  font-weight: 800 !important;
+  font-size: 0.84rem !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15) !important;
+}
+
+.btn-admin-panel-trigger:hover {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #ffffff !important;
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.6) !important;
+  transform: translateY(-1px);
+}
+
+.btn-admin-panel-trigger .arrow-indicator {
+  font-size: 0.7rem;
+  opacity: 0.85;
+  transition: transform 0.2s ease;
+}
+
+.btn-admin-panel-trigger:hover .arrow-indicator {
+  transform: translateY(1px);
+}
+
+/* Modal Dialog para Panel de Admin */
+.admin-panel-dialog {
+  max-width: 860px;
+  width: 95vw;
+  max-height: 92vh;
+  border-radius: 16px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-panel-badge-icon {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35));
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+}
+
+.admin-panel-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+  max-height: calc(92vh - 130px);
+}
+
+.admin-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+/* Tarjeta individual de función en el Panel Admin */
+.admin-panel-card {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px 18px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-panel-card:hover {
+  transform: translateY(-3px);
+  background: #243248;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.6), 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.admin-panel-card:active {
+  transform: translateY(-1px);
+}
+
+.admin-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.admin-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.45rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.card-dashboard .admin-card-icon { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.4); }
+.card-inventario .admin-card-icon { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); }
+.card-auditoria .admin-card-icon { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
+.card-personal .admin-card-icon { background: rgba(168, 85, 247, 0.2); border-color: rgba(168, 85, 247, 0.4); }
+.card-fotos .admin-card-icon { background: rgba(236, 72, 153, 0.2); border-color: rgba(236, 72, 153, 0.4); }
+.card-actualizaciones .admin-card-icon { background: rgba(14, 165, 233, 0.2); border-color: rgba(14, 165, 233, 0.4); }
+.card-editor .admin-card-icon { background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4); }
+
+.admin-card-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-card-tag.live { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.admin-card-tag.stock { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.admin-card-tag.security { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.admin-card-tag.staff { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+.admin-card-tag.visual { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
+.admin-card-tag.system { background: rgba(14, 165, 233, 0.2); color: #38bdf8; }
+.admin-card-tag.layout { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+.admin-panel-card h4 {
+  margin: 0 0 6px 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.admin-panel-card p {
+  margin: 0 0 14px 0;
+  font-size: 0.83rem;
+  line-height: 1.35;
+  color: #94a3b8;
+}
+
+.admin-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #38bdf8;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.admin-card-action .arrow {
+  transition: transform 0.15s ease;
+}
+
+.admin-panel-card:hover .admin-card-action .arrow {
+  transform: translateX(4px);
+}
+
+@media (max-width: 640px) {
+  .admin-panel-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .admin-panel-dialog {
+    width: 98vw;
+    max-height: 96vh;
+    border-radius: 12px;
+  }
+  .admin-panel-body {
+    padding: 12px 14px;
+  }
 }
 
 

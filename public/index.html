@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>PUNTO DE VENTA | Restaurantes & Bares</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -217,12 +217,10 @@
       </div>
 
       <!-- MENÚS DE NAVEGACIÓN -->
+      <!-- MENÚS DE NAVEGACIÓN -->
       <nav class="nav-pills">
         <button class="nav-pill active" data-view="salon">
           <span class="pill-icon">🗺️</span> Salón & Mesas
-        </button>
-        <button class="nav-pill admin-only-tab" data-view="editor-plano">
-          <span class="pill-icon">📐</span> Editor Salón
         </button>
         <button class="nav-pill" data-view="kds">
           <span class="pill-icon">🍳</span> Cocina & Barra
@@ -234,36 +232,25 @@
         <button class="nav-pill" data-view="facturacion">
           <span class="pill-icon">⚡</span> Facturación Express
         </button>
-        <button class="nav-pill admin-only-tab" data-view="metricas">
+        <!-- Pestañas internas para vistas admin (gestionadas desde el Panel de Admin) -->
+        <button class="nav-pill admin-view-tab" data-view="metricas" style="display: none !important;">
           <span class="pill-icon">📊</span> Dashboard
         </button>
-        <button class="nav-pill admin-only-tab" data-view="inventario">
+        <button class="nav-pill admin-view-tab" data-view="inventario" style="display: none !important;">
           <span class="pill-icon">📦</span> Inventario
         </button>
-        <button class="nav-pill admin-only-tab" data-view="auditoria">
+        <button class="nav-pill admin-view-tab" data-view="auditoria" style="display: none !important;">
           <span class="pill-icon">🛡️</span> Auditoría
+        </button>
+        <button class="nav-pill admin-view-tab" data-view="editor-plano" style="display: none !important;">
+          <span class="pill-icon">📐</span> Editor Salón
         </button>
       </nav>
 
-      <!-- BOTONES DE ADMINISTRACIÓN (ADMIN & DEV) -->
+      <!-- BOTÓN ÚNICO DEL PANEL DE ADMINISTRACIÓN (SOLO ADMIN & DEV) -->
       <div class="admin-extra-actions" id="adminExtraActions">
-        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('metricas')" title="Ver Métricas y Dashboard en tiempo real">
-          📊 Dashboard
-        </button>
-        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('inventario')" title="Control de Inventario y Existencias">
-          📦 Inventario
-        </button>
-        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('auditoria')" title="Bitácora de Auditoría y Seguridad">
-          🛡️ Auditoría
-        </button>
-        <button class="btn-topbar-tool" id="btnAdminPersonal" title="Gestionar meseros y cajeros">
-          👥 Personal
-        </button>
-        <button class="btn-topbar-tool" id="btnPersonalizarFotos" title="Personalizar imágenes y fotos de los botones">
-          🎨 Fotos Menú
-        </button>
-        <button class="btn-topbar-tool" id="btnAbrirModalActualizaciones" onclick="abrirModalActualizaciones()" title="Buscar e instalar actualizaciones del sistema" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 8px; font-weight: 600;">
-          🔄 Actualizaciones
+        <button class="btn-topbar-tool btn-admin-panel-trigger" id="btnAbrirPanelAdmin" onclick="abrirPanelAdmin()" title="Abrir Panel con todas las funciones de administración">
+          👑 Panel de Admin <span class="arrow-indicator">▼</span>
         </button>
       </div>
 
@@ -1226,6 +1213,133 @@
         <button class="btn-pri" id="btnGuardarNuevoProducto" onclick="guardarNuevoProducto()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding: 10px 22px;">
           💾 Guardar Producto
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL CENTRAL: PANEL DE ADMINISTRACIÓN (ADMIN & DEV) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalPanelAdmin" onclick="if(event.target===this) cerrarPanelAdmin();">
+    <div class="modal-dialog admin-panel-dialog">
+      <div class="dialog-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="admin-panel-badge-icon">👑</div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.22rem; color: #fff; font-weight: 800;">Panel de Administración</h3>
+            <small style="color: var(--text-muted); font-size: 0.82rem;">Centro de control gerencial, inventario, personal y configuración</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarPanelAdmin()">✕</button>
+      </div>
+
+      <div class="dialog-body admin-panel-body">
+        <div class="admin-panel-grid">
+          
+          <!-- 1. Dashboard -->
+          <div class="admin-panel-card card-dashboard" onclick="ejecutarAccionAdmin('metricas')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">📊</div>
+              <span class="admin-card-tag live">En Tiempo Real</span>
+            </div>
+            <h4>Dashboard & Métricas</h4>
+            <p>Ventas del día, horas pico de afluencia, productos más vendidos y ranking de meseros.</p>
+            <div class="admin-card-action">
+              <span>Abrir Dashboard</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 2. Inventario -->
+          <div class="admin-panel-card card-inventario" onclick="ejecutarAccionAdmin('inventario')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">📦</div>
+              <span class="admin-card-tag stock">Stock & Kardex</span>
+            </div>
+            <h4>Control de Inventario</h4>
+            <p>Existencias de insumos y bebidas, alertas de stock crítico, entradas y registro de mermas.</p>
+            <div class="admin-card-action">
+              <span>Gestionar Stock</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 3. Auditoría -->
+          <div class="admin-panel-card card-auditoria" onclick="ejecutarAccionAdmin('auditoria')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">🛡️</div>
+              <span class="admin-card-tag security">Seguridad</span>
+            </div>
+            <h4>Bitácora de Auditoría</h4>
+            <p>Historial de cancelaciones con motivo y PIN de supervisor, aperturas y cierres de turno.</p>
+            <div class="admin-card-action">
+              <span>Ver Auditoría</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 4. Personal -->
+          <div class="admin-panel-card card-personal" id="btnAdminPersonal" onclick="ejecutarAccionAdmin('personal')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">👥</div>
+              <span class="admin-card-tag staff">Equipo</span>
+            </div>
+            <h4>Gestión de Personal</h4>
+            <p>Administrar meseros, saloneros, cajeros, claves PIN y perfiles del restaurante.</p>
+            <div class="admin-card-action">
+              <span>Administrar Personal</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 5. Fotos del Menú -->
+          <div class="admin-panel-card card-fotos" id="btnPersonalizarFotos" onclick="ejecutarAccionAdmin('fotos')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">🎨</div>
+              <span class="admin-card-tag visual">Catálogo</span>
+            </div>
+            <h4>Fotos del Menú</h4>
+            <p>Personalizar imágenes reales de platillos, fotografías y colores de botones del menú.</p>
+            <div class="admin-card-action">
+              <span>Personalizar Fotos</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 6. Actualizaciones -->
+          <div class="admin-panel-card card-actualizaciones" id="btnAbrirModalActualizaciones" onclick="ejecutarAccionAdmin('actualizaciones')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">🔄</div>
+              <span class="admin-card-tag system">Sistema</span>
+            </div>
+            <h4>Actualizaciones del Sistema</h4>
+            <p>Comprobar e instalar nuevas actualizaciones en línea manteniendo tus datos intactos.</p>
+            <div class="admin-card-action">
+              <span>Buscar Actualizaciones</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 7. Diseñador del Salón -->
+          <div class="admin-panel-card card-editor" onclick="ejecutarAccionAdmin('editor-plano')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">📐</div>
+              <span class="admin-card-tag layout">Salón</span>
+            </div>
+            <h4>Diseñador del Salón</h4>
+            <p>Editar distribución física de mesas, agregar barras y auto-organizar en cuadrícula limpia.</p>
+            <div class="admin-card-action">
+              <span>Diseñar Salón</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 22px;">
+        <span style="color: var(--text-muted); font-size: 0.8rem;">GastroBar Pro • Panel Central de Administración</span>
+        <button class="btn-sec" onclick="cerrarPanelAdmin()">Cerrar</button>
       </div>
     </div>
   </div>

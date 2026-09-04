@@ -717,26 +717,64 @@ window.irAPuntoDeVentaAdmin = function() {
   cargarCajaDesdeBackend();
 };
 
+window.abrirPanelAdmin = function() {
+  const modal = document.getElementById('modalPanelAdmin');
+  if (modal) modal.classList.add('active');
+};
+
+window.cerrarPanelAdmin = function() {
+  const modal = document.getElementById('modalPanelAdmin');
+  if (modal) modal.classList.remove('active');
+};
+
+window.togglePanelAdmin = function() {
+  const modal = document.getElementById('modalPanelAdmin');
+  if (!modal) return;
+  if (modal.classList.contains('active')) {
+    modal.classList.remove('active');
+  } else {
+    modal.classList.add('active');
+  }
+};
+
+window.ejecutarAccionAdmin = function(tipo) {
+  cerrarPanelAdmin();
+  if (tipo === 'metricas' || tipo === 'inventario' || tipo === 'auditoria' || tipo === 'editor-plano') {
+    abrirModuloAdmin(tipo);
+  } else if (tipo === 'personal') {
+    if (typeof cargarEmpleadosAdmin === 'function') cargarEmpleadosAdmin();
+    document.getElementById('modalAdminPersonal')?.classList.add('active');
+  } else if (tipo === 'fotos') {
+    if (typeof poblarSelectorProductosCustom === 'function') poblarSelectorProductosCustom();
+    if (typeof renderGaleriaPresets === 'function') renderGaleriaPresets();
+    if (typeof cargarDatosProductoCustom === 'function') cargarDatosProductoCustom();
+    document.getElementById('modalPersonalizarBoton')?.classList.add('active');
+  } else if (tipo === 'actualizaciones') {
+    if (typeof abrirModalActualizaciones === 'function') abrirModalActualizaciones();
+  }
+};
+
 window.abrirModuloAdmin = function(modulo) {
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
   document.body.classList.add('is-admin');
   const adminTools = document.getElementById('adminExtraActions');
   if (adminTools) adminTools.style.display = 'flex';
-  document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+
+  cerrarPanelAdmin();
+
+  document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
 
   const navBtn = document.querySelector(`.nav-pill[data-view="${modulo}"]`);
-  if (navBtn) {
-    navBtn.click();
-  } else {
-    document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
-    const target = document.getElementById('view-' + modulo);
-    if (target) target.classList.add('active');
-    if (modulo === 'metricas') cargarDashboardMetricas();
-    if (modulo === 'inventario') cargarInventarioAdmin();
-    if (modulo === 'auditoria') cargarAuditoriaAdmin();
-  }
+  if (navBtn) navBtn.classList.add('active');
+
+  const target = document.getElementById('view-' + modulo);
+  if (target) target.classList.add('active');
+  if (modulo === 'metricas') cargarDashboardMetricas();
+  if (modulo === 'inventario') cargarInventarioAdmin();
+  if (modulo === 'auditoria') cargarAuditoriaAdmin();
+  if (modulo === 'editor-plano') renderEditorPlano();
 };
 
 function actualizarBrandingNegocio(negocio) {
