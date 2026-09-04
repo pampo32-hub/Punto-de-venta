@@ -1887,12 +1887,12 @@ app.post('/api/productos', async (req, res) => {
   }
 });
 
-// Obtener estado de vinculación a Kárdex de un producto
+// Obtener estado de vinculación a Kárdex de un producto (con detalle completo de insumo)
 app.get('/api/productos/:id/kardex-link', async (req, res) => {
   try {
     const prodId = req.params.id;
     const receta = await dbGet(`
-      SELECT r.*, i.nombre as insumo_nombre, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots, i.stock_actual, i.unidad_medida, i.costo_unitario
+      SELECT r.*, i.nombre as insumo_nombre, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots, i.stock_actual, i.stock_minimo, i.unidad_medida, i.costo_unitario, i.categoria as insumo_categoria
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
       WHERE r.producto_id = ?
@@ -1907,11 +1907,17 @@ app.get('/api/productos/:id/kardex-link', async (req, res) => {
         kardex_tipo: esShot ? 'shot' : (receta.cantidad === 1 ? 'unidad' : 'shot'),
         insumo_id: receta.insumo_id,
         insumo_nombre: receta.insumo_nombre,
+        insumo_categoria: receta.insumo_categoria,
         cantidad: receta.cantidad,
         ml_shot: mlShot,
         capacidad_ml: receta.capacidad_ml,
+        medida_shot_ml: receta.medida_shot_ml,
+        rendimiento_shots: receta.rendimiento_shots,
         unidad_medida: receta.unidad_medida,
-        costo_unitario: receta.costo_unitario
+        costo_unitario: receta.costo_unitario,
+        stock_actual: receta.stock_actual,
+        stock_minimo: receta.stock_minimo,
+        es_licor: receta.es_licor
       });
     }
 
@@ -1922,11 +1928,17 @@ app.get('/api/productos/:id/kardex-link', async (req, res) => {
         kardex_tipo: 'unidad',
         insumo_id: insumoDirecto.id,
         insumo_nombre: insumoDirecto.nombre,
+        insumo_categoria: insumoDirecto.categoria,
         cantidad: 1,
         ml_shot: insumoDirecto.medida_shot_ml,
         capacidad_ml: insumoDirecto.capacidad_ml,
+        medida_shot_ml: insumoDirecto.medida_shot_ml,
+        rendimiento_shots: insumoDirecto.rendimiento_shots,
         unidad_medida: insumoDirecto.unidad_medida,
-        costo_unitario: insumoDirecto.costo_unitario
+        costo_unitario: insumoDirecto.costo_unitario,
+        stock_actual: insumoDirecto.stock_actual,
+        stock_minimo: insumoDirecto.stock_minimo,
+        es_licor: insumoDirecto.es_licor
       });
     }
 
@@ -1936,8 +1948,8 @@ app.get('/api/productos/:id/kardex-link', async (req, res) => {
   }
 });
 
-// Editar producto y actualizar vinculación al Kárdex
-app.put('/api/productos/:id', async (req, res) => {
+// Editar producto y actualizar todas sus características y sincronización en Kárdex
+app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
   try {
     const prodId = req.params.id;
     const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
@@ -1950,10 +1962,20 @@ app.put('/api/productos/:id', async (req, res) => {
       destino,
       curso,
       imagen_url,
+      happy_hour,
+      agotado,
       kardex_tipo,
       insumo_id,
       ml_shot,
-      cantidad_descuento
+      cantidad_descuento,
+      // Campos de actualización directa de la ficha de Kárdex
+      insumo_nombre,
+      insumo_stock_actual,
+      insumo_costo_unitario,
+      insumo_stock_minimo,
+      insumo_capacidad_ml,
+      insumo_medida_shot_ml,
+      usuarioNombre = 'Administrador'
     } = req.body;
 
     const nombreLimpio = nombre ? nombre.trim() : prod.nombre;
@@ -1962,13 +1984,18 @@ app.put('/api/productos/:id', async (req, res) => {
     const destinoFinal = destino ? destino.trim().toLowerCase() : prod.destino;
     const cursoNum = curso !== undefined ? Number(curso) : prod.curso;
     const imgUrl = imagen_url !== undefined ? imagen_url : prod.imagen_url;
+    const hhVal = happy_hour !== undefined ? (happy_hour ? 1 : 0) : prod.happy_hour;
+    const agotadoVal = agotado !== undefined ? (agotado ? 1 : 0) : prod.agotado;
 
     await dbRun(
       `UPDATE Productos 
-       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?
+       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, happy_hour = ?, agotado = ?
        WHERE id = ?`,
-      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, prodId]
+      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, hhVal, agotadoVal, prodId]
     );
+
+    let huboCambiosKardex = false;
+    const ahora = new Date().toISOString();
 
     // Actualizar vinculación Kárdex si se especificó kardex_tipo
     if (kardex_tipo !== undefined) {
@@ -1978,29 +2005,107 @@ app.put('/api/productos/:id', async (req, res) => {
       if (kardex_tipo === 'shot' && insumo_id) {
         const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
         if (insumo) {
-          const ml = Number(ml_shot) || Number(insumo.medida_shot_ml) || 30;
-          const capacidad = Number(insumo.capacidad_ml) || 750;
-          const fraccion = Math.round((ml / capacidad) * 10000) / 10000;
+          const capMlActual = insumo_capacidad_ml !== undefined && !isNaN(Number(insumo_capacidad_ml)) ? Number(insumo_capacidad_ml) : (Number(insumo.capacidad_ml) || 750);
+          const shotMlActual = insumo_medida_shot_ml !== undefined && !isNaN(Number(insumo_medida_shot_ml)) ? Number(insumo_medida_shot_ml) : (Number(ml_shot) || Number(insumo.medida_shot_ml) || 30);
+          const ml = Number(ml_shot) || shotMlActual;
+          const fraccion = Math.round((ml / capMlActual) * 10000) / 10000;
+
           await dbRun(
             'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
             [prodId, insumo_id, fraccion]
           );
+
+          // Actualizar datos del insumo en Kárdex si se proporcionaron
+          const nuevoStock = (insumo_stock_actual !== undefined && !isNaN(Number(insumo_stock_actual))) ? Number(insumo_stock_actual) : insumo.stock_actual;
+          const nuevoCosto = (insumo_costo_unitario !== undefined && !isNaN(Number(insumo_costo_unitario))) ? Number(insumo_costo_unitario) : insumo.costo_unitario;
+          const nuevoMin = (insumo_stock_minimo !== undefined && !isNaN(Number(insumo_stock_minimo))) ? Number(insumo_stock_minimo) : insumo.stock_minimo;
+          const nuevoNom = insumo_nombre ? insumo_nombre.trim() : insumo.nombre;
+          const nuevoRend = shotMlActual > 0 ? Math.round((capMlActual / shotMlActual) * 10) / 10 : insumo.rendimiento_shots;
+
+          // Registrar movimiento en Kárdex si el stock fue modificado manualmente
+          if (insumo_stock_actual !== undefined && Math.abs(nuevoStock - insumo.stock_actual) > 0.0001) {
+            const diff = Math.abs(nuevoStock - insumo.stock_actual);
+            const tipoMov = nuevoStock > insumo.stock_actual ? 'ajuste' : 'merma';
+            await dbRun(
+              `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+               VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
+            );
+          }
+
+          await dbRun(
+            `UPDATE Inventario SET 
+              nombre = ?, stock_actual = ?, costo_unitario = ?, stock_minimo = ?,
+              capacidad_ml = ?, medida_shot_ml = ?, rendimiento_shots = ?, actualizado_en = ?
+             WHERE id = ?`,
+            [nuevoNom, nuevoStock, nuevoCosto, nuevoMin, capMlActual, shotMlActual, nuevoRend, ahora, insumo.id]
+          );
+          huboCambiosKardex = true;
         }
       } else if (kardex_tipo === 'unidad' && insumo_id) {
-        const cant = Number(cantidad_descuento) || 1;
-        await dbRun(
-          'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
-          [prodId, insumo_id, cant]
-        );
-        await dbRun('UPDATE Inventario SET producto_id = ? WHERE id = ?', [prodId, insumo_id]);
+        const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
+        if (insumo) {
+          const cant = Number(cantidad_descuento) || 1;
+          await dbRun(
+            'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
+            [prodId, insumo_id, cant]
+          );
+          await dbRun('UPDATE Inventario SET producto_id = ? WHERE id = ?', [prodId, insumo_id]);
+
+          // Actualizar datos de inventario si se suministraron
+          const nuevoStock = (insumo_stock_actual !== undefined && !isNaN(Number(insumo_stock_actual))) ? Number(insumo_stock_actual) : insumo.stock_actual;
+          const nuevoCosto = (insumo_costo_unitario !== undefined && !isNaN(Number(insumo_costo_unitario))) ? Number(insumo_costo_unitario) : insumo.costo_unitario;
+          const nuevoMin = (insumo_stock_minimo !== undefined && !isNaN(Number(insumo_stock_minimo))) ? Number(insumo_stock_minimo) : insumo.stock_minimo;
+          const nuevoNom = insumo_nombre ? insumo_nombre.trim() : insumo.nombre;
+
+          if (insumo_stock_actual !== undefined && Math.abs(nuevoStock - insumo.stock_actual) > 0.0001) {
+            const diff = Math.abs(nuevoStock - insumo.stock_actual);
+            const tipoMov = nuevoStock > insumo.stock_actual ? 'ajuste' : 'merma';
+            await dbRun(
+              `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+               VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
+            );
+          }
+
+          await dbRun(
+            `UPDATE Inventario SET nombre = ?, stock_actual = ?, costo_unitario = ?, stock_minimo = ?, actualizado_en = ? WHERE id = ?`,
+            [nuevoNom, nuevoStock, nuevoCosto, nuevoMin, ahora, insumo.id]
+          );
+          huboCambiosKardex = true;
+        }
       }
     }
 
     const actualizado = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
     io.emit('producto_actualizado', actualizado);
     io.emit('menu_actualizado');
+    if (huboCambiosKardex) {
+      io.emit('inventario_actualizado');
+    }
 
-    res.json({ message: 'Producto actualizado exitosamente', producto: actualizado });
+    res.json({ message: 'Producto y Kárdex actualizados exitosamente', producto: actualizado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Desactivar o eliminar producto del menú
+app.delete('/api/productos/:id', verificarAdmin, async (req, res) => {
+  try {
+    const prodId = req.params.id;
+    const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    // Desactivación segura para preservar integridad histórica de órdenes
+    await dbRun('UPDATE Productos SET activo = 0 WHERE id = ?', [prodId]);
+    await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
+    await dbRun('UPDATE Inventario SET producto_id = NULL WHERE producto_id = ?', [prodId]);
+
+    io.emit('producto_eliminado', { id: Number(prodId), nombre: prod.nombre });
+    io.emit('menu_actualizado');
+
+    res.json({ success: true, message: `Producto "${prod.nombre}" retirado del menú`, id: prodId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

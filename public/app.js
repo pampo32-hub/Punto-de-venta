@@ -75,10 +75,12 @@ window.cambiarTipoKardexProducto = function() {
   const tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   const boxShot = document.getElementById('boxKardexShotConfig');
   const boxUnidad = document.getElementById('boxKardexUnidadConfig');
+  const boxParams = document.getElementById('boxKardexParametrosInsumo');
   const badge = document.getElementById('badgeKardexEstado');
 
   if (boxShot) boxShot.style.display = (tipo === 'shot') ? 'block' : 'none';
   if (boxUnidad) boxUnidad.style.display = (tipo === 'unidad') ? 'block' : 'none';
+  if (boxParams) boxParams.style.display = (tipo !== 'ninguno') ? 'block' : 'none';
 
   if (badge) {
     if (tipo === 'shot') {
@@ -98,6 +100,41 @@ window.cambiarTipoKardexProducto = function() {
 
   if (tipo === 'shot') {
     window.recalcularInfoShotKardex();
+  }
+  window.sincronizarParametrosInsumoDesdeSelect();
+};
+
+window.sincronizarParametrosInsumoDesdeSelect = function(forzar = false) {
+  const tipo = document.getElementById('selectKardexTipo')?.value;
+  const boxParams = document.getElementById('boxKardexParametrosInsumo');
+  if (!boxParams) return;
+
+  if (!tipo || tipo === 'ninguno') {
+    boxParams.style.display = 'none';
+    return;
+  }
+
+  boxParams.style.display = 'block';
+  let selectedId = null;
+  if (tipo === 'shot') {
+    selectedId = document.getElementById('selectKardexBotella')?.value;
+  } else if (tipo === 'unidad') {
+    selectedId = document.getElementById('selectKardexInsumoUnidad')?.value;
+  }
+
+  if (!selectedId) return;
+
+  const txtStock = document.getElementById('txtKardexInsumoStock');
+  const txtCosto = document.getElementById('txtKardexInsumoCosto');
+  const txtMin = document.getElementById('txtKardexInsumoMin');
+
+  if (forzar || !txtStock || txtStock.value === '') {
+    const insumo = (estado.inventario || []).find(i => Number(i.id) === Number(selectedId));
+    if (insumo) {
+      if (txtStock) txtStock.value = insumo.stock_actual ?? 0;
+      if (txtCosto) txtCosto.value = insumo.costo_unitario ?? 0;
+      if (txtMin) txtMin.value = insumo.stock_minimo ?? 0;
+    }
   }
 };
 
@@ -132,6 +169,7 @@ window.recalcularInfoShotKardex = function() {
     📊 <strong>Rendimiento:</strong> ~${shotsPorBotella} shots por botella | Fracción: ${fraccion} bot.<br>
     💰 <strong>Costo estimado por trago:</strong> ${formatCRC(costoShot)} (Costo botella: ${formatCRC(costo)}) | <strong>Stock actual:</strong> ${stock} bot.
   `;
+  window.sincronizarParametrosInsumoDesdeSelect();
 };
 
 function poblarSelectoresKardexProducto(insumoIdSeleccionado = null, tipoPre = 'ninguno', mlPre = 30) {
@@ -193,6 +231,13 @@ window.abrirModalNuevoProducto = async function() {
   const iconHeader = document.getElementById('iconModalProducto');
   const titleHeader = document.getElementById('titleModalProducto');
   const subHeader = document.getElementById('subModalProducto');
+  const chkHH = document.getElementById('chkProdHappyHour');
+  const chkAgotado = document.getElementById('chkProdAgotado');
+  const btnEliminar = document.getElementById('btnEliminarProdModal');
+  const boxParams = document.getElementById('boxKardexParametrosInsumo');
+  const txtStock = document.getElementById('txtKardexInsumoStock');
+  const txtCosto = document.getElementById('txtKardexInsumoCosto');
+  const txtMin = document.getElementById('txtKardexInsumoMin');
 
   if (iconHeader) iconHeader.textContent = '➕';
   if (titleHeader) titleHeader.textContent = 'Agregar Producto';
@@ -206,6 +251,14 @@ window.abrirModalNuevoProducto = async function() {
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
   if (txtNuevaCatNombre) txtNuevaCatNombre.value = '';
   if (txtNuevaCatIcono) txtNuevaCatIcono.value = '🍾';
+  if (chkHH) chkHH.checked = false;
+  if (chkAgotado) chkAgotado.checked = false;
+  if (btnEliminar) btnEliminar.style.display = 'none';
+
+  if (boxParams) boxParams.style.display = 'none';
+  if (txtStock) txtStock.value = '';
+  if (txtCosto) txtCosto.value = '';
+  if (txtMin) txtMin.value = '';
 
   // Asegurar que inventario esté cargado para los selectores de Kárdex
   if (!estado.inventario || !estado.inventario.length) {
@@ -261,6 +314,13 @@ window.abrirModalEditarProducto = async function(prodId) {
   const iconHeader = document.getElementById('iconModalProducto');
   const titleHeader = document.getElementById('titleModalProducto');
   const subHeader = document.getElementById('subModalProducto');
+  const chkHH = document.getElementById('chkProdHappyHour');
+  const chkAgotado = document.getElementById('chkProdAgotado');
+  const btnEliminar = document.getElementById('btnEliminarProdModal');
+  const boxParams = document.getElementById('boxKardexParametrosInsumo');
+  const txtStock = document.getElementById('txtKardexInsumoStock');
+  const txtCosto = document.getElementById('txtKardexInsumoCosto');
+  const txtMin = document.getElementById('txtKardexInsumoMin');
 
   const prod = (estado.productos || []).find(p => p.id === prodId);
   if (!prod) {
@@ -270,7 +330,7 @@ window.abrirModalEditarProducto = async function(prodId) {
 
   if (iconHeader) iconHeader.textContent = '✏️';
   if (titleHeader) titleHeader.textContent = `Editar: ${prod.nombre}`;
-  if (subHeader) subHeader.textContent = 'Modificar precio, categoría o vincular al Kárdex';
+  if (subHeader) subHeader.textContent = 'Modificar características, precio y sincronizar con Kárdex';
 
   if (txtId) txtId.value = prod.id;
   if (txtNombre) txtNombre.value = prod.nombre || '';
@@ -279,6 +339,10 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (selDest) selDest.value = prod.destino || 'cocina';
   if (selCurso) selCurso.value = String(prod.curso || 2);
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
+
+  if (chkHH) chkHH.checked = Boolean(prod.happy_hour || prod.happyHour);
+  if (chkAgotado) chkAgotado.checked = Boolean(prod.agotado);
+  if (btnEliminar) btnEliminar.style.display = 'inline-flex';
 
   // Asegurar inventario en estado
   if (!estado.inventario || !estado.inventario.length) {
@@ -326,6 +390,18 @@ window.abrirModalEditarProducto = async function(prodId) {
     linkData.ml_shot || 30
   );
 
+  if (linkData.vinculado && linkData.insumo_id) {
+    if (boxParams) boxParams.style.display = 'block';
+    if (txtStock) txtStock.value = linkData.stock_actual !== undefined ? linkData.stock_actual : '';
+    if (txtCosto) txtCosto.value = linkData.costo_unitario !== undefined ? linkData.costo_unitario : '';
+    if (txtMin) txtMin.value = linkData.stock_minimo !== undefined ? linkData.stock_minimo : '';
+  } else {
+    if (boxParams) boxParams.style.display = 'none';
+    if (txtStock) txtStock.value = '';
+    if (txtCosto) txtCosto.value = '';
+    if (txtMin) txtMin.value = '';
+  }
+
   if (modal) modal.classList.add('active');
   setTimeout(() => {
     if (txtNombre) txtNombre.focus();
@@ -348,6 +424,8 @@ window.guardarNuevoProducto = async function() {
   const selDest = document.getElementById('selectNuevoProdDestino');
   const txtImg = document.getElementById('txtNuevoProdImagen');
   const selCurso = document.getElementById('selectNuevoProdCurso');
+  const chkHH = document.getElementById('chkProdHappyHour');
+  const chkAgotado = document.getElementById('chkProdAgotado');
 
   const nombre = (txtNombre ? txtNombre.value : '').trim();
   const precioVal = txtPrecio ? txtPrecio.value : '';
@@ -408,6 +486,8 @@ window.guardarNuevoProducto = async function() {
   const destino = selDest ? selDest.value : 'cocina';
   const imagen_url = (txtImg ? txtImg.value : '').trim();
   const curso = selCurso ? selCurso.value : 2;
+  const happy_hour = chkHH && chkHH.checked ? 1 : 0;
+  const agotado = chkAgotado && chkAgotado.checked ? 1 : 0;
 
   // Datos Kárdex
   const kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
@@ -431,6 +511,14 @@ window.guardarNuevoProducto = async function() {
     }
   }
 
+  const txtStock = document.getElementById('txtKardexInsumoStock');
+  const txtCosto = document.getElementById('txtKardexInsumoCosto');
+  const txtMin = document.getElementById('txtKardexInsumoMin');
+
+  const insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
+  const insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
+  const insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
+
   const payload = {
     nombre,
     precio,
@@ -438,19 +526,28 @@ window.guardarNuevoProducto = async function() {
     destino,
     curso,
     imagen_url,
+    happy_hour,
+    agotado,
     kardex_tipo,
     insumo_id,
     ml_shot,
-    cantidad_descuento
+    cantidad_descuento,
+    insumo_stock_actual,
+    insumo_costo_unitario,
+    insumo_stock_minimo
   };
 
   try {
     const url = isEditing ? `/api/productos/${prodId}` : '/api/productos';
     const method = isEditing ? 'PUT' : 'POST';
+    const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
     const res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': userRol
+      },
       body: JSON.stringify(payload)
     });
 
@@ -461,7 +558,7 @@ window.guardarNuevoProducto = async function() {
     }
 
     window.cerrarModalNuevoProducto();
-    mostrarNotificacionCentro(`✅ Producto "${nombre}" guardado exitosamente`, 'success');
+    mostrarNotificacionCentro(`✅ Producto "${nombre}" guardado y sincronizado con éxito`, 'success');
 
     // Recargar catálogo y menú
     await cargarMenuDesdeBackend();
@@ -471,6 +568,114 @@ window.guardarNuevoProducto = async function() {
   } catch (e) {
     alert('❌ Error al guardar producto: ' + e.message);
   }
+};
+
+window.eliminarProductoDesdeModal = async function() {
+  const txtId = document.getElementById('txtNuevoProdId');
+  const prodId = txtId ? txtId.value : '';
+  const txtNombre = document.getElementById('txtNuevoProdNombre');
+  const nombre = txtNombre ? txtNombre.value : 'este producto';
+
+  if (!prodId) return;
+
+  if (!confirm(`¿Estás seguro de que deseas desactivar "${nombre}" del menú?\nYa no aparecerá en el comandero ni en el catálogo de ventas.`)) {
+    return;
+  }
+
+  try {
+    const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+    const res = await fetch(`/api/productos/${prodId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': userRol
+      }
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo desactivar el producto'));
+      return;
+    }
+
+    window.cerrarModalNuevoProducto();
+    mostrarNotificacionCentro(`🗑️ Producto "${nombre}" desactivado del menú`, 'info');
+    await cargarMenuDesdeBackend();
+    if (typeof cargarInventarioAdmin === 'function') {
+      cargarInventarioAdmin();
+    }
+  } catch (e) {
+    alert('❌ Error al desactivar producto: ' + e.message);
+  }
+};
+
+window.abrirSelectorEditarProductoComandero = function() {
+  const modal = document.getElementById('modalSelectorEditarProducto');
+  const input = document.getElementById('txtBuscarProdParaEditar');
+  if (input) input.value = '';
+  filtrarListaProdsParaEditar();
+  if (modal) modal.classList.add('active');
+  setTimeout(() => {
+    if (input) input.focus();
+  }, 100);
+};
+
+window.cerrarSelectorEditarProductoComandero = function() {
+  const modal = document.getElementById('modalSelectorEditarProducto');
+  if (modal) modal.classList.remove('active');
+};
+
+window.filtrarListaProdsParaEditar = function() {
+  const input = document.getElementById('txtBuscarProdParaEditar');
+  const container = document.getElementById('listaProdsParaEditar');
+  if (!container) return;
+
+  const query = (input ? input.value : '').toLowerCase().trim();
+  const prods = (estado.productos || []).filter(p => p.activo !== 0);
+
+  const filtrados = prods.filter(p => {
+    if (!query) return true;
+    const cat = (estado.categorias || []).find(c => c.id === p.categoria_id);
+    const catName = cat ? cat.nombre.toLowerCase() : '';
+    return (p.nombre && p.nombre.toLowerCase().includes(query)) || catName.includes(query);
+  });
+
+  if (!filtrados.length) {
+    container.innerHTML = `<div style="text-align:center; padding:24px; color:#94a3b8; font-size:0.9rem;">
+      No se encontraron productos que coincidan con "${escapeHtml(query)}"
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = filtrados.map(p => {
+    const cat = (estado.categorias || []).find(c => c.id === p.categoria_id);
+    const catLabel = cat ? `${cat.icono || '🏷️'} ${cat.nombre}` : 'Sin categoría';
+    const statusBadges = [];
+    if (p.agotado) statusBadges.push('<span style="background:rgba(239,68,68,0.2); color:#f87171; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Agotado</span>');
+    if (p.happy_hour || p.happyHour) statusBadges.push('<span style="background:rgba(245,158,11,0.2); color:#fbbf24; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Happy Hour</span>');
+
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#1e293b; border:1px solid #334155; border-radius:8px; gap:10px; transition:border-color 0.2s;" onmouseover="this.style.borderColor='#38bdf8'" onmouseout="this.style.borderColor='#334155'">
+        <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+          ${p.imagen_url ? `<img src="${p.imagen_url}" style="width:38px; height:38px; border-radius:6px; object-fit:cover;" />` : `<div style="width:38px; height:38px; border-radius:6px; background:#0f172a; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">🍽️</div>`}
+          <div style="min-width:0;">
+            <div style="font-weight:700; font-size:0.95rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${escapeHtml(p.nombre)}
+            </div>
+            <div style="font-size:0.78rem; color:#94a3b8; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span>${catLabel}</span>
+              <span>•</span>
+              <strong style="color:#34d399;">${formatCRC(p.precio)}</strong>
+              ${statusBadges.join(' ')}
+            </div>
+          </div>
+        </div>
+        <button class="btn-pri" onclick="cerrarSelectorEditarProductoComandero(); abrirModalEditarProducto(${p.id});" style="padding:6px 14px; font-size:0.82rem; font-weight:700; white-space:nowrap; background:#0284c7; border:none; border-radius:6px; cursor:pointer; color:#fff; display:flex; align-items:center; gap:4px;">
+          ✏️ Editar
+        </button>
+      </div>
+    `;
+  }).join('');
 };
 
 window.abrirModalActualizaciones = async function() {
@@ -1310,8 +1515,13 @@ function aplicarEnrutamientoPorRol() {
   const esAdmin = u.rol === 'admin' || u.rol === 'developer';
   document.body.classList.toggle('is-admin', esAdmin);
 
+  const btnComanderoEditar = document.getElementById('btnComanderoEditarProd');
+  const btnComanderoAgregar = document.getElementById('btnAbrirModalNuevoProducto');
+
   if (esAdmin) {
     if (adminTools) adminTools.style.display = 'flex';
+    if (btnComanderoEditar) btnComanderoEditar.style.display = 'inline-flex';
+    if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'inline-flex';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
     document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'inline-flex');
     if (perfilBadge && u.rol === 'admin') {
@@ -1319,6 +1529,8 @@ function aplicarEnrutamientoPorRol() {
     }
   } else {
     if (adminTools) adminTools.style.display = 'none';
+    if (btnComanderoEditar) btnComanderoEditar.style.display = 'none';
+    if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'none';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'none');
     const activeNav = document.querySelector('.nav-pill.active');
@@ -1346,6 +1558,11 @@ window.irAPuntoDeVentaAdmin = function() {
   const adminTools = document.getElementById('adminExtraActions');
   if (adminTools) adminTools.style.display = 'flex';
   document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+
+  const btnComanderoEditar = document.getElementById('btnComanderoEditarProd');
+  if (btnComanderoEditar) btnComanderoEditar.style.display = 'inline-flex';
+  const btnComanderoAgregar = document.getElementById('btnAbrirModalNuevoProducto');
+  if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'inline-flex';
 
   // Si es developer, habilitar controles de edición superior y badge del local
   const devTop = document.getElementById('devTopControls');
@@ -2404,7 +2621,8 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     }
   }
 
-  const esAdminODev = estado.usuario && (estado.usuario.rol === 'admin' || estado.usuario.rol === 'developer');
+  const userActual = estado.usuarioActual || estado.usuario;
+  const esAdminODev = Boolean(userActual && (userActual.rol === 'admin' || userActual.rol === 'developer'));
 
   const prodsHtml = standardProds.map(p => {
     const esCerveza = Boolean(p.happyHour || p.happy_hour || p.catId === 4 || p.categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(p.nombre || ''));
@@ -2430,13 +2648,13 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     `;
   }).join('');
 
-  const btnAddHtml = `
+  const btnAddHtml = esAdminODev ? `
     <div class="prod-card-one-tap" onclick="abrirModalNuevoProducto()" style="border: 2px dashed rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 100px; border-radius: 12px; transition: all 0.2s ease;" title="Agregar nuevo producto y precio">
       <span style="font-size: 1.6rem; margin-bottom: 4px;">➕</span>
       <span style="font-weight: 700; font-size: 0.85rem; color: #10b981; text-align: center;">+ Producto</span>
       <small style="color: #94a3b8; font-size: 0.72rem;">Nuevo precio</small>
     </div>
-  `;
+  ` : '';
 
   grid.innerHTML = headerNavHtml + specialCardsHtml + prodsHtml + btnAddHtml;
 }

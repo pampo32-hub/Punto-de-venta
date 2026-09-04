@@ -317,4 +317,120 @@ describe('Tier 9: Control de Licores, Botellas y Medidas de Shots Configurables 
     assert.equal(linkRes.body.insumo_id, ron.id);
     assert.equal(linkRes.body.ml_shot, 30);
   });
+
+  it('T9.9: Seguridad de Roles: PUT y DELETE /api/productos/:id rechazan saloneros y cajeros (403), permitiendo solo admin y developer', async () => {
+    // 1. Crear producto con admin
+    const pRes = await req('/api/productos', 'POST', {
+      nombre: 'Tequila Don Julio Reposado',
+      precio: 4500,
+      categoria_id: 1,
+      destino: 'barra'
+    });
+    assert.equal(pRes.status, 201);
+    const prodId = pRes.body.producto.id;
+
+    // 2. Intentar editar con rol salonero -> Debe dar 403
+    const editSalonero = await req(`/api/productos/${prodId}`, 'PUT', {
+      nombre: 'Hacked by Salonero',
+      precio: 100
+    }, { 'x-user-rol': 'salonero' });
+    assert.equal(editSalonero.status, 403);
+
+    // 3. Intentar eliminar con rol cajero -> Debe dar 403
+    const delCajero = await req(`/api/productos/${prodId}`, 'DELETE', null, { 'x-user-rol': 'cajero' });
+    assert.equal(delCajero.status, 403);
+
+    // 4. Editar con rol developer -> Permitido (200)
+    const editDev = await req(`/api/productos/${prodId}`, 'PUT', {
+      nombre: 'Tequila Don Julio Reposado 1.5oz',
+      precio: 4800
+    }, { 'x-user-rol': 'developer' });
+    assert.equal(editDev.status, 200);
+    assert.equal(editDev.body.producto.nombre, 'Tequila Don Julio Reposado 1.5oz');
+  });
+
+  it('T9.10: Sincronización atómica: PUT /api/productos/:id actualiza happy_hour, agotado y sincroniza stock/costo de Kárdex con auditoría de movimientos', async () => {
+    // 1. Obtener insumo de licor existente
+    const invRes = await req('/api/admin/inventario');
+    const licor = invRes.body.find(i => i.es_licor === 1);
+    assert.ok(licor);
+    const stockPrevio = licor.stock_actual;
+
+    // 2. Crear producto trago vinculado al licor
+    const pRes = await req('/api/productos', 'POST', {
+      nombre: 'Shot Cacique Prueba Sync',
+      precio: 1000,
+      kardex_tipo: 'shot',
+      insumo_id: licor.id,
+      ml_shot: 30
+    });
+    const prodId = pRes.body.producto.id;
+
+    // 3. Modificar características operativas y ajustar stock/costo del insumo desde el modal
+    const nuevoStock = stockPrevio + 5; // ej: se contaron 5 botellas más
+    const nuevoCosto = 14500;
+    const nuevoMinimo = 3;
+
+    const editRes = await req(`/api/productos/${prodId}`, 'PUT', {
+      nombre: 'Shot Cacique Ultra Sync',
+      precio: 1200,
+      happy_hour: 1,
+      agotado: 0,
+      destino: 'barra',
+      curso: 1,
+      kardex_tipo: 'shot',
+      insumo_id: licor.id,
+      ml_shot: 45,
+      insumo_stock_actual: nuevoStock,
+      insumo_costo_unitario: nuevoCosto,
+      insumo_stock_minimo: nuevoMinimo
+    });
+
+    assert.equal(editRes.status, 200);
+    assert.equal(editRes.body.producto.nombre, 'Shot Cacique Ultra Sync');
+    assert.equal(editRes.body.producto.precio, 1200);
+    assert.equal(editRes.body.producto.happy_hour, 1);
+    assert.equal(editRes.body.producto.agotado, 0);
+
+    // 4. Verificar que el insumo en Inventario (Kárdex) se actualizó atómicamente
+    const checkInv = await req(`/api/admin/inventario/${licor.id}`);
+    assert.equal(checkInv.status, 200);
+    assert.equal(checkInv.body.stock_actual, nuevoStock);
+    assert.equal(checkInv.body.costo_unitario, nuevoCosto);
+    assert.equal(checkInv.body.stock_minimo, nuevoMinimo);
+
+    // 5. Verificar que se registró el movimiento de ajuste en InventarioMovimientos (Kardex)
+    const kardexRes = await req(`/api/admin/inventario/${licor.id}/kardex`);
+    assert.equal(kardexRes.status, 200);
+    const movAjuste = kardexRes.body.movimientos.find(m => m.tipo === 'ajuste' || m.tipo === 'ajuste_manual');
+    assert.ok(movAjuste, 'Debe registrar movimiento de ajuste en Kárdex');
+    assert.ok(movAjuste.motivo.includes('Shot Cacique Ultra Sync') || movAjuste.motivo.includes('Ajuste desde edición de producto'));
+  });
+
+  it('T9.11: DELETE /api/productos/:id realiza desactivación suave (activo=0) y desvincula recetas sin romper integridad referencial', async () => {
+    // 1. Crear producto de prueba
+    const pRes = await req('/api/productos', 'POST', {
+      nombre: 'Producto para Eliminar',
+      precio: 3000,
+      categoria_id: 1,
+      destino: 'cocina'
+    });
+    const prodId = pRes.body.producto.id;
+
+    // 2. Eliminar con DELETE protegido
+    const delRes = await req(`/api/productos/${prodId}`, 'DELETE');
+    assert.equal(delRes.status, 200);
+    assert.ok(delRes.body.success);
+
+    // 3. Verificar que el producto quedó inactivo en base de datos
+    const dbRow = await server.dbGet('SELECT id, nombre, activo FROM Productos WHERE id = ?', [prodId]);
+    assert.ok(dbRow);
+    assert.equal(dbRow.activo, 0, 'El producto debe estar desactivado con activo = 0');
+
+    // 4. En el menú activo no debe listarse
+    const menuRes = await req('/api/menu');
+    const productosActivos = menuRes.body.productos || [];
+    const existeEnMenu = productosActivos.some(p => p.id === prodId);
+    assert.equal(existeEnMenu, false, 'No debe aparecer en productos activos del menú');
+  });
 });

@@ -1154,9 +1154,14 @@
                 📱 QR Cliente
               </button>
             </div>
-            <button class="btn-tool" id="btnAbrirModalNuevoProducto" onclick="abrirModalNuevoProducto()" title="Agregar nuevo producto y precio al menú" style="background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(16,185,129,0.3);">
-              ➕ Agregar Producto
-            </button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button class="btn-tool" id="btnComanderoEditarProd" onclick="abrirSelectorEditarProductoComandero()" title="Editar productos y sincronizar con Kárdex" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2,132,199,0.3);">
+                ✏️ Editar Producto
+              </button>
+              <button class="btn-tool" id="btnAbrirModalNuevoProducto" onclick="abrirModalNuevoProducto()" title="Agregar nuevo producto y precio al menú" style="background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(16,185,129,0.3);">
+                ➕ Agregar Producto
+              </button>
+            </div>
           </div>
           <div class="category-chips" id="comCategoryChips"></div>
           <div class="comandero-search-bar" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; background: #0b1120; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.25);">
@@ -1815,6 +1820,18 @@
           </div>
         </div>
 
+        <!-- Opciones Operativas (Happy Hour y Agotado) -->
+        <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; background:rgba(30,41,59,0.5); padding:10px 12px; border-radius:8px; border:1px solid #334155;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.88rem; color:#f8fafc; margin:0;">
+            <input type="checkbox" id="chkProdHappyHour" style="width:18px; height:18px; accent-color:#f59e0b; cursor:pointer;" />
+            <span>🍸 Happy Hour 2x1</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.88rem; color:#f8fafc; margin:0;">
+            <input type="checkbox" id="chkProdAgotado" style="width:18px; height:18px; accent-color:#ef4444; cursor:pointer;" />
+            <span style="color:#f87171;">🚫 Agotado (86)</span>
+          </label>
+        </div>
+
         <!-- ======================================================== -->
         <!-- SECCIÓN DE VINCULACIÓN CON STOCK DE KARDEX / INVENTARIO -->
         <!-- ======================================================== -->
@@ -1865,10 +1882,32 @@
           <div id="boxKardexUnidadConfig" style="display:none; background:rgba(30,41,59,0.7); border:1px solid #10b981; border-radius:8px; padding:12px; margin-top:8px;">
             <div style="margin-bottom:8px;">
               <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Insumo del Kárdex (Descuenta 1 unidad): <span style="color:#ef4444;">*</span></label>
-              <select id="selectKardexInsumoUnidad" class="select-styled" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;">
+              <select id="selectKardexInsumoUnidad" class="select-styled" onchange="sincronizarParametrosInsumoDesdeSelect()" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;">
               </select>
             </div>
             <small style="color:#94a3b8; font-size:0.78rem;">Cada vez que se cobre o comande este producto, se restará exactamente 1 unidad completa del stock del Kárdex.</small>
+          </div>
+
+          <!-- Contenedor Parámetros Insumo Kárdex (Stock, Costo, Mínimo) -->
+          <div id="boxKardexParametrosInsumo" style="display:none; background:rgba(15,23,42,0.75); border:1px dashed #38bdf8; border-radius:8px; padding:10px 12px; margin-top:10px;">
+            <div style="font-size:0.82rem; font-weight:700; color:#38bdf8; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+              <span>📊</span> Datos del Insumo en Kárdex (Sincronización Directa):
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+              <div>
+                <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Stock Actual:</label>
+                <input type="number" id="txtKardexInsumoStock" step="any" min="0" class="select-styled" placeholder="Stock" style="width:100%; padding:6px 8px; font-size:0.85rem; border:1px solid #475569; background:#111827; color:#34d399; font-weight:700; border-radius:6px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Costo Unit. (₡):</label>
+                <input type="number" id="txtKardexInsumoCosto" step="any" min="0" class="select-styled" placeholder="Costo" style="width:100%; padding:6px 8px; font-size:0.85rem; border:1px solid #475569; background:#111827; color:#fbbf24; font-weight:700; border-radius:6px;" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Stock Mínimo:</label>
+                <input type="number" id="txtKardexInsumoMin" step="any" min="0" class="select-styled" placeholder="Mínimo" style="width:100%; padding:6px 8px; font-size:0.85rem; border:1px solid #475569; background:#111827; color:#cbd5e1; border-radius:6px;" />
+              </div>
+            </div>
+            <small style="color:#94a3b8; font-size:0.72rem; margin-top:4px; display:block;">Cualquier cambio aquí actualizará el registro del insumo en Kárdex y registrará el movimiento de ajuste.</small>
           </div>
         </div>
 
@@ -1877,11 +1916,45 @@
           <input type="url" id="txtNuevoProdImagen" class="select-styled" placeholder="https://... (dejar vacío para icono automático)" style="width:100%; padding:8px 12px; font-size:0.88rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
         </div>
       </div>
-      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px;">
-        <button class="btn-sec" onclick="cerrarModalNuevoProducto()">Cancelar</button>
-        <button class="btn-pri" id="btnGuardarNuevoProducto" onclick="guardarNuevoProducto()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding: 10px 22px;">
-          💾 Guardar Producto
+      <div class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding: 14px 20px;">
+        <button class="btn-sec" id="btnEliminarProdModal" onclick="eliminarProductoDesdeModal()" style="display:none; background:rgba(239,68,68,0.18); border:1px solid #ef4444; color:#f87171; font-weight:700; padding:8px 16px; border-radius:8px; cursor:pointer;">
+          🗑️ Desactivar Producto
         </button>
+        <div style="display:flex; gap:10px; margin-left:auto;">
+          <button class="btn-sec" onclick="cerrarModalNuevoProducto()">Cancelar</button>
+          <button class="btn-pri" id="btnGuardarNuevoProducto" onclick="guardarNuevoProducto()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding: 10px 22px;">
+            💾 Guardar Producto
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SELECTOR RÁPIDO PARA EDITAR PRODUCTO (ADMIN & DEV) -->
+  <div class="modal-backdrop" id="modalSelectorEditarProducto">
+    <div class="modal-dialog" style="max-width:540px; width:92vw; max-height:85vh; display:flex; flex-direction:column;">
+      <div class="dialog-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">✏️</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem;">Seleccionar Producto para Editar</h3>
+            <small style="color:var(--text-muted);">Buscar cualquier producto del catálogo para modificar sus datos y Kárdex</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarSelectorEditarProductoComandero()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding:16px 20px; flex:1; display:flex; flex-direction:column; gap:12px; overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:8px; background:#0b1120; padding:8px 12px; border-radius:8px; border:1px solid #38bdf8;">
+          <span style="font-size:1rem;">🔍</span>
+          <input type="text" id="txtBuscarProdParaEditar" placeholder="Escriba el nombre del producto o categoría..." oninput="filtrarListaProdsParaEditar()" autocomplete="off" style="background:transparent; border:none; outline:none; color:#fff; font-size:0.92rem; font-weight:600; width:100%;" />
+          <button type="button" onclick="document.getElementById('txtBuscarProdParaEditar').value=''; filtrarListaProdsParaEditar();" style="background:transparent; border:none; color:#94a3b8; cursor:pointer;">✕</button>
+        </div>
+        <div id="listaProdsParaEditar" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; max-height:48vh; padding-right:4px;">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; padding:12px 20px;">
+        <button class="btn-sec" onclick="cerrarSelectorEditarProductoComandero()">Cerrar</button>
       </div>
     </div>
   </div>
