@@ -1396,6 +1396,38 @@ textarea:focus, select:focus, input:focus {
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
 }
 
+.split-body-items {
+  display: none;
+}
+
+.split-body-items.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.split-body-equal {
+  display: none;
+}
+
+.split-body-equal.active {
+  display: block;
+}
+
+.btn-toggle-piso.alerta-piso-cuenta {
+  background: linear-gradient(135deg, #f59e0b, #ef4444) !important;
+  color: #ffffff !important;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.7), 0 0 25px rgba(245, 158, 11, 0.5) !important;
+  animation: pulseAlertaPiso 1.2s infinite ease-in-out !important;
+  font-weight: 800 !important;
+}
+
+@keyframes pulseAlertaPiso {
+  0% { transform: scale(1); box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); }
+  50% { transform: scale(1.05); box-shadow: 0 0 22px rgba(245, 158, 11, 0.9); }
+  100% { transform: scale(1); box-shadow: 0 0 10px rgba(239, 68, 68, 0.6); }
+}
+
 .split-drag-workspace {
   display: grid;
   grid-template-columns: 1fr 1fr;

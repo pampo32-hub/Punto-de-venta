@@ -607,12 +607,31 @@ window.togglePisoActual = function() {
 window.actualizarBotonPisoSalon = function() {
   const btn = document.getElementById('btnTogglePisoSalon');
   if (!btn) return;
+
+  const otroPiso = (estado.pisoActual === 2 ? 1 : 2);
+  const mesasOtroPiso = (estado.mesas || []).filter(m => {
+    const mesaPiso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+    return mesaPiso === otroPiso;
+  });
+
+  const hayCuentaPedidaOtroPiso = mesasOtroPiso.some(m => m.estado === 'cuenta' || m.pidio_cuenta_qr === 1 || m.cuenta_pedida);
+
   if (estado.pisoActual === 2) {
-    btn.innerHTML = '🏢 Ver Primer Piso ↙';
+    btn.innerHTML = hayCuentaPedidaOtroPiso 
+      ? '🚨 ¡Piso 1 Pide Cuenta! ↙' 
+      : '🏢 Ver Primer Piso ↙';
     btn.classList.add('piso-2-activo');
   } else {
-    btn.innerHTML = '🏢 Ver Segundo Piso ↗';
+    btn.innerHTML = hayCuentaPedidaOtroPiso 
+      ? '🚨 ¡Piso 2 Pide Cuenta! ↗' 
+      : '🏢 Ver Segundo Piso ↗';
     btn.classList.remove('piso-2-activo');
+  }
+
+  if (hayCuentaPedidaOtroPiso) {
+    btn.classList.add('alerta-piso-cuenta');
+  } else {
+    btn.classList.remove('alerta-piso-cuenta');
   }
 };
 
@@ -1273,6 +1292,8 @@ async function cargarMenuDesdeBackend() {
   } catch (e) {}
 }
 
+window.categoriaActivaComandero = 'todos';
+
 function renderCatalogoComandero() {
   const chipsContainer = document.getElementById('comCategoryChips');
   chipsContainer.innerHTML = `
@@ -1280,18 +1301,48 @@ function renderCatalogoComandero() {
     ${estado.categorias.map(c => `<button class="cat-chip" onclick="filtrarCatalogo(${c.id}, this)">${c.icono || '🍽️'} ${c.nombre}</button>`).join('')}
   `;
 
-  renderGridProductos(estado.productos);
+  window.categoriaActivaComandero = 'todos';
+  const txtSearch = document.getElementById('txtBuscarProductoComandero');
+  if (txtSearch) txtSearch.value = '';
+  filtrarProductosComandero();
 }
 
 window.filtrarCatalogo = function(catId, elBtn) {
   document.querySelectorAll('.cat-chip').forEach(b => b.classList.remove('active'));
-  elBtn.classList.add('active');
+  if (elBtn) elBtn.classList.add('active');
+  window.categoriaActivaComandero = catId;
+  filtrarProductosComandero();
+};
 
-  if (catId === 'todos') {
-    renderGridProductos(estado.productos);
-  } else {
-    renderGridProductos(estado.productos.filter(p => p.catId === catId));
+window.filtrarProductosComandero = function() {
+  const query = (document.getElementById('txtBuscarProductoComandero')?.value || '').toLowerCase().trim();
+  const btnClear = document.getElementById('btnClearSearchComandero');
+  if (btnClear) btnClear.style.display = query ? 'inline-block' : 'none';
+
+  let prods = estado.productos || [];
+
+  if (window.categoriaActivaComandero && window.categoriaActivaComandero !== 'todos') {
+    prods = prods.filter(p => p.catId === window.categoriaActivaComandero || p.categoria_id === window.categoriaActivaComandero);
   }
+
+  if (query) {
+    const palabras = query.split(/\s+/);
+    prods = prods.filter(p => {
+      const matchTexto = `${p.nombre || ''} ${p.categoria || ''} ${p.codigo || ''} ${p.descripcion || ''}`.toLowerCase();
+      return palabras.every(palabra => matchTexto.includes(palabra));
+    });
+  }
+
+  renderGridProductos(prods);
+};
+
+window.limpiarBuscadorComandero = function() {
+  const input = document.getElementById('txtBuscarProductoComandero');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  filtrarProductosComandero();
 };
 
 function renderGridProductos(prods) {
@@ -2712,6 +2763,11 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   alert(`✅ ¡Cuenta de ${estado.mesaActiva.numero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
   estado.mesaActiva.estado = 'libre';
   estado.mesaActiva.items = [];
+  estado.mesaActiva.orden_id = null;
+  estado.mesaActiva.orden_activa_id = null;
+  estado.mesaActiva.orden_total = 0;
+  estado.mesaActiva.pidio_cuenta_qr = 0;
+  estado.mesaActiva.cuenta_pedida = false;
   document.getElementById('modalCobro').classList.remove('active');
   document.getElementById('modalComandero').classList.remove('active');
   cargarMesasDesdeBackend();
@@ -3026,10 +3082,20 @@ function initSplitBills() {
 function iniciarDivisionCuentas() {
   const totalNum = estado.mesaActiva.total || (estado.mesaActiva.subtotal ? estado.mesaActiva.subtotal * 1.23 : 0);
   const totalTxt = formatCRCSinDecimales(totalNum);
-  const mesaNombre = estado.mesaActiva.nombre 
-    ? (estado.mesaActiva.nombre.toLowerCase().startsWith('mesa') ? estado.mesaActiva.nombre : `Mesa ${estado.mesaActiva.nombre}`)
-    : `Mesa ${estado.mesaActiva.numero}`;
-  document.getElementById('splitMesaTitulo').textContent = `${mesaNombre} • Total: ${totalTxt}`;
+  const numRaw = String(estado.mesaActiva.numero || '');
+  const nomRaw = String(estado.mesaActiva.nombre || '');
+  let mesaFinal = nomRaw || numRaw;
+  if (!mesaFinal.toLowerCase().startsWith('mesa') && !mesaFinal.toLowerCase().startsWith('barra') && !mesaFinal.toLowerCase().startsWith('terraza')) {
+    mesaFinal = `Mesa ${mesaFinal}`;
+  }
+  document.getElementById('splitMesaTitulo').textContent = `${mesaFinal} • Total: ${totalTxt}`;
+
+  // Resetear pestañas a modo Por Ítems
+  document.querySelectorAll('.split-mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === 'items');
+  });
+  document.getElementById('splitModeItemsBody')?.classList.add('active');
+  document.getElementById('splitModeEqualBody')?.classList.remove('active');
 
   const numInicial = Math.max(2, estado.splitPersonas || 2);
   splitState.numPersonas = numInicial;
@@ -3312,9 +3378,10 @@ function renderSplitPersonaActiva() {
     p.items.forEach((it, idx) => {
       const itemEl = document.createElement('div');
       itemEl.className = 'split-assigned-item';
+      itemEl.title = 'Toca o mantén presionado para sumar más unidades (+1)';
       itemEl.innerHTML = `
         <div class="split-item-info">
-          <span class="split-qty-badge" style="background:#059669;">${it.cantidad}x</span>
+          <span class="split-qty-badge" style="background:#059669; cursor:pointer;" title="Toca para sumar (+1)">${it.cantidad}x</span>
           <span class="split-item-name">${escapeHtml(it.nombre)}</span>
         </div>
         <div class="split-item-actions">
@@ -3323,8 +3390,39 @@ function renderSplitPersonaActiva() {
         </div>
       `;
 
+      // Long press detection (450ms)
+      let pressTimer = null;
+      const startPress = () => {
+        pressTimer = setTimeout(() => {
+          abrirModalSumarItemSplit(idx);
+        }, 450);
+      };
+      const cancelPress = () => {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      };
+
+      itemEl.addEventListener('mousedown', startPress);
+      itemEl.addEventListener('mouseup', cancelPress);
+      itemEl.addEventListener('mouseleave', cancelPress);
+      itemEl.addEventListener('touchstart', startPress, { passive: true });
+      itemEl.addEventListener('touchend', cancelPress);
+      itemEl.addEventListener('touchcancel', cancelPress);
+
+      const qtyBadge = itemEl.querySelector('.split-qty-badge');
+      if (qtyBadge) {
+        qtyBadge.addEventListener('click', (e) => {
+          e.stopPropagation();
+          cancelPress();
+          abrirModalSumarItemSplit(idx);
+        });
+      }
+
       itemEl.querySelector('.split-btn-remove').addEventListener('click', (e) => {
         e.stopPropagation();
+        cancelPress();
         devolverItemAMesa(idx);
       });
 
@@ -3349,6 +3447,98 @@ function renderSplitPersonaActiva() {
     btnGuardar.innerHTML = `💾 Guardar ${p.nombre} y Pasar a ${sigNombre} ➡️`;
   }
 }
+
+let splitQuickAddState = {
+  itemIndex: null,
+  nombre: '',
+  precio: 0,
+  cantidadOriginal: 0,
+  cantidadNueva: 0,
+  producto_id: null
+};
+
+window.abrirModalSumarItemSplit = function(assignedItemIndex) {
+  const personaActiva = splitState.personas[splitState.personaActivaIndex];
+  if (!personaActiva || !personaActiva.items[assignedItemIndex]) return;
+
+  const item = personaActiva.items[assignedItemIndex];
+  splitQuickAddState = {
+    itemIndex: assignedItemIndex,
+    nombre: item.nombre,
+    precio: item.precio,
+    cantidadOriginal: item.cantidad,
+    cantidadNueva: item.cantidad,
+    producto_id: item.producto_id
+  };
+
+  const nameEl = document.getElementById('splitQuickAddItemName');
+  if (nameEl) nameEl.textContent = item.nombre;
+  const qtyEl = document.getElementById('splitQuickAddQtyDisplay');
+  if (qtyEl) qtyEl.textContent = `${splitQuickAddState.cantidadNueva}x`;
+
+  const modal = document.getElementById('modalSplitQuickAdd');
+  if (modal) modal.classList.add('active');
+};
+
+window.incrementarSplitQuickAdd = function() {
+  splitQuickAddState.cantidadNueva++;
+  const qtyEl = document.getElementById('splitQuickAddQtyDisplay');
+  if (qtyEl) qtyEl.textContent = `${splitQuickAddState.cantidadNueva}x`;
+};
+
+window.cerrarModalSplitQuickAdd = function() {
+  const modal = document.getElementById('modalSplitQuickAdd');
+  if (modal) modal.classList.remove('active');
+};
+
+window.confirmarSplitQuickAdd = function() {
+  const personaActiva = splitState.personas[splitState.personaActivaIndex];
+  if (!personaActiva || splitQuickAddState.itemIndex === null) {
+    cerrarModalSplitQuickAdd();
+    return;
+  }
+
+  const item = personaActiva.items[splitQuickAddState.itemIndex];
+  if (item) {
+    const diff = splitQuickAddState.cantidadNueva - item.cantidad;
+    if (diff > 0) {
+      // Si había unidades disponibles en la mesa de ese producto, descontarlas
+      const disponible = splitState.itemsDisponibles.find(it => it.nombre === item.nombre && it.precio === item.precio);
+      if (disponible && disponible.cantidad > 0) {
+        const tomar = Math.min(disponible.cantidad, diff);
+        disponible.cantidad -= tomar;
+        if (disponible.cantidad <= 0) {
+          const dIdx = splitState.itemsDisponibles.indexOf(disponible);
+          if (dIdx !== -1) splitState.itemsDisponibles.splice(dIdx, 1);
+        }
+      }
+      
+      // Aplicar nueva cantidad al ítem
+      item.cantidad = splitQuickAddState.cantidadNueva;
+      
+      // Asegurar sincronía con la comanda de la mesa si sobrepasa
+      if (estado.mesaActiva && estado.mesaActiva.items) {
+        let itemMesa = estado.mesaActiva.items.find(it => (it.nombre === item.nombre || it.id === item.producto_id));
+        if (itemMesa) {
+          const totalAsignado = splitState.personas.reduce((acc, p) => {
+            const pi = (p.items || []).find(it => it.nombre === item.nombre);
+            return acc + (pi ? pi.cantidad : 0);
+          }, 0);
+          const totalDisp = splitState.itemsDisponibles.reduce((acc, it) => it.nombre === item.nombre ? acc + it.cantidad : acc, 0);
+          itemMesa.cantidad = Math.max(itemMesa.cantidad, totalAsignado + totalDisp);
+          itemMesa.subtotal = itemMesa.cantidad * itemMesa.precio;
+        }
+      }
+    }
+
+    recalcularPersona(personaActiva);
+    renderSplitDisponibles();
+    renderSplitPersonaActiva();
+    renderSplitColaPersonas();
+  }
+
+  cerrarModalSplitQuickAdd();
+};
 
 function guardarPersonaSplitActiva() {
   const p = splitState.personas[splitState.personaActivaIndex];

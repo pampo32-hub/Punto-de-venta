@@ -689,6 +689,11 @@
             </button>
           </div>
           <div class="category-chips" id="comCategoryChips"></div>
+          <div class="comandero-search-bar" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; background: #0b1120; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.25);">
+            <span style="font-size: 1.05rem; opacity: 0.8;">🔎</span>
+            <input type="text" id="txtBuscarProductoComandero" placeholder="Buscar platillo o bebida en el menú..." oninput="filtrarProductosComandero()" autocomplete="off" style="background: transparent; border: none; outline: none; color: #fff; font-size: 0.88rem; font-weight: 600; width: 100%;" />
+            <button type="button" id="btnClearSearchComandero" onclick="limpiarBuscadorComandero()" style="display: none; background: transparent; border: none; color: #94a3b8; font-size: 0.9rem; cursor: pointer; padding: 2px 6px;">✕</button>
+          </div>
         </div>
 
         <div class="products-one-tap-grid" id="comProductsGrid"></div>
@@ -720,12 +725,6 @@
         <div class="ticket-body" id="comTicketItemsList"></div>
 
         <div class="ticket-bottom">
-          <div class="kitchen-course-fire-box">
-            <button class="btn-fire-courses" id="btnLanzarPlatosFuertes">
-              🚀 Lanzar Platos Fuertes a Cocina (Marchando)
-            </button>
-          </div>
-
           <div class="ticket-calc-box">
             <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0.00</span></div>
             <div class="calc-line" id="comHappyHourRow" style="display:none; color:#f59e0b;">
@@ -738,7 +737,7 @@
 
           <div class="ticket-action-buttons">
             <button class="btn-btn-cmd guardar" id="btnEnviarComandaCocina">
-              💾 Guardar
+              🍳 Enviar a Cocina
             </button>
             <button class="btn-btn-cmd split" id="btnAbrirSplitBill">
               ✂️ Dividir Cuenta (Split)
@@ -1595,9 +1594,37 @@
         </div>
       </div>
 
-      <div class="dialog-footer">
+      <div class="dialog-footer" id="splitModalFooter">
         <button class="btn-sec" id="btnCancelarSplit">Cerrar</button>
         <button class="btn-pri" id="btnCobrarTodasDivididas" style="display:none;">💵 Cobrar Cuentas Divididas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL QUICK-ADD (+1) EN SPLIT BILLS CON LONG-PRESS -->
+  <div class="modal-backdrop" id="modalSplitQuickAdd" style="z-index: 10005;">
+    <div class="modal-dialog" style="width: 360px; max-width: 90vw; background: #0f172a; border: 1px solid #38bdf8; box-shadow: 0 10px 30px rgba(0,0,0,0.8); border-radius: 14px; text-align: center; padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 1.1rem; color: #f8fafc;">➕ Ajustar Cantidad</h3>
+        <button class="btn-icon-close" id="btnCloseSplitQuickAdd" onclick="cerrarModalSplitQuickAdd()">✕</button>
+      </div>
+      <p id="splitQuickAddItemName" style="color: #38bdf8; font-weight: 700; font-size: 1rem; margin: 4px 0 12px 0;">Platillo</p>
+      
+      <div style="display: flex; align-items: center; justify-content: center; gap: 18px; margin: 16px 0;">
+        <span style="font-size: 0.85rem; color: #94a3b8;">Cantidad asignada:</span>
+        <span id="splitQuickAddQtyDisplay" style="font-size: 1.8rem; font-weight: 800; color: #34d399; background: #13271f; border: 1px solid #10b981; padding: 4px 16px; border-radius: 10px;">1x</span>
+      </div>
+
+      <div style="margin: 18px 0;">
+        <button type="button" id="btnSplitPlusOne" onclick="incrementarSplitQuickAdd()" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; color: #fff; font-size: 1.3rem; font-weight: 900; padding: 12px 28px; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); transition: transform 0.1s ease;">
+          ➕ 1 Más
+        </button>
+      </div>
+      <small style="color: #64748b; font-size: 0.76rem; display: block; margin-bottom: 16px;">Toca "+1 Más" para agregar más unidades a esta persona.</small>
+
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button type="button" class="btn-sec" onclick="cerrarModalSplitQuickAdd()" style="flex: 1; padding: 10px;">Cancelar</button>
+        <button type="button" class="btn-pri" onclick="confirmarSplitQuickAdd()" style="flex: 1; padding: 10px; background: linear-gradient(135deg, #10b981, #059669); font-weight: 800;">✓ Aceptar</button>
       </div>
     </div>
   </div>
