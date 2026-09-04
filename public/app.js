@@ -2744,7 +2744,29 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
   const cambio = Math.max(0, recibido - totalNum);
 
-  if (estado.mesaActiva.orden_id) {
+  const esCobroPersonaSplit = (typeof splitState !== 'undefined' && splitState.personaCobrandoIndex !== null && splitState.personaCobrandoIndex !== undefined && splitState.personas && splitState.personas[splitState.personaCobrandoIndex]);
+
+  let esParcial = false;
+  let saldoRestante = 0;
+  let personaNombre = '';
+
+  if (esCobroPersonaSplit) {
+    const pCobrada = splitState.personas[splitState.personaCobrandoIndex];
+    pCobrada.pagada = true;
+    personaNombre = pCobrada.nombre;
+
+    // Calcular personas pendientes y saldo restante de la mesa
+    const personasPendientes = splitState.personas.filter(p => !p.pagada && p.items && p.items.length > 0);
+    saldoRestante = personasPendientes.reduce((acc, p) => acc + p.total, 0);
+    esParcial = (saldoRestante > 0);
+  } else {
+    // Si es cobro general pero el monto recibido/pagado es menor que el total de la mesa
+    const totalMesaActual = estado.mesaActiva.total || (estado.mesaActiva.subtotal ? estado.mesaActiva.subtotal * 1.23 : totalNum);
+    saldoRestante = Math.max(0, totalMesaActual - totalNum);
+    esParcial = (saldoRestante > 5);
+  }
+
+  if (estado.mesaActiva && estado.mesaActiva.orden_id) {
     try {
       await fetch(`/api/ordenes/${estado.mesaActiva.orden_id}/cobrar`, {
         method: 'POST',
@@ -2754,22 +2776,47 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           monto: totalNum,
           propina: Math.round(totalNum * 0.10),
           cambio,
-          mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival'
+          mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+          esParcial
         })
       });
     } catch (e) {}
   }
 
-  alert(`✅ ¡Cuenta de ${estado.mesaActiva.numero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
-  estado.mesaActiva.estado = 'libre';
-  estado.mesaActiva.items = [];
-  estado.mesaActiva.orden_id = null;
-  estado.mesaActiva.orden_activa_id = null;
-  estado.mesaActiva.orden_total = 0;
-  estado.mesaActiva.pidio_cuenta_qr = 0;
-  estado.mesaActiva.cuenta_pedida = false;
-  document.getElementById('modalCobro').classList.remove('active');
-  document.getElementById('modalComandero').classList.remove('active');
+  if (esParcial) {
+    const msg = personaNombre 
+      ? `💳 ¡Pago de ${personaNombre} (${formatCRCSinDecimales(totalNum)}) registrado!\n\nLa mesa permanece ABIERTA con un saldo pendiente de ${formatCRCSinDecimales(saldoRestante)}.`
+      : `💳 ¡Pago parcial de ${formatCRCSinDecimales(totalNum)} registrado!\n\nLa mesa permanece ABIERTA con un saldo pendiente de ${formatCRCSinDecimales(saldoRestante)}.`;
+    
+    alert(msg);
+
+    estado.mesaActiva.estado = 'ocupada';
+    estado.mesaActiva.total = saldoRestante;
+    estado.mesaActiva.subtotal = Math.round(saldoRestante / 1.23);
+
+    document.getElementById('modalCobro').classList.remove('active');
+
+    if (esCobroPersonaSplit) {
+      renderSplitColaPersonas();
+      document.getElementById('modalSplitBill').classList.add('active');
+    } else {
+      document.getElementById('modalComandero').classList.remove('active');
+    }
+  } else {
+    alert(`✅ ¡Cuenta de ${estado.mesaActiva.numero} liquidada en su totalidad!\n\n• Tiquete impreso.\n• Mesa liberada.`);
+    estado.mesaActiva.estado = 'libre';
+    estado.mesaActiva.items = [];
+    estado.mesaActiva.orden_id = null;
+    estado.mesaActiva.orden_activa_id = null;
+    estado.mesaActiva.orden_total = 0;
+    estado.mesaActiva.pidio_cuenta_qr = 0;
+    estado.mesaActiva.cuenta_pedida = false;
+    document.getElementById('modalCobro').classList.remove('active');
+    document.getElementById('modalSplitBill').classList.remove('active');
+    document.getElementById('modalComandero').classList.remove('active');
+  }
+
+  if (typeof splitState !== 'undefined') splitState.personaCobrandoIndex = null;
   cargarMesasDesdeBackend();
   cargarCajaDesdeBackend();
 });
@@ -3581,24 +3628,31 @@ function renderSplitColaPersonas() {
     recalcularPersona(p);
     const card = document.createElement('div');
     const esActiva = (idx === splitState.personaActivaIndex);
-    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''}`;
+    const esPagada = Boolean(p.pagada);
+    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''} ${esPagada ? 'paid-card' : ''}`;
 
     const totalItems = (p.items || []).reduce((acc, it) => acc + it.cantidad, 0);
     const summaryTxt = totalItems > 0 
       ? p.items.map(it => `${it.cantidad}x ${it.nombre}`).join(', ')
       : 'Sin consumos asignados';
 
+    const actionsHtml = esPagada
+      ? `<div style="text-align:center; padding: 5px; color:#34d399; font-weight:800; font-size:0.8rem; background:rgba(16,185,129,0.15); border-radius:6px; border:1px solid rgba(16,185,129,0.35);">✅ Cuenta Pagada</div>`
+      : `
+        <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
+        <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
+      `;
+
     card.innerHTML = `
       <div class="card-head">
-        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''}</span>
-        <span class="card-total">${formatCRCSinDecimales(p.total)}</span>
+        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''} ${esPagada ? '<small style="color:#34d399;">(Pagada)</small>' : ''}</span>
+        <span class="card-total" style="${esPagada ? 'text-decoration:line-through; opacity:0.6;' : ''}">${formatCRCSinDecimales(p.total)}</span>
       </div>
       <div class="card-items-summary" title="${escapeHtml(summaryTxt)}">
         ${escapeHtml(summaryTxt)}
       </div>
       <div class="card-actions">
-        <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
-        <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
+        ${actionsHtml}
       </div>
     `;
 
@@ -3608,6 +3662,10 @@ function renderSplitColaPersonas() {
 
 window.seleccionarPersonaSplitParaEditar = function(index) {
   if (index >= 0 && index < splitState.personas.length) {
+    if (splitState.personas[index].pagada) {
+      alert(`La cuenta de ${splitState.personas[index].nombre} ya fue pagada y no puede modificarse.`);
+      return;
+    }
     splitState.personaActivaIndex = index;
     renderSplitPersonaActiva();
     renderSplitColaPersonas();
@@ -3620,9 +3678,16 @@ window.cobrarPersonaSplit = function(personaIndex) {
     alert('Esta persona no tiene productos asignados para cobrar.');
     return;
   }
+  if (p.pagada) {
+    alert(`La cuenta de ${p.nombre} ya fue pagada.`);
+    return;
+  }
+
+  splitState.personaCobrandoIndex = personaIndex;
   document.getElementById('modalSplitBill').classList.remove('active');
 
-  document.getElementById('cobroMesaTitulo').textContent = `${estado.mesaActiva.numero} - ${p.nombre}`;
+  const mesaNombre = estado.mesaActiva.nombre || `Mesa ${estado.mesaActiva.numero}`;
+  document.getElementById('cobroMesaTitulo').textContent = `${mesaNombre} - ${p.nombre}`;
   document.getElementById('cobroTotalDisplay').textContent = formatCRCSinDecimales(p.total);
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0';

@@ -2043,7 +2043,7 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 app.post('/api/ordenes/:id/cobrar', async (req, res) => {
   try {
     const ordenId = req.params.id;
-    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival' } = req.body;
+    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival', esParcial = false } = req.body;
     const ahora = new Date().toISOString();
 
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
@@ -2057,21 +2057,36 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
       [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
     );
 
-    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+    const pagosRes = await dbGet('SELECT COALESCE(SUM(monto), 0) as totalPagado FROM Pagos WHERE orden_id = ?', [ordenId]);
+    const totalPagado = pagosRes ? Number(pagosRes.totalPagado) : Number(monto);
+    const totalOrden = Number(orden.total) || 0;
+    const saldoPendiente = Math.max(0, totalOrden - totalPagado);
 
-    if (orden.mesa_id) {
-      await dbRun(
-        "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
-        [orden.mesa_id]
-      );
-      await dbRun(
-        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-        [orden.mesa_id, orden.mesa_id]
-      );
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+    const esPagoTotal = !esParcial && (saldoPendiente <= 5 || totalOrden === 0);
+
+    if (esPagoTotal) {
+      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+
+      if (orden.mesa_id) {
+        await dbRun(
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+          [orden.mesa_id]
+        );
+        await dbRun(
+          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+          [orden.mesa_id, orden.mesa_id]
+        );
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+      }
+
+      res.json({ message: 'Cobro total completado y mesa liberada', ordenId, pagadaCompletamente: true, saldoPendiente: 0 });
+    } else {
+      if (orden.mesa_id) {
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'ocupada', total: saldoPendiente });
+      }
+
+      res.json({ message: 'Pago parcial registrado. Mesa permanece abierta.', ordenId, pagadaCompletamente: false, saldoPendiente });
     }
-
-    res.json({ message: 'Cobro completado y mesa liberada', ordenId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
