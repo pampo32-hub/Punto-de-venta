@@ -4989,6 +4989,7 @@ body.is-admin .admin-only-tab {
 
 
 /* ================================================================= */
+/* TEXTURAS DE PISO DEL SALÓN — salon-container & editor-board       */
 /* MODAL: SELECTOR DE PISO DEL SALÓN                                */
 /* ================================================================= */
 #modalSelectorPiso {
@@ -5346,4 +5347,125 @@ body.dev-inspecting-active * {
   outline: 3px solid #ec4899 !important;
   outline-offset: 3px !important;
   box-shadow: 0 0 15px rgba(236,72,153,0.5) !important;
+}
+
+/* ================================================================= */
+/* CONTROLES DEVELOPER EN BARRA SUPERIOR (TOP-NAV)                   */
+/* ================================================================= */
+.dev-top-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 4px 8px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.dev-negocio-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #a5b4fc;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-top-modo-edicion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid #a855f7;
+  color: #d8b4fe;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-top-modo-edicion:hover {
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
+  border-color: #c084fc;
+  transform: translateY(-1px);
+}
+
+/* Estado activo del botón Modo Edición */
+.btn-top-modo-edicion.activo {
+  background: linear-gradient(135deg, #d946ef, #8b5cf6) !important;
+  color: #fff !important;
+  border-color: #f0abfc !important;
+  box-shadow: 0 0 14px rgba(217, 70, 239, 0.6) !important;
+  animation: pulseEdicionActiva 2s infinite ease-in-out;
+}
+
+@keyframes pulseEdicionActiva {
+  0%, 100% { box-shadow: 0 0 12px rgba(217, 70, 239, 0.5); }
+  50% { box-shadow: 0 0 22px rgba(217, 70, 239, 0.85); transform: scale(1.02); }
+}
+
+.btn-top-guardar-edicion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-top-guardar-edicion.has-changes {
+  animation: pulseSaveButton 1.5s infinite;
+  border: 1px solid #6ee7b7;
+}
+
+@keyframes pulseSaveButton {
+  0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.9); transform: scale(1.03); }
+}
+
+.btn-top-volver-dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(37, 99, 235, 0.18);
+  border: 1px solid #2563eb;
+  color: #93c5fd;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-top-volver-dev:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+/* Réplicas en modales (Comandero y Dividir Cuenta) */
+.dev-modal-action {
+  white-space: nowrap;
 }

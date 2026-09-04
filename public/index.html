@@ -522,6 +522,25 @@
         </button>
       </div>
 
+      <!-- CONTROLES EXCLUSIVOS DEVELOPER (MODO EDICIÓN Y LOCAL ACTIVO) -->
+      <div class="dev-top-controls" id="devTopControls" style="display:none;">
+        <div class="dev-negocio-badge" id="devActiveNegocioBadge" title="Local que estás visualizando y editando actualmente">
+          <span class="badge-icon">🏬</span>
+          <span class="badge-name" id="devActiveNegocioName">GastroBar Pro</span>
+        </div>
+        <button class="btn-top-modo-edicion" id="btnToggleModoEdicionTop" onclick="toggleModoEdicionGlobal()" title="Activar o desactivar modo de edición 100% editable">
+          <span class="btn-icon">🎨</span>
+          <span class="btn-text">Modo Edición</span>
+        </button>
+        <button class="btn-top-guardar-edicion" id="btnGuardarCambiosTop" onclick="guardarPersonalizacionPaginaTotal()" style="display:none;" title="Guardar cambios permanentemente para este local">
+          <span class="btn-icon">💾</span>
+          <span class="btn-text">Guardar</span>
+        </button>
+        <button class="btn-top-volver-dev" id="btnVolverConsolaDevTop" onclick="volverAConsoleDev()" title="Regresar a la Consola SaaS Developer">
+          <span>🛠️ Consola Dev</span>
+        </button>
+      </div>
+
       <!-- PERFIL DE USUARIO CON GÉNERO DINÁMICO & CERRAR SESIÓN -->
       <div class="user-status-pill">
         <div class="status-indicator online"></div>
@@ -977,7 +996,15 @@
             <h3>🧾 Comanda Actual</h3>
             <small id="comTicketOrdenId">Orden #ORD-0000</small>
           </div>
-          <button class="btn-icon-close" id="btnCloseComandero">✕</button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-top-modo-edicion dev-modal-action" id="btnToggleModoEdicionComandero" onclick="toggleModoEdicionGlobal()" style="display:none; padding:4px 10px; font-size:0.78rem;" title="Activar o desactivar modo de edición 100% editable">
+              🎨 Modo Edición
+            </button>
+            <button class="btn-top-guardar-edicion dev-modal-action" id="btnGuardarCambiosComandero" onclick="guardarPersonalizacionPaginaTotal()" style="display:none; padding:4px 10px; font-size:0.78rem;" title="Guardar cambios">
+              💾 Guardar
+            </button>
+            <button class="btn-icon-close" id="btnCloseComandero">✕</button>
+          </div>
         </div>
 
         <!-- Banner de Mesa Fusionada con Botón Rápido de Separar -->
@@ -1821,6 +1848,12 @@
             <span class="split-counter-label" id="splitPersonasCountLabel">2 Personas</span>
             <button type="button" class="btn-split-counter" id="btnSplitMasPersonas" title="Agregar persona">+</button>
           </div>
+          <button class="btn-top-modo-edicion dev-modal-action" id="btnToggleModoEdicionSplit" onclick="toggleModoEdicionGlobal()" style="display:none; padding:4px 10px; font-size:0.78rem;" title="Activar o desactivar modo de edición 100% editable">
+            🎨 Modo Edición
+          </button>
+          <button class="btn-top-guardar-edicion dev-modal-action" id="btnGuardarCambiosSplit" onclick="guardarPersonalizacionPaginaTotal()" style="display:none; padding:4px 10px; font-size:0.78rem;" title="Guardar cambios">
+            💾 Guardar
+          </button>
           <button class="btn-icon-close" id="btnCloseSplitModal">✕</button>
         </div>
       </div>
@@ -2255,7 +2288,7 @@
   <!-- ============================================================ -->
   <!-- MODAL: SELECTOR DE PISO DEL SALÓN                           -->
   <!-- ============================================================ -->
-  <div class="modal-backdrop" id="modalSelectorPiso">
+  <div class="modal-backdrop" id="modalSelectorPiso" style="display:none; z-index:9500;">
     <div class="dialog-box" style="max-width:680px; width:95vw; border-radius:18px; background:#0f172a; border:1px solid #334155; box-shadow:0 20px 60px rgba(0,0,0,0.7); padding:0; overflow:hidden; max-height:90vh; display:flex; flex-direction:column;">
       <div class="dialog-header" style="background:linear-gradient(135deg,#1e293b,#0f172a); border-bottom:1px solid #334155; padding:18px 22px; flex-shrink:0;">
         <div style="display:flex; justify-content:space-between; align-items:center;">

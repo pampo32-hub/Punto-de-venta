@@ -3040,68 +3040,104 @@ tcpPrinterServer.on('error', (e) => {
 });
 
 // ============================================================================
-// PISO DEL SALÓN — Leer y guardar el fondo visual del salón
+// PISO DEL SALÓN — Leer y guardar el fondo visual del salón (Multi-Comercio)
 // ============================================================================
 app.get('/api/salon/piso-fondo', (req, res) => {
-  db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'salon_piso_fondo'", (err, row) => {
-    if (err || !row) return res.json({ pisoId: null });
-    res.json({ pisoId: row.valor || null });
+  const negocioId = req.query.negocio_id || 1;
+  const claveNegocio = `salon_piso_fondo_negocio_${negocioId}`;
+
+  db.get("SELECT valor FROM ConfigNegocio WHERE clave = ?", [claveNegocio], (err, row) => {
+    if (!err && row && row.valor) {
+      return res.json({ pisoId: row.valor, negocio_id: Number(negocioId) });
+    }
+    // Fallback general si no tiene específico aún
+    db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'salon_piso_fondo'", (err2, row2) => {
+      if (err2 || !row2) return res.json({ pisoId: null, negocio_id: Number(negocioId) });
+      res.json({ pisoId: row2.valor || null, negocio_id: Number(negocioId) });
+    });
   });
 });
 
 app.post('/api/salon/piso-fondo', (req, res) => {
-  const { pisoId } = req.body;
+  const { pisoId, negocio_id = 1 } = req.body;
   if (!pisoId) return res.status(400).json({ error: 'Se requiere pisoId' });
+
+  const claveNegocio = `salon_piso_fondo_negocio_${negocio_id}`;
   db.run(
-    "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('salon_piso_fondo', ?)",
-    [pisoId],
+    "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)",
+    [claveNegocio, pisoId],
     (err) => {
       if (err) return res.status(500).json({ error: 'Error al guardar piso' });
-      io.emit('salon_piso_fondo_cambiado', { pisoId });
-      res.json({ ok: true, pisoId });
+      // Guardar también como fallback si es negocio 1
+      if (Number(negocio_id) === 1) {
+        db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('salon_piso_fondo', ?)", [pisoId], () => {});
+      }
+      io.emit('salon_piso_fondo_cambiado', { pisoId, negocio_id: Number(negocio_id) });
+      res.json({ ok: true, pisoId, negocio_id: Number(negocio_id) });
     }
   );
 });
 
 // ============================================================================
-// DEVELOPER: PERSONALIZACIÓN Y EDICIÓN TOTAL DE PÁGINA (ESTILOS, TEXTOS, MODULOS)
+// DEVELOPER: PERSONALIZACIÓN Y EDICIÓN TOTAL DE PÁGINA (Multi-Comercio)
 // ============================================================================
 app.get('/api/dev/personalizacion-pagina', (req, res) => {
-  db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'custom_page_settings'", (err, row) => {
-    if (err || !row || !row.valor) {
-      return res.json({ config: {} });
+  const negocioId = req.query.negocio_id || 1;
+  const claveNegocio = `custom_page_settings_negocio_${negocioId}`;
+
+  db.get("SELECT valor FROM ConfigNegocio WHERE clave = ?", [claveNegocio], (err, row) => {
+    if (!err && row && row.valor) {
+      try {
+        const config = JSON.parse(row.valor);
+        return res.json({ config, negocio_id: Number(negocioId) });
+      } catch (_) {}
     }
-    try {
-      const config = JSON.parse(row.valor);
-      res.json({ config });
-    } catch (_) {
-      res.json({ config: {} });
-    }
+    // Fallback general si no tiene configuración específica aún
+    db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'custom_page_settings'", (err2, row2) => {
+      if (err2 || !row2 || !row2.valor) {
+        return res.json({ config: {}, negocio_id: Number(negocioId) });
+      }
+      try {
+        const config = JSON.parse(row2.valor);
+        res.json({ config, negocio_id: Number(negocioId) });
+      } catch (_) {
+        res.json({ config: {}, negocio_id: Number(negocioId) });
+      }
+    });
   });
 });
 
 app.post('/api/dev/personalizacion-pagina', (req, res) => {
-  const { config } = req.body;
+  const { config, negocio_id = 1 } = req.body;
   if (!config) return res.status(400).json({ error: 'Configuración no provista' });
 
   const valorStr = typeof config === 'string' ? config : JSON.stringify(config);
+  const claveNegocio = `custom_page_settings_negocio_${negocio_id}`;
+
   db.run(
-    "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('custom_page_settings', ?)",
-    [valorStr],
+    "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)",
+    [claveNegocio, valorStr],
     (err) => {
       if (err) return res.status(500).json({ error: 'Error guardando personalización de página' });
+      // Guardar también como fallback si es negocio 1
+      if (Number(negocio_id) === 1) {
+        db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('custom_page_settings', ?)", [valorStr], () => {});
+      }
       const configObj = typeof config === 'string' ? JSON.parse(config) : config;
-      io.emit('pagina_personalizacion_actualizada', { config: configObj });
-      res.json({ ok: true, message: 'Personalización de página guardada exitosamente', config: configObj });
+      io.emit('pagina_personalizacion_actualizada', { config: configObj, negocio_id: Number(negocio_id) });
+      res.json({ ok: true, message: 'Personalización de página guardada exitosamente', config: configObj, negocio_id: Number(negocio_id) });
     }
   );
 });
 
 app.post('/api/dev/personalizacion-pagina/reset', (req, res) => {
-  db.run("DELETE FROM ConfigNegocio WHERE clave = 'custom_page_settings'", (err) => {
+  const { negocio_id = 1 } = req.body;
+  const claveNegocio = `custom_page_settings_negocio_${negocio_id}`;
+
+  db.run("DELETE FROM ConfigNegocio WHERE clave = ? OR clave = 'custom_page_settings'", [claveNegocio], (err) => {
     if (err) return res.status(500).json({ error: 'Error al restablecer personalización' });
-    io.emit('pagina_personalizacion_actualizada', { config: {} });
-    res.json({ ok: true, message: 'Personalización restablecida a valores originales' });
+    io.emit('pagina_personalizacion_actualizada', { config: {}, negocio_id: Number(negocio_id) });
+    res.json({ ok: true, message: 'Personalización restablecida a valores originales', negocio_id: Number(negocio_id) });
   });
 });
 

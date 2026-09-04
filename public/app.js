@@ -811,8 +811,12 @@ window.ejecutarLogin = async function() {
 };
 
 window.cerrarSesion = function() {
+  if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
   estado.usuarioActual = null;
   sessionStorage.removeItem('pos_usuario');
+  const devTop = document.getElementById('devTopControls');
+  if (devTop) devTop.style.display = 'none';
+  document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
   document.getElementById('landingLoginView').classList.add('active');
   document.getElementById('developerPortalView').classList.remove('active');
   document.getElementById('posMainView').classList.remove('active');
@@ -821,7 +825,10 @@ window.cerrarSesion = function() {
 
 function aplicarEnrutamientoPorRol() {
   const u = estado.usuarioActual;
+  const devTop = document.getElementById('devTopControls');
   if (!u) {
+    if (devTop) devTop.style.display = 'none';
+    document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
     document.getElementById('landingLoginView').classList.add('active');
     document.getElementById('developerPortalView').classList.remove('active');
     document.getElementById('posMainView').classList.remove('active');
@@ -832,6 +839,9 @@ function aplicarEnrutamientoPorRol() {
 
   // CASO 1: DEVELOPER ➔ PORTAL DISTINTO DE DESARROLLADOR
   if (u.rol === 'developer') {
+    if (devTop) devTop.style.display = 'none';
+    document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
+    if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
     document.getElementById('developerPortalView').classList.add('active');
     document.getElementById('posMainView').classList.remove('active');
     cargarDevPortal();
@@ -839,6 +849,8 @@ function aplicarEnrutamientoPorRol() {
   }
 
   // CASO 2: ADMIN, CAJERO, SALONERO/A ➔ SISTEMA POS RESTAURANTE
+  if (devTop) devTop.style.display = 'none';
+  document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
   document.getElementById('developerPortalView').classList.remove('active');
   document.getElementById('posMainView').classList.add('active');
 
@@ -872,12 +884,14 @@ function aplicarEnrutamientoPorRol() {
     }
   }
 
-  // Cargar datos operativos del restaurante
+  // Cargar datos operativos del restaurante para el negocio actual
+  const nid = estado.negocioActual?.id || 1;
   cargarMesasDesdeBackend();
   cargarMenuDesdeBackend();
   cargarKDSDesdeBackend();
   cargarCajaDesdeBackend();
-  cargarPisoSalonDesdeBackend();
+  cargarPisoSalonDesdeBackend(nid);
+  cargarPersonalizacionPagina(nid);
 }
 
 // Helpers globales para acceso directo a módulos de Admin desde cualquier vista
@@ -888,11 +902,27 @@ window.irAPuntoDeVentaAdmin = function() {
   const adminTools = document.getElementById('adminExtraActions');
   if (adminTools) adminTools.style.display = 'flex';
   document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+
+  // Si es developer, habilitar controles de edición superior y badge del local
+  const devTop = document.getElementById('devTopControls');
+  if (estado.usuarioActual?.rol === 'developer') {
+    if (devTop) devTop.style.display = 'flex';
+    const badgeName = document.getElementById('devActiveNegocioName');
+    if (badgeName) badgeName.textContent = estado.negocioActual?.nombre || 'GastroBar Pro (Local 1)';
+    document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'inline-flex');
+    if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
+  } else {
+    if (devTop) devTop.style.display = 'none';
+    document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
+  }
+
+  const nid = estado.negocioActual?.id || 1;
   cargarMesasDesdeBackend();
   cargarMenuDesdeBackend();
   cargarKDSDesdeBackend();
   cargarCajaDesdeBackend();
-  cargarPisoSalonDesdeBackend();
+  cargarPisoSalonDesdeBackend(nid);
+  cargarPersonalizacionPagina(nid);
 };
 
 window.abrirPanelAdmin = function() {
@@ -1051,19 +1081,44 @@ window.abrirPosComoNegocio = async function(negocioId) {
     if (neg) {
       estado.negocioActual = neg;
       actualizarBrandingNegocio(neg);
-      document.getElementById('developerPortalView').classList.remove('active');
-      document.getElementById('posMainView').classList.add('active');
+      document.getElementById('developerPortalView')?.classList.remove('active');
+      document.getElementById('posMainView')?.classList.add('active');
+      document.body.classList.add('is-admin');
 
       const perfilBadge = document.getElementById('userProfileBadge');
-      perfilBadge.textContent = 'Juan Developer (Modo Supervisión)';
-      document.getElementById('adminExtraActions').style.display = 'flex';
+      if (perfilBadge) perfilBadge.textContent = `${estado.usuarioActual?.nombre || 'Juan Developer'} (Supervisión)`;
+
+      const adminTools = document.getElementById('adminExtraActions');
+      if (adminTools) adminTools.style.display = 'flex';
+      document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+
+      // Configurar controles developer superiores y badge del local activo
+      const devTop = document.getElementById('devTopControls');
+      if (devTop) devTop.style.display = 'flex';
+      const badgeName = document.getElementById('devActiveNegocioName');
+      if (badgeName) badgeName.textContent = neg.nombre;
+
+      // Habilitar botones de modo edición en modales (comandero y split)
+      document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'inline-flex');
+
+      // Iniciar en modo normal (apagado pero disponible con un clic)
+      if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
+      if (typeof marcarCambiosPendientes === 'function') marcarCambiosPendientes(false);
+
+      // Cargar personalización y piso únicos para este comercio específico
+      cargarPersonalizacionPagina(neg.id);
+      cargarPisoSalonDesdeBackend(neg.id);
 
       cargarMesasDesdeBackend();
       cargarMenuDesdeBackend();
       cargarKDSDesdeBackend();
       cargarCajaDesdeBackend();
+
+      mostrarNotificacionCentro(`🏬 Conectado a "${neg.nombre}". Modo Edición disponible en la barra superior.`, 'info');
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('Error al abrir POS como negocio:', e);
+  }
 };
 
 window.abrirModalNuevoNegocio = function() {
@@ -5763,10 +5818,11 @@ window.aplicarClasePisoSalon = function(pisoId) {
   });
 };
 
-// Carga el piso desde el backend al iniciar
-window.cargarPisoSalonDesdeBackend = async function() {
+// Carga el piso desde el backend para el comercio indicado o el activo
+window.cargarPisoSalonDesdeBackend = async function(negocioId) {
+  const nid = negocioId || estado.negocioActual?.id || 1;
   try {
-    const res = await fetch('/api/salon/piso-fondo');
+    const res = await fetch(`/api/salon/piso-fondo?negocio_id=${nid}`);
     if (!res.ok) return;
     const data = await res.json();
     const piso = (data && data.pisoId) ? data.pisoId : 'piso-default';
@@ -5858,23 +5914,28 @@ window.seleccionarPisoPrevio = function(pisoId) {
   if (cardSeleccionada) cardSeleccionada.classList.add('activo');
 };
 
-// Guarda el piso en el backend y cierra el modal
+// Guarda el piso en el backend para el comercio activo y cierra el modal
 window.guardarPisoSalonSeleccionado = async function() {
   if (!_pisoSeleccionadoPrevio) {
     mostrarNotificacionCentro('⚠️ Selecciona un piso antes de aplicar', 'warning');
     return;
   }
+  const nid = estado.negocioActual?.id || 1;
+  const nombreNegocio = estado.negocioActual?.nombre || 'este local';
   try {
     const res = await fetch('/api/salon/piso-fondo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pisoId: _pisoSeleccionadoPrevio })
+      body: JSON.stringify({
+        pisoId: _pisoSeleccionadoPrevio,
+        negocio_id: nid
+      })
     });
     if (!res.ok) throw new Error('Error al guardar');
     estado.pisoSalonActual = _pisoSeleccionadoPrevio;
     window.aplicarClasePisoSalon(_pisoSeleccionadoPrevio);
     const piso = CATALOGO_PISOS_SALON.find(p => p.id === _pisoSeleccionadoPrevio);
-    mostrarNotificacionCentro(`✅ Piso "${piso ? piso.nombre : ''}" guardado permanentemente en el salón`, 'success');
+    mostrarNotificacionCentro(`✅ Piso "${piso ? piso.nombre : ''}" guardado para "${nombreNegocio}"`, 'success');
     cerrarModalSelectorPiso();
   } catch (e) {
     mostrarNotificacionCentro('❌ Error al guardar el piso: ' + e.message, 'error');
@@ -5892,10 +5953,11 @@ estado.personalizacionPagina = {
   elementStyles: {}
 };
 
-// Carga la personalización desde el backend
-window.cargarPersonalizacionPagina = async function() {
+// Carga la personalización desde el backend para el comercio indicado o el activo
+window.cargarPersonalizacionPagina = async function(negocioId) {
+  const nid = negocioId || estado.negocioActual?.id || 1;
   try {
-    const res = await fetch('/api/dev/personalizacion-pagina');
+    const res = await fetch(`/api/dev/personalizacion-pagina?negocio_id=${nid}`);
     if (!res.ok) return;
     const data = await res.json();
     if (data && data.config) {
@@ -5907,6 +5969,7 @@ window.cargarPersonalizacionPagina = async function() {
       };
       aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
       poblarFormulariosPersonalizador(estado.personalizacionPagina);
+      marcarCambiosPendientes(false);
     }
   } catch (e) {
     console.warn('No se pudo cargar personalización guardada:', e);
@@ -6061,6 +6124,7 @@ window.aplicarCambioPrevia = function(clave, valor, tipo) {
     }
     estado.personalizacionPagina.textos[clave] = { tipo: 'selector-html-kds', valor };
   }
+  marcarCambiosPendientes(true);
 };
 
 // Aplica variable CSS en el root
@@ -6068,6 +6132,7 @@ window.aplicarVariableCSS = function(varName, valor) {
   document.documentElement.style.setProperty(varName, valor);
   if (!estado.personalizacionPagina.cssVars) estado.personalizacionPagina.cssVars = {};
   estado.personalizacionPagina.cssVars[varName] = valor;
+  marcarCambiosPendientes(true);
 };
 
 // Aplica CSS custom
@@ -6080,30 +6145,39 @@ window.aplicarCSSCustomEnVivo = function(cssText) {
   }
   styleEl.innerHTML = cssText;
   estado.personalizacionPagina.customCSS = cssText;
+  marcarCambiosPendientes(true);
 };
 
-// Guarda la personalización en el backend para todos los usuarios
+// Guarda la personalización en el backend para el local actual
 window.guardarPersonalizacionPaginaTotal = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const nombreNegocio = estado.negocioActual?.nombre || 'este local';
   try {
     const res = await fetch('/api/dev/personalizacion-pagina', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config: estado.personalizacionPagina })
+      body: JSON.stringify({
+        config: estado.personalizacionPagina,
+        negocio_id: nid
+      })
     });
     if (!res.ok) throw new Error('Error al guardar en el servidor');
-    mostrarNotificacionCentro('💾 ¡Personalización de página guardada permanentemente!', 'success');
+    marcarCambiosPendientes(false);
+    mostrarNotificacionCentro(`💾 ¡Personalización guardada permanentemente para "${nombreNegocio}"!`, 'success');
   } catch (e) {
     mostrarNotificacionCentro('❌ Error guardando personalización: ' + e.message, 'error');
   }
 };
 
-// Restablece la personalización original
+// Restablece la personalización original del comercio activo
 window.restablecerPersonalizacionPagina = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const nombreNegocio = estado.negocioActual?.nombre || 'este local';
   const confirmado = await confirmarAccion({
     icono: '🔄',
     titulo: '¿Restablecer diseño original?',
-    subtitulo: 'Se borrarán todos los cambios visuales y textos personalizados',
-    mensaje: '¿Deseas volver al diseño, textos y colores por defecto del sistema?',
+    subtitulo: `Se borrarán las personalizaciones visuales de "${nombreNegocio}"`,
+    mensaje: '¿Deseas volver al diseño, textos y colores por defecto del sistema para este local?',
     tipo: 'peligro',
     txtSi: '🔄 Sí, restablecer',
     txtNo: 'Cancelar'
@@ -6111,9 +6185,14 @@ window.restablecerPersonalizacionPagina = async function() {
   if (!confirmado) return;
 
   try {
-    await fetch('/api/dev/personalizacion-pagina/reset', { method: 'POST' });
+    await fetch('/api/dev/personalizacion-pagina/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ negocio_id: nid })
+    });
     estado.personalizacionPagina = { textos: {}, cssVars: {}, customCSS: '', elementStyles: {} };
-    mostrarNotificacionCentro('✨ Diseño original restablecido. Recargando...', 'info');
+    marcarCambiosPendientes(false);
+    mostrarNotificacionCentro('✨ Diseño original restablecido para este local. Recargando...', 'info');
     setTimeout(() => window.location.reload(), 1200);
   } catch (e) {
     mostrarNotificacionCentro('❌ Error al restablecer: ' + e.message, 'error');
@@ -6132,44 +6211,125 @@ window.cambiarSubTabEditorPagina = function(subtab) {
 };
 
 // ============================================================================
-// MODO EDICIÓN VISUAL EN VIVO (CLICK-TO-EDIT & CONTENTEDITABLE)
+// MODO EDICIÓN VISUAL GLOBAL (CLICK-TO-EDIT & CONTENTEDITABLE MULTI-PANTALLA)
 // ============================================================================
 
 let _elementoSeleccionadoLive = null;
 let _modoInspeccionActivo = false;
 let _modoContentEditableActivo = false;
+let _modoEdicionGlobalActivo = false;
+let _hayCambiosPendientes = false;
 
-// Activa el modo de edición en pantalla completa en el POS
-window.activarModoEdicionEnVivo = function() {
-  document.getElementById('developerPortalView')?.classList.remove('active');
-  document.getElementById('posMainView')?.classList.add('active');
+// Marca y gestiona visualmente el estado de cambios pendientes
+window.marcarCambiosPendientes = function(hayCambios) {
+  _hayCambiosPendientes = !!hayCambios;
+  const btnsGuardar = [
+    document.getElementById('btnGuardarCambiosTop'),
+    document.getElementById('btnGuardarCambiosComandero'),
+    document.getElementById('btnGuardarCambiosSplit')
+  ].filter(Boolean);
 
-  const bar = document.getElementById('devLiveEditBar');
-  if (bar) bar.style.display = 'flex';
-
-  toggleModoInspeccionLive(true);
-  mostrarNotificacionCentro('🖱️ Modo Edición Activo: Haz clic en cualquier elemento para editarlo', 'info');
-};
-
-// Desactiva el modo de edición
-window.desactivarModoEdicionEnVivo = function() {
-  const bar = document.getElementById('devLiveEditBar');
-  if (bar) bar.style.display = 'none';
-
-  toggleModoInspeccionLive(false);
-  toggleContentEditableLive(false);
-
-  document.querySelectorAll('.dev-inspect-hover, .dev-element-selected').forEach(el => {
-    el.classList.remove('dev-inspect-hover', 'dev-element-selected');
+  btnsGuardar.forEach(btn => {
+    if (_hayCambiosPendientes) {
+      btn.classList.add('has-changes');
+      btn.style.display = 'inline-flex';
+    } else {
+      btn.classList.remove('has-changes');
+      if (!_modoEdicionGlobalActivo) {
+        btn.style.display = 'none';
+      }
+    }
   });
 };
 
-// Vuelve a la consola dev
-window.volverAConsoleDev = function() {
-  desactivarModoEdicionEnVivo();
+// Alterna o fuerza el Modo Edición en la barra superior y en modales
+window.toggleModoEdicionGlobal = function(forzarEstado) {
+  if (forzarEstado !== undefined) {
+    _modoEdicionGlobalActivo = !!forzarEstado;
+  } else {
+    _modoEdicionGlobalActivo = !_modoEdicionGlobalActivo;
+  }
+
+  const btnsModo = [
+    document.getElementById('btnToggleModoEdicionTop'),
+    document.getElementById('btnToggleModoEdicionComandero'),
+    document.getElementById('btnToggleModoEdicionSplit')
+  ].filter(Boolean);
+
+  const btnsGuardar = [
+    document.getElementById('btnGuardarCambiosTop'),
+    document.getElementById('btnGuardarCambiosComandero'),
+    document.getElementById('btnGuardarCambiosSplit')
+  ].filter(Boolean);
+
+  if (_modoEdicionGlobalActivo) {
+    btnsModo.forEach(b => {
+      b.classList.add('activo');
+      const txt = b.querySelector('.btn-text');
+      if (txt) txt.textContent = 'Editando (Activo)';
+      else b.innerHTML = '🎨 Editando';
+      b.setAttribute('title', 'Modo Edición activo. Clic para desactivar');
+    });
+
+    btnsGuardar.forEach(b => {
+      b.style.display = 'inline-flex';
+    });
+
+    toggleModoInspeccionLive(true);
+    toggleContentEditableLive(true);
+    mostrarNotificacionCentro('🎨 Modo Edición Activado: Clic para propiedades y estilos, doble clic para escribir texto', 'info');
+  } else {
+    btnsModo.forEach(b => {
+      b.classList.remove('activo');
+      const txt = b.querySelector('.btn-text');
+      if (txt) txt.textContent = 'Modo Edición';
+      else b.innerHTML = '🎨 Modo Edición';
+      b.setAttribute('title', 'Activar o desactivar modo de edición 100% editable');
+    });
+
+    if (!_hayCambiosPendientes) {
+      btnsGuardar.forEach(b => {
+        b.style.display = 'none';
+      });
+    }
+
+    toggleModoInspeccionLive(false);
+    toggleContentEditableLive(false);
+
+    document.querySelectorAll('.dev-inspect-hover, .dev-element-selected').forEach(el => {
+      el.classList.remove('dev-inspect-hover', 'dev-element-selected');
+    });
+
+    mostrarNotificacionCentro('🔒 Modo Edición Desactivado', 'info');
+  }
+};
+
+// Vuelve a la consola dev desde el POS
+window.volverAConsoleDev = async function() {
+  if (_hayCambiosPendientes) {
+    const confirmado = await confirmarAccion({
+      icono: '💾',
+      titulo: '¿Deseas guardar los cambios antes de salir?',
+      subtitulo: 'Hay modificaciones visuales pendientes para este local',
+      mensaje: 'Si sales sin guardar se perderán las personalizaciones que no hayas guardado.',
+      tipo: 'aviso',
+      txtSi: '💾 Guardar y Salir',
+      txtNo: 'Salir sin Guardar'
+    });
+    if (confirmado) {
+      await guardarPersonalizacionPaginaTotal();
+    }
+  }
+
+  toggleModoEdicionGlobal(false);
   document.getElementById('posMainView')?.classList.remove('active');
   document.getElementById('developerPortalView')?.classList.add('active');
-  document.querySelector('.dev-nav-btn[data-dev-tab="editor-pagina"]')?.click();
+
+  const devTop = document.getElementById('devTopControls');
+  if (devTop) devTop.style.display = 'none';
+  document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
+
+  if (typeof cargarDevPortal === 'function') cargarDevPortal();
 };
 
 // Activa/desactiva el inspector por clic
@@ -6193,7 +6353,16 @@ window.toggleContentEditableLive = function(activo) {
   _modoContentEditableActivo = activo;
   const elementos = document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, strong, button, label, .badge-tag');
   elementos.forEach(el => {
-    if (el.closest('#devLiveEditBar') || el.closest('#modalEditorElementoLive') || el.closest('#developerPortalView')) return;
+    if (
+      el.closest('#devTopControls') ||
+      el.closest('.dev-modal-action') ||
+      el.closest('#devLiveEditBar') ||
+      el.closest('#modalEditorElementoLive') ||
+      el.closest('#modalConfirmacionAccion') ||
+      el.closest('#modalSelectorPiso') ||
+      el.closest('#developerPortalView')
+    ) return;
+
     if (activo) {
       el.setAttribute('contenteditable', 'true');
       el.addEventListener('blur', handleContentEditableBlur);
@@ -6212,12 +6381,21 @@ function handleContentEditableBlur(e) {
   if (!estado.personalizacionPagina.elementStyles) estado.personalizacionPagina.elementStyles = {};
   if (!estado.personalizacionPagina.elementStyles[selector]) estado.personalizacionPagina.elementStyles[selector] = {};
   estado.personalizacionPagina.elementStyles[selector].text = el.innerHTML;
+  marcarCambiosPendientes(true);
 }
 
 function handleLiveMouseOver(e) {
   if (!_modoInspeccionActivo) return;
   const target = e.target;
-  if (target.closest('#devLiveEditBar') || target.closest('#modalEditorElementoLive')) return;
+  if (
+    target.closest('#devTopControls') ||
+    target.closest('.dev-modal-action') ||
+    target.closest('#devLiveEditBar') ||
+    target.closest('#modalEditorElementoLive') ||
+    target.closest('#modalConfirmacionAccion') ||
+    target.closest('#modalSelectorPiso') ||
+    target.closest('#developerPortalView')
+  ) return;
   target.classList.add('dev-inspect-hover');
 }
 
@@ -6229,7 +6407,15 @@ function handleLiveMouseOut(e) {
 function handleLiveElementClick(e) {
   if (!_modoInspeccionActivo) return;
   const target = e.target;
-  if (target.closest('#devLiveEditBar') || target.closest('#modalEditorElementoLive')) return;
+  if (
+    target.closest('#devTopControls') ||
+    target.closest('.dev-modal-action') ||
+    target.closest('#devLiveEditBar') ||
+    target.closest('#modalEditorElementoLive') ||
+    target.closest('#modalConfirmacionAccion') ||
+    target.closest('#modalSelectorPiso') ||
+    target.closest('#developerPortalView')
+  ) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -6305,6 +6491,7 @@ window.aplicarCambioElementoActual = function(prop, valor) {
     el.style.cssText += ';' + valor;
     estado.personalizacionPagina.elementStyles[selector].customCSS = valor;
   }
+  marcarCambiosPendientes(true);
 };
 
 // Elimina / oculta el elemento seleccionado
@@ -6337,8 +6524,9 @@ function obtenerSelectorUnico(el) {
 
 // Inicializar piso y personalización al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
-  cargarPisoSalonDesdeBackend();
-  cargarPersonalizacionPagina();
+  const nid = estado.negocioActual?.id || 1;
+  cargarPisoSalonDesdeBackend(nid);
+  cargarPersonalizacionPagina(nid);
 });
 
 // Sockets en vivo
@@ -6346,14 +6534,20 @@ try {
   if (typeof socket !== 'undefined' && socket) {
     socket.on('salon_piso_fondo_cambiado', (data) => {
       if (data && data.pisoId) {
-        window.aplicarClasePisoSalon(data.pisoId);
+        const currentNid = estado.negocioActual?.id || 1;
+        if (!data.negocio_id || Number(data.negocio_id) === Number(currentNid)) {
+          window.aplicarClasePisoSalon(data.pisoId);
+        }
       }
     });
 
     socket.on('pagina_personalizacion_actualizada', (data) => {
       if (data && data.config) {
-        estado.personalizacionPagina = data.config;
-        aplicarPersonalizacionAlDOM(data.config);
+        const currentNid = estado.negocioActual?.id || 1;
+        if (!data.negocio_id || Number(data.negocio_id) === Number(currentNid)) {
+          estado.personalizacionPagina = data.config;
+          aplicarPersonalizacionAlDOM(data.config);
+        }
       }
     });
   }
