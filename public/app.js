@@ -873,6 +873,8 @@ window.ejecutarAccionAdmin = function(tipo) {
     document.getElementById('modalPersonalizarBoton')?.classList.add('active');
   } else if (tipo === 'actualizaciones') {
     if (typeof abrirModalActualizaciones === 'function') abrirModalActualizaciones();
+  } else if (tipo === 'impresoras') {
+    if (typeof abrirModalMonitorImpresoras === 'function') abrirModalMonitorImpresoras();
   }
 };
 
@@ -2751,6 +2753,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
     }
+    alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
     estado.mesaActiva.items.forEach(it => it.enviado = true);
     actualizarBotonEnviarComanda();
     
@@ -2759,12 +2762,6 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
-
-    if (data.ticketCocina || data.ticketBarra) {
-      mostrarVisorTicketTermico(data.ticketCocina || data.ticketBarra);
-    } else {
-      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!', 'success');
-    }
   } catch (e) {
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
@@ -3075,10 +3072,9 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
   }
 
-  let dataCobro = null;
   if (ordenId) {
     try {
-      const resCobro = await fetch(`/api/ordenes/${ordenId}/cobrar`, {
+      await fetch(`/api/ordenes/${ordenId}/cobrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3088,17 +3084,16 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           cambio,
           mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
           liquidar_total: esLiquidacionFinal,
-          persona_nombre: personaCobrada ? personaCobrada.nombre : 'Cliente',
           items_pagados: personaCobrada ? personaCobrada.items : []
         })
       });
-      dataCobro = await resCobro.json();
     } catch (e) {
       console.error('Error al registrar cobro:', e);
     }
   }
 
   if (esLiquidacionFinal) {
+    alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
     if (estado.mesaActiva) {
       estado.mesaActiva.estado = 'libre';
       estado.mesaActiva.items = [];
@@ -3141,6 +3136,8 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       renderComanda();
     }
 
+    alert(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado!\n\n• Monto cobrado: ${formatCRCSinDecimales(totalNum)}\n• Tiquete impreso.\n• Mesa permanece abierta con productos pendientes.`);
+
     estado.cobroSplitPersonaIndex = null;
     document.getElementById('modalCobro').classList.remove('active');
 
@@ -3152,13 +3149,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     renderSplitPersonaActiva();
     renderSplitColaPersonas();
     document.getElementById('modalSplitBill').classList.add('active');
-  }
-
-  // Mostrar ticket térmico en pantalla si fue generado
-  if (dataCobro && dataCobro.ticket) {
-    mostrarVisorTicketTermico(dataCobro.ticket);
-  } else {
-    mostrarNotificacionCentro(esLiquidacionFinal ? `✅ ¡Cuenta de ${mesaNumero} liquidada!` : `✅ ¡Cobro parcial realizado!`, 'success');
   }
 
   await cargarMesasDesdeBackend();

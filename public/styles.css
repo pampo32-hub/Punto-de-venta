@@ -4787,228 +4787,204 @@ body.is-admin .admin-only-tab {
     max-height: 96vh;
     border-radius: 12px;
   }
-  .admin-panel-body {
-    padding: 12px 14px;
-  }
+.card-impresoras:hover {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 8px 24px rgba(56, 189, 248, 0.2) !important;
 }
 
 /* ============================================================= */
-/* SIMULADOR DE PAPEL TÉRMICO CONTINUO DE 80MM (48 COLS) */
+/* PAPEL CONTINUO TÉRMICO DE 80MM (SIMULADOR DE RECEIPT REAL) */
 /* ============================================================= */
+.receipt-paper-80mm-wrapper {
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
 .receipt-paper-80mm {
-  width: 320px; /* Exacto a escala para 80mm en pantalla */
+  width: 320px;
   background: #ffffff;
   color: #000000;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
+  padding: 24px 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px #d1d5db;
+  border-radius: 4px;
   position: relative;
-  overflow: hidden;
-  margin: 10px auto;
   user-select: text;
 }
 
-.receipt-cut-edge {
+/* Efecto de borde dentado de corte de papel continuo arriba y abajo */
+.receipt-paper-80mm::before,
+.receipt-paper-80mm::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
   height: 8px;
-  background-color: #070b14;
-  background-size: 12px 8px;
+  background-size: 16px 8px;
+  background-repeat: repeat-x;
 }
 
-.receipt-cut-edge.top {
-  background-image: radial-gradient(circle at 6px 0px, transparent 6px, #ffffff 6.5px);
+.receipt-paper-80mm::before {
+  top: -8px;
+  background-image: radial-gradient(circle at 8px 8px, transparent 8px, #ffffff 8px);
 }
 
-.receipt-cut-edge.bottom {
-  background-image: radial-gradient(circle at 6px 8px, transparent 6px, #ffffff 6.5px);
-}
-
-.receipt-inner {
-  padding: 16px 14px;
+.receipt-paper-80mm::after {
+  bottom: -8px;
+  background-image: radial-gradient(circle at 8px 0px, transparent 8px, #ffffff 8px);
 }
 
 .receipt-header {
   text-align: center;
-  margin-bottom: 12px;
-  border-bottom: 1px dashed #333;
+  border-bottom: 1px dashed #000;
   padding-bottom: 10px;
+  margin-bottom: 10px;
 }
 
-.receipt-logo {
-  font-size: 24px;
-  margin-bottom: 4px;
-}
-
-.receipt-brand-name {
-  font-size: 15px;
+.receipt-business-name {
+  font-size: 18px;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 2px 0;
+  margin-bottom: 2px;
 }
 
-.receipt-sub {
-  font-size: 11px;
-  color: #444;
-  margin: 1px 0;
-}
-
-.receipt-type-badge {
-  display: inline-block;
-  background: #000;
-  color: #fff;
-  font-size: 12px;
+.receipt-title-badge {
+  font-size: 14px;
   font-weight: 900;
-  padding: 3px 8px;
-  border-radius: 4px;
-  margin: 8px 0 4px 0;
-  letter-spacing: 0.5px;
+  margin: 6px 0;
+  text-align: center;
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
+  padding: 4px 0;
 }
 
 .receipt-meta-grid {
-  margin: 8px 0;
-  font-size: 11.5px;
-  border-bottom: 1px dashed #333;
-  padding-bottom: 8px;
+  font-size: 12px;
+  margin-bottom: 8px;
 }
 
 .receipt-meta-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
-.receipt-items-table {
+.receipt-table {
   width: 100%;
   border-collapse: collapse;
   margin: 10px 0;
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
-.receipt-items-table th {
-  border-bottom: 1px solid #000;
+.receipt-table th {
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
   padding: 4px 0;
   text-align: left;
-  font-weight: 900;
+  font-weight: 800;
 }
 
-.receipt-items-table td {
-  padding: 5px 0 2px 0;
+.receipt-table td {
+  padding: 4px 0;
   vertical-align: top;
 }
 
-.receipt-item-title {
-  font-weight: 700;
-}
+.receipt-table .col-cant { width: 14%; text-align: left; }
+.receipt-table .col-desc { width: 56%; }
+.receipt-table .col-tot  { width: 30%; text-align: right; }
 
 .receipt-item-note {
-  font-size: 10.5px;
-  font-style: italic;
-  color: #333;
-  padding-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding-left: 10px;
+  color: #222;
 }
 
-.receipt-divider {
-  border-top: 1px dashed #333;
-  margin: 8px 0;
-}
-
-.receipt-divider.double {
-  border-top: 2px solid #000;
-  margin: 8px 0;
-}
-
-.receipt-totals-box {
-  margin-top: 8px;
-  font-size: 12px;
+.receipt-calculations {
+  border-top: 1px dashed #000;
+  padding-top: 6px;
+  margin-top: 6px;
 }
 
 .receipt-calc-line {
   display: flex;
   justify-content: space-between;
+  font-size: 12.5px;
   margin-bottom: 3px;
 }
 
 .receipt-calc-line.total-destacado {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 900;
-  border-top: 1px solid #000;
-  border-bottom: 1px solid #000;
+  border-top: 2px solid #000;
+  border-bottom: 2px solid #000;
   padding: 6px 0;
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .receipt-footer {
   text-align: center;
-  margin-top: 14px;
+  font-size: 11px;
+  border-top: 1px dashed #000;
+  margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px dashed #555;
-  font-size: 10.5px;
-  color: #333;
+  line-height: 1.4;
 }
 
-/* ============================================================= */
-/* REGLAS DE IMPRESIÓN DIRECTA @media print (80MM EXACTOS) */
-/* ============================================================= */
+/* Reglas especiales para imprimir directamente a impresora física de 80mm */
 @media print {
-  @page {
-    size: 80mm auto;
-    margin: 0;
-  }
-
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
-
-  #modalVisorTicket,
-  #modalVisorTicket * {
-    visibility: visible;
-  }
-
-  #modalVisorTicket {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 80mm !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    border: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .thermal-viewer-dialog {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    box-shadow: none !important;
-    border: none !important;
-    background: transparent !important;
+  .modal-backdrop#modalVisorTicket {
+    position: static !important;
+    visibility: visible !important;
+    display: block !important;
+    background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
   }
-
-  .dialog-header,
-  .dialog-footer,
-  .receipt-cut-edge {
+  .modal-backdrop#modalVisorTicket .visor-ticket-dialog {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .modal-backdrop#modalVisorTicket .dialog-header,
+  .modal-backdrop#modalVisorTicket button,
+  .modal-backdrop#modalVisorTicket [style*="justify-content:space-between"] {
     display: none !important;
   }
-
-  .dialog-body {
+  .receipt-paper-80mm-wrapper {
+    overflow: visible !important;
+    max-height: none !important;
     padding: 0 !important;
-    background: transparent !important;
+    margin: 0 !important;
   }
-
   .receipt-paper-80mm {
-    width: 76mm !important;
+    visibility: visible !important;
     box-shadow: none !important;
-    border: none !important;
+    border-radius: 0 !important;
+    width: 80mm !important;
     margin: 0 auto !important;
-    padding: 2mm 0 !important;
-    font-size: 12px !important;
-    color: #000 !important;
-    background: #fff !important;
+    padding: 2mm 3mm !important;
+  }
+  .receipt-paper-80mm::before,
+  .receipt-paper-80mm::after {
+    display: none !important;
+  }
+  .receipt-paper-80mm * {
+    visibility: visible !important;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0mm;
   }
 }
+
 
 
