@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-static-v1';
+const CACHE_NAME = 'pos-static-v2';
 const CORE_ASSETS = [
   '/',
   '/index.html',
@@ -39,10 +39,22 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   if (url.pathname.startsWith('/socket.io/')) return;
 
-  // Cache-first for static assets
+  // Network-first with cache fallback for code scripts and stylesheets
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+    event.respondWith(
+      fetch(req).then((netRes) => {
+        if (netRes && netRes.status === 200) {
+          const clone = netRes.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+        }
+        return netRes;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Cache-first for images and media
   if (
-    url.pathname.endsWith('.css') ||
-    url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.jpg') ||
     url.pathname.endsWith('.ico') ||
