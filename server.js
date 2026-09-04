@@ -68,6 +68,7 @@ db.serialize(() => {
   db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
   db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
+  db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
   db.run("ALTER TABLE InventarioRecetas ADD COLUMN merma_porcentaje REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN es_licor INTEGER DEFAULT 0", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN capacidad_ml REAL DEFAULT 750", () => {});

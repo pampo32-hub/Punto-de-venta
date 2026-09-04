@@ -1599,10 +1599,10 @@ window.editarNegocioDev = async function(negocioId) {
   document.getElementById('modalDevNegocio').classList.add('active');
 };
 
-document.getElementById('btnCloseDevNegocio').addEventListener('click', () => document.getElementById('modalDevNegocio').classList.remove('active'));
-document.getElementById('btnCancelarDevNegocio').addEventListener('click', () => document.getElementById('modalDevNegocio').classList.remove('active'));
+document.getElementById('btnCloseDevNegocio')?.addEventListener('click', () => document.getElementById('modalDevNegocio')?.classList.remove('active'));
+document.getElementById('btnCancelarDevNegocio')?.addEventListener('click', () => document.getElementById('modalDevNegocio')?.classList.remove('active'));
 
-document.getElementById('btnGuardarDevNegocio').addEventListener('click', async () => {
+document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async () => {
   const id = document.getElementById('devNegocioId').value;
   const nombre = document.getElementById('devNegocioNombre').value.trim();
   const slogan = document.getElementById('devNegocioSlogan').value.trim();
@@ -1692,13 +1692,13 @@ window.eliminarUsuarioDev = async function(id) {
 // ============================================================================
 // 3. ADMINISTRACIÓN DE PERSONAL PARA ADMIN (AISLAMIENTO: NUNCA VE A DEVELOPER)
 // ============================================================================
-document.getElementById('btnAdminPersonal').addEventListener('click', () => {
+document.getElementById('btnAdminPersonal')?.addEventListener('click', () => {
   cargarEmpleadosAdmin();
-  document.getElementById('modalAdminPersonal').classList.add('active');
+  document.getElementById('modalAdminPersonal')?.classList.add('active');
 });
 
-document.getElementById('btnCloseAdminPersonal').addEventListener('click', () => {
-  document.getElementById('modalAdminPersonal').classList.remove('active');
+document.getElementById('btnCloseAdminPersonal')?.addEventListener('click', () => {
+  document.getElementById('modalAdminPersonal')?.classList.remove('active');
 });
 
 async function cargarEmpleadosAdmin() {
@@ -6007,6 +6007,7 @@ function renderTablaInventario(items) {
   tbody.innerHTML = '';
 
   if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
     return;
   }
@@ -6030,13 +6031,16 @@ function renderTablaInventario(items) {
     }
 
     tr.innerHTML = `
+      <td><strong>${escapeHtml(ins.nombre)}</strong></td>
       <td>${nombreHtml}</td>
       <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
+      <td><strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
       <td>
         <strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small>
         ${stockExtraHtml}
       </td>
       <td>${ins.stock_minimo} <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
+      <td>${formatCRC(ins.costo_unitario || 0)}</td>
       <td>
         ${formatCRC(ins.costo_unitario || 0)}
         ${costoExtraHtml}
@@ -6047,6 +6051,7 @@ function renderTablaInventario(items) {
           ${ins.estado_stock === 'agotado' ? '⛔ Agotado' : ins.estado_stock === 'bajo' ? '⚠️ Bajo Stock' : '✅ Normal'}
         </span>
       </td>
+      <td style="text-align:right;">
       <td style="text-align:right; white-space:nowrap;">
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#374151; border-color:#6b7280;" onclick="abrirModalEditarInsumo(${ins.id})" title="Editar Insumo">✏️</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>

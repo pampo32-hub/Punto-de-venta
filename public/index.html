@@ -1017,6 +1017,8 @@
                   </select>
                 </div>
                 <div>
+                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Cantidad en Receta:</label>
+                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" placeholder="Ej: 0.2 o 1" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <label style="font-size:0.75rem; color:#9ca3af;">Cantidad en Receta:</label>
                     <select id="selNuevoIngredienteUnidadTipo" style="background:#0f172a; color:#38bdf8; border:1px solid #374151; font-size:0.72rem; border-radius:4px; padding:2px 6px;" onchange="actualizarPlaceholderCantidadReceta()">
@@ -2389,6 +2391,7 @@
           </div>
           <div>
             <label>Costo Unitario:</label>
+            <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
             <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" oninput="actualizarCalculoShotsNuevo()" />
           </div>
         </div>
@@ -2861,7 +2864,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.2.0"></script>
+  <script src="app.js?v=2.3.0"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
