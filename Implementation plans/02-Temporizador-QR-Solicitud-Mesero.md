@@ -55,3 +55,4 @@ Ubicación: `test/e2e/tier1-features.test.js`
 - `T1.22`: `POST /api/cliente/mesa/:id/pedir-cuenta` asigna `hora_pidio_cuenta` y `pidio_cuenta_qr`.
 - `T1.23`: Cooldown mantiene botón inactivo (<120s) y lo reactiva (>=120s) si la cuenta sigue abierta.
 - `T1.24`: El cobro de orden libera la mesa y resetea `hora_pidio_cuenta` a NULL.
+

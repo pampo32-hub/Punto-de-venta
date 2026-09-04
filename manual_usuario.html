@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Manual Oficial de Usuario — GastroBar Pro POS</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    @page {
+      size: A4;
+      margin: 18mm 14mm 18mm 14mm;
+      @bottom-right {
+        content: counter(page);
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 8pt;
+        color: #64748b;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      line-height: 1.6;
+      font-size: 10pt;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Portada */
+    .cover-page {
+      page-break-after: always;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 20px;
+      border: 3px solid #0284c7;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #090d16 0%, #0f172a 60%, #1e293b 100%);
+      color: #ffffff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover-page::before {
+      content: "";
+      position: absolute;
+      top: -100px;
+      right: -100px;
+      width: 350px;
+      height: 350px;
+      background: radial-gradient(circle, rgba(2, 132, 199, 0.4) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .cover-top {
+      position: relative;
+      z-index: 2;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background: rgba(2, 132, 199, 0.25);
+      border: 1px solid #38bdf8;
+      color: #7dd3fc;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-weight: 700;
+      font-size: 9pt;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 20px;
+    }
+
+    .cover-title {
+      font-size: 32pt;
+      font-weight: 800;
+      line-height: 1.15;
+      margin: 0 0 14px 0;
+      background: linear-gradient(135deg, #ffffff 30%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .cover-subtitle {
+      font-size: 14pt;
+      color: #94a3b8;
+      font-weight: 400;
+      max-width: 580px;
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .cover-features-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 40px 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    .cover-feature-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+
+    .cover-feature-card strong {
+      display: block;
+      color: #38bdf8;
+      font-size: 11pt;
+      margin-bottom: 4px;
+    }
+
+    .cover-feature-card span {
+      font-size: 8.5pt;
+      color: #cbd5e1;
+    }
+
+    .cover-footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      padding-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      font-size: 8.5pt;
+      color: #94a3b8;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Encabezados y Estructura */
+    h1, h2, h3, h4 {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: #0f172a;
+      page-break-after: avoid;
+    }
+
+    h1 {
+      font-size: 18pt;
+      font-weight: 800;
+      border-bottom: 2.5px solid #0284c7;
+      padding-bottom: 6px;
+      margin-top: 24pt;
+      margin-bottom: 12pt;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chapter-num {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 2px 10px;
+      border-radius: 6px;
+      font-size: 12pt;
+      font-weight: 800;
+    }
+
+    h2 {
+      font-size: 13pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 16pt;
+      margin-bottom: 8pt;
+      border-left: 4px solid #0284c7;
+      padding-left: 8px;
+    }
+
+    h3 {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #334155;
+      margin-top: 12pt;
+      margin-bottom: 6pt;
+    }
+
+    p {
+      margin: 0 0 10pt 0;
+      text-align: justify;
+    }
+
+    /* Tablas */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12pt 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    /* Cajas de Alerta y Destacados */
+    .callout {
+      border-radius: 8px;
+      padding: 10pt 14pt;
+      margin: 12pt 0;
+      page-break-inside: avoid;
+      font-size: 9.5pt;
+    }
+
+    .callout-info {
+      background: #f0f9ff;
+      border-left: 4px solid #0284c7;
+      color: #0369a1;
+    }
+
+    .callout-success {
+      background: #ecfdf5;
+      border-left: 4px solid #10b981;
+      color: #047857;
+    }
+
+    .callout-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #b45309;
+    }
+
+    .callout-danger {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      color: #b91c1c;
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 3px;
+      font-weight: 700;
+    }
+
+    /* Badges simulando la UI real */
+    .ui-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 8.5pt;
+      white-space: nowrap;
+      border: 1px solid transparent;
+    }
+
+    .ui-btn-blue { background: #0284c7; color: #ffffff; }
+    .ui-btn-green { background: #059669; color: #ffffff; }
+    .ui-btn-amber { background: #d97706; color: #ffffff; }
+    .ui-btn-red { background: #dc2626; color: #ffffff; }
+    .ui-btn-dark { background: #1e293b; color: #f8fafc; border-color: #334155; }
+    .ui-btn-purple { background: #7c3aed; color: #ffffff; }
+
+    .mesa-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .mesa-libre { background: #e2e8f0; color: #475569; }
+    .mesa-ocupada { background: #e0f2fe; color: #0369a1; }
+    .mesa-esperando { background: #ffedd5; color: #c2410c; }
+    .mesa-esperando-parcial { background: #fef9c3; color: #a16207; }
+    .mesa-activa { background: #dbeafe; color: #1d4ed8; }
+    .mesa-cuenta { background: #fee2e2; color: #b91c1c; }
+    .mesa-unida { background: #f3e8ff; color: #7e22ce; }
+
+    /* Pasos ordenados visuales */
+    .step-list {
+      list-style: none;
+      padding-left: 0;
+      margin: 12pt 0;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 10pt;
+      page-break-inside: avoid;
+    }
+
+    .step-number {
+      background: #0284c7;
+      color: #ffffff;
+      width: 22pt;
+      height: 22pt;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 9.5pt;
+      flex-shrink: 0;
+      margin-right: 10pt;
+      margin-top: 1pt;
+    }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-content strong {
+      color: #0f172a;
+      display: block;
+      font-size: 10pt;
+      margin-bottom: 2pt;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .toc-item {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dotted #cbd5e1;
+      padding: 6px 0;
+      font-size: 9.5pt;
+    }
+    .toc-item span:first-child { font-weight: 600; color: #0f172a; }
+    .toc-item span:last-child { color: #64748b; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <!-- ===================================================================== -->
+  <!-- PORTADA PROFESIONAL -->
+  <!-- ===================================================================== -->
+  <div class="cover-page">
+    <div class="cover-top">
+      <div class="cover-badge">Manual Integral de Operación & Capacitación</div>
+      <h1 class="cover-title">GastroBar Pro Cloud & Local POS</h1>
+      <p class="cover-subtitle">Manual maestro de usuario paso a paso para la operación comercial de restaurantes, bares, cafeterías y discotecas.</p>
+    </div>
+
+    <div class="cover-features-grid">
+      <div class="cover-feature-card">
+        <strong>🗺️ Control Táctil de Salón & Mesas</strong>
+        <span>Mapa virtual en tiempo real, 2 pisos independientes, unión y movimiento de mesas sin perder trazabilidad.</span>
+      </div>
+      <div class="cover-feature-card">
+        <strong>🍳 KDS de Cocina & Barra</strong>
+        <span>Comandero dinámico, timbre térmico, cursos (entradas/fuertes) y semáforo de tiempos de espera.</span>
+      </div>
+      <div class="cover-feature-card">
+        <strong>💵 Facturación & División de Cuentas</strong>
+        <span>Separación de comensales equitativa o por ítem, propinas, impuestos (IVA 13% + Servicio 10%) y cierres de caja.</span>
+      </div>
+      <div class="cover-feature-card">
+        <strong>📶 Arquitectura Offline-First</strong>
+        <span>Resistencia total ante caídas de internet: guardado local en el dispositivo y sincronización automática.</span>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <div>
+        <strong>Desarrollado para:</strong> Operadores, Administradores, Cajeros y Saloneros<br>
+        <strong>Versión del Sistema:</strong> 2.2.0 Cloud Pro • Multi-Comercio SaaS
+      </div>
+      <div style="text-align: right;">
+        <strong>Documento Oficial de Entrega</strong><br>
+        Costa Rica • 2026
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TABLA DE CONTENIDO -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1>📑 Tabla de Contenido</h1>
+
+  <div style="margin: 20pt 0;">
+    <div class="toc-item"><span>Capítulo 1: Acceso, Roles de Usuario y Primer Inicio</span><span>Pág. 2</span></div>
+    <div class="toc-item"><span>Capítulo 2: El Mapa del Salón, Zonas y Pisos</span><span>Pág. 3</span></div>
+    <div class="toc-item"><span>Capítulo 3: Ciclo de una Mesa y Códigos de Color</span><span>Pág. 4</span></div>
+    <div class="toc-item"><span>Capítulo 4: Comandero Táctil y Toma de Pedidos</span><span>Pág. 5</span></div>
+    <div class="toc-item"><span>Capítulo 5: Operaciones de Mesas: Mover y Trasladar Cuentas</span><span>Pág. 6</span></div>
+    <div class="toc-item"><span>Capítulo 6: Unir Mesas (Grupos Grandes) y Separación sin Conflicto</span><span>Pág. 7</span></div>
+    <div class="toc-item"><span>Capítulo 7: División de Cuentas (Separación entre Comensales)</span><span>Pág. 8</span></div>
+    <div class="toc-item"><span>Capítulo 8: Caja, Cobro, Métodos de Pago y Facturación</span><span>Pág. 9</span></div>
+    <div class="toc-item"><span>Capítulo 9: KDS de Cocina, Tiempos de Espera y Lanzar Platos Fuertes</span><span>Pág. 10</span></div>
+    <div class="toc-item"><span>Capítulo 10: Autoservicio QR para Clientes & Cooldown de 2 Minutos</span><span>Pág. 11</span></div>
+    <div class="toc-item"><span>Capítulo 11: Happy Hour 2x1 y Promociones Automatizadas</span><span>Pág. 12</span></div>
+    <div class="toc-item"><span>Capítulo 12: Modo Offline-First (Resistencia ante Cortes de Internet)</span><span>Pág. 13</span></div>
+    <div class="toc-item"><span>Capítulo 13: Panel de Administración, Inventarios y Reportes</span><span>Pág. 14</span></div>
+    <div class="toc-item"><span>Capítulo 14: Editor Visual en Vivo & Personalización Total</span><span>Pág. 15</span></div>
+  </div>
+
+  <div class="callout callout-info">
+    <strong>💡 ¿A quién va dirigido este manual?</strong>
+    Este documento fue diseñado tanto para el personal nuevo en inducción (saloneros, cajeros, cocineros) como para dueños de restaurante que deseen dominar y supervisar la totalidad de su negocio sin depender de soporte técnico externo.
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 1: ACCESO Y ROLES -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">1</span> Acceso, Roles de Usuario y Primer Inicio</h1>
+
+  <p>GastroBar Pro opera desde cualquier navegador moderno (Google Chrome, Edge, Safari) entrando a la dirección del servidor (ej. <code>http://localhost:4000</code> o la IP local de la caja <code>http://192.168.1.50:4000</code>).</p>
+
+  <h2>1.1 Tipos de Usuarios y Niveles de Permiso</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Rol</th>
+        <th>Funciones Principales</th>
+        <th>Vistas Habilitadas</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>🛠️ Developer</strong></td>
+        <td>Control SaaS total, creación de nuevos locales/negocios, editor visual de estilos, base de datos SQLite.</td>
+        <td>Consola Dev + Salón + Admin + Editor</td>
+      </tr>
+      <tr>
+        <td><strong>👑 Administrador</strong></td>
+        <td>Supervisión total, anulación de comandas, métricas financieras, inventario (86), configuración de personal.</td>
+        <td>Todas las vistas operativas y de gerencia</td>
+      </tr>
+      <tr>
+        <td><strong>💵 Cajero</strong></td>
+        <td>Apertura y cierre de caja, cobro de cuentas, facturación express, reportes de propinas por mesero.</td>
+        <td>Salón, Caja & Propinas, Facturación Express</td>
+      </tr>
+      <tr>
+        <td><strong>🍽️ Salonero / Mesero</strong></td>
+        <td>Apertura de mesas, comanda táctil, mover comensales, solicitar cuenta y cobro con tarjeta.</td>
+        <td>Salón & Mesas, Comandero</td>
+      </tr>
+      <tr>
+        <td><strong>🍳 Cocinero / Barman</strong></td>
+        <td>Visualización de comandas pendientes, tiempos de preparación y despacho de platillos.</td>
+        <td>Pantalla Cocina & Barra KDS</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>1.2 Inicio de Sesión</h2>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Ingresar Usuario y Contraseña</strong>
+        Digita tu usuario y clave. También puedes presionar uno de los botones de <em>Acceso Rápido de Prueba</em> (Dev, Admin, Cajero, Salonero) si están habilitados para agilizar el cambio de turno.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Presionar <span class="ui-btn ui-btn-blue">🔐 Ingresar al Sistema</span></strong>
+        El sistema valida tus credenciales y te dirige automáticamente a la vista correspondiente según tu rol.
+      </div>
+    </li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 2: EL MAPA DEL SALÓN -->
+  <!-- ===================================================================== -->
+  <h1><span class="chapter-num">2</span> El Mapa del Salón, Zonas y Pisos</h1>
+
+  <p>La pantalla principal muestra la réplica física del restaurante. Cada mesa se ubica en coordenadas visuales exactas con su forma real (cuadrada, redonda o silla de barra).</p>
+
+  <h2>2.1 Zonas Disponibles</h2>
+  <p>En la barra superior del salón puedes filtrar mesas rápidamente haciendo clic en:</p>
+  <ul>
+    <li><span class="ui-btn ui-btn-dark">Todas las Zonas</span>: Muestra la totalidad de las mesas del piso activo.</li>
+    <li><span class="ui-btn ui-btn-dark">Salón Principal</span>: Mesas centrales del restaurante.</li>
+    <li><span class="ui-btn ui-btn-dark">Barra / Bar</span>: Sillas y puestos frente a la coctelería.</li>
+    <li><span class="ui-btn ui-btn-dark">Terraza</span>: Mesas de exterior o aire libre.</li>
+    <li><span class="ui-btn ui-btn-dark">Zona VIP</span>: Área reservada para grupos exclusivos.</li>
+    <li><span class="ui-btn ui-btn-dark">🏢 Segundo Piso</span>: Planta superior del establecimiento.</li>
+  </ul>
+
+  <h2>2.2 Navegación Entre Pisos (Piso 1 vs Segundo Piso)</h2>
+  <p>Para alternar entre plantas, utiliza el botón flotante en la esquina inferior derecha:</p>
+  <ul>
+    <li>Al estar en el Piso 1, el botón muestra: <span class="ui-btn ui-btn-blue">🏢 Ver Segundo Piso ↗</span>. Al pulsarlo, el mapa carga las mesas del 2do nivel.</li>
+    <li><strong>Alerta visual entre pisos:</strong> Si un comensal del segundo piso solicita la cuenta o un platillo está listo, el botón parpadeará en rojo/naranja alertando: <span class="ui-btn ui-btn-red">🚨 ¡Piso 2 Pide Cuenta! ↗</span>, permitiendo al salonero enterarse sin subir físicamente.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 3: CÓDIGO DE COLORES -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">3</span> Ciclo de una Mesa y Códigos de Color</h1>
+
+  <p>El color de cada mesa comunica el estado del comensal a simple vista desde cualquier distancia:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Estado</th>
+        <th>Badge Visual</th>
+        <th>Significado Operativo</th>
+        <th>Siguiente Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Libre</strong></td>
+        <td><span class="mesa-pill mesa-libre">Libre</span></td>
+        <td>Mesa desocupada y limpia, lista para recibir comensales. Total ₡0.</td>
+        <td>Tocar la mesa para sentar clientes y abrir comanda.</td>
+      </tr>
+      <tr>
+        <td><strong>Abierta</strong></td>
+        <td><span class="mesa-pill mesa-ocupada">Abierta</span></td>
+        <td>Tiene comensales consumiendo bebidas de barra o ítems que no requieren cocina caliente.</td>
+        <td>Agregar más platillos o solicitar la cuenta.</td>
+      </tr>
+      <tr>
+        <td><strong>Esperando Comida</strong></td>
+        <td><span class="mesa-pill mesa-esperando">Esperando</span></td>
+        <td>La mesa envió una comanda a cocina y <strong>todos los platillos están en preparación</strong>.</td>
+        <td>Cocina debe despachar los platos. La mesa muestra chip de minutos transcurridos.</td>
+      </tr>
+      <tr>
+        <td><strong>Esperando Parcial</strong></td>
+        <td><span class="mesa-pill mesa-esperando-parcial">Parcial</span></td>
+        <td>Cocina entregó una parte del pedido (ej. las entradas), pero <strong>aún faltan los platos fuertes</strong>.</td>
+        <td>El salonero puede ver en el tooltip exactamente qué plato falta por salir.</td>
+      </tr>
+      <tr>
+        <td><strong>Activa (Azul)</strong></td>
+        <td><span class="mesa-pill mesa-activa">Activa</span></td>
+        <td><strong>Todos los platillos de cocina fueron entregados con éxito</strong> a la mesa. Comensales comiendo a gusto.</td>
+        <td>Ofrecer postres, cafés, bajativos o cuenta.</td>
+      </tr>
+      <tr>
+        <td><strong>Cuenta Pedida</strong></td>
+        <td><span class="mesa-pill mesa-cuenta">Cuenta</span></td>
+        <td>El cliente solicitó la factura (directamente al salonero o mediante el código QR de su celular). La mesa parpadea.</td>
+        <td>Caja o salonero debe imprimir la pre-cuenta y acercar el datáfono.</td>
+      </tr>
+      <tr>
+        <td><strong>Unida</strong></td>
+        <td><span class="mesa-pill mesa-unida">Unida</span></td>
+        <td>Mesa secundaria agrupada dentro de una mesa principal para un grupo grande.</td>
+        <td>Los pedidos se gestionan desde la mesa principal.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3.1 Tooltip Inteligente de Espera</h2>
+  <p>Al pasar el cursor o presionar sobre el chip <span class="ui-btn ui-btn-amber">⏱️ 14m</span> de una mesa naranja o amarilla, se desplegará una ventana emergente que indica:</p>
+  <div class="callout callout-warning">
+    <strong>⏱️ Esperando hace 14 min (2 pendientes):</strong>
+    • 1x Hamburguesa Gourmet Artesanal (Cocina)<br>
+    • 1x Casado con Carne en Salsa (Cocina)<br>
+    <em>(Los refrescos y entradas ya entregados se excluyen automáticamente para evitar confusiones).</em>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 4: COMANDERO TÁCTIL -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">4</span> Comandero Táctil y Toma de Pedidos</h1>
+
+  <p>Al tocar cualquier mesa se abre el <strong>Comandero Táctil de Alta Velocidad</strong>. Diseñado para operar en menos de 10 segundos por pedido.</p>
+
+  <h2>4.1 Pasos para Tomar una Comanda</h2>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Tocar la Mesa Deseada</strong>
+        Se abre la ventana con la comanda actual de la mesa a la izquierda y el catálogo de productos a la derecha.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Seleccionar Productos</strong>
+        • Toca sobre la categoría (ej. <em>Cervezas, Platos Fuertes, Entradas, Cocteles</em>).<br>
+        • O usa el <strong>Buscador Inteligente</strong> escribiendo apenas dos letras (ej: <code>"cev"</code> para Ceviche).<br>
+        • Cada toque suma 1 unidad inmediatamente al ticket.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Agregar Notas de Cocina o Términos de Carne</strong>
+        Al tocar el ítem en la lista izquierda, puedes escribir especificaciones (ej. <em>"Término medio", "Sin cebolla", "Salsa aparte"</em>).
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <strong>Despachar con el Botón Inteligente</strong>
+        Observa el botón inferior derecho:
+        <br>• Si agregaste alimentos de cocina, el botón dirá: <span class="ui-btn ui-btn-amber">🔔 Enviar Comanda a Cocina</span>.
+        <br>• Si solo agregaste cervezas o bebidas de barra, dirá: <span class="ui-btn ui-btn-blue">💾 Guardar Comanda</span>.
+        <br>Al pulsarlo, suena el timbre térmico, se imprime la comanda en la impresora de cocina/barra, la mesa se actualiza en el mapa y la ventana se cierra automáticamente.
+      </div>
+    </li>
+  </ul>
+
+  <h2>4.2 Botón <span class="ui-btn ui-btn-purple">🚀 Lanzar Platos Fuertes</span></h2>
+  <p>En servicios donde los comensales piden entradas y platos principales a la vez: los platos fuertes se registran como curso 2. Cuando los clientes terminan sus entradas, el salonero pulsa <strong>"Lanzar Fuertes"</strong> y la pantalla de cocina recibe una alerta sonora y visual inmediata para montar las carnes o pastas sin demoras.</p>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 5: MOVER MESAS -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">5</span> Mover Mesas y Trasladar Comensales</h1>
+
+  <p>Ocurre frecuentemente que una pareja sentada en la Barra solicita pasar a una mesa de la Terraza o al Salón Principal. El sistema permite el traslado en 2 segundos sin reescribir la cuenta.</p>
+
+  <h2>5.1 Procedimiento de Traslado</h2>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Presionar el botón superior <span class="ui-btn ui-btn-dark">🔄 Mover / Unir Mesas</span></strong>
+        Se abre la ventana modal de gestión de salón.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Seleccionar Mesa de Origen</strong>
+        En el selector izquierdo, escoge la mesa ocupada que se va a mover (ej. <em>Mesa 2 - Ocupada [₡14,500]</em>).
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Seleccionar Mesa de Destino</strong>
+        En el selector derecho, escoge la mesa vacía a la que se mudan los clientes (ej. <em>Mesa 8 - Libre</em>).
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <strong>Presionar <span class="ui-btn ui-btn-blue">🚀 Mover Mesa Ahora</span></strong>
+        El sistema ejecuta el traslado instantáneamente:
+        <br>• La <strong>Mesa 2</strong> se libera por completo (queda blanca/gris lista para nuevos comensales).
+        <br>• La <strong>Mesa 8</strong> adquiere todos los platillos, bebidas, tiempos de espera y el mesero responsable.
+      </div>
+    </li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 6: UNIR Y SEPARAR MESAS -->
+  <!-- ===================================================================== -->
+  <h1><span class="chapter-num">6</span> Unir Mesas (Grupos) y Separación sin Conflicto</h1>
+
+  <h2>6.1 Unir Dos o Más Mesas (Fusión de Cuentas)</h2>
+  <p>Cuando llega un grupo grande o cumpleaños que ocupa varias mesas contiguas:</p>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Abrir <span class="ui-btn ui-btn-dark">🔄 Mover / Unir Mesas</span> y elegir la pestaña "Unir Mesas"</strong>
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Seleccionar Mesa Principal y Mesa Secundaria</strong>
+        • <em>Mesa Principal</em>: Será la mesa que lidera la cuenta (ej. Mesa 10).<br>
+        • <em>Mesa Secundaria</em>: Mesa que se fusionará dentro de la principal (ej. Mesa 11).
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Confirmar Unión</strong>
+        La Mesa 10 ahora agrupa todo el consumo. <strong>Trazabilidad Automática:</strong> Cada ítem de la Mesa 11 queda etiquetado internamente como <code>[Mesa 11]</code> para saber quién consumió qué.
+      </div>
+    </li>
+  </ul>
+
+  <h2>6.2 Separar Mesas (Deshacer la Unión)</h2>
+  <p>Si el grupo decide pagar por separado o dividirse de nuevo:</p>
+  <div class="callout callout-info">
+    <strong>Separación Inteligente:</strong><br>
+    Al pulsar <strong>"Separar Mesas"</strong> en la mesa principal, el sistema devuelve los platillos exactos a su mesa secundaria original. Si durante el servicio la mesa secundaria original fue ocupada por otros clientes, el sistema te solicitará una <strong>mesa libre alternativa</strong> para restaurar la cuenta sin mezclar clientes.
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 7: DIVISIÓN DE CUENTAS -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">7</span> División de Cuentas (Split Bill)</h1>
+
+  <p>GastroBar Pro permite dividir cualquier comanda en segundos según la modalidad que prefiera el grupo de comensales:</p>
+
+  <h2>7.1 Modalidad A: División Equitativa (Partes Iguales)</h2>
+  <p>Ideal para mesas donde todos pagan lo mismo (ej. 4 amigos se reparten la cuenta en partes iguales):</p>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Abrir la Mesa y presionar <span class="ui-btn ui-btn-dark">✂️ Dividir Cuenta</span></strong>
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Seleccionar Número de Comensales</strong>
+        Toca los botones rápidos <code>2</code>, <code>3</code>, <code>4</code>, <code>5</code> o escribe el número exacto.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Visualizar Montos Exactos</strong>
+        El sistema desglosa de inmediato: Subtotal, Servicio 10%, IVA 13% y <strong>Monto Exacto por Persona</strong> sin descuadre de céntimos. Puedes imprimir los mini-recibos individuales o cobrar uno a uno con diferentes tarjetas.
+      </div>
+    </li>
+  </ul>
+
+  <h2>7.2 Modalidad B: División por Consumo Individual (Cada Quien Paga lo Suyo)</h2>
+  <p>En el panel derecho de la ventana de división, puedes arrastrar o seleccionar qué platillo o bebida corresponde al <em>Comensal 1</em>, <em>Comensal 2</em>, etc. El sistema emite tickets separados y permite cobrar con datáfono en mano de forma secuencial.</p>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 8: COBRO Y FACTURACIÓN -->
+  <!-- ===================================================================== -->
+  <h1><span class="chapter-num">8</span> Caja, Cobro y Métodos de Pago</h1>
+
+  <h2>8.1 Proceso de Cobro</h2>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Presionar <span class="ui-btn ui-btn-green">💵 Cobrar Cuenta</span></strong>
+        Se abre la pasarela de cobro del sistema.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Elegir Método de Pago</strong>
+        • <strong>Efectivo</strong>: Digita el monto recibido y el sistema calcula el vuelto exacto.<br>
+        • <strong>Tarjeta (Datáfono)</strong>: Registra el voucher o referencia de transacción.<br>
+        • <strong>SINPE Móvil / Transferencia</strong>: Permite verificar el número de teléfono y comprobante.<br>
+        • <strong>Pago Mixto</strong>: Permite combinar (ej. ₡10,000 en efectivo y el resto en tarjeta).
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Finalizar y Liberar Mesa</strong>
+        Se imprime la factura final del cliente, la mesa pasa automáticamente a <span class="mesa-pill mesa-libre">Libre</span> y el dinero ingresa al corte de caja activo.
+      </div>
+    </li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 9: PANTALLA DE COCINA (KDS) -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">9</span> Pantalla de Cocina & Barra (KDS)</h1>
+
+  <p>La pestaña <span class="ui-btn ui-btn-dark">🍳 Cocina & Barra</span> está diseñada para instalarse en una tablet o pantalla táctil en la cocina caliente y en el bar, eliminando el desorden de papeles perdidos.</p>
+
+  <h2>9.1 Semáforo de Tiempos de Preparación</h2>
+  <p>Cada comanda recibida muestra un temporizador cronometrado con código de colores según el estándar gastronómico:</p>
+  <ul>
+    <li>🟢 <strong>Verde (&lt; 10 min)</strong>: Comanda recién entrada, dentro del tiempo estándar de preparación.</li>
+    <li>🟡 <strong>Amarillo (10 a 20 min)</strong>: Tiempo intermedio, requiere atención pronta del jefe de cocina.</li>
+    <li>🔴 <strong>Rojo (&gt; 20 min)</strong>: Comanda con retraso crítico. Requiere despacho urgente.</li>
+  </ul>
+
+  <h2>9.2 Despacho de Platillos</h2>
+  <p>Los cocineros pueden despachar platos de dos formas:</p>
+  <ul>
+    <li><strong>Por Platillo Individual</strong>: Tocando el platillo que ya está emplatado (cambia a verde con check ✅). La mesa en el salón pasará a <em>Esperando Parcial</em>.</li>
+    <li><strong>Comanda Completa</strong>: Tocando el botón <span class="ui-btn ui-btn-green">✅ Despachar Comanda</span> cuando la bandeja completa sale al salón. La mesa en el salón pasa a <em>Activa (Azul)</em>.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 10: QR DE CLIENTES Y COOLDOWN -->
+  <!-- ===================================================================== -->
+  <h1><span class="chapter-num">10</span> Autoservicio QR para Clientes & Cooldown</h1>
+
+  <p>Cada mesa cuenta con un código QR único que los clientes escanean con la cámara de su teléfono móvil para abrir la vista <code>cliente.html</code> sin necesidad de descargar ninguna app.</p>
+
+  <h2>10.1 Funcionalidades del Menú QR</h2>
+  <ul>
+    <li>Visualización del menú completo con fotos en alta definición y precios actualizados.</li>
+    <li>Consulta en tiempo real de su cuenta activa y lo que llevan consumido hasta el momento.</li>
+  </ul>
+
+  <h2>10.2 Botón "Solicitar Mesero / Pedir Cuenta" con Protección Anti-Spam</h2>
+  <p>Para evitar que comensales inquietos o niños opriman el botón 20 veces seguidas:</p>
+  <div class="callout callout-warning">
+    <strong>Mecanismo de Cooldown de 2 Minutos (120 Segundos):</strong><br>
+    1. Apenas el cliente presiona el botón, este se bloquea de inmediato y queda en gris (<strong>Gray Out</strong> inactivo).<br>
+    2. El botón muestra una cuenta regresiva en vivo: <code>⏳ Mesero Solicitado (Reintentar en 1:59)</code>.<br>
+    3. Suena la alarma en la caja y la mesa en el salón parpadea en rojo con badge de cuenta pedida.<br>
+    4. <strong>Reactivación Cíclica:</strong> Si pasan los 2 minutos y el mesero aún no ha cerrado la cuenta, el botón se reactiva automáticamente para permitir al cliente volver a llamar.<br>
+    5. Cuando la mesa se paga en caja, el botón se apaga definitivamente mostrando <code>✅ Cuenta Cerrada</code>.
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 11: HAPPY HOUR 2x1 -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">11</span> Happy Hour 2x1 y Promociones Automatizadas</h1>
+
+  <p>GastroBar Pro automatiza las promociones horarias sin que el mesero deba calcular descuentos a mano:</p>
+
+  <h2>11.1 Reglas del Happy Hour</h2>
+  <ul>
+    <li><strong>Horario Programable</strong>: Por defecto de 16:00 a 19:00 horas (personalizable desde la consola).</li>
+    <li><strong>Productos Participantes</strong>: Cervezas nacionales, importadas y cócteles seleccionados con etiqueta <code>🍸 2x1</code>.</li>
+    <li><strong>Alimentos Excluidos</strong>: Los platillos de cocina nunca se descuentan para proteger los márgenes del restaurante.</li>
+    <li><strong>Fórmula Exacta para Cantidades Impares</strong>:
+      <br>• 1 Cerveza: Paga 1 normal (0 gratis).
+      <br>• 2 Cervezas: Paga 1 (1 gratis).
+      <br>• 3 Cervezas: Paga 2 (1 gratis).
+      <br>• 4 Cervezas: Paga 2 (2 gratis).
+      <br>• 5 Cervezas: Paga 3 (2 gratis).
+    </li>
+    <li><strong>Auto-Expiración</strong>: Apenas el reloj del servidor marca las 19:00:00, las siguientes bebidas vuelven a su precio regular de forma instantánea.</li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 12: MODO OFFLINE-FIRST -->
+  <!-- ===================================================================== -->
+  <h1><span class="chapter-num">12</span> Modo Offline-First (Resistencia a Caídas de Red)</h1>
+
+  <p>La mayor pesadilla de un restaurante es que se caiga el internet un sábado por la noche en hora pico. GastroBar Pro está blindado con <strong>Arquitectura Offline-First</strong>:</p>
+
+  <h2>12.1 ¿Qué sucede si se cae el internet?</h2>
+  <div class="callout callout-success">
+    <strong>¡El restaurante NUNCA se detiene!</strong><br>
+    1. <strong>La página sigue abriendo</strong>: Gracias al Service Worker instalado en el navegador, la app carga aunque no haya conexión.<br>
+    2. <strong>El catálogo y las mesas siguen ahí</strong>: Todos los platillos y mesas están resguardados en IndexedDB local.<br>
+    3. <strong>Las comandas se siguen enviando</strong>: Al presionar "Enviar Comanda", el sistema no da error de red. La guarda en la cola local <em>Outbox</em> y actualiza la mesa en pantalla.<br>
+    4. <strong>El badge superior te informa</strong>: Cambia de <span class="ui-btn ui-btn-green">🟢 En línea</span> a <span class="ui-btn ui-btn-amber">🟡 Offline (3 pend.)</span> indicando cuántos pedidos están en espera.<br>
+    5. <strong>Sincronización Automática al volver el internet</strong>: Cuando la conexión regresa, el sistema vacía la cola al servidor central en un solo lote con identificadores únicos (`idempotencyKey`), garantizando que ninguna orden se duplique.
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 13: ADMINISTRACIÓN Y REPORTES -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1><span class="chapter-num">13</span> Panel de Administración y Reportes</h1>
+
+  <p>Al ingresar con rol Administrador o Developer, se habilita el botón <span class="ui-btn ui-btn-dark">👑 Panel de Admin ▼</span> en la barra superior:</p>
+
+  <h2>13.1 Módulos Administrativos</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Módulo</th>
+        <th>Uso y Beneficio</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>📊 Dashboard & Métricas</strong></td>
+        <td>Ventas totales en colones, ticket promedio por mesa, platillos más vendidos y gráfico de horas pico del restaurante.</td>
+      </tr>
+      <tr>
+        <td><strong>📦 Control de Inventario & Agotados</strong></td>
+        <td>Permite marcar productos como "Agotados / 86". Apenas se marca un platillo agotado, se deshabilita en todas las tablets y en el QR de los clientes.</td>
+      </tr>
+      <tr>
+        <td><strong>🛡️ Bitácora de Auditoría</strong></td>
+        <td>Registro inmutable de seguridad: quién anuló un platillo, quién movió una mesa y quién cobró cada factura.</td>
+      </tr>
+      <tr>
+        <td><strong>📐 Editor de Salón</strong></td>
+        <td>Diseñador gráfico para mover mesas de lugar, cambiar dimensiones, agregar sillas o reestructurar el salón para un evento.</td>
+      </tr>
+      <tr>
+        <td><strong>🖨️ Monitor de Impresoras</strong></td>
+        <td>Verificación del estado de las impresoras térmicas de 80mm de cocina, barra y caja.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ===================================================================== -->
+  <!-- CAPÍTULO 14: PERSONALIZADOR VISUAL TOTAL -->
+  <!-- ===================================================================== -->
+  <h1><span class="chapter-num">14</span> Editor Visual en Vivo & Personalización Total</h1>
+
+  <p>Exclusivo para dueños y desarrolladores: permite adaptar el 100% de la identidad gráfica del negocio directamente en pantalla.</p>
+
+  <h2>14.1 Cómo Usar el Inspector Visual</h2>
+  <ul class="step-list">
+    <li class="step-item">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <strong>Activar Modo Edición</strong>
+        Presiona el botón <span class="ui-btn ui-btn-purple">🎨 Modo Edición</span> en la barra superior.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <strong>Hacer Clic en Cualquier Elemento</strong>
+        Toca cualquier botón, texto, título o tarjeta. Se abrirá el inspector visual flotante.
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <strong>Modificar Estilos en Tiempo Real</strong>
+        Puedes cambiar: color de fondo, texto, tamaño de letra, esquinas redondeadas, relleno interno o ingresar gradientes personalizados (ej. <code>linear-gradient(135deg, #10b981, #059669)</code>).
+      </div>
+    </li>
+    <li class="step-item">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <strong>Guardar Cambios</strong>
+        Presiona <span class="ui-btn ui-btn-green">💾 Guardar Todo</span>. Los estilos quedan almacenados en la base de datos y se aplicarán permanentemente para ese local.
+      </div>
+    </li>
+  </ul>
+
+  <!-- ===================================================================== -->
+  <!-- GUÍA RÁPIDA / FAQ -->
+  <!-- ===================================================================== -->
+  <div class="page-break"></div>
+  <h1>❓ Preguntas Frecuentes y Solución de Dudas</h1>
+
+  <h2>1. ¿Qué hago si un cliente quiere pagar la mitad en efectivo y la mitad con tarjeta?</h2>
+  <p>Al presionar <strong>"Cobrar Cuenta"</strong>, selecciona la opción <strong>"Pago Mixto"</strong>. Ingresa el monto en efectivo (ej. ₡10,000) y el sistema asignará el remanente automáticamente al cobro con tarjeta.</p>
+
+  <h2>2. ¿Cómo sé qué mesero atendió una mesa?</h2>
+  <p>Cada mesa en el salón muestra el nombre del salonero responsable en la esquina inferior de su tarjeta (ej. <em>"Juan Jival"</em> o <em>"Carlos Salonero"</em>). Además, la bitácora de auditoría guarda el registro exacto.</p>
+
+  <h2>3. ¿Se pueden imprimir pre-cuentas antes de cobrar?</h2>
+  <p>Sí, dentro de la ventana de la comanda presiona el botón <strong>"🖨️ Pre-Cuenta"</strong>. Imprimirá un comprobante detallado para que el cliente revise sus consumos en la mesa antes de sacar la tarjeta.</p>
+
+  <h2>4. ¿Cómo cambio el piso o textura visual del salón?</h2>
+  <p>Presiona el botón <span class="ui-btn ui-btn-dark">🎨 Piso del Salón</span> en la sub-barra superior. Podrás elegir entre 18 texturas profesionales (Madera Roble, Mármol Negro, Granito Pulido, Azulejos Vintage, Deck de Terraza, etc.).</p>
+
+  <div style="margin-top: 40pt; border-top: 2px solid #e2e8f0; padding-top: 16pt; text-align: center; color: #64748b; font-size: 8.5pt;">
+    <strong>GastroBar Pro POS Cloud & Local Edition</strong> • Manual Oficial de Usuario v2.2<br>
+    Sistema certificado para la operación ininterrumpida de restaurantes y bares modernos.
+  </div>
+
+</body>
+</html>

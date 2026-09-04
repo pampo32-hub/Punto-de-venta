@@ -40,3 +40,4 @@ Gestionar promociones 2x1 en cervezas y cócteles durante horarios programados (
 - `test/e2e/tier2-boundaries.test.js`: `T2.11` a `T2.15`.
 - `test/e2e/tier3-combinations.test.js`: `T3.1`, `T3.5`, `T3.11`.
 - `test/e2e/tier4-scenarios.test.js`: `T4.2`.
+

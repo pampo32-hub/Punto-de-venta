@@ -74,3 +74,4 @@ Suite dedicada en `test/e2e/tier6-offline-sync.test.js`:
 - `T6.2`: `POST /api/comandas/enviar` respeta `idempotencyKey` y previene duplicaciones en reintentos.
 - `T6.3`: `POST /api/sync/batch` procesa acciones acumuladas y descarta duplicadas.
 - `T6.4`: `POST /api/sync/batch` procesa solicitudes de cuenta `PEDIR_CUENTA`.
+

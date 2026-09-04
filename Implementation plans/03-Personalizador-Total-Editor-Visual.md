@@ -30,3 +30,4 @@ Proporcionar a los administradores y desarrolladores la capacidad de personaliza
 - `public/index.html`: Modal de inspector visual en vivo con controles de fondo, color de texto, tamaño de fuente, radio de borde, padding y CSS personalizado.
 - `public/styles.css`: Estilos para el inspector flotante, halo de selección y badges de edición.
 - `server.js`: Endpoints `GET /api/personalizacion/:negocioId` y `POST /api/personalizacion/:negocioId`.
+

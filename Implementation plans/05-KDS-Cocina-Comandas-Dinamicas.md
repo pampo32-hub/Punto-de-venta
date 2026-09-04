@@ -39,3 +39,4 @@ Automatizar el flujo de comandas entre el salón, cocina y barra: detección int
 - `test/e2e/tier1-features.test.js`: `T1.1` a `T1.12`.
 - `test/e2e/tier2-boundaries.test.js`: `T2.1` a `T2.10`.
 - `test/e2e/tier3-combinations.test.js`: `T3.2`, `T3.6`, `T3.7`.
+

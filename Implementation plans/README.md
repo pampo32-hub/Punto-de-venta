@@ -23,3 +23,4 @@ Todas las implementaciones listadas cuentan con pruebas automatizadas integradas
 npm test
 ```
 **Resultado actual:** 69 pruebas ejecutadas y aprobadas al 100% en 15 suites.
+

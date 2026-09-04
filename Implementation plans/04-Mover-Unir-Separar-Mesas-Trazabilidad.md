@@ -40,3 +40,4 @@ Permitir la reorganización fluida de clientes en el salón: mover mesas vacías
 - `test/e2e/tier1-features.test.js`: `T1.18` a `T1.21`.
 - `test/e2e/tier4-scenarios.test.js`: `T4.3`, `T4.4`, `T4.5`.
 - `test/e2e/tier5-occupied-split.test.js`: `T5.1` a `T5.4`.
+
