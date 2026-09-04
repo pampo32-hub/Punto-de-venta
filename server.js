@@ -58,6 +58,8 @@ db.serialize(() => {
   db.run("ALTER TABLE Mesas ADD COLUMN unida_a_mesa_id INTEGER", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN unida_con TEXT", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN grupo_mesas TEXT", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN transferida_de TEXT", () => {});
+  db.run("ALTER TABLE Ordenes ADD COLUMN transferida_de TEXT", () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -474,6 +476,24 @@ app.get('/api/mesas', async (req, res) => {
       LEFT JOIN Ordenes o ON m.id = o.mesa_id AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
       ORDER BY m.id ASC
     `);
+
+    // Sincronizar siempre con la distribución física maestra del admin guardada en ConfigNegocio
+    try {
+      const cfg = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'distribucion_mesas_admin'");
+      if (cfg && cfg.valor) {
+        const mapAdmin = JSON.parse(cfg.valor);
+        const posById = Object.fromEntries(mapAdmin.map(p => [p.id, p]));
+        for (const m of mesas) {
+          if (posById[m.id]) {
+            m.x = posById[m.id].x;
+            m.y = posById[m.id].y;
+            if (posById[m.id].ancho != null) m.ancho = posById[m.id].ancho;
+            if (posById[m.id].alto != null) m.alto = posById[m.id].alto;
+            if (posById[m.id].forma) m.forma = posById[m.id].forma;
+          }
+        }
+      }
+    } catch (_) {}
 
     const activeOrderIds = mesas.map(m => m.orden_activa_id).filter(Boolean);
     let itemsByOrder = {};
