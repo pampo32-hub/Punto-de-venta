@@ -16,47 +16,61 @@
   --radius: 12px;
 }
 
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-body {
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
   background: var(--bg-dark);
   color: var(--text-main);
   height: 100vh;
-  overflow: hidden;
+  height: 100dvh;
 }
 
 .pos-app {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100vw;
   height: 100vh;
+  height: 100dvh;
+  overflow-x: hidden;
 }
 
 /* ------------------------------------------------------------- */
 /* BARRA SUPERIOR */
 /* ------------------------------------------------------------- */
 .top-nav {
-  height: 64px;
+  min-height: 58px;
+  height: auto;
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  gap: 16px;
+  padding: 6px 14px;
+  gap: 8px 12px;
   z-index: 100;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100vw;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .brand-logo {
@@ -80,8 +94,9 @@ body {
 
 .quick-search-box {
   position: relative;
-  flex: 1;
-  max-width: 380px;
+  flex: 1 1 180px;
+  max-width: 320px;
+  min-width: 140px;
   display: flex;
   align-items: center;
 }
@@ -157,6 +172,20 @@ body {
 .nav-pills {
   display: flex;
   gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  flex-shrink: 1;
+  max-width: 100%;
+  align-items: center;
+}
+
+.nav-pills::-webkit-scrollbar {
+  height: 3px;
+}
+.nav-pills::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 4px;
 }
 
 .nav-pill {
@@ -173,6 +202,9 @@ body {
   gap: 6px;
   position: relative;
   transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-height: 38px;
 }
 
 .nav-pill:hover, .nav-pill.active {
@@ -203,6 +235,8 @@ body {
   padding: 6px 12px;
   border-radius: 20px;
   border: 1px solid var(--border);
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .status-indicator.online {
@@ -326,13 +360,16 @@ body {
 /* CANVAS DE SALÓN & MESAS */
 /* ------------------------------------------------------------- */
 .salon-container {
-  height: calc(100vh - 170px);
+  height: calc(100vh - 165px);
   background: #060911;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   position: relative;
   overflow: auto;
-  padding: 24px;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .mesas-canvas-view {
@@ -724,11 +761,12 @@ body {
 /* ------------------------------------------------------------- */
 .kds-tickets-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 12px;
   align-items: start;
-  height: calc(100vh - 170px);
+  height: calc(100vh - 165px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 6px 4px;
 }
 
@@ -820,30 +858,36 @@ body {
 }
 
 .comandero-window {
-  width: 96vw;
-  height: 94vh;
+  width: min(98vw, 1400px);
+  height: min(94vh, 900px);
+  max-width: 100vw;
+  max-height: 100vh;
   background: var(--bg-dark);
   border: 1px solid var(--border);
   border-radius: 16px;
   display: flex;
+  flex-direction: row;
   overflow: hidden;
   box-shadow: 0 25px 50px rgba(0,0,0,0.8);
 }
 
 .comandero-catalog {
-  flex: 65%;
+  flex: 1 1 60%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: #080d1a;
   border-right: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .catalog-topbar {
-  padding: 14px 18px;
+  flex-shrink: 0;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .mesa-tag-header {
@@ -893,12 +937,15 @@ body {
 }
 
 .products-one-tap-grid {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 145px), 1fr));
+  gap: 10px;
+  align-content: start;
 }
 
 .prod-card-one-tap {
@@ -934,14 +981,21 @@ body {
 
 /* LADO DERECHO: TICKET */
 .comandero-ticket {
-  flex: 35%;
+  flex: 0 0 380px;
+  width: 380px;
+  max-width: 42%;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
   background: var(--bg-card);
+  overflow: hidden;
 }
 
 .ticket-topbar {
-  padding: 16px 20px;
+  flex-shrink: 0;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
@@ -957,9 +1011,12 @@ body {
 }
 
 .ticket-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 80px;
   overflow-y: auto;
-  padding: 12px 18px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 10px 14px;
 }
 
 .ticket-item-row {
@@ -1032,42 +1089,50 @@ body {
 }
 
 .ticket-bottom {
-  padding: 16px 20px;
+  flex-shrink: 0;
+  padding: 12px 16px;
   border-top: 1px solid var(--border);
   background: #090d16;
+  margin-top: auto;
 }
 
 .ticket-calc-box .calc-line {
   display: flex;
   justify-content: space-between;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .ticket-calc-box .calc-line.total {
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   font-weight: 800;
   color: var(--primary-glow);
   border-top: 1px solid var(--border);
-  padding-top: 8px;
-  margin-top: 8px;
+  padding-top: 6px;
+  margin-top: 6px;
 }
 
 .ticket-action-buttons {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .btn-btn-cmd {
-  padding: 12px;
+  min-height: 42px;
+  padding: 8px 6px;
   border: none;
   border-radius: 8px;
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .btn-btn-cmd.cocina { background: var(--accent); color: #fff; }
@@ -1085,15 +1150,21 @@ body {
   box-shadow: 0 20px 40px rgba(0,0,0,0.7);
   display: flex;
   flex-direction: column;
+  max-width: min(96vw, 680px);
+  max-height: 92vh;
+  max-height: 92dvh;
+  overflow: hidden;
+  margin: auto;
 }
 
 .modif-dialog { width: 480px; max-width: 92vw; }
 .anula-dialog { width: 420px; max-width: 92vw; }
 .cobro-dialog { width: 480px; max-width: 92vw; }
-.split-dialog { width: 850px; max-width: 94vw; max-height: 90vh; }
+.split-dialog { width: 850px; max-width: 94vw; max-height: 90vh; max-height: 90dvh; }
 
 .dialog-header {
-  padding: 16px 20px;
+  flex-shrink: 0;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
@@ -1101,16 +1172,22 @@ body {
 }
 
 .dialog-body {
-  padding: 18px 20px;
+  padding: 16px 18px;
   overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .dialog-footer {
-  padding: 14px 20px;
+  flex-shrink: 0;
+  padding: 12px 18px;
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .section-label {
@@ -2722,8 +2799,19 @@ textarea:focus, select:focus, input:focus {
 
 /* ============================================================================
    RESPONSIVE DESIGN & ADAPTABILIDAD MULTI-DISPOSITIVO
-   (Laptops 1366x768, Laptops 1280x800, Tablets, Celulares / Móviles)
+   (Laptops 1366x768, Tablets 768-1024px, Celulares / Móviles 360-480px)
    ============================================================================ */
+
+/* TABLE RESPONSIVE CONTAINERS */
+.table-responsive,
+.tip-pool-table-wrapper,
+.inventory-table-container,
+.audit-table-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* Mobile Comandero Tabs (Ocultos por defecto en PC/Laptop) */
 .comandero-mobile-tabs {
@@ -2747,6 +2835,7 @@ textarea:focus, select:focus, input:focus {
   font-size: 0.88rem;
   cursor: pointer;
   text-align: center;
+  transition: all 0.15s ease;
 }
 
 .com-mob-tab.active {
@@ -2760,9 +2849,11 @@ textarea:focus, select:focus, input:focus {
    ============================================================================ */
 @media screen and (max-width: 1400px) {
   .top-nav {
-    padding: 0 10px;
-    gap: 8px;
-    height: 60px;
+    min-height: 58px;
+    height: auto;
+    padding: 6px 12px;
+    gap: 8px 10px;
+    flex-wrap: wrap;
   }
 
   .brand {
@@ -2782,7 +2873,8 @@ textarea:focus, select:focus, input:focus {
   }
 
   .quick-search-box {
-    max-width: 170px;
+    max-width: 200px;
+    min-width: 140px;
   }
 
   .quick-search-box input {
@@ -2811,32 +2903,39 @@ textarea:focus, select:focus, input:focus {
     gap: 4px;
     flex-shrink: 1;
     overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .nav-pills::-webkit-scrollbar {
-    display: none;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
 
   .nav-pill {
     padding: 6px 10px;
     font-size: 0.78rem;
     white-space: nowrap;
+    min-height: 36px;
   }
 
   .pill-icon {
     font-size: 0.9rem;
   }
 
+  .admin-extra-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
   .btn-topbar-tool {
     padding: 5px 8px;
     font-size: 0.74rem;
     white-space: nowrap;
+    min-height: 34px;
   }
 
   .user-status-pill {
     padding: 4px 8px;
     gap: 6px;
+    margin-left: auto;
   }
 
   .user-title {
@@ -2851,19 +2950,29 @@ textarea:focus, select:focus, input:focus {
     display: none;
   }
 
+  .btn-user-logout {
+    min-width: 34px;
+    min-height: 34px;
+  }
+
   /* COMANDERO COMPACTO PARA LAPTOPS 768px DE ALTO */
   .comandero-window {
     width: 98vw;
-    height: 96vh;
+    height: min(96vh, 760px);
   }
 
   .comandero-catalog {
-    flex: 60%;
+    flex: 1 1 58%;
+    min-width: 0;
   }
 
   .comandero-ticket {
-    flex: 40%;
-    min-width: 320px;
+    flex: 0 0 350px;
+    width: 350px;
+    max-width: 42%;
+    min-width: 290px;
+    height: 100%;
+    min-height: 0;
   }
 
   .catalog-topbar {
@@ -2878,11 +2987,11 @@ textarea:focus, select:focus, input:focus {
   }
 
   .prod-card-one-tap {
-    min-height: 120px;
+    min-height: 115px;
   }
 
   .prod-card-thumb, .prod-card-no-thumb {
-    height: 68px;
+    height: 65px;
   }
 
   .ticket-topbar {
@@ -2891,6 +3000,8 @@ textarea:focus, select:focus, input:focus {
 
   .ticket-body {
     padding: 8px 12px;
+    flex: 1 1 auto;
+    min-height: 60px;
   }
 
   .ticket-item-row {
@@ -2899,7 +3010,8 @@ textarea:focus, select:focus, input:focus {
   }
 
   .ticket-bottom {
-    padding: 10px 14px;
+    padding: 8px 12px;
+    flex-shrink: 0;
   }
 
   .ticket-calc-box .calc-line {
@@ -2916,14 +3028,15 @@ textarea:focus, select:focus, input:focus {
   /* BOTONES DE ACCIÓN EN 1 FILA COMPACTA (3 columnas) */
   .ticket-action-buttons {
     display: grid;
-    grid-template-columns: 1.2fr 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
     margin-top: 8px;
   }
 
   .btn-btn-cmd {
-    padding: 8px 6px;
+    padding: 6px 4px;
     font-size: 0.78rem;
+    min-height: 38px;
     white-space: nowrap;
     text-align: center;
   }
@@ -2943,27 +3056,61 @@ textarea:focus, select:focus, input:focus {
    ============================================================================ */
 @media screen and (max-width: 1024px) {
   .top-nav {
+    min-height: 58px;
     height: auto;
     padding: 8px 12px;
     flex-wrap: wrap;
+    gap: 8px;
   }
 
   .quick-search-box {
+    order: 2;
+    max-width: 260px;
+    flex: 1 1 200px;
+  }
+
+  .happy-hour-pill {
     order: 3;
-    max-width: 100%;
-    width: 100%;
-    margin-top: 4px;
+  }
+
+  .user-status-pill {
+    order: 4;
+    margin-left: auto;
   }
 
   .nav-pills {
-    order: 4;
+    order: 5;
     width: 100%;
     overflow-x: auto;
     white-space: nowrap;
     padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .nav-pill {
+    min-height: 40px;
+  }
+
+  .admin-extra-actions {
+    order: 6;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .btn-topbar-tool {
+    min-height: 38px;
   }
 
   .caja-grid-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-grids-row {
     grid-template-columns: 1fr;
   }
 
@@ -2986,6 +3133,11 @@ textarea:focus, select:focus, input:focus {
     white-space: nowrap;
     width: 100%;
     padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .zone-tab {
+    min-height: 38px;
   }
 
   .salon-quick-tools {
@@ -2995,6 +3147,7 @@ textarea:focus, select:focus, input:focus {
     overflow-x: auto;
     white-space: nowrap;
     padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .dev-body-layout {
@@ -3006,6 +3159,7 @@ textarea:focus, select:focus, input:focus {
     flex-direction: row;
     overflow-x: auto;
     white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
   }
 
   .dev-nav-btn {
@@ -3014,20 +3168,121 @@ textarea:focus, select:focus, input:focus {
 }
 
 /* ============================================================================
-   3. CELULARES Y SMARTPHONES (< 768px)
+   3. MÓDULO COMANDERO RESPONSIVO PARA PANTALLAS PEQUEÑAS (<= 900px)
+   ============================================================================ */
+@media screen and (max-width: 900px) {
+  .comandero-window {
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    position: fixed !important;
+    inset: 0 !important;
+    flex-direction: column !important;
+    z-index: 1050;
+  }
+
+  .comandero-mobile-tabs {
+    display: flex !important;
+    flex-shrink: 0;
+    height: 48px;
+    background: #0f172a;
+    border-bottom: 1px solid var(--border);
+    padding: 4px 8px;
+    gap: 8px;
+  }
+
+  .com-mob-tab {
+    flex: 1;
+    height: 100%;
+    padding: 0 12px;
+    background: #1e293b;
+    border: 1px solid var(--border-light);
+    color: #94a3b8;
+    border-radius: 8px;
+    font-weight: 800;
+    font-size: 0.88rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .com-mob-tab.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+
+  .comandero-catalog {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-right: none !important;
+    display: flex !important;
+    height: calc(100% - 48px) !important;
+    overflow: hidden;
+  }
+
+  .comandero-catalog.mobile-hidden {
+    display: none !important;
+  }
+
+  .comandero-ticket {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    display: none !important;
+    height: calc(100% - 48px) !important;
+    overflow: hidden;
+  }
+
+  .comandero-ticket.mobile-active {
+    display: flex !important;
+  }
+
+  .ticket-action-buttons {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .btn-btn-cmd {
+    min-height: 46px !important;
+    font-size: 0.95rem !important;
+  }
+}
+
+/* ============================================================================
+   4. CELULARES Y SMARTPHONES (< 768px)
    ============================================================================ */
 @media screen and (max-width: 768px) {
-  body {
-    overflow-y: auto;
+  html, body {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
     height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .pos-app {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
     height: auto;
     min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .top-nav {
+    min-height: auto;
     height: auto;
     padding: 8px 10px;
     flex-direction: column;
@@ -3044,114 +3299,104 @@ textarea:focus, select:focus, input:focus {
     width: 100%;
   }
 
-  .admin-extra-actions {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-  }
-
-  .btn-topbar-tool {
-    flex: 1;
-    text-align: center;
-  }
-
   .user-status-pill {
     width: 100%;
     justify-content: space-between;
+    margin-left: 0;
+    padding: 6px 12px;
+  }
+
+  .btn-user-logout {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.25rem;
+    border-radius: 8px;
+  }
+
+  .quick-search-box {
+    width: 100%;
+    max-width: 100%;
+    order: 3;
+  }
+
+  .happy-hour-pill {
+    width: 100%;
+    justify-content: center;
+    order: 4;
   }
 
   .nav-pills {
     width: 100%;
     overflow-x: auto;
     padding-bottom: 6px;
-    gap: 4px;
+    gap: 6px;
+    order: 5;
+    -webkit-overflow-scrolling: touch;
   }
 
   .nav-pill {
-    padding: 8px 12px;
-    font-size: 0.8rem;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    min-height: 42px;
     flex-shrink: 0;
+  }
+
+  .admin-extra-actions {
+    display: flex;
+    justify-content: flex-start;
+    overflow-x: auto;
+    width: 100%;
+    gap: 6px;
+    padding-bottom: 4px;
+    order: 6;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .btn-topbar-tool {
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    text-align: center;
   }
 
   /* SUBBAR EN MÓVIL */
   .view-subbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
   }
 
   .legend-group {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 6px;
   }
 
   .salon-container {
-    height: 70vh;
-    min-height: 380px;
+    height: 65vh;
+    min-height: 360px;
     padding: 8px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .editor-board {
-    height: 70vh;
-    min-height: 380px;
+    height: 65vh;
+    min-height: 360px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .editor-actions {
     flex-wrap: wrap;
+    gap: 6px;
   }
 
   .btn-tool, .btn-save-plan {
-    flex: 1;
-    font-size: 0.75rem;
-    padding: 6px 8px;
+    flex: 1 1 120px;
+    font-size: 0.82rem;
+    min-height: 42px;
+    padding: 8px 10px;
     text-align: center;
-  }
-
-  /* COMANDERO EN PANTALLA COMPLETA MÓVIL CON PESTAÑAS (MENÚ / COMANDA) */
-  .comandero-window {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
-    position: fixed !important;
-    inset: 0 !important;
-    flex-direction: column !important;
-  }
-
-  .comandero-mobile-tabs {
-    display: flex !important;
-  }
-
-  .comandero-catalog {
-    flex: 1 !important;
-    width: 100% !important;
-    border-right: none !important;
-    display: flex;
-  }
-
-  .comandero-catalog.mobile-hidden {
-    display: none !important;
-  }
-
-  .comandero-ticket {
-    flex: 1 !important;
-    width: 100% !important;
-    display: none;
-  }
-
-  .comandero-ticket.mobile-active {
-    display: flex !important;
-  }
-
-  .ticket-action-buttons {
-    grid-template-columns: 1fr !important;
-    gap: 8px !important;
-  }
-
-  .btn-btn-cmd {
-    padding: 12px !important;
-    font-size: 0.95rem !important;
   }
 
   /* LANDING & LOGIN MÓVIL */
@@ -3175,12 +3420,18 @@ textarea:focus, select:focus, input:focus {
     grid-template-columns: 1fr;
   }
 
+  .btn-login-submit {
+    min-height: 46px;
+  }
+
   /* DIÁLOGOS Y MODALES EN MÓVIL */
   .modal-dialog {
     width: 96vw !important;
     max-width: 96vw !important;
     max-height: 94vh !important;
-    padding: 14px !important;
+    max-height: 94dvh !important;
+    padding: 12px !important;
+    margin: auto !important;
   }
 
   .staff-form-grid {
@@ -3192,7 +3443,10 @@ textarea:focus, select:focus, input:focus {
   }
 
   .split-columns-wrapper {
-    grid-template-columns: 1fr !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: auto !important;
+    gap: 12px !important;
   }
 
   .numeric-keypad {
@@ -3201,7 +3455,13 @@ textarea:focus, select:focus, input:focus {
 
   .num-btn {
     height: 52px !important;
-    font-size: 1.2rem !important;
+    font-size: 1.25rem !important;
+  }
+
+  .kds-tickets-container {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-height: calc(100vh - 180px);
   }
 }
 
@@ -3473,15 +3733,16 @@ body.is-admin .admin-only-tab {
   transform: translateY(-1px);
 }
 
-/* Scroll horizontal suave en barra superior si la pantalla es estrecha */
+/* Barra superior fluida con flex-wrap para que nunca oculte el botón de salir */
 .top-nav {
-  overflow-x: auto !important;
-  scrollbar-width: none !important;
+  overflow-x: visible !important;
+  flex-wrap: wrap !important;
 }
-.top-nav::-webkit-scrollbar {
-  display: none;
+.nav-pills, .admin-extra-actions {
+  flex-shrink: 1 !important;
 }
-.nav-pills, .admin-extra-actions, .brand, .user-status-pill {
+.user-status-pill {
+  margin-left: auto !important;
   flex-shrink: 0 !important;
 }
 
@@ -3690,6 +3951,7 @@ body.is-admin .admin-only-tab {
 
 .inventory-table, .audit-table {
   width: 100%;
+  min-width: 600px;
   border-collapse: collapse;
   background: #111827;
   border-radius: 12px;
