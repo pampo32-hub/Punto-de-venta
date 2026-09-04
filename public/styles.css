@@ -4993,82 +4993,84 @@ body.is-admin .admin-only-tab {
 /* ================================================================= */
 
 /* Base sin piso */
-#salonContainer, #editorBoard { transition: background 0.4s ease; }
+#salonContainer, #editorBoard, .salon-container, .editor-board { 
+  transition: background 0.3s ease !important; 
+}
 
 /* === MADERAS === */
-.salon-container.piso-madera-oscura, #editorBoard.piso-madera-oscura {
-  background-color: #3d1f00;
-  background-image: repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(0,0,0,0.12) 18px, rgba(0,0,0,0.12) 19px),
-    repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(255,255,255,0.04) 4px, rgba(255,255,255,0.04) 5px);
+#salonContainer.piso-madera-oscura, .salon-container.piso-madera-oscura, #editorBoard.piso-madera-oscura, .editor-board.piso-madera-oscura {
+  background-color: #3d1f00 !important;
+  background-image: repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(0,0,0,0.18) 18px, rgba(0,0,0,0.18) 19px),
+    repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(255,255,255,0.06) 4px, rgba(255,255,255,0.06) 5px) !important;
 }
-.salon-container.piso-madera-clara, #editorBoard.piso-madera-clara {
-  background-color: #c8a06a;
-  background-image: repeating-linear-gradient(90deg, transparent, transparent 16px, rgba(0,0,0,0.08) 16px, rgba(0,0,0,0.08) 17px),
-    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.08) 3px, rgba(255,255,255,0.08) 4px);
+#salonContainer.piso-madera-clara, .salon-container.piso-madera-clara, #editorBoard.piso-madera-clara, .editor-board.piso-madera-clara {
+  background-color: #c8a06a !important;
+  background-image: repeating-linear-gradient(90deg, transparent, transparent 16px, rgba(0,0,0,0.1) 16px, rgba(0,0,0,0.1) 17px),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.12) 3px, rgba(255,255,255,0.12) 4px) !important;
 }
-.salon-container.piso-madera-roble, #editorBoard.piso-madera-roble {
-  background-color: #8b5e2e;
-  background-image: repeating-linear-gradient(88deg, transparent, transparent 20px, rgba(0,0,0,0.1) 20px, rgba(0,0,0,0.1) 21px),
-    repeating-linear-gradient(2deg, transparent, transparent 5px, rgba(255,220,140,0.05) 5px, rgba(255,220,140,0.05) 6px);
+#salonContainer.piso-madera-roble, .salon-container.piso-madera-roble, #editorBoard.piso-madera-roble, .editor-board.piso-madera-roble {
+  background-color: #8b5e2e !important;
+  background-image: repeating-linear-gradient(88deg, transparent, transparent 20px, rgba(0,0,0,0.15) 20px, rgba(0,0,0,0.15) 21px),
+    repeating-linear-gradient(2deg, transparent, transparent 5px, rgba(255,220,140,0.08) 5px, rgba(255,220,140,0.08) 6px) !important;
 }
 
 /* === MÁRMOLES === */
-.salon-container.piso-marmol-blanco, #editorBoard.piso-marmol-blanco {
-  background-color: #f0ece4;
-  background-image: repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(150,130,110,0.15) 40px, rgba(150,130,110,0.15) 41px),
-    repeating-linear-gradient(45deg, transparent, transparent 60px, rgba(180,160,140,0.1) 60px, rgba(180,160,140,0.1) 61px);
+#salonContainer.piso-marmol-blanco, .salon-container.piso-marmol-blanco, #editorBoard.piso-marmol-blanco, .editor-board.piso-marmol-blanco {
+  background-color: #f0ece4 !important;
+  background-image: repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(150,130,110,0.2) 40px, rgba(150,130,110,0.2) 41px),
+    repeating-linear-gradient(45deg, transparent, transparent 60px, rgba(180,160,140,0.15) 60px, rgba(180,160,140,0.15) 61px) !important;
 }
-.salon-container.piso-marmol-negro, #editorBoard.piso-marmol-negro {
-  background-color: #1a1a2e;
-  background-image: repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(255,255,255,0.06) 40px, rgba(255,255,255,0.06) 41px),
-    repeating-linear-gradient(45deg, transparent, transparent 60px, rgba(255,255,255,0.04) 60px, rgba(255,255,255,0.04) 61px);
+#salonContainer.piso-marmol-negro, .salon-container.piso-marmol-negro, #editorBoard.piso-marmol-negro, .editor-board.piso-marmol-negro {
+  background-color: #1a1a2e !important;
+  background-image: repeating-linear-gradient(135deg, transparent, transparent 40px, rgba(255,255,255,0.09) 40px, rgba(255,255,255,0.09) 41px),
+    repeating-linear-gradient(45deg, transparent, transparent 60px, rgba(255,255,255,0.06) 60px, rgba(255,255,255,0.06) 61px) !important;
 }
-.salon-container.piso-marmol-gris, #editorBoard.piso-marmol-gris {
-  background-color: #8e9aaf;
-  background-image: repeating-linear-gradient(130deg, transparent, transparent 45px, rgba(255,255,255,0.1) 45px, rgba(255,255,255,0.1) 46px),
-    repeating-linear-gradient(50deg, transparent, transparent 65px, rgba(0,0,0,0.08) 65px, rgba(0,0,0,0.08) 66px);
+#salonContainer.piso-marmol-gris, .salon-container.piso-marmol-gris, #editorBoard.piso-marmol-gris, .editor-board.piso-marmol-gris {
+  background-color: #8e9aaf !important;
+  background-image: repeating-linear-gradient(130deg, transparent, transparent 45px, rgba(255,255,255,0.15) 45px, rgba(255,255,255,0.15) 46px),
+    repeating-linear-gradient(50deg, transparent, transparent 65px, rgba(0,0,0,0.12) 65px, rgba(0,0,0,0.12) 66px) !important;
 }
 
 /* === BALDOSAS === */
-.salon-container.piso-baldosa-vintage, #editorBoard.piso-baldosa-vintage {
-  background-color: #c4a882;
-  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 40px),
-    repeating-linear-gradient(90deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 40px);
+#salonContainer.piso-baldosa-vintage, .salon-container.piso-baldosa-vintage, #editorBoard.piso-baldosa-vintage, .editor-board.piso-baldosa-vintage {
+  background-color: #c4a882 !important;
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 40px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 40px) !important;
 }
-.salon-container.piso-ajedrez, #editorBoard.piso-ajedrez {
-  background-color: #fff;
-  background-image: repeating-conic-gradient(#222 0% 25%, #fff 0% 50%);
-  background-size: 36px 36px;
+#salonContainer.piso-ajedrez, .salon-container.piso-ajedrez, #editorBoard.piso-ajedrez, .editor-board.piso-ajedrez {
+  background-color: #fff !important;
+  background-image: repeating-conic-gradient(#222 0% 25%, #fff 0% 50%) !important;
+  background-size: 36px 36px !important;
 }
-.salon-container.piso-baldosa-azul, #editorBoard.piso-baldosa-azul {
-  background-color: #1e3a5f;
-  background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.12) 0px, rgba(255,255,255,0.12) 1px, transparent 1px, transparent 38px),
-    repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0px, rgba(255,255,255,0.12) 1px, transparent 1px, transparent 38px);
+#salonContainer.piso-baldosa-azul, .salon-container.piso-baldosa-azul, #editorBoard.piso-baldosa-azul, .editor-board.piso-baldosa-azul {
+  background-color: #1e3a5f !important;
+  background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.16) 0px, rgba(255,255,255,0.16) 1px, transparent 1px, transparent 38px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.16) 0px, rgba(255,255,255,0.16) 1px, transparent 1px, transparent 38px) !important;
 }
 
 /* === ESPECIALES === */
-.salon-container.piso-cemento, #editorBoard.piso-cemento {
-  background-color: #6b7280;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='%236b7280'/%3E%3Ccircle cx='1' cy='1' r='0.8' fill='rgba(255,255,255,0.06)'/%3E%3Ccircle cx='3' cy='3' r='0.8' fill='rgba(0,0,0,0.06)'/%3E%3C/svg%3E");
+#salonContainer.piso-cemento, .salon-container.piso-cemento, #editorBoard.piso-cemento, .editor-board.piso-cemento {
+  background-color: #6b7280 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='%236b7280'/%3E%3Ccircle cx='1' cy='1' r='0.8' fill='rgba(255,255,255,0.1)'/%3E%3Ccircle cx='3' cy='3' r='0.8' fill='rgba(0,0,0,0.1)'/%3E%3C/svg%3E") !important;
 }
-.salon-container.piso-deck-terraza, #editorBoard.piso-deck-terraza {
-  background-color: #5c3d1e;
-  background-image: repeating-linear-gradient(0deg, transparent, transparent 14px, rgba(0,0,0,0.18) 14px, rgba(0,0,0,0.18) 15px);
+#salonContainer.piso-deck-terraza, .salon-container.piso-deck-terraza, #editorBoard.piso-deck-terraza, .editor-board.piso-deck-terraza {
+  background-color: #5c3d1e !important;
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 14px, rgba(0,0,0,0.25) 14px, rgba(0,0,0,0.25) 15px) !important;
 }
-.salon-container.piso-ladrillo, #editorBoard.piso-ladrillo {
-  background-color: #8b3a1e;
+#salonContainer.piso-ladrillo, .salon-container.piso-ladrillo, #editorBoard.piso-ladrillo, .editor-board.piso-ladrillo {
+  background-color: #8b3a1e !important;
   background-image:
-    repeating-linear-gradient(0deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 18px),
-    repeating-linear-gradient(90deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 36px);
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px, transparent 1px, transparent 18px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px, transparent 1px, transparent 36px) !important;
 }
 
 /* === COLORES SÓLIDOS === */
-.salon-container.piso-verde-musgo, #editorBoard.piso-verde-musgo   { background: #2d6a4f; background-image: none; }
-.salon-container.piso-azul-marino, #editorBoard.piso-azul-marino   { background: #1e3a5f; background-image: none; }
-.salon-container.piso-gris-oscuro, #editorBoard.piso-gris-oscuro   { background: #374151; background-image: none; }
-.salon-container.piso-negro-mate,  #editorBoard.piso-negro-mate    { background: #111827; background-image: none; }
-.salon-container.piso-burdeos,     #editorBoard.piso-burdeos       { background: #6b1a1a; background-image: none; }
-.salon-container.piso-arena,       #editorBoard.piso-arena         { background: #d4a76a; background-image: none; }
+#salonContainer.piso-verde-musgo, .salon-container.piso-verde-musgo, #editorBoard.piso-verde-musgo, .editor-board.piso-verde-musgo   { background: #2d6a4f !important; background-image: none !important; }
+#salonContainer.piso-azul-marino, .salon-container.piso-azul-marino, #editorBoard.piso-azul-marino, .editor-board.piso-azul-marino   { background: #1e3a5f !important; background-image: none !important; }
+#salonContainer.piso-gris-oscuro, .salon-container.piso-gris-oscuro, #editorBoard.piso-gris-oscuro, .editor-board.piso-gris-oscuro   { background: #374151 !important; background-image: none !important; }
+#salonContainer.piso-negro-mate,  .salon-container.piso-negro-mate,  #editorBoard.piso-negro-mate,  .editor-board.piso-negro-mate    { background: #111827 !important; background-image: none !important; }
+#salonContainer.piso-burdeos,     .salon-container.piso-burdeos,     #editorBoard.piso-burdeos,     .editor-board.piso-burdeos       { background: #6b1a1a !important; background-image: none !important; }
+#salonContainer.piso-arena,       .salon-container.piso-arena,       #editorBoard.piso-arena,       .editor-board.piso-arena         { background: #d4a76a !important; background-image: none !important; }
 
 /* ================================================================= */
 /* THUMBNAILS DE PISO — mismas texturas pero para .piso-preview-thumb*/
@@ -5205,3 +5207,120 @@ body.is-admin .admin-only-tab {
   margin-top: 1px;
 }
 .piso-card-item.activo .piso-card-nombre { color: #86efac; }
+
+/* ================================================================= */
+/* BARRA FLOTANTE DEVELOPER LIVE EDIT & INSPECTOR                    */
+/* ================================================================= */
+.dev-live-edit-toolbar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99990;
+  background: linear-gradient(135deg, #0f172a, #1e1b4b);
+  border: 2px solid #6366f1;
+  border-radius: 40px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 20px rgba(99,102,241,0.4);
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  backdrop-filter: blur(12px);
+  animation: slideUpToolbar 0.3s ease;
+}
+
+@keyframes slideUpToolbar {
+  from { transform: translate(-50%, 50px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.live-edit-handle {
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+}
+
+.live-edit-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.live-edit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255,255,255,0.06);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  user-select: none;
+}
+
+.live-edit-toggle input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: #a855f7;
+}
+
+.btn-live-save {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16,185,129,0.3);
+}
+
+.btn-live-console {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.btn-live-close {
+  background: rgba(239,68,68,0.2);
+  border: 1px solid rgba(239,68,68,0.4);
+  color: #f87171;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Modo inspección activo */
+body.dev-inspecting-active * {
+  cursor: crosshair !important;
+}
+
+.dev-inspect-hover {
+  outline: 2px dashed #38bdf8 !important;
+  outline-offset: 2px !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+  transition: outline 0.1s ease;
+}
+
+.dev-element-selected {
+  outline: 3px solid #ec4899 !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 15px rgba(236,72,153,0.5) !important;
+}

@@ -102,6 +102,9 @@
         <button class="dev-nav-btn" data-dev-tab="db">
           💾 Monitor de Base de Datos
         </button>
+        <button class="dev-nav-btn" data-dev-tab="editor-pagina" style="background: linear-gradient(135deg, rgba(168,85,247,0.22), rgba(99,102,241,0.22)); border: 1px solid #a855f7; color: #d8b4fe; font-weight: 800;">
+          🎨 Editar Página / Personalizador Total
+        </button>
         <div style="margin:16px 0 8px; border-top:1px solid #374151; padding-top:12px; font-size:0.75rem; color:#9ca3af; font-weight:700; text-transform:uppercase;">
           ⚡ Módulos GastroBar POS
         </div>
@@ -177,6 +180,271 @@
             <div class="db-stat-box"><span id="dbUsuariosCount">5</span><small>Usuarios Registrados</small></div>
             <div class="db-stat-box"><span>100%</span><small>Persistencia Activa</small></div>
           </div>
+        </section>
+
+        <!-- TAB 4: PERSONALIZADOR TOTAL Y EDITOR DE PÁGINA (SOLO DEVELOPER) -->
+        <section id="devTabEditorPagina" class="dev-tab-panel">
+          <div class="panel-header-action" style="background: linear-gradient(135deg, rgba(30,27,75,0.7), rgba(15,23,42,0.8)); border: 1px solid #6366f1; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+                <span style="font-size:1.6rem;">🎨</span>
+                <h3 style="margin:0; font-size:1.3rem; color:#f8fafc; font-weight:800;">Studio Editor Visual & Personalizador Total (100% Editable)</h3>
+              </div>
+              <p style="margin:0; color:#94a3b8; font-size:0.88rem;">
+                Modifica, quita, agrega, cambia colores, títulos, botones, barras, caja de propinas, facturación express y funcionalidades con guardado permanente.
+              </p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <button class="btn-pri" style="background:linear-gradient(135deg,#ec4899,#d946ef); border:none; padding:10px 18px; border-radius:10px; font-weight:800; color:#fff; cursor:pointer; box-shadow:0 4px 14px rgba(217,70,239,0.4);" onclick="activarModoEdicionEnVivo()">
+                🖱️ Activar Editor Visual en Pantalla (En Vivo)
+              </button>
+              <button class="btn-pri" style="background:linear-gradient(135deg,#10b981,#059669); border:none; padding:10px 18px; border-radius:10px; font-weight:800; color:#fff; cursor:pointer;" onclick="guardarPersonalizacionPaginaTotal()">
+                💾 Guardar Todos los Cambios
+              </button>
+              <button class="btn-sec" style="padding:10px 14px; border-radius:10px; font-size:0.85rem;" onclick="restablecerPersonalizacionPagina()">
+                🔄 Restablecer Original
+              </button>
+            </div>
+          </div>
+
+          <!-- SUB-PESTAÑAS DEL EDITOR DE PÁGINA -->
+          <div class="editor-subtabs-nav" style="display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid #334155; padding-bottom:10px; overflow-x:auto;">
+            <button class="btn-tool active" onclick="cambiarSubTabEditorPagina('branding')" id="subtabBtn_branding" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              🏷️ Encabezado & Branding
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('navegacion')" id="subtabBtn_navegacion" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              🧭 Menú & Pestañas
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('salon')" id="subtabBtn_salon" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              🗺️ Salón & Mesas
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('kds')" id="subtabBtn_kds" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              🍳 Cocina & KDS
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('caja')" id="subtabBtn_caja" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              💵 Caja & Propinas
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('facturacion')" id="subtabBtn_facturacion" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              ⚡ Facturación Express
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('colores')" id="subtabBtn_colores" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              🎨 Colores & Tema Global
+            </button>
+            <button class="btn-tool" onclick="cambiarSubTabEditorPagina('css')" id="subtabBtn_css" style="padding:8px 14px; border-radius:8px; font-size:0.84rem; font-weight:700;">
+              💻 CSS Custom Avanzado
+            </button>
+          </div>
+
+          <!-- SECCIÓN 1: ENCABEZADO Y BRANDING -->
+          <div id="subtabContent_branding" class="editor-subtab-section active">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">🏷️ Encabezado Principal y Barra Superior</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Título del Restaurante / Sistema:</label>
+                  <input type="text" id="cfg_topbarRestauranteNombre" placeholder="PUNTO DE VENTA" oninput="aplicarCambioPrevia('topbarRestauranteNombre', this.value, 'text')" />
+                </div>
+                <div class="field-group">
+                  <label>Slogan o Subtítulo:</label>
+                  <input type="text" id="cfg_topbarSlogan" placeholder="GastroBar Pro Cloud" oninput="aplicarCambioPrevia('topbarSlogan', this.value, 'text')" />
+                </div>
+                <div class="field-group">
+                  <label>Emoji o Icono de Logo:</label>
+                  <input type="text" id="cfg_topbarDefaultEmoji" placeholder="🔥" oninput="aplicarCambioPrevia('topbarDefaultEmoji', this.value, 'text')" />
+                </div>
+                <div class="field-group">
+                  <label>Placeholder del Buscador Rápido:</label>
+                  <input type="text" id="cfg_globalSearchInput_placeholder" placeholder="Buscar platillo, bebida o código..." oninput="aplicarCambioPrevia('globalSearchInput', this.value, 'placeholder')" />
+                </div>
+                <div class="field-group">
+                  <label>Texto Botón Happy Hour:</label>
+                  <input type="text" id="cfg_hh_title" placeholder="HAPPY HOUR 2x1" oninput="aplicarCambioPrevia('.hh-title', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Subtítulo Happy Hour:</label>
+                  <input type="text" id="cfg_hhStatusTxt" placeholder="Activado (4 PM - 7 PM)" oninput="aplicarCambioPrevia('hhStatusTxt', this.value, 'text')" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 2: MENÚ & PESTAÑAS -->
+          <div id="subtabContent_navegacion" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">🧭 Personalizar Pestañas del Menú Superior</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Pestaña 1: Salón & Mesas (Texto / Icono):</label>
+                  <input type="text" id="cfg_tab_salon_text" placeholder="🗺️ Salón & Mesas" oninput="aplicarCambioPrevia('.nav-pill[data-view=\'salon\']', this.value, 'selector-html')" />
+                </div>
+                <div class="field-group">
+                  <label>Pestaña 2: Cocina & Barra KDS:</label>
+                  <input type="text" id="cfg_tab_kds_text" placeholder="🍳 Cocina & Barra" oninput="aplicarCambioPrevia('.nav-pill[data-view=\'kds\']', this.value, 'selector-html-kds')" />
+                </div>
+                <div class="field-group">
+                  <label>Pestaña 3: Caja & Propinas:</label>
+                  <input type="text" id="cfg_tab_caja_text" placeholder="💵 Caja & Propinas" oninput="aplicarCambioPrevia('.nav-pill[data-view=\'caja\']', this.value, 'selector-html')" />
+                </div>
+                <div class="field-group">
+                  <label>Pestaña 4: Facturación Express:</label>
+                  <input type="text" id="cfg_tab_facturacion_text" placeholder="⚡ Facturación Express" oninput="aplicarCambioPrevia('.nav-pill[data-view=\'facturacion\']', this.value, 'selector-html')" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 3: SALÓN & MESAS -->
+          <div id="subtabContent_salon" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">🗺️ Módulo de Salón, Mesas y Zonas</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Botón Zonas: Salón Principal:</label>
+                  <input type="text" id="cfg_zone_salon" placeholder="Salón Principal" oninput="aplicarCambioPrevia('.zone-tab[data-zona=\'salon\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Botón Zonas: Barra / Bar:</label>
+                  <input type="text" id="cfg_zone_barra" placeholder="Barra / Bar" oninput="aplicarCambioPrevia('.zone-tab[data-zona=\'barra\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Botón Zonas: Terraza:</label>
+                  <input type="text" id="cfg_zone_terraza" placeholder="Terraza" oninput="aplicarCambioPrevia('.zone-tab[data-zona=\'terraza\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Botón Zonas: Zona VIP:</label>
+                  <input type="text" id="cfg_zone_vip" placeholder="Zona VIP" oninput="aplicarCambioPrevia('.zone-tab[data-zona=\'vip\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Botón Zonas: Segundo Piso:</label>
+                  <input type="text" id="cfg_zone_segundo" placeholder="🏢 Segundo Piso" oninput="aplicarCambioPrevia('.zone-tab[data-zona=\'segundo\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Piso del Salón Actual:</label>
+                  <button class="btn-tool" onclick="abrirModalSelectorPiso()" style="width:100%; justify-content:center; background:#4338ca; color:#fff; font-weight:700;">🎨 Abrir Selector de Pisos (18 Texturas)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 4: COCINA & KDS -->
+          <div id="subtabContent_kds" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">🍳 Pantalla de Cocina y KDS</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Filtro: Todas las Comandas:</label>
+                  <input type="text" id="cfg_kds_todos" placeholder="📋 Todas las Comandas" oninput="aplicarCambioPrevia('.kds-tab[data-kds-dest=\'todos\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Filtro: Cocina Caliente:</label>
+                  <input type="text" id="cfg_kds_cocina" placeholder="🍳 Cocina Caliente" oninput="aplicarCambioPrevia('.kds-tab[data-kds-dest=\'cocina\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Filtro: Barra & Bebidas:</label>
+                  <input type="text" id="cfg_kds_barra" placeholder="🍸 Barra & Bebidas" oninput="aplicarCambioPrevia('.kds-tab[data-kds-dest=\'barra\']', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Botón Campana de Cocina:</label>
+                  <input type="text" id="cfg_btnTestBellSound" placeholder="🔔 Probar Campana" oninput="aplicarCambioPrevia('btnTestBellSound', this.value, 'text')" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 5: CAJA & PROPINAS -->
+          <div id="subtabContent_caja" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">💵 Caja, Facturación y Control de Propinas (Tip Pool)</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Título Tarjeta Turno:</label>
+                  <input type="text" id="cfg_caja_titulo_turno" placeholder="💰 Turno Actual de Operación" oninput="aplicarCambioPrevia('#view-caja .caja-card:nth-child(1) h3', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Título Tarjeta Propinas:</label>
+                  <input type="text" id="cfg_caja_titulo_propinas" placeholder="🤝 Tip Pool & Propinas del Turno" oninput="aplicarCambioPrevia('#view-caja .caja-card:nth-child(2) h3', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Título Tarjeta Cierre:</label>
+                  <input type="text" id="cfg_caja_titulo_cierre" placeholder="🔒 Cierre de Turno y Arqueo" oninput="aplicarCambioPrevia('#view-caja .caja-card:nth-child(3) h3', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Texto Botón Cerrar Turno:</label>
+                  <input type="text" id="cfg_btnCerrarTurnoCaja" placeholder="🔒 Realizar Corte y Cierre de Caja" oninput="aplicarCambioPrevia('#btnCerrarTurnoCaja', this.value, 'selector-text')" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 6: FACTURACIÓN EXPRESS -->
+          <div id="subtabContent_facturacion" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">⚡ Facturación Express y Emisión</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Título Facturación:</label>
+                  <input type="text" id="cfg_fact_titulo" placeholder="⚡ Emisión Rápida de Comprobante / Factura" oninput="aplicarCambioPrevia('#view-facturacion h3', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Subtítulo Facturación:</label>
+                  <input type="text" id="cfg_fact_subtitulo" placeholder="Genera facturas electrónicas o tiquetes para clientes directos o pedidos rápidos." oninput="aplicarCambioPrevia('#view-facturacion p', this.value, 'selector-text')" />
+                </div>
+                <div class="field-group">
+                  <label>Texto Botón Emitir:</label>
+                  <input type="text" id="cfg_btnEmitirFacturaDirecta" placeholder="⚡ Emitir Factura Express" oninput="aplicarCambioPrevia('#btnEmitirFacturaDirecta', this.value, 'selector-text')" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 7: COLORES & TEMA GLOBAL -->
+          <div id="subtabContent_colores" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 14px; color:#38bdf8;">🎨 Paleta de Colores y Estilo Visual Global</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+                <div class="field-group">
+                  <label>Color Primario (Botones y Acentos):</label>
+                  <input type="color" id="cfg_color_primary" value="#6366f1" style="height:44px; padding:2px;" onchange="aplicarVariableCSS('--primary', this.value)" />
+                </div>
+                <div class="field-group">
+                  <label>Color Fondo Principal (App):</label>
+                  <input type="color" id="cfg_color_bg_dark" value="#0a0e1a" style="height:44px; padding:2px;" onchange="aplicarVariableCSS('--bg-dark', this.value)" />
+                </div>
+                <div class="field-group">
+                  <label>Color Fondo de Tarjetas (Cards):</label>
+                  <input type="color" id="cfg_color_bg_card" value="#111827" style="height:44px; padding:2px;" onchange="aplicarVariableCSS('--bg-card', this.value)" />
+                </div>
+                <div class="field-group">
+                  <label>Color de Bordes:</label>
+                  <input type="color" id="cfg_color_border" value="#1f2937" style="height:44px; padding:2px;" onchange="aplicarVariableCSS('--border', this.value)" />
+                </div>
+                <div class="field-group">
+                  <label>Color de Texto Principal:</label>
+                  <input type="color" id="cfg_color_text" value="#f3f4f6" style="height:44px; padding:2px;" onchange="aplicarVariableCSS('--text-main', this.value)" />
+                </div>
+                <div class="field-group">
+                  <label>Radio de Bordes (Border Radius):</label>
+                  <select id="cfg_border_radius" onchange="aplicarVariableCSS('--radius', this.value)" style="padding:10px; background:#1f2937; color:#fff; border:1px solid #374151; border-radius:8px;">
+                    <option value="6px">Pequeño (6px)</option>
+                    <option value="12px" selected>Moderno Estándar (12px)</option>
+                    <option value="18px">Redondeado Suave (18px)</option>
+                    <option value="24px">Extra Redondeado (24px)</option>
+                    <option value="0px">Cuadrado (0px)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 8: CSS PERSONALIZADO AVANZADO -->
+          <div id="subtabContent_css" class="editor-subtab-section" style="display:none;">
+            <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px; margin-bottom:16px;">
+              <h4 style="margin:0 0 10px; color:#38bdf8;">💻 Inyector de CSS Personalizado</h4>
+              <p style="margin:0 0 12px; color:#94a3b8; font-size:0.85rem;">Escribe reglas CSS adicionales que se inyectarán en tiempo real y persistirán para todos los usuarios.</p>
+              <textarea id="cfg_custom_css" rows="9" placeholder="/* Escribe tus reglas CSS personalizadas aquí */\n.top-nav { box-shadow: 0 4px 20px rgba(0,0,0,0.5); }\n.btn-pri { font-weight: 800; }" style="width:100%; font-family:monospace; font-size:0.88rem; background:#080d1a; color:#a5f3fc; border:1px solid #334155; border-radius:10px; padding:12px;" oninput="aplicarCSSCustomEnVivo(this.value)"></textarea>
+            </div>
+          </div>
+
         </section>
 
       </main>
@@ -290,6 +558,9 @@
           </div>
 
           <div class="salon-quick-tools">
+            <button class="btn-quick-action" onclick="abrirModalSelectorPiso()" title="Cambiar textura y piso del salón">
+              🎨 Piso del Salón
+            </button>
             <button class="btn-quick-action" id="btnVerTodosQRs">
               📱 Códigos QR Mesas
             </button>
@@ -2025,7 +2296,109 @@
     </div>
   </div>
 
+  <!-- ============================================================ -->
+  <!-- BARRA FLOTANTE DEVELOPER: MODO EDICIÓN VISUAL EN VIVO (100% EDITABLE) -->
+  <!-- ============================================================ -->
+  <div id="devLiveEditBar" class="dev-live-edit-toolbar" style="display:none;">
+    <div class="live-edit-handle">🛠️ STUDIO DEVELOPER</div>
+    <div class="live-edit-controls">
+      <span style="font-size:0.82rem; color:#f8fafc; font-weight:700;">Modo Edición en Pantalla</span>
+      <label class="live-edit-toggle">
+        <input type="checkbox" id="chkModoInspeccionLive" onchange="toggleModoInspeccionLive(this.checked)" checked />
+        <span>🖱️ Inspeccionar / Clic para Editar</span>
+      </label>
+      <label class="live-edit-toggle">
+        <input type="checkbox" id="chkContentEditableLive" onchange="toggleContentEditableLive(this.checked)" />
+        <span>✏️ Doble Clic para Escribir</span>
+      </label>
+      <button class="btn-live-save" onclick="guardarPersonalizacionPaginaTotal()">
+        💾 Guardar Cambios
+      </button>
+      <button class="btn-live-console" onclick="volverAConsoleDev()">
+        💻 Consola Dev
+      </button>
+      <button class="btn-live-close" onclick="desactivarModoEdicionEnVivo()" title="Salir del Modo Edición">
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: INSPECTOR Y EDITOR RÁPIDO DE ELEMENTO LIVE           -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="modalEditorElementoLive" style="display:none; z-index:99998;">
+    <div class="dialog-box" style="max-width:520px; width:95vw; border-radius:18px; background:#0f172a; border:1px solid #6366f1; box-shadow:0 20px 60px rgba(0,0,0,0.8); padding:0; overflow:hidden;">
+      <div class="dialog-header" style="background:linear-gradient(135deg,#1e1b4b,#0f172a); border-bottom:1px solid #334155; padding:16px 20px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.3rem;">🎨</span>
+          <div>
+            <h3 style="margin:0; color:#f8fafc; font-size:1rem; font-weight:800;" id="liveInspElementTag">Editar Elemento</h3>
+            <span style="color:#818cf8; font-size:0.75rem;" id="liveInspElementSelector">Selector</span>
+          </div>
+        </div>
+        <button onclick="cerrarModalInspectorLive()" style="background:transparent; border:none; color:#94a3b8; font-size:1.2rem; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="padding:18px 22px; max-height:75vh; overflow-y:auto;">
+        <div class="field-group" style="margin-bottom:12px;">
+          <label>📝 Contenido / Texto / HTML:</label>
+          <textarea id="liveInspText" rows="3" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:8px; padding:8px; font-size:0.9rem;" oninput="aplicarCambioElementoActual('text', this.value)"></textarea>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="field-group">
+            <label>🎨 Color de Fondo (Background):</label>
+            <input type="color" id="liveInspBgColor" style="width:100%; height:38px; padding:2px; border-radius:6px; background:#1e293b;" onchange="aplicarCambioElementoActual('bgColor', this.value)" />
+          </div>
+          <div class="field-group">
+            <label>🔤 Color de Texto (Color):</label>
+            <input type="color" id="liveInspTextColor" style="width:100%; height:38px; padding:2px; border-radius:6px; background:#1e293b;" onchange="aplicarCambioElementoActual('textColor', this.value)" />
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="field-group">
+            <label>📏 Tamaño de Fuente (Font Size):</label>
+            <input type="text" id="liveInspFontSize" placeholder="Ej: 16px, 1.2rem" style="background:#1e293b; color:#fff; border:1px solid #334155; border-radius:8px; padding:8px;" oninput="aplicarCambioElementoActual('fontSize', this.value)" />
+          </div>
+          <div class="field-group">
+            <label>🔘 Radio de Borde (Border Radius):</label>
+            <input type="text" id="liveInspBorderRadius" placeholder="Ej: 8px, 14px, 50%" style="background:#1e293b; color:#fff; border:1px solid #334155; border-radius:8px; padding:8px;" oninput="aplicarCambioElementoActual('borderRadius', this.value)" />
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="field-group">
+            <label>📦 Relleno Interno (Padding):</label>
+            <input type="text" id="liveInspPadding" placeholder="Ej: 8px 16px" style="background:#1e293b; color:#fff; border:1px solid #334155; border-radius:8px; padding:8px;" oninput="aplicarCambioElementoActual('padding', this.value)" />
+          </div>
+          <div class="field-group">
+            <label>👁️ Visibilidad del Elemento:</label>
+            <select id="liveInspDisplay" onchange="aplicarCambioElementoActual('display', this.value)" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:8px; padding:8px;">
+              <option value="default">Visible (Normal)</option>
+              <option value="none">Ocultar Elemento (Display None)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label>💻 Estilo CSS Personalizado Directo:</label>
+          <input type="text" id="liveInspCustomCSS" placeholder="Ej: box-shadow: 0 4px 15px rgba(0,0,0,0.5); opacity: 0.9;" style="background:#1e293b; color:#a5f3fc; border:1px solid #334155; border-radius:8px; padding:8px; font-family:monospace;" oninput="aplicarCambioElementoActual('customCSS', this.value)" />
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="padding:12px 20px; display:flex; justify-content:space-between; align-items:center; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="eliminarElementoSeleccionadoLive()" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#f87171; padding:8px 14px; border-radius:8px; font-size:0.8rem;">🗑️ Quitar Elemento</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-sec" onclick="cerrarModalInspectorLive()" style="padding:8px 14px; font-size:0.85rem;">Listo</button>
+          <button class="btn-pri" onclick="guardarPersonalizacionPaginaTotal()" style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:8px 18px; border-radius:8px; font-weight:700;">💾 Guardar Todo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
+

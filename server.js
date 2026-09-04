@@ -3064,6 +3064,48 @@ app.post('/api/salon/piso-fondo', (req, res) => {
 });
 
 // ============================================================================
+// DEVELOPER: PERSONALIZACIÓN Y EDICIÓN TOTAL DE PÁGINA (ESTILOS, TEXTOS, MODULOS)
+// ============================================================================
+app.get('/api/dev/personalizacion-pagina', (req, res) => {
+  db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'custom_page_settings'", (err, row) => {
+    if (err || !row || !row.valor) {
+      return res.json({ config: {} });
+    }
+    try {
+      const config = JSON.parse(row.valor);
+      res.json({ config });
+    } catch (_) {
+      res.json({ config: {} });
+    }
+  });
+});
+
+app.post('/api/dev/personalizacion-pagina', (req, res) => {
+  const { config } = req.body;
+  if (!config) return res.status(400).json({ error: 'Configuración no provista' });
+
+  const valorStr = typeof config === 'string' ? config : JSON.stringify(config);
+  db.run(
+    "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('custom_page_settings', ?)",
+    [valorStr],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Error guardando personalización de página' });
+      const configObj = typeof config === 'string' ? JSON.parse(config) : config;
+      io.emit('pagina_personalizacion_actualizada', { config: configObj });
+      res.json({ ok: true, message: 'Personalización de página guardada exitosamente', config: configObj });
+    }
+  );
+});
+
+app.post('/api/dev/personalizacion-pagina/reset', (req, res) => {
+  db.run("DELETE FROM ConfigNegocio WHERE clave = 'custom_page_settings'", (err) => {
+    if (err) return res.status(500).json({ error: 'Error al restablecer personalización' });
+    io.emit('pagina_personalizacion_actualizada', { config: {} });
+    res.json({ ok: true, message: 'Personalización restablecida a valores originales' });
+  });
+});
+
+// ============================================================================
 // INICIAR SERVIDOR & EXPORTAR (ENTRYPOINT & TEST HARNESS)
 // ============================================================================
 if (require.main === module) {

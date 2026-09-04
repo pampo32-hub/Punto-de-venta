@@ -998,6 +998,9 @@ function cargarDevPortal() {
         cargarUsuariosDev();
       } else if (target === 'db') {
         document.getElementById('devTabDb').classList.add('active');
+      } else if (target === 'editor-pagina') {
+        document.getElementById('devTabEditorPagina').classList.add('active');
+        cargarPersonalizacionPagina();
       }
     });
   });
@@ -5729,7 +5732,7 @@ const CATALOGO_PISOS_SALON = [
 // Piso actualmente seleccionado para previsualización
 let _pisoSeleccionadoPrevio = null;
 
-// Aplica clase CSS al salón y editor
+// Aplica clase CSS al salón y editor con máxima prioridad
 window.aplicarClasePisoSalon = function(pisoId) {
   const salon  = document.getElementById('salonContainer');
   const editor = document.getElementById('editorBoard');
@@ -5760,19 +5763,23 @@ window.cargarPisoSalonDesdeBackend = async function() {
 window.abrirModalSelectorPiso = function() {
   const modal = document.getElementById('modalSelectorPiso');
   if (!modal) return;
-  _pisoSeleccionadoPrevio = null; // reset previsualización
+  _pisoSeleccionadoPrevio = null;
   const inputFiltro = document.getElementById('inputFiltroPiso');
   const selectCat   = document.getElementById('selectCategoriaPiso');
   if (inputFiltro) inputFiltro.value = '';
   if (selectCat)   selectCat.value   = '';
   renderPisosSelectionGrid(CATALOGO_PISOS_SALON);
+  modal.classList.add('active');
   modal.style.display = 'flex';
 };
 
 // Cierra el modal selector
 window.cerrarModalSelectorPiso = function() {
   const modal = document.getElementById('modalSelectorPiso');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 };
 
 // Filtra el catálogo
@@ -5794,7 +5801,6 @@ window.renderPisosSelectionGrid = function(pisos) {
   const grid = document.getElementById('pisosSelectionGrid');
   if (!grid) return;
 
-  // Obtener el piso actual del salón
   const salon = document.getElementById('salonContainer');
   const pisoActual = salon ? [...salon.classList].find(c => c.startsWith('piso-')) : null;
 
@@ -5817,7 +5823,7 @@ window.renderPisosSelectionGrid = function(pisos) {
   }).join('');
 };
 
-// Previsualiza un piso al clickear (sin guardarlo aún)
+// Previsualiza un piso al clickear
 window.seleccionarPisoPrevio = function(pisoId) {
   _pisoSeleccionadoPrevio = pisoId;
   window.aplicarClasePisoSalon(pisoId);
@@ -5826,7 +5832,7 @@ window.seleccionarPisoPrevio = function(pisoId) {
   const piso = CATALOGO_PISOS_SALON.find(p => p.id === pisoId);
   if (txt && piso) txt.textContent = `${piso.icono} ${piso.nombre} — seleccionado`;
 
-  // Actualizar estado activo en el grid
+  // Actualizar tarjeta activa en el grid
   document.querySelectorAll('#pisosSelectionGrid .piso-card-item').forEach(card => {
     card.classList.remove('activo');
   });
@@ -5856,17 +5862,479 @@ window.guardarPisoSalonSeleccionado = async function() {
   }
 };
 
-// Inicializar piso al cargar la página
+// ============================================================================
+// STUDIO DEVELOPER: MOTOR DE PERSONALIZACIÓN Y EDICIÓN TOTAL (100% EDITABLE)
+// ============================================================================
+
+estado.personalizacionPagina = {
+  textos: {},
+  cssVars: {},
+  customCSS: '',
+  elementStyles: {}
+};
+
+// Carga la personalización desde el backend
+window.cargarPersonalizacionPagina = async function() {
+  try {
+    const res = await fetch('/api/dev/personalizacion-pagina');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.config) {
+      estado.personalizacionPagina = {
+        textos: data.config.textos || {},
+        cssVars: data.config.cssVars || {},
+        customCSS: data.config.customCSS || '',
+        elementStyles: data.config.elementStyles || {}
+      };
+      aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
+      poblarFormulariosPersonalizador(estado.personalizacionPagina);
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar personalización guardada:', e);
+  }
+};
+
+// Aplica todos los textos, variables CSS y estilos guardados en el DOM
+window.aplicarPersonalizacionAlDOM = function(config) {
+  if (!config) return;
+
+  // 1. Textos directos
+  if (config.textos) {
+    Object.entries(config.textos).forEach(([key, item]) => {
+      try {
+        if (!item || item.valor === undefined) return;
+        if (item.tipo === 'id-text') {
+          const el = document.getElementById(key);
+          if (el) el.textContent = item.valor;
+        } else if (item.tipo === 'placeholder') {
+          const el = document.getElementById(key);
+          if (el) el.placeholder = item.valor;
+        } else if (item.tipo === 'selector-text') {
+          document.querySelectorAll(key).forEach(el => el.textContent = item.valor);
+        } else if (item.tipo === 'selector-html') {
+          document.querySelectorAll(key).forEach(el => el.innerHTML = item.valor);
+        } else if (item.tipo === 'selector-html-kds') {
+          const el = document.querySelector(key);
+          if (el) {
+            const counter = el.querySelector('#kdsCounter');
+            const cnt = counter ? counter.textContent : '0';
+            el.innerHTML = `${item.valor} <span class="pill-counter" id="kdsCounter">${cnt}</span>`;
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  // 2. Variables CSS
+  if (config.cssVars) {
+    Object.entries(config.cssVars).forEach(([varName, varVal]) => {
+      if (varVal) document.documentElement.style.setProperty(varName, varVal);
+    });
+  }
+
+  // 3. CSS Custom
+  if (config.customCSS) {
+    let styleEl = document.getElementById('dynamicCustomCSS');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'dynamicCustomCSS';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.innerHTML = config.customCSS;
+  }
+
+  // 4. Estilos individuales de elementos
+  if (config.elementStyles) {
+    Object.entries(config.elementStyles).forEach(([selector, styles]) => {
+      try {
+        const el = document.querySelector(selector);
+        if (el && styles) {
+          if (styles.bgColor) el.style.backgroundColor = styles.bgColor;
+          if (styles.textColor) el.style.color = styles.textColor;
+          if (styles.fontSize) el.style.fontSize = styles.fontSize;
+          if (styles.borderRadius) el.style.borderRadius = styles.borderRadius;
+          if (styles.padding) el.style.padding = styles.padding;
+          if (styles.display && styles.display !== 'default') el.style.display = styles.display;
+          if (styles.customCSS) el.style.cssText += ';' + styles.customCSS;
+          if (styles.text !== undefined && styles.text !== '') el.innerHTML = styles.text;
+        }
+      } catch (_) {}
+    });
+  }
+};
+
+// Rellena los inputs del panel Developer con la configuración actual
+window.poblarFormulariosPersonalizador = function(config) {
+  if (!config) return;
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && val !== undefined) el.value = val;
+  };
+
+  if (config.textos) {
+    if (config.textos['topbarRestauranteNombre']) setVal('cfg_topbarRestauranteNombre', config.textos['topbarRestauranteNombre'].valor);
+    if (config.textos['topbarSlogan']) setVal('cfg_topbarSlogan', config.textos['topbarSlogan'].valor);
+    if (config.textos['topbarDefaultEmoji']) setVal('cfg_topbarDefaultEmoji', config.textos['topbarDefaultEmoji'].valor);
+    if (config.textos['globalSearchInput']) setVal('cfg_globalSearchInput_placeholder', config.textos['globalSearchInput'].valor);
+    if (config.textos['.hh-title']) setVal('cfg_hh_title', config.textos['.hh-title'].valor);
+    if (config.textos['hhStatusTxt']) setVal('cfg_hhStatusTxt', config.textos['hhStatusTxt'].valor);
+    if (config.textos['.nav-pill[data-view=\'salon\']']) setVal('cfg_tab_salon_text', config.textos['.nav-pill[data-view=\'salon\']'].valor);
+    if (config.textos['.nav-pill[data-view=\'kds\']']) setVal('cfg_tab_kds_text', config.textos['.nav-pill[data-view=\'kds\']'].valor);
+    if (config.textos['.nav-pill[data-view=\'caja\']']) setVal('cfg_tab_caja_text', config.textos['.nav-pill[data-view=\'caja\']'].valor);
+    if (config.textos['.nav-pill[data-view=\'facturacion\']']) setVal('cfg_tab_facturacion_text', config.textos['.nav-pill[data-view=\'facturacion\']'].valor);
+    if (config.textos['.zone-tab[data-zona=\'salon\']']) setVal('cfg_zone_salon', config.textos['.zone-tab[data-zona=\'salon\']'].valor);
+    if (config.textos['.zone-tab[data-zona=\'barra\']']) setVal('cfg_zone_barra', config.textos['.zone-tab[data-zona=\'barra\']'].valor);
+    if (config.textos['.zone-tab[data-zona=\'terraza\']']) setVal('cfg_zone_terraza', config.textos['.zone-tab[data-zona=\'terraza\']'].valor);
+    if (config.textos['.zone-tab[data-zona=\'vip\']']) setVal('cfg_zone_vip', config.textos['.zone-tab[data-zona=\'vip\']'].valor);
+    if (config.textos['.zone-tab[data-zona=\'segundo\']']) setVal('cfg_zone_segundo', config.textos['.zone-tab[data-zona=\'segundo\']'].valor);
+    if (config.textos['.kds-tab[data-kds-dest=\'todos\']']) setVal('cfg_kds_todos', config.textos['.kds-tab[data-kds-dest=\'todos\']'].valor);
+    if (config.textos['.kds-tab[data-kds-dest=\'cocina\']']) setVal('cfg_kds_cocina', config.textos['.kds-tab[data-kds-dest=\'cocina\']'].valor);
+    if (config.textos['.kds-tab[data-kds-dest=\'barra\']']) setVal('cfg_kds_barra', config.textos['.kds-tab[data-kds-dest=\'barra\']'].valor);
+    if (config.textos['btnTestBellSound']) setVal('cfg_btnTestBellSound', config.textos['btnTestBellSound'].valor);
+    if (config.textos['#view-caja .caja-card:nth-child(1) h3']) setVal('cfg_caja_titulo_turno', config.textos['#view-caja .caja-card:nth-child(1) h3'].valor);
+    if (config.textos['#view-caja .caja-card:nth-child(2) h3']) setVal('cfg_caja_titulo_propinas', config.textos['#view-caja .caja-card:nth-child(2) h3'].valor);
+    if (config.textos['#view-caja .caja-card:nth-child(3) h3']) setVal('cfg_caja_titulo_cierre', config.textos['#view-caja .caja-card:nth-child(3) h3'].valor);
+    if (config.textos['#btnCerrarTurnoCaja']) setVal('cfg_btnCerrarTurnoCaja', config.textos['#btnCerrarTurnoCaja'].valor);
+    if (config.textos['#view-facturacion h3']) setVal('cfg_fact_titulo', config.textos['#view-facturacion h3'].valor);
+    if (config.textos['#view-facturacion p']) setVal('cfg_fact_subtitulo', config.textos['#view-facturacion p'].valor);
+    if (config.textos['#btnEmitirFacturaDirecta']) setVal('cfg_btnEmitirFacturaDirecta', config.textos['#btnEmitirFacturaDirecta'].valor);
+  }
+
+  if (config.cssVars) {
+    if (config.cssVars['--primary']) setVal('cfg_color_primary', config.cssVars['--primary']);
+    if (config.cssVars['--bg-dark']) setVal('cfg_color_bg_dark', config.cssVars['--bg-dark']);
+    if (config.cssVars['--bg-card']) setVal('cfg_color_bg_card', config.cssVars['--bg-card']);
+    if (config.cssVars['--border']) setVal('cfg_color_border', config.cssVars['--border']);
+    if (config.cssVars['--text-main']) setVal('cfg_color_text', config.cssVars['--text-main']);
+    if (config.cssVars['--radius']) setVal('cfg_border_radius', config.cssVars['--radius']);
+  }
+
+  if (config.customCSS) {
+    setVal('cfg_custom_css', config.customCSS);
+  }
+};
+
+// Aplica cambio in-situ y lo guarda en estado
+window.aplicarCambioPrevia = function(clave, valor, tipo) {
+  if (!estado.personalizacionPagina.textos) estado.personalizacionPagina.textos = {};
+
+  if (tipo === 'text') {
+    const el = document.getElementById(clave);
+    if (el) el.textContent = valor;
+    estado.personalizacionPagina.textos[clave] = { tipo: 'id-text', valor };
+  } else if (tipo === 'placeholder') {
+    const el = document.getElementById(clave);
+    if (el) el.placeholder = valor;
+    estado.personalizacionPagina.textos[clave] = { tipo: 'placeholder', valor };
+  } else if (tipo === 'selector-text') {
+    document.querySelectorAll(clave).forEach(el => el.textContent = valor);
+    estado.personalizacionPagina.textos[clave] = { tipo: 'selector-text', valor };
+  } else if (tipo === 'selector-html') {
+    document.querySelectorAll(clave).forEach(el => el.innerHTML = valor);
+    estado.personalizacionPagina.textos[clave] = { tipo: 'selector-html', valor };
+  } else if (tipo === 'selector-html-kds') {
+    const el = document.querySelector(clave);
+    if (el) {
+      const counter = el.querySelector('#kdsCounter');
+      const cnt = counter ? counter.textContent : '0';
+      el.innerHTML = `${valor} <span class="pill-counter" id="kdsCounter">${cnt}</span>`;
+    }
+    estado.personalizacionPagina.textos[clave] = { tipo: 'selector-html-kds', valor };
+  }
+};
+
+// Aplica variable CSS en el root
+window.aplicarVariableCSS = function(varName, valor) {
+  document.documentElement.style.setProperty(varName, valor);
+  if (!estado.personalizacionPagina.cssVars) estado.personalizacionPagina.cssVars = {};
+  estado.personalizacionPagina.cssVars[varName] = valor;
+};
+
+// Aplica CSS custom
+window.aplicarCSSCustomEnVivo = function(cssText) {
+  let styleEl = document.getElementById('dynamicCustomCSS');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'dynamicCustomCSS';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.innerHTML = cssText;
+  estado.personalizacionPagina.customCSS = cssText;
+};
+
+// Guarda la personalización en el backend para todos los usuarios
+window.guardarPersonalizacionPaginaTotal = async function() {
+  try {
+    const res = await fetch('/api/dev/personalizacion-pagina', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: estado.personalizacionPagina })
+    });
+    if (!res.ok) throw new Error('Error al guardar en el servidor');
+    mostrarNotificacionCentro('💾 ¡Personalización de página guardada permanentemente!', 'success');
+  } catch (e) {
+    mostrarNotificacionCentro('❌ Error guardando personalización: ' + e.message, 'error');
+  }
+};
+
+// Restablece la personalización original
+window.restablecerPersonalizacionPagina = async function() {
+  const confirmado = await confirmarAccion({
+    icono: '🔄',
+    titulo: '¿Restablecer diseño original?',
+    subtitulo: 'Se borrarán todos los cambios visuales y textos personalizados',
+    mensaje: '¿Deseas volver al diseño, textos y colores por defecto del sistema?',
+    tipo: 'peligro',
+    txtSi: '🔄 Sí, restablecer',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
+
+  try {
+    await fetch('/api/dev/personalizacion-pagina/reset', { method: 'POST' });
+    estado.personalizacionPagina = { textos: {}, cssVars: {}, customCSS: '', elementStyles: {} };
+    mostrarNotificacionCentro('✨ Diseño original restablecido. Recargando...', 'info');
+    setTimeout(() => window.location.reload(), 1200);
+  } catch (e) {
+    mostrarNotificacionCentro('❌ Error al restablecer: ' + e.message, 'error');
+  }
+};
+
+// Cambia sub-pestaña del editor de página
+window.cambiarSubTabEditorPagina = function(subtab) {
+  document.querySelectorAll('.editor-subtabs-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.editor-subtab-section').forEach(s => s.style.display = 'none');
+
+  const btn = document.getElementById('subtabBtn_' + subtab);
+  const sec = document.getElementById('subtabContent_' + subtab);
+  if (btn) btn.classList.add('active');
+  if (sec) sec.style.display = 'block';
+};
+
+// ============================================================================
+// MODO EDICIÓN VISUAL EN VIVO (CLICK-TO-EDIT & CONTENTEDITABLE)
+// ============================================================================
+
+let _elementoSeleccionadoLive = null;
+let _modoInspeccionActivo = false;
+let _modoContentEditableActivo = false;
+
+// Activa el modo de edición en pantalla completa en el POS
+window.activarModoEdicionEnVivo = function() {
+  document.getElementById('developerPortalView')?.classList.remove('active');
+  document.getElementById('posMainView')?.classList.add('active');
+
+  const bar = document.getElementById('devLiveEditBar');
+  if (bar) bar.style.display = 'flex';
+
+  toggleModoInspeccionLive(true);
+  mostrarNotificacionCentro('🖱️ Modo Edición Activo: Haz clic en cualquier elemento para editarlo', 'info');
+};
+
+// Desactiva el modo de edición
+window.desactivarModoEdicionEnVivo = function() {
+  const bar = document.getElementById('devLiveEditBar');
+  if (bar) bar.style.display = 'none';
+
+  toggleModoInspeccionLive(false);
+  toggleContentEditableLive(false);
+
+  document.querySelectorAll('.dev-inspect-hover, .dev-element-selected').forEach(el => {
+    el.classList.remove('dev-inspect-hover', 'dev-element-selected');
+  });
+};
+
+// Vuelve a la consola dev
+window.volverAConsoleDev = function() {
+  desactivarModoEdicionEnVivo();
+  document.getElementById('posMainView')?.classList.remove('active');
+  document.getElementById('developerPortalView')?.classList.add('active');
+  document.querySelector('.dev-nav-btn[data-dev-tab="editor-pagina"]')?.click();
+};
+
+// Activa/desactiva el inspector por clic
+window.toggleModoInspeccionLive = function(activo) {
+  _modoInspeccionActivo = activo;
+  if (activo) {
+    document.body.classList.add('dev-inspecting-active');
+    document.addEventListener('mouseover', handleLiveMouseOver, true);
+    document.addEventListener('mouseout', handleLiveMouseOut, true);
+    document.addEventListener('click', handleLiveElementClick, true);
+  } else {
+    document.body.classList.remove('dev-inspecting-active');
+    document.removeEventListener('mouseover', handleLiveMouseOver, true);
+    document.removeEventListener('mouseout', handleLiveMouseOut, true);
+    document.removeEventListener('click', handleLiveElementClick, true);
+  }
+};
+
+// Activa/desactiva edición de texto por doble clic
+window.toggleContentEditableLive = function(activo) {
+  _modoContentEditableActivo = activo;
+  const elementos = document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, strong, button, label, .badge-tag');
+  elementos.forEach(el => {
+    if (el.closest('#devLiveEditBar') || el.closest('#modalEditorElementoLive') || el.closest('#developerPortalView')) return;
+    if (activo) {
+      el.setAttribute('contenteditable', 'true');
+      el.addEventListener('blur', handleContentEditableBlur);
+    } else {
+      el.removeAttribute('contenteditable');
+      el.removeEventListener('blur', handleContentEditableBlur);
+    }
+  });
+};
+
+function handleContentEditableBlur(e) {
+  const el = e.target;
+  const selector = obtenerSelectorUnico(el);
+  if (!selector) return;
+
+  if (!estado.personalizacionPagina.elementStyles) estado.personalizacionPagina.elementStyles = {};
+  if (!estado.personalizacionPagina.elementStyles[selector]) estado.personalizacionPagina.elementStyles[selector] = {};
+  estado.personalizacionPagina.elementStyles[selector].text = el.innerHTML;
+}
+
+function handleLiveMouseOver(e) {
+  if (!_modoInspeccionActivo) return;
+  const target = e.target;
+  if (target.closest('#devLiveEditBar') || target.closest('#modalEditorElementoLive')) return;
+  target.classList.add('dev-inspect-hover');
+}
+
+function handleLiveMouseOut(e) {
+  if (!_modoInspeccionActivo) return;
+  e.target.classList.remove('dev-inspect-hover');
+}
+
+function handleLiveElementClick(e) {
+  if (!_modoInspeccionActivo) return;
+  const target = e.target;
+  if (target.closest('#devLiveEditBar') || target.closest('#modalEditorElementoLive')) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  document.querySelectorAll('.dev-element-selected').forEach(el => el.classList.remove('dev-element-selected'));
+  target.classList.add('dev-element-selected');
+  _elementoSeleccionadoLive = target;
+
+  abrirModalInspectorLive(target);
+}
+
+// Abre el modal inspector para el elemento seleccionado
+window.abrirModalInspectorLive = function(el) {
+  const modal = document.getElementById('modalEditorElementoLive');
+  if (!modal || !el) return;
+
+  const selector = obtenerSelectorUnico(el);
+  const compStyles = window.getComputedStyle(el);
+
+  document.getElementById('liveInspElementTag').textContent = `<${el.tagName.toLowerCase()}> ${el.id ? '#' + el.id : ''}`;
+  document.getElementById('liveInspElementSelector').textContent = selector;
+
+  document.getElementById('liveInspText').value = el.innerHTML;
+  document.getElementById('liveInspFontSize').value = compStyles.fontSize || '';
+  document.getElementById('liveInspBorderRadius').value = compStyles.borderRadius || '';
+  document.getElementById('liveInspPadding').value = compStyles.padding || '';
+  document.getElementById('liveInspDisplay').value = compStyles.display === 'none' ? 'none' : 'default';
+  document.getElementById('liveInspCustomCSS').value = '';
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalInspectorLive = function() {
+  const modal = document.getElementById('modalEditorElementoLive');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+// Aplica cambio al elemento actualmente inspeccionado
+window.aplicarCambioElementoActual = function(prop, valor) {
+  if (!_elementoSeleccionadoLive) return;
+  const el = _elementoSeleccionadoLive;
+  const selector = obtenerSelectorUnico(el);
+
+  if (!estado.personalizacionPagina.elementStyles) estado.personalizacionPagina.elementStyles = {};
+  if (!estado.personalizacionPagina.elementStyles[selector]) estado.personalizacionPagina.elementStyles[selector] = {};
+
+  if (prop === 'text') {
+    el.innerHTML = valor;
+    estado.personalizacionPagina.elementStyles[selector].text = valor;
+  } else if (prop === 'bgColor') {
+    el.style.backgroundColor = valor;
+    estado.personalizacionPagina.elementStyles[selector].bgColor = valor;
+  } else if (prop === 'textColor') {
+    el.style.color = valor;
+    estado.personalizacionPagina.elementStyles[selector].textColor = valor;
+  } else if (prop === 'fontSize') {
+    el.style.fontSize = valor;
+    estado.personalizacionPagina.elementStyles[selector].fontSize = valor;
+  } else if (prop === 'borderRadius') {
+    el.style.borderRadius = valor;
+    estado.personalizacionPagina.elementStyles[selector].borderRadius = valor;
+  } else if (prop === 'padding') {
+    el.style.padding = valor;
+    estado.personalizacionPagina.elementStyles[selector].padding = valor;
+  } else if (prop === 'display') {
+    el.style.display = valor === 'none' ? 'none' : '';
+    estado.personalizacionPagina.elementStyles[selector].display = valor;
+  } else if (prop === 'customCSS') {
+    el.style.cssText += ';' + valor;
+    estado.personalizacionPagina.elementStyles[selector].customCSS = valor;
+  }
+};
+
+// Elimina / oculta el elemento seleccionado
+window.eliminarElementoSeleccionadoLive = function() {
+  if (!_elementoSeleccionadoLive) return;
+  aplicarCambioElementoActual('display', 'none');
+  cerrarModalInspectorLive();
+  mostrarNotificacionCentro('🗑️ Elemento ocultado en la página', 'info');
+};
+
+// Helper: genera un selector CSS único para un elemento
+function obtenerSelectorUnico(el) {
+  if (!el || el === document.body) return 'body';
+  if (el.id) return '#' + el.id;
+
+  const tag = el.tagName.toLowerCase();
+  const classes = [...el.classList].filter(c => !c.startsWith('dev-')).join('.');
+  if (classes) return `${tag}.${classes}`;
+
+  if (el.parentElement) {
+    const siblings = [...el.parentElement.children].filter(c => c.tagName === el.tagName);
+    if (siblings.length > 1) {
+      const idx = siblings.indexOf(el) + 1;
+      return `${obtenerSelectorUnico(el.parentElement)} > ${tag}:nth-of-type(${idx})`;
+    }
+    return `${obtenerSelectorUnico(el.parentElement)} > ${tag}`;
+  }
+  return tag;
+}
+
+// Inicializar piso y personalización al cargar la página
 document.addEventListener('DOMContentLoaded', () => {
   cargarPisoSalonDesdeBackend();
+  cargarPersonalizacionPagina();
 });
 
-// Socket: actualizar piso en tiempo real si otro dispositivo lo cambia
+// Sockets en vivo
 try {
   if (typeof socket !== 'undefined' && socket) {
     socket.on('salon_piso_fondo_cambiado', (data) => {
       if (data && data.pisoId) {
         window.aplicarClasePisoSalon(data.pisoId);
+      }
+    });
+
+    socket.on('pagina_personalizacion_actualizada', (data) => {
+      if (data && data.config) {
+        estado.personalizacionPagina = data.config;
+        aplicarPersonalizacionAlDOM(data.config);
       }
     });
   }
