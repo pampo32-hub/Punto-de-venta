@@ -1,3 +1,6 @@
 node_modules
 pos.db
 .env
+build_installer/
+Instalador_Listo/
+pos.db.test-bak
