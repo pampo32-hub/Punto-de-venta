@@ -799,18 +799,28 @@ function sonarCampanaCocina() {
 // 1. GESTIÓN DE SESIÓN & LOGIN CON GÉNERO Y ENRUTAMIENTO
 // ============================================================================
 window.cargarCredencialDemo = function(user, pass) {
-  document.getElementById('loginUsuario').value = user;
-  document.getElementById('loginPassword').value = pass;
-  ejecutarLogin();
+  const u = document.getElementById('loginUsuario');
+  const p = document.getElementById('loginPassword');
+  if (u) u.value = user;
+  if (p) p.value = pass;
+  window.ejecutarLogin();
 };
 
 window.ejecutarLogin = async function() {
-  const usuario = document.getElementById('loginUsuario').value.trim();
-  const password = document.getElementById('loginPassword').value.trim();
+  const uEl = document.getElementById('loginUsuario');
+  const pEl = document.getElementById('loginPassword');
+  const usuario = uEl ? uEl.value.trim() : '';
+  const password = pEl ? pEl.value.trim() : '';
 
   if (!usuario || !password) {
     alert('Ingresa tu usuario y contraseña.');
     return;
+  }
+
+  const btnSubmit = document.getElementById('btnLoginSubmit');
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = '⏳ Ingresando...';
   }
 
   try {
@@ -832,6 +842,11 @@ window.ejecutarLogin = async function() {
     aplicarEnrutamientoPorRol();
   } catch (e) {
     alert('❌ ' + e.message);
+  } finally {
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = '🔐 Ingresar al Sistema';
+    }
   }
 };
 
