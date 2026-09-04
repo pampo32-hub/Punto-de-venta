@@ -669,15 +669,18 @@ window.actualizarBotonPisoSalon = function() {
 
   const hayCuentaPedidaOtroPiso = mesasOtroPiso.some(m => m.estado === 'cuenta' || m.pidio_cuenta_qr === 1 || m.cuenta_pedida);
 
+  const customStyles = estado.personalizacionPagina?.elementStyles?.['#btnTogglePisoSalon'];
+  const customTexto = customStyles?.text || estado.personalizacionPagina?.textos?.['#btnTogglePisoSalon']?.valor;
+
   if (estado.pisoActual === 2) {
     btn.innerHTML = hayCuentaPedidaOtroPiso 
       ? '🚨 ¡Piso 1 Pide Cuenta! ↙' 
-      : '🏢 Ver Primer Piso ↙';
+      : (customTexto && customTexto.includes('Primer') ? customTexto : '🏢 Ver Primer Piso ↙');
     btn.classList.add('piso-2-activo');
   } else {
     btn.innerHTML = hayCuentaPedidaOtroPiso 
       ? '🚨 ¡Piso 2 Pide Cuenta! ↗' 
-      : '🏢 Ver Segundo Piso ↗';
+      : (customTexto || '🏢 Ver Segundo Piso ↗');
     btn.classList.remove('piso-2-activo');
   }
 
@@ -685,6 +688,16 @@ window.actualizarBotonPisoSalon = function() {
     btn.classList.add('alerta-piso-cuenta');
   } else {
     btn.classList.remove('alerta-piso-cuenta');
+  }
+
+  // Re-aplicar estilos visuales personalizados si existen
+  if (customStyles) {
+    if (customStyles.bgColor) btn.style.backgroundColor = customStyles.bgColor;
+    if (customStyles.textColor) btn.style.color = customStyles.textColor;
+    if (customStyles.fontSize) btn.style.fontSize = customStyles.fontSize;
+    if (customStyles.borderRadius) btn.style.borderRadius = customStyles.borderRadius;
+    if (customStyles.padding) btn.style.padding = customStyles.padding;
+    if (customStyles.customCSS) btn.style.cssText += ';' + customStyles.customCSS;
   }
 };
 
@@ -715,12 +728,24 @@ window.actualizarBotonPisoEditor = function() {
     }
   }
   if (btnToggle) {
+    const customStyles = estado.personalizacionPagina?.elementStyles?.['#btnTogglePisoEditor'];
+    const customTexto = customStyles?.text || estado.personalizacionPagina?.textos?.['#btnTogglePisoEditor']?.valor;
+
     if (estado.pisoActualEditor === 2) {
-      btnToggle.innerHTML = '🏢 Ver Primer Piso ↙';
+      btnToggle.innerHTML = (customTexto && customTexto.includes('Primer') ? customTexto : '🏢 Ver Primer Piso ↙');
       btnToggle.classList.add('piso-2-activo');
     } else {
-      btnToggle.innerHTML = '🏢 Ver Segundo Piso ↗';
+      btnToggle.innerHTML = (customTexto || '🏢 Ver Segundo Piso ↗');
       btnToggle.classList.remove('piso-2-activo');
+    }
+
+    if (customStyles) {
+      if (customStyles.bgColor) btnToggle.style.backgroundColor = customStyles.bgColor;
+      if (customStyles.textColor) btnToggle.style.color = customStyles.textColor;
+      if (customStyles.fontSize) btnToggle.style.fontSize = customStyles.fontSize;
+      if (customStyles.borderRadius) btnToggle.style.borderRadius = customStyles.borderRadius;
+      if (customStyles.padding) btnToggle.style.padding = customStyles.padding;
+      if (customStyles.customCSS) btnToggle.style.cssText += ';' + customStyles.customCSS;
     }
   }
 };
@@ -6057,6 +6082,14 @@ window.aplicarPersonalizacionAlDOM = function(config) {
       } catch (_) {}
     });
   }
+
+  // Sincronizar botones dinámicos de cambio de piso
+  if (typeof window.actualizarBotonPisoSalon === 'function') {
+    try { window.actualizarBotonPisoSalon(); } catch (_) {}
+  }
+  if (typeof window.actualizarBotonPisoEditor === 'function') {
+    try { window.actualizarBotonPisoEditor(); } catch (_) {}
+  }
 };
 
 // Rellena los inputs del panel Developer con la configuración actual
@@ -6084,6 +6117,9 @@ window.poblarFormulariosPersonalizador = function(config) {
     if (config.textos['.zone-tab[data-zona=\'terraza\']']) setVal('cfg_zone_terraza', config.textos['.zone-tab[data-zona=\'terraza\']'].valor);
     if (config.textos['.zone-tab[data-zona=\'vip\']']) setVal('cfg_zone_vip', config.textos['.zone-tab[data-zona=\'vip\']'].valor);
     if (config.textos['.zone-tab[data-zona=\'segundo\']']) setVal('cfg_zone_segundo', config.textos['.zone-tab[data-zona=\'segundo\']'].valor);
+    if (config.textos['btnTogglePisoSalon']) setVal('cfg_btnTogglePisoSalon', config.textos['btnTogglePisoSalon'].valor);
+    if (config.textos['#btnTogglePisoSalon']) setVal('cfg_btnTogglePisoSalon', config.textos['#btnTogglePisoSalon'].valor);
+    if (config.elementStyles?.['#btnTogglePisoSalon']?.text) setVal('cfg_btnTogglePisoSalon', config.elementStyles['#btnTogglePisoSalon'].text);
     if (config.textos['.kds-tab[data-kds-dest=\'todos\']']) setVal('cfg_kds_todos', config.textos['.kds-tab[data-kds-dest=\'todos\']'].valor);
     if (config.textos['.kds-tab[data-kds-dest=\'cocina\']']) setVal('cfg_kds_cocina', config.textos['.kds-tab[data-kds-dest=\'cocina\']'].valor);
     if (config.textos['.kds-tab[data-kds-dest=\'barra\']']) setVal('cfg_kds_barra', config.textos['.kds-tab[data-kds-dest=\'barra\']'].valor);
@@ -6116,9 +6152,14 @@ window.aplicarCambioPrevia = function(clave, valor, tipo) {
   if (!estado.personalizacionPagina.textos) estado.personalizacionPagina.textos = {};
 
   if (tipo === 'text') {
-    const el = document.getElementById(clave);
+    const cleanId = clave.startsWith('#') ? clave.substring(1) : clave;
+    const el = document.getElementById(cleanId);
     if (el) el.textContent = valor;
-    estado.personalizacionPagina.textos[clave] = { tipo: 'id-text', valor };
+    estado.personalizacionPagina.textos[cleanId] = { tipo: 'id-text', valor };
+    estado.personalizacionPagina.textos['#' + cleanId] = { tipo: 'id-text', valor };
+    if (cleanId === 'btnTogglePisoSalon' && typeof window.actualizarBotonPisoSalon === 'function') {
+      window.actualizarBotonPisoSalon();
+    }
   } else if (tipo === 'placeholder') {
     const el = document.getElementById(clave);
     if (el) el.placeholder = valor;
@@ -6582,6 +6623,15 @@ function obtenerSelectorUnico(el) {
       part += '.' + cleanClasses[0];
     }
 
+    // Atributos semánticos clave
+    if (curr.getAttribute('data-zona')) {
+      part += `[data-zona="${curr.getAttribute('data-zona')}"]`;
+    } else if (curr.getAttribute('data-view')) {
+      part += `[data-view="${curr.getAttribute('data-view')}"]`;
+    } else if (curr.getAttribute('data-kds-dest')) {
+      part += `[data-kds-dest="${curr.getAttribute('data-kds-dest')}"]`;
+    }
+
     if (curr.parentElement) {
       const sameTagSiblings = [...curr.parentElement.children].filter(c => {
         if (cleanClasses.length > 0) {
@@ -6589,7 +6639,7 @@ function obtenerSelectorUnico(el) {
         }
         return c.tagName === curr.tagName;
       });
-      if (sameTagSiblings.length > 1) {
+      if (sameTagSiblings.length > 1 && !curr.getAttribute('data-zona') && !curr.getAttribute('data-view')) {
         const idx = sameTagSiblings.indexOf(curr) + 1;
         part += `:nth-of-type(${idx})`;
       }
