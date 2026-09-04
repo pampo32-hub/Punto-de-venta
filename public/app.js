@@ -567,6 +567,18 @@ try {
     socket.on('happy_hour_cambio', (data) => {
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
     });
+    socket.on('negocio_modulos_actualizados', (d) => {
+      if (estado.negocioActual && Number(estado.negocioActual.id) === Number(d.negocioId)) {
+        estado.negocioActual.modulos_activos = d.modulos_activos;
+        estado.negocioActual.plan_nombre = d.plan_nombre;
+        if (typeof aplicarRestriccionesModulos === 'function') {
+          aplicarRestriccionesModulos();
+        }
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro(`🧩 Licencia actualizada: ${d.plan_nombre || 'Módulos actualizados'}`, 'info');
+        }
+      }
+    });
   }
 } catch (e) {}
 
@@ -954,6 +966,9 @@ function aplicarEnrutamientoPorRol() {
 
   // Configurar Logo y Nombre del Negocio
   actualizarBrandingNegocio(estado.negocioActual);
+  if (typeof aplicarRestriccionesModulos === 'function') {
+    aplicarRestriccionesModulos();
+  }
 
   // Visibilidad de herramientas y pestañas exclusivas de Admin
   const adminTools = document.getElementById('adminExtraActions');
@@ -1138,34 +1153,310 @@ async function cargarNegociosDev() {
     const negocios = await res.json();
     const grid = document.getElementById('devNegociosGrid');
 
-    grid.innerHTML = negocios.map(n => `
-      <div class="negocio-card">
-        <div class="negocio-top">
-          <img class="negocio-logo-img" src="${n.logo_url || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=100'}" alt="Logo" />
-          <div class="negocio-details">
-            <h4>${n.nombre}</h4>
-            <small>${n.slogan || 'Restaurante & Bar'}</small>
+    grid.innerHTML = negocios.map(n => {
+      let modulosCount = 11;
+      let planTexto = n.plan_nombre || 'Plan Full Tech 2026';
+      if (n.modulos_activos && n.modulos_activos !== 'all') {
+        try {
+          const parsed = typeof n.modulos_activos === 'string' ? JSON.parse(n.modulos_activos) : n.modulos_activos;
+          modulosCount = Array.isArray(parsed) ? parsed.length : 11;
+        } catch (_) {}
+      }
+
+      return `
+        <div class="negocio-card">
+          <div class="negocio-top">
+            <img class="negocio-logo-img" src="${n.logo_url || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=100'}" alt="Logo" />
+            <div class="negocio-details">
+              <h4>${n.nombre}</h4>
+              <small>${n.slogan || 'Restaurante & Bar'}</small>
+            </div>
+          </div>
+          <div class="negocio-meta-stats">
+            <span>👥 ${n.total_usuarios || 0} Usuarios</span>
+            <span>🍽️ ${n.total_mesas || 0} Mesas</span>
+            <span>💰 Moneda: ${n.moneda}</span>
+            <span style="grid-column: 1 / -1; color: #818cf8; font-weight: 700;">🧩 ${modulosCount}/11 Módulos (${planTexto})</span>
+          </div>
+          <div class="negocio-actions" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button class="btn-open-pos-as" style="flex: 1 1 100%;" onclick="abrirPosComoNegocio(${n.id})">
+              👀 Abrir POS como este Local
+            </button>
+            <button class="btn-edit-negocio" style="flex: 1; background: #312e81; border-color: #4338ca; color: #e0e7ff; font-weight: 700;" onclick="abrirModalModulosNegocio(${n.id})">
+              🧩 Licencia & Módulos
+            </button>
+            <button class="btn-edit-negocio" style="flex: 1;" onclick="editarNegocioDev(${n.id})">
+              ✏️ Editar Datos
+            </button>
           </div>
         </div>
-        <div class="negocio-meta-stats">
-          <span>👥 ${n.total_usuarios || 0} Usuarios</span>
-          <span>🍽️ ${n.total_mesas || 0} Mesas</span>
-          <span>💰 Moneda: ${n.moneda}</span>
-        </div>
-        <div class="negocio-actions">
-          <button class="btn-open-pos-as" onclick="abrirPosComoNegocio(${n.id})">
-            👀 Abrir POS como este Local
-          </button>
-          <button class="btn-edit-negocio" onclick="editarNegocioDev(${n.id})">
-            ✏️ Editar Logo / Datos
-          </button>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (e) {
     console.error('Error cargando negocios dev:', e);
   }
 }
+
+// ============================================================================
+// CENTRO DE LICENCIAS Y MÓDULOS SAAS 2026 (DEVELOPER)
+// ============================================================================
+let _catalogoModulosCache = [];
+let _modulosSeleccionadosSet = new Set();
+let _negocioModulosActivoId = null;
+
+window.abrirModalModulosNegocio = async function(negocioId) {
+  _negocioModulosActivoId = negocioId;
+  const inputId = document.getElementById('modulosNegocioId');
+  if (inputId) inputId.value = negocioId;
+
+  try {
+    const [resCat, resNeg] = await Promise.all([
+      fetch('/api/dev/modulos/catalogo'),
+      fetch(`/api/dev/negocios/${negocioId}/modulos`)
+    ]);
+
+    _catalogoModulosCache = await resCat.json();
+    const dataNeg = await resNeg.json();
+
+    const subEl = document.getElementById('modulosModalSubtitulo');
+    if (subEl) subEl.textContent = `Comercio: ${dataNeg.nombre || 'Restaurante'}`;
+
+    const planBadge = document.getElementById('planActualBadge');
+    if (planBadge) planBadge.textContent = dataNeg.planNombre || 'Plan Full Tech 2026';
+
+    _modulosSeleccionadosSet.clear();
+    if (dataNeg.modulosActivos === 'all' || !Array.isArray(dataNeg.modulosActivos)) {
+      _catalogoModulosCache.forEach(m => _modulosSeleccionadosSet.add(m.id));
+    } else {
+      dataNeg.modulosActivos.forEach(mId => _modulosSeleccionadosSet.add(mId));
+    }
+    // El módulo base pos_core siempre debe estar activo
+    _modulosSeleccionadosSet.add('pos_core');
+
+    renderizarListaModulos();
+    actualizarResumenModulosUI();
+
+    document.getElementById('modalModulosNegocio')?.classList.add('active');
+  } catch (e) {
+    alert('Error al cargar módulos del comercio: ' + e.message);
+  }
+};
+
+window.renderizarListaModulos = function() {
+  const cont = document.getElementById('listaModulosContainer');
+  if (!cont) return;
+
+  cont.innerHTML = _catalogoModulosCache.map(m => {
+    const isActivo = _modulosSeleccionadosSet.has(m.id);
+    const isBase = m.esBase;
+
+    return `
+      <div class="modulo-item-card ${isActivo ? 'activo' : ''} ${isBase ? 'is-base' : ''}" id="cardModulo_${m.id}">
+        <div class="modulo-icon-box">${m.icono}</div>
+        <div class="modulo-info">
+          <div class="modulo-header-row">
+            <h5 class="modulo-title">${m.nombre}</h5>
+            <span class="modulo-badge-cat">${m.categoria}</span>
+          </div>
+          <p class="modulo-desc">${m.descripcion}</p>
+          <div class="modulo-price-row">
+            <span class="modulo-price-tag">₡${(m.precioCRC).toLocaleString()} / mes ($${m.precioUSD})</span>
+            <label class="switch-toggle-label" title="${isBase ? 'Módulo Base Obligatorio' : (isActivo ? 'Desactivar módulo' : 'Activar módulo')}">
+              <input type="checkbox" id="chkModulo_${m.id}" ${isActivo ? 'checked' : ''} ${isBase ? 'disabled' : ''} onchange="toggleModuloItem('${m.id}')">
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+};
+
+window.toggleModuloItem = function(modId) {
+  if (modId === 'pos_core') return;
+  if (_modulosSeleccionadosSet.has(modId)) {
+    _modulosSeleccionadosSet.delete(modId);
+  } else {
+    _modulosSeleccionadosSet.add(modId);
+  }
+
+  const card = document.getElementById(`cardModulo_${modId}`);
+  if (card) {
+    if (_modulosSeleccionadosSet.has(modId)) {
+      card.classList.add('activo');
+    } else {
+      card.classList.remove('activo');
+    }
+  }
+
+  document.querySelectorAll('.btn-plan-preset').forEach(b => b.classList.remove('active'));
+  const badge = document.getElementById('planActualBadge');
+  if (badge) badge.textContent = 'Plan Personalizado';
+
+  actualizarResumenModulosUI();
+};
+
+window.aplicarPresetPlan = function(tipo) {
+  document.querySelectorAll('.btn-plan-preset').forEach(b => b.classList.remove('active'));
+  _modulosSeleccionadosSet.clear();
+  _modulosSeleccionadosSet.add('pos_core');
+
+  let planNombre = 'Plan Personalizado';
+
+  if (tipo === 'basico') {
+    _modulosSeleccionadosSet.add('kds_cocina');
+    _modulosSeleccionadosSet.add('offline_first');
+    planNombre = 'Plan Básico (Start)';
+  } else if (tipo === 'smart') {
+    _modulosSeleccionadosSet.add('kds_cocina');
+    _modulosSeleccionadosSet.add('mesas_promos');
+    _modulosSeleccionadosSet.add('split_bill');
+    _modulosSeleccionadosSet.add('menu_qr');
+    _modulosSeleccionadosSet.add('offline_first');
+    planNombre = 'Plan Smart Gastro';
+  } else if (tipo === 'full') {
+    _catalogoModulosCache.forEach(m => _modulosSeleccionadosSet.add(m.id));
+    planNombre = 'Plan Full Tech 2026';
+  }
+
+  const badge = document.getElementById('planActualBadge');
+  if (badge) badge.textContent = planNombre;
+
+  renderizarListaModulos();
+  actualizarResumenModulosUI();
+};
+
+window.actualizarResumenModulosUI = function() {
+  const totalModulos = _catalogoModulosCache.length || 11;
+  const activos = _modulosSeleccionadosSet.size;
+
+  let totalCRC = 0;
+  let totalUSD = 0;
+
+  _catalogoModulosCache.forEach(m => {
+    if (_modulosSeleccionadosSet.has(m.id)) {
+      totalCRC += m.precioCRC || 0;
+      totalUSD += m.precioUSD || 0;
+    }
+  });
+
+  const txtContador = document.getElementById('resumenModulosContador');
+  if (txtContador) {
+    txtContador.textContent = `${activos} de ${totalModulos} módulos activos`;
+  }
+
+  const txtPrecio = document.getElementById('resumenPrecioMensual');
+  if (txtPrecio) {
+    txtPrecio.textContent = `Total sugerido: ₡${totalCRC.toLocaleString()} / mes ($${totalUSD} USD)`;
+  }
+};
+
+document.getElementById('btnGuardarModulosNegocio')?.addEventListener('click', async () => {
+  if (!_negocioModulosActivoId) return;
+
+  const planNombre = document.getElementById('planActualBadge')?.textContent || 'Personalizado';
+  const modulosArray = Array.from(_modulosSeleccionadosSet);
+
+  try {
+    const res = await fetch(`/api/dev/negocios/${_negocioModulosActivoId}/modulos`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modulos_activos: modulosArray,
+        plan_nombre: planNombre
+      })
+    });
+
+    if (res.ok) {
+      alert(`✅ ¡Licencia y módulos guardados con éxito!\n\n• Plan: ${planNombre}\n• Módulos activos: ${modulosArray.length} de ${_catalogoModulosCache.length}`);
+      document.getElementById('modalModulosNegocio')?.classList.remove('active');
+      cargarNegociosDev();
+
+      // Si el negocio editado es el activo actualmente en pantalla, actualizar restricciones en vivo
+      if (estado.negocioActual && Number(estado.negocioActual.id) === Number(_negocioModulosActivoId)) {
+        estado.negocioActual.modulos_activos = modulosArray;
+        estado.negocioActual.plan_nombre = planNombre;
+        aplicarRestriccionesModulos();
+      }
+    } else {
+      const err = await res.json();
+      alert('Error al guardar módulos: ' + (err.error || 'Error desconocido'));
+    }
+  } catch (e) {
+    alert('Error al comunicar con el servidor: ' + e.message);
+  }
+});
+
+document.getElementById('btnCloseModulosNegocio')?.addEventListener('click', () => {
+  document.getElementById('modalModulosNegocio')?.classList.remove('active');
+});
+
+document.getElementById('btnCancelarModulosNegocio')?.addEventListener('click', () => {
+  document.getElementById('modalModulosNegocio')?.classList.remove('active');
+});
+
+// ============================================================================
+// FEATURE-FLAGS Y RESTRICCIONES EN VIVO POR MÓDULO
+// ============================================================================
+window.tieneModulo = function(moduloKey) {
+  if (!estado.negocioActual) return true;
+  const modulos = estado.negocioActual.modulos_activos;
+  if (!modulos || modulos === 'all') return true;
+
+  if (Array.isArray(modulos)) {
+    return modulos.includes(moduloKey);
+  }
+  if (typeof modulos === 'string') {
+    try {
+      const arr = JSON.parse(modulos);
+      return Array.isArray(arr) ? arr.includes(moduloKey) : true;
+    } catch (_) {
+      return true;
+    }
+  }
+  return true;
+};
+
+window.aplicarRestriccionesModulos = function() {
+  const tieneKDS = tieneModulo('kds_cocina');
+  const tieneSplit = tieneModulo('split_bill');
+  const tieneMesasPromos = tieneModulo('mesas_promos');
+  const tieneInventario = tieneModulo('inventario_recetas');
+  const tieneQR = tieneModulo('menu_qr');
+  const tieneAutoPago = tieneModulo('auto_pago_qr');
+
+  // 1. KDS
+  document.querySelectorAll('.nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds').forEach(el => {
+    el.style.display = tieneKDS ? '' : 'none';
+  });
+
+  // 2. Split Bill
+  const btnSplit = document.getElementById('btnDividirCuentaModal');
+  if (btnSplit) {
+    btnSplit.style.display = tieneSplit ? '' : 'none';
+  }
+
+  // 3. Inventario
+  document.querySelectorAll('.admin-only-tab[onclick*="inventario"], button[onclick*="abrirModuloAdmin(\'inventario\')"]').forEach(el => {
+    el.style.display = tieneInventario ? '' : 'none';
+  });
+
+  // 4. Happy Hour & Promociones
+  const hhSwitch = document.getElementById('hhSwitchInput');
+  if (hhSwitch && !tieneMesasPromos) {
+    hhSwitch.disabled = true;
+    const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
+    if (hhBar) hhBar.title = 'Módulo Mesas Avanzadas & Happy Hour no contratado';
+  } else if (hhSwitch) {
+    hhSwitch.disabled = false;
+  }
+
+  // 5. Menú QR
+  const btnQR = document.getElementById('btnAbrirModalQR');
+  if (btnQR) {
+    btnQR.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
+  }
+};
 
 window.abrirPosComoNegocio = async function(negocioId) {
   try {
@@ -1175,6 +1466,8 @@ window.abrirPosComoNegocio = async function(negocioId) {
     if (neg) {
       estado.negocioActual = neg;
       actualizarBrandingNegocio(neg);
+      aplicarRestriccionesModulos();
+
       document.getElementById('developerPortalView')?.classList.remove('active');
       document.getElementById('posMainView')?.classList.add('active');
       document.body.classList.add('is-admin');

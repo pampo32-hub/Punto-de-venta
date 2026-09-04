@@ -65,6 +65,8 @@ db.serialize(() => {
   db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN hora_pidio_cuenta TEXT", () => {});
   db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+  db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
+  db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
   db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
 
@@ -278,6 +280,202 @@ app.put('/api/dev/negocios/:id', async (req, res) => {
     const actualizado = await dbGet('SELECT * FROM Negocios WHERE id = ?', [req.params.id]);
     io.emit('negocio_actualizado', actualizado);
     res.json(actualizado);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// 2.1 CATÁLOGO DE MÓDULOS SAAS 2026 Y CENTRO DE LICENCIAS
+// ============================================================================
+const CATALOGO_MODULOS = [
+  {
+    id: 'pos_core',
+    nombre: 'POS Core & Salón',
+    icono: '🍽️',
+    categoria: 'Esencial',
+    descripcion: 'Plano interactivo de mesas, comandero táctil por cursos y control de caja.',
+    precioCRC: 15000,
+    precioUSD: 30,
+    esBase: true
+  },
+  {
+    id: 'kds_cocina',
+    nombre: 'KDS Cocina & Barra Multiestación',
+    icono: '🍳',
+    categoria: 'Operaciones',
+    descripcion: 'Pantallas táctiles en cocina y barra con alerta sonora, tiempos de espera y estados.',
+    precioCRC: 8000,
+    precioUSD: 16,
+    esBase: false
+  },
+  {
+    id: 'mesas_promos',
+    nombre: 'Mesas Avanzadas & Happy Hour',
+    icono: '🍸',
+    categoria: 'Ventas',
+    descripcion: 'Mover, unir y separar mesas con trazabilidad de origen y 2x1 automático programado.',
+    precioCRC: 6000,
+    precioUSD: 12,
+    esBase: false
+  },
+  {
+    id: 'split_bill',
+    nombre: 'División de Cuentas (Split Bill)',
+    icono: '✂️',
+    categoria: 'Caja',
+    descripcion: 'División de cuentas por persona o por platillo con pagos parciales y tiques individuales.',
+    precioCRC: 5000,
+    precioUSD: 10,
+    esBase: false
+  },
+  {
+    id: 'menu_qr',
+    nombre: 'Menú QR & Llamado a Mesero',
+    icono: '📱',
+    categoria: 'Cliente',
+    descripcion: 'Códigos QR en mesas con menú digital y llamado a mesero con cooldown de 2 minutos.',
+    precioCRC: 7000,
+    precioUSD: 14,
+    esBase: false
+  },
+  {
+    id: 'auto_pago_qr',
+    nombre: 'Auto-Pago QR & SINPE Móvil',
+    icono: '💳',
+    categoria: 'Pagos Digitales',
+    descripcion: 'Pago directo del cliente desde su celular con SINPE Móvil/Tarjeta y división colaborativa.',
+    precioCRC: 9000,
+    precioUSD: 18,
+    esBase: false
+  },
+  {
+    id: 'offline_first',
+    nombre: 'Modo Offline-First Blindado',
+    icono: '⚡',
+    categoria: 'Resiliencia',
+    descripcion: 'Operación continua sin internet con IndexedDB local y sincronización automática Outbox.',
+    precioCRC: 10000,
+    precioUSD: 20,
+    esBase: false
+  },
+  {
+    id: 'inventario_recetas',
+    nombre: 'Inventario & Escandallos',
+    icono: '📦',
+    categoria: 'Inventario',
+    descripcion: 'Fichas técnicas, descuento milimétrico por recetas (gramos/ml), costeo y alerta de barriles.',
+    precioCRC: 12000,
+    precioUSD: 24,
+    esBase: false
+  },
+  {
+    id: 'notificaciones_whatsapp',
+    nombre: 'Notificaciones WhatsApp & Bot',
+    icono: '📲',
+    categoria: 'Comunicación',
+    descripcion: 'Comprobantes por WhatsApp para clientes y alertas gerenciales de cierre/anulaciones para el dueño.',
+    precioCRC: 9000,
+    precioUSD: 18,
+    esBase: false
+  },
+  {
+    id: 'inteligencia_artificial',
+    nombre: 'IA Gastronómica 2026',
+    icono: '🤖',
+    categoria: 'Vanguardia',
+    descripcion: 'Comandero por voz (Voice POS), sugerencias de upselling predictivo y pronóstico de ventas.',
+    precioCRC: 15000,
+    precioUSD: 30,
+    esBase: false
+  },
+  {
+    id: 'facturacion_electronica',
+    nombre: 'Facturación Electrónica Legal',
+    icono: '🏛️',
+    categoria: 'Fiscal',
+    descripcion: 'Emisión y firma de comprobantes electrónicos autorizados con envío de XML y PDF.',
+    precioCRC: 10000,
+    precioUSD: 20,
+    esBase: false
+  }
+];
+
+// Obtener catálogo de módulos
+app.get('/api/dev/modulos/catalogo', (req, res) => {
+  res.json(CATALOGO_MODULOS);
+});
+
+// Obtener módulos activos de un negocio
+app.get('/api/dev/negocios/:id/modulos', async (req, res) => {
+  try {
+    const neg = await dbGet('SELECT id, nombre, modulos_activos, plan_nombre FROM Negocios WHERE id = ?', [req.params.id]);
+    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    let modulos = neg.modulos_activos || 'all';
+    if (modulos !== 'all') {
+      try { modulos = JSON.parse(modulos); } catch (_) { modulos = 'all'; }
+    }
+
+    res.json({
+      negocioId: neg.id,
+      nombre: neg.nombre,
+      planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
+      modulosActivos: modulos,
+      catalogo: CATALOGO_MODULOS
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Actualizar módulos activos y plan de un negocio
+app.put('/api/dev/negocios/:id/modulos', async (req, res) => {
+  try {
+    const { modulos_activos, plan_nombre = 'Personalizado' } = req.body;
+    const valorModulos = typeof modulos_activos === 'object' ? JSON.stringify(modulos_activos) : (modulos_activos || 'all');
+
+    await dbRun(
+      'UPDATE Negocios SET modulos_activos = ?, plan_nombre = ? WHERE id = ?',
+      [valorModulos, plan_nombre, req.params.id]
+    );
+
+    const actualizado = await dbGet('SELECT id, nombre, modulos_activos, plan_nombre FROM Negocios WHERE id = ?', [req.params.id]);
+
+    let parsedModulos = valorModulos;
+    try { parsedModulos = JSON.parse(valorModulos); } catch (_) {}
+
+    // Notificar en tiempo real a todas las pantallas de ese negocio
+    io.emit('negocio_modulos_actualizados', {
+      negocioId: Number(req.params.id),
+      modulos_activos: parsedModulos,
+      plan_nombre
+    });
+
+    res.json({ ok: true, negocio: actualizado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Obtener módulos del negocio activo actual
+app.get('/api/negocio/actual/modulos', async (req, res) => {
+  try {
+    const negocioId = req.query.negocioId || 1;
+    const neg = await dbGet('SELECT id, nombre, modulos_activos, plan_nombre FROM Negocios WHERE id = ?', [negocioId]);
+    if (!neg) {
+      return res.json({ modulos_activos: 'all', plan_nombre: 'Plan Full Tech 2026' });
+    }
+    let modulos = neg.modulos_activos || 'all';
+    if (modulos !== 'all') {
+      try { modulos = JSON.parse(modulos); } catch (_) { modulos = 'all'; }
+    }
+    res.json({
+      negocioId: neg.id,
+      nombre: neg.nombre,
+      planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
+      modulosActivos: modulos
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

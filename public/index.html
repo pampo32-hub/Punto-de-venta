@@ -1240,6 +1240,68 @@
   </div>
 
   <!-- ===================================================================== -->
+  <!-- MODAL: GESTIÓN DE MÓDULOS Y LICENCIA SAAS 2026 (DEVELOPER) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalModulosNegocio">
+    <div class="modal-dialog" style="max-width: 860px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e1b4b, #312e81); border-bottom: 1px solid #4338ca; padding: 16px 20px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 2rem;">🧩</div>
+          <div>
+            <h3 style="margin: 0; color: #fff; font-size: 1.25rem;">Centro de Licencias & Módulos Activos</h3>
+            <small style="color: #c7d2fe;" id="modulosModalSubtitulo">Comercio: GastroBar Central</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" id="btnCloseModulosNegocio" style="color: #fff;">✕</button>
+      </div>
+      
+      <div class="dialog-body" style="padding: 20px; overflow-y: auto; flex: 1;">
+        <input type="hidden" id="modulosNegocioId" value="" />
+
+        <!-- SELECTOR DE PLANES RÁPIDOS -->
+        <div style="background: #1e293b; padding: 14px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <strong style="color: #f8fafc; font-size: 0.9rem;">⚡ Plantillas de Suscripción Rápida:</strong>
+            <span id="planActualBadge" style="background: #4f46e5; color: #fff; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800;">Plan Personalizado</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
+            <button type="button" class="btn-plan-preset" onclick="aplicarPresetPlan('basico')">
+              🥉 Plan Básico<br><small style="opacity: 0.8;">Core + KDS + Offline</small>
+            </button>
+            <button type="button" class="btn-plan-preset" onclick="aplicarPresetPlan('smart')">
+              🥈 Plan Smart Gastro<br><small style="opacity: 0.8;">+ Mesas/Promos + QR</small>
+            </button>
+            <button type="button" class="btn-plan-preset" onclick="aplicarPresetPlan('full')">
+              🥇 Plan Full Tech 2026<br><small style="opacity: 0.8;">Todos los 11 módulos</small>
+            </button>
+          </div>
+        </div>
+
+        <!-- LISTA DE LOS 11 MÓDULOS -->
+        <h4 style="margin: 0 0 12px; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">
+          Catálogo Modular GastroBar Pro (2026)
+        </h4>
+        <div id="listaModulosContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 12px;">
+          <!-- Generado dinámicamente con app.js -->
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="background: #0f172a; border-top: 1px solid #1e293b; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; flex-direction: column;">
+          <span style="color: #94a3b8; font-size: 0.8rem;" id="resumenModulosContador">0 de 11 módulos activos</span>
+          <strong style="color: #38bdf8; font-size: 1.05rem;" id="resumenPrecioMensual">Total sugerido: ₡0 / mes ($0 USD)</strong>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-sec" id="btnCancelarModulosNegocio">Cancelar</button>
+          <button class="btn-pri" id="btnGuardarModulosNegocio" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); border: none;">
+            💾 Guardar y Aplicar Licencia
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
   <!-- MODALES PREEXISTENTES: MODIFICADORES, SPLIT BILLS, ANULACIÓN, ETC. -->
   <!-- ===================================================================== -->
   <!-- MODIFICADORES -->
