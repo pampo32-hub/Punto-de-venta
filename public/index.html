@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>PUNTO DE VENTA | Restaurantes & Bares</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0284c7" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -543,6 +545,12 @@
         <button class="btn-top-volver-dev" id="btnVolverConsolaDevTop" onclick="volverAConsoleDev()" title="Regresar a la Consola SaaS Developer">
           <span>🛠️ Consola Dev</span>
         </button>
+      </div>
+
+      <!-- BADGE DE ESTADO DE CONEXIÓN OFFLINE-FIRST -->
+      <div id="netStatusBadge" class="network-status-badge online" title="Conexión en línea y sincronizada">
+        <span class="net-dot online"></span>
+        <span class="net-text">En línea</span>
       </div>
 
       <!-- PERFIL DE USUARIO CON GÉNERO DINÁMICO & CERRAR SESIÓN -->
@@ -2435,7 +2443,20 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/offline-db.js"></script>
+  <script src="/offline-sync.js"></script>
   <script src="app.js?v=2.2.0"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then((reg) => {
+          console.log('[PWA] Service Worker registrado exitosamente:', reg.scope);
+        }).catch((err) => {
+          console.warn('[PWA] Fallo al registrar Service Worker:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
 

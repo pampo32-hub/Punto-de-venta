@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Mi Mesa | Consulta de Cuenta & Menú</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0284c7" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -782,10 +784,20 @@
       // Desactivar inmediatamente y comenzar la cuenta regresiva de 2 minutos
       iniciarTemporizadorSolicitarMesero(120);
 
-      try {
-        await fetch('/api/cliente/mesa/' + mesaId + '/pedir-cuenta', { method: 'POST' });
-      } catch (e) {
-        console.error('Error enviando solicitud de mesero:', e);
+      if (window.PosOfflineSync) {
+        await window.PosOfflineSync.ejecutarConRespaldo({
+          tipo: 'PEDIR_CUENTA',
+          endpoint: '/api/cliente/mesa/' + mesaId + '/pedir-cuenta',
+          metodo: 'POST',
+          payload: { mesaId: Number(mesaId) },
+          descripcion: `Solicitar cuenta Mesa ${mesaId}`
+        });
+      } else {
+        try {
+          await fetch('/api/cliente/mesa/' + mesaId + '/pedir-cuenta', { method: 'POST' });
+        } catch (e) {
+          console.error('Error enviando solicitud de mesero:', e);
+        }
       }
     };
 
@@ -809,6 +821,15 @@
     } catch (e) {}
 
     document.addEventListener('DOMContentLoaded', cargarDatosCliente);
+  </script>
+  <script src="/offline-db.js"></script>
+  <script src="/offline-sync.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
   </script>
 </body>
 </html>

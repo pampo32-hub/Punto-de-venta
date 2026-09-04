@@ -80,6 +80,12 @@ db.serialize(() => {
     creado_en TEXT,
     activo INTEGER DEFAULT 1
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS IdempotencyLog (
+    idempotency_key TEXT PRIMARY KEY,
+    accion TEXT,
+    creado_en TEXT
+  )`);
 });
 
 // Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
@@ -1613,237 +1619,334 @@ app.post('/api/happy-hour', async (req, res) => {
   res.json({ ...happyHourEstado });
 });
 
+// Endpoint de heartbeat para monitoreo de conectividad de clientes
+app.get('/api/ping', (req, res) => {
+  res.json({ ok: true, timestamp: Date.now() });
+});
+
+async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null }) {
+  const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+  if (!mesa) {
+    const err = new Error('Mesa no encontrada');
+    err.status = 404;
+    throw err;
+  }
+  const mesaNumero = mesa.nombre || mesa.numero || `Mesa ${mesaId}`;
+
+  // 1. Identificar items nuevos no enviados previamente
+  const nuevosItems = items.filter(it => !it.id_detalle_existente && !it.enviado);
+  if (!nuevosItems.length && items.length > 0) {
+    const ordenExistente = await dbGet(
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      [mesaId]
+    );
+    return {
+      message: 'Comanda guardada con éxito',
+      ordenId: ordenExistente ? ordenExistente.id : null,
+      total: ordenExistente ? ordenExistente.total : 0,
+      estado: mesa.estado,
+      tieneCocina: false
+    };
+  }
+
+  // 2. Procesar y normalizar detalles de productos nuevos
+  const itemsProcesados = [];
+  for (const it of nuevosItems) {
+    let prodId = it.producto_id || it.id;
+    let nombre = it.nombre || it.nombre_producto;
+    let precio = it.precio != null ? Number(it.precio) : (it.precio_unitario != null ? Number(it.precio_unitario) : null);
+    let destino = it.destino;
+    let curso = it.curso;
+
+    if (prodId) {
+      if (!nombre || precio == null || !destino || !curso) {
+        const prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+        if (prodDb) {
+          if (!nombre) nombre = prodDb.nombre;
+          if (precio == null) precio = prodDb.precio;
+          if (!destino) destino = prodDb.destino;
+          if (!curso) curso = prodDb.curso || 2;
+        }
+      }
+    } else if (nombre) {
+      const prodDb = await dbGet('SELECT * FROM Productos WHERE nombre = ? OR nombre LIKE ?', [nombre, `%${nombre}%`]);
+      if (prodDb) {
+        prodId = prodDb.id;
+        if (precio == null) precio = prodDb.precio;
+        if (!destino) destino = prodDb.destino;
+        if (!curso) curso = prodDb.curso || 2;
+      } else {
+        prodId = 1;
+      }
+    } else {
+      prodId = 1;
+    }
+
+    itemsProcesados.push({
+      id: prodId,
+      nombre: nombre || 'Producto',
+      precio: precio || 0,
+      cantidad: Number(it.cantidad) || 1,
+      notas: it.notas || '',
+      curso: curso || 2,
+      destino: destino || 'cocina',
+      origen_mesa_numero: it.origen_mesa_numero || null
+    });
+  }
+
+  // 3. Evaluar si algún nuevo item va a cocina
+  const tieneNuevosCocina = itemsProcesados.some(it => 
+    it.destino === 'cocina' || (it.destino !== 'barra' && it.curso && it.curso <= 3)
+  );
+
+  // 4. Buscar orden activa o crear una nueva
+  let orden = await dbGet(
+    "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+    [mesaId]
+  );
+  const ahora = new Date().toISOString();
+  let ordenId;
+
+  if (!orden) {
+    const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+    const estadoInicialOrden = tieneNuevosCocina ? 'esperando' : 'abierta';
+    const r = await dbRun(
+      `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
+    );
+    ordenId = r.lastID;
+  } else {
+    ordenId = orden.id;
+    if (tieneNuevosCocina) {
+      await dbRun("UPDATE Ordenes SET estado = 'esperando' WHERE id = ?", [ordenId]);
+    }
+  }
+
+  // 5. Determinar nuevo estado de mesa
+  let nuevoEstadoMesa;
+  if (tieneNuevosCocina) {
+    nuevoEstadoMesa = 'esperando';
+  } else {
+    nuevoEstadoMesa = (mesa.estado === 'libre') ? 'abierta' : mesa.estado;
+  }
+
+  await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesa, mesero, mesaId]);
+
+  // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
+  const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
+  const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
+
+  const nuevasComandas = [];
+  for (const it of itemsProcesados) {
+    const subtotal = it.precio * it.cantidad;
+    const rItem = await dbRun(
+      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero]
+    );
+    nuevasComandas.push({
+      id: rItem.lastID,
+      orden_id: ordenId,
+      comanda_numero: comandaNumero,
+      producto_id: it.id,
+      nombre_producto: it.nombre,
+      precio_unitario: it.precio,
+      cantidad: it.cantidad,
+      notas: it.notas,
+      curso: it.curso,
+      destino: it.destino,
+      hora_pedido: ahora
+    });
+  }
+
+  // Descontar existencias de inventario en tiempo real
+  await descontarInventarioPorItems(itemsProcesados);
+
+  // 7. Recalcular totales de orden
+  const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
+  let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+
+  // Usar el estado de HH del servidor (fuente de verdad), no el del cliente
+  let descuentoHH = 0;
+  if (happyHourEstado.activo) {
+    rows.forEach(r => {
+      const esCerveza = Boolean(r.prod_happy_hour || r.prod_categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(r.nombre_producto || ''));
+      if (esCerveza) {
+        const pares = Math.floor(r.cantidad / 2);
+        descuentoHH += pares * r.precio_unitario;
+      }
+    });
+  }
+
+  const subNeto = subtotal - descuentoHH;
+  const servicio = Math.round(subNeto * 0.10);
+  const iva = Math.round(subNeto * 0.13);
+  const total = subNeto + servicio + iva;
+
+  await dbRun(
+    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+    [subtotal, descuentoHH, servicio, iva, total, ordenId]
+  );
+
+  // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
+  const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
+  if (comandasCocina.length > 0) {
+    io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina });
+  }
+
+  // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
+  let ticketCocina = null;
+  let ticketBarra = null;
+  if (nuevasComandas.length > 0) {
+    const itemsCocina = nuevasComandas.filter(c => c.destino === 'cocina');
+    const itemsBarra = nuevasComandas.filter(c => c.destino === 'barra');
+
+    if (itemsCocina.length > 0) {
+      const tInfoCocina = printerService.generarTicketComanda({
+        ordenId,
+        comandaNumero,
+        mesaNumero,
+        mesero,
+        items: itemsCocina,
+        destino: 'cocina',
+        fechaHora: ahora
+      });
+      ticketCocina = await printerService.procesarImpresion({
+        destinoImpresora: 'cocina',
+        ticketInfo: tInfoCocina,
+        io
+      });
+    }
+
+    if (itemsBarra.length > 0) {
+      const tInfoBarra = printerService.generarTicketComanda({
+        ordenId,
+        comandaNumero,
+        mesaNumero,
+        mesero,
+        items: itemsBarra,
+        destino: 'barra',
+        fechaHora: ahora
+      });
+      ticketBarra = await printerService.procesarImpresion({
+        destinoImpresora: 'barra',
+        ticketInfo: tInfoBarra,
+        io
+      });
+    }
+  }
+
+  // Notificar siempre al salón de mesa actualizada
+  io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesa, total });
+
+  return {
+    message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Comanda guardada con éxito',
+    ordenId,
+    total,
+    estado: nuevoEstadoMesa,
+    tieneCocina: tieneNuevosCocina,
+    ticketCocina: ticketCocina ? ticketCocina.ticketVisual : null,
+    ticketBarra: ticketBarra ? ticketBarra.ticketVisual : null
+  };
+}
+
 app.post('/api/comandas/enviar', async (req, res) => {
   try {
     const mesaId = req.body.mesaId || req.body.mesa_id;
-    const { mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false } = req.body;
+    const { mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey } = req.body;
     if (!Array.isArray(items) || !items.length) {
       return res.status(400).json({ error: 'La comanda no contiene productos' });
     }
 
-
-    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
-    const mesaNumero = mesa.nombre || mesa.numero || `Mesa ${mesaId}`;
-
-    // 1. Identificar items nuevos no enviados previamente
-    const nuevosItems = items.filter(it => !it.id_detalle_existente && !it.enviado);
-    if (!nuevosItems.length && items.length > 0) {
-      const ordenExistente = await dbGet(
-        "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-        [mesaId]
-      );
-      return res.json({
-        message: 'Comanda guardada con éxito',
-        ordenId: ordenExistente ? ordenExistente.id : null,
-        total: ordenExistente ? ordenExistente.total : 0,
-        estado: mesa.estado,
-        tieneCocina: false
-      });
-    }
-
-    // 2. Procesar y normalizar detalles de productos nuevos
-    const itemsProcesados = [];
-    for (const it of nuevosItems) {
-      let prodId = it.producto_id || it.id;
-      let nombre = it.nombre || it.nombre_producto;
-      let precio = it.precio != null ? Number(it.precio) : (it.precio_unitario != null ? Number(it.precio_unitario) : null);
-      let destino = it.destino;
-      let curso = it.curso;
-
-      if (prodId) {
-        if (!nombre || precio == null || !destino || !curso) {
-          const prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
-          if (prodDb) {
-            if (!nombre) nombre = prodDb.nombre;
-            if (precio == null) precio = prodDb.precio;
-            if (!destino) destino = prodDb.destino;
-            if (!curso) curso = prodDb.curso || 2;
-          }
-        }
-      } else if (nombre) {
-        const prodDb = await dbGet('SELECT * FROM Productos WHERE nombre = ? OR nombre LIKE ?', [nombre, `%${nombre}%`]);
-        if (prodDb) {
-          prodId = prodDb.id;
-          if (precio == null) precio = prodDb.precio;
-          if (!destino) destino = prodDb.destino;
-          if (!curso) curso = prodDb.curso || 2;
-        } else {
-          prodId = 1;
-        }
-      } else {
-        prodId = 1;
-      }
-
-      itemsProcesados.push({
-        id: prodId,
-        nombre: nombre || 'Producto',
-        precio: precio || 0,
-        cantidad: Number(it.cantidad) || 1,
-        notas: it.notas || '',
-        curso: curso || 2,
-        destino: destino || 'cocina',
-        origen_mesa_numero: it.origen_mesa_numero || null
-      });
-    }
-
-    // 3. Evaluar si algún nuevo item va a cocina
-    const tieneNuevosCocina = itemsProcesados.some(it => 
-      it.destino === 'cocina' || (it.destino !== 'barra' && it.curso && it.curso <= 3)
-    );
-
-    // 4. Buscar orden activa o crear una nueva
-    let orden = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-      [mesaId]
-    );
-    const ahora = new Date().toISOString();
-    let ordenId;
-
-    if (!orden) {
-      const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
-      const estadoInicialOrden = tieneNuevosCocina ? 'esperando' : 'abierta';
-      const r = await dbRun(
-        `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
-      );
-      ordenId = r.lastID;
-    } else {
-      ordenId = orden.id;
-      if (tieneNuevosCocina) {
-        await dbRun("UPDATE Ordenes SET estado = 'esperando' WHERE id = ?", [ordenId]);
+    if (idempotencyKey) {
+      const yaRegistrada = await dbGet('SELECT idempotency_key FROM IdempotencyLog WHERE idempotency_key = ?', [idempotencyKey]);
+      if (yaRegistrada) {
+        return res.json({ message: 'Comanda ya procesada previamente (idempotente)', idempotencyKey });
       }
     }
 
-    // 5. Determinar nuevo estado de mesa
-    let nuevoEstadoMesa;
-    if (tieneNuevosCocina) {
-      nuevoEstadoMesa = 'esperando';
-    } else {
-      nuevoEstadoMesa = (mesa.estado === 'libre') ? 'abierta' : mesa.estado;
+    const resultado = await ejecutarComanda({ mesaId, mesero, cliente, items, happyHourActivo, idempotencyKey });
+
+    if (idempotencyKey) {
+      await dbRun('INSERT OR IGNORE INTO IdempotencyLog (idempotency_key, accion, creado_en) VALUES (?, ?, ?)', [
+        idempotencyKey,
+        'ENVIAR_COMANDA',
+        new Date().toISOString()
+      ]);
     }
 
-    await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesa, mesero, mesaId]);
-
-    // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
-    const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
-    const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
-
-    const nuevasComandas = [];
-    for (const it of itemsProcesados) {
-      const subtotal = it.precio * it.cantidad;
-      const rItem = await dbRun(
-        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero]
-      );
-      nuevasComandas.push({
-        id: rItem.lastID,
-        orden_id: ordenId,
-        comanda_numero: comandaNumero,
-        producto_id: it.id,
-        nombre_producto: it.nombre,
-        precio_unitario: it.precio,
-        cantidad: it.cantidad,
-        notas: it.notas,
-        curso: it.curso,
-        destino: it.destino,
-        hora_pedido: ahora
-      });
-    }
-
-    // Descontar existencias de inventario en tiempo real
-    await descontarInventarioPorItems(itemsProcesados);
-
-    // 7. Recalcular totales de orden
-    const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
-    let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-
-    // Usar el estado de HH del servidor (fuente de verdad), no el del cliente
-    let descuentoHH = 0;
-    if (happyHourEstado.activo) {
-      rows.forEach(r => {
-        const esCerveza = Boolean(r.prod_happy_hour || r.prod_categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(r.nombre_producto || ''));
-        if (esCerveza) {
-          const pares = Math.floor(r.cantidad / 2);
-          descuentoHH += pares * r.precio_unitario;
-        }
-      });
-    }
-
-    const subNeto = subtotal - descuentoHH;
-    const servicio = Math.round(subNeto * 0.10);
-    const iva = Math.round(subNeto * 0.13);
-    const total = subNeto + servicio + iva;
-
-    await dbRun(
-      "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-      [subtotal, descuentoHH, servicio, iva, total, ordenId]
-    );
-
-    // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
-    const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
-    if (comandasCocina.length > 0) {
-      io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina });
-    }
-
-    // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
-    let ticketCocina = null;
-    let ticketBarra = null;
-    if (nuevasComandas.length > 0) {
-      const itemsCocina = nuevasComandas.filter(c => c.destino === 'cocina');
-      const itemsBarra = nuevasComandas.filter(c => c.destino === 'barra');
-
-      if (itemsCocina.length > 0) {
-        const tInfoCocina = printerService.generarTicketComanda({
-          ordenId,
-          comandaNumero,
-          mesaNumero,
-          mesero,
-          items: itemsCocina,
-          destino: 'cocina',
-          fechaHora: ahora
-        });
-        ticketCocina = await printerService.procesarImpresion({
-          destinoImpresora: 'cocina',
-          ticketInfo: tInfoCocina,
-          io
-        });
-      }
-
-      if (itemsBarra.length > 0) {
-        const tInfoBarra = printerService.generarTicketComanda({
-          ordenId,
-          comandaNumero,
-          mesaNumero,
-          mesero,
-          items: itemsBarra,
-          destino: 'barra',
-          fechaHora: ahora
-        });
-        ticketBarra = await printerService.procesarImpresion({
-          destinoImpresora: 'barra',
-          ticketInfo: tInfoBarra,
-          io
-        });
-      }
-    }
-
-    // Notificar siempre al salón de mesa actualizada
-    io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesa, total });
-
-    res.json({
-      message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Comanda guardada con éxito',
-      ordenId,
-      total,
-      estado: nuevoEstadoMesa,
-      tieneCocina: tieneNuevosCocina,
-      ticketCocina: ticketCocina ? ticketCocina.ticketVisual : null,
-      ticketBarra: ticketBarra ? ticketBarra.ticketVisual : null
-    });
+    res.json(resultado);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.status || 500;
+    res.status(status).json({ error: e.message });
+  }
+});
+
+// Sincronización en lote para operaciones Offline-First
+app.post('/api/sync/batch', async (req, res) => {
+  try {
+    const { acciones = [] } = req.body;
+    const procesadas = [];
+    const duplicadas = [];
+    const errores = [];
+
+    for (const accion of acciones) {
+      const idKey = accion.idempotencyKey || `act_${accion.id}`;
+
+      // 1. Chequeo de idempotencia
+      if (idKey) {
+        const existente = await dbGet('SELECT idempotency_key FROM IdempotencyLog WHERE idempotency_key = ?', [idKey]);
+        if (existente) {
+          duplicadas.push(idKey);
+          continue;
+        }
+      }
+
+      // 2. Ejecutar según tipo de acción
+      try {
+        if (accion.tipo === 'ENVIAR_COMANDA' || accion.endpoint === '/api/comandas/enviar') {
+          const payload = accion.payload || {};
+          const mesaId = payload.mesaId || payload.mesa_id;
+          await ejecutarComanda({
+            mesaId,
+            mesero: payload.mesero,
+            cliente: payload.cliente,
+            items: payload.items,
+            happyHourActivo: payload.happyHourActivo,
+            idempotencyKey: idKey
+          });
+        } else if (accion.tipo === 'PEDIR_CUENTA' || (accion.endpoint && accion.endpoint.includes('/pedir-cuenta'))) {
+          const mesaId = accion.payload?.mesaId || accion.endpoint.split('/')[4];
+          if (mesaId) {
+            const ahora = new Date().toISOString();
+            await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = ? WHERE id = ?", [ahora, mesaId]);
+            await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [mesaId]);
+            io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), hora_pidio_cuenta: ahora });
+            io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
+          }
+        } else {
+          console.warn('[SyncBatch] Acción desconocida o sin handler específico:', accion.tipo);
+        }
+
+        if (idKey) {
+          await dbRun('INSERT OR IGNORE INTO IdempotencyLog (idempotency_key, accion, creado_en) VALUES (?, ?, ?)', [
+            idKey,
+            accion.tipo || 'ACCION_OFFLINE',
+            new Date().toISOString()
+          ]);
+        }
+        procesadas.push(idKey);
+      } catch (errAccion) {
+        console.error('[SyncBatch] Error procesando acción individual:', errAccion);
+        errores.push({ idKey, error: errAccion.message });
+      }
+    }
+
+    res.json({ ok: true, procesadas, duplicadas, errores });
+  } catch (err) {
+    console.error('Error en /api/sync/batch:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

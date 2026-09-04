@@ -1510,8 +1510,22 @@ async function cargarMenuDesdeBackend() {
       imagen_url: p.imagen_url
     }));
 
+    if (window.PosOfflineDB && estado.productos.length > 0) {
+      window.PosOfflineDB.guardarCatalogo(estado.productos).catch(() => {});
+    }
+
     renderCatalogoComandero();
-  } catch (e) {}
+  } catch (e) {
+    if (window.PosOfflineDB) {
+      try {
+        const cached = await window.PosOfflineDB.obtenerCatalogo();
+        if (cached && cached.length > 0) {
+          estado.productos = cached;
+          renderCatalogoComandero();
+        }
+      } catch (errDb) {}
+    }
+  }
 }
 
 window.categoriaActivaComandero = null; // null = Vista de Categorías Principal
@@ -1956,7 +1970,21 @@ async function cargarMesasDesdeBackend() {
     if (document.getElementById('view-editor-plano')?.classList.contains('active')) {
       renderEditorPlano();
     }
-  } catch (e) {}
+
+    if (window.PosOfflineDB && estado.mesas.length > 0) {
+      window.PosOfflineDB.guardarMesas(estado.mesas).catch(() => {});
+    }
+  } catch (e) {
+    if (window.PosOfflineDB) {
+      try {
+        const cached = await window.PosOfflineDB.obtenerMesas();
+        if (cached && cached.length > 0) {
+          estado.mesas = cached;
+          renderSalón();
+        }
+      } catch (errDb) {}
+    }
+  }
 }
 
 function aplicarEscalaTextoMesa(el, w, h, esSilla) {
@@ -2965,7 +2993,7 @@ function recalcularTotalesTicket() {
   document.getElementById('comTotal').textContent = formatCRC(total);
 }
 
-// Enviar Comanda a Cocina o Guardar (cierra el menú de una vez)
+// Enviar Comanda a Cocina o Guardar (cierra el menú de una vez) con soporte Offline-First
 document.getElementById('btnEnviarComandaCocina').addEventListener('click', async () => {
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
     alert('No hay productos en la comanda.');
@@ -2976,37 +3004,62 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
   );
 
+  const payloadComanda = {
+    mesaId: estado.mesaActiva.id,
+    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+    items: estado.mesaActiva.items,
+    happyHourActivo: estado.happyHourActivo
+  };
+
+  const optimistaFn = () => {
+    if (tieneNuevosCocina) {
+      sonarCampanaCocina();
+    }
+    estado.mesaActiva.items.forEach(it => it.enviado = true);
+    actualizarBotonEnviarComanda();
+    document.getElementById('modalComandero').classList.remove('active');
+  };
+
+  if (window.PosOfflineSync) {
+    const resSync = await window.PosOfflineSync.ejecutarConRespaldo({
+      tipo: 'ENVIAR_COMANDA',
+      endpoint: '/api/comandas/enviar',
+      metodo: 'POST',
+      payload: payloadComanda,
+      descripcion: `Comanda ${estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id)} (${estado.mesaActiva.items.length} productos)`,
+      optimistaFn
+    });
+
+    if (resSync && resSync.offlineQueued) {
+      // Pedido respaldado localmente en IndexedDB
+      return;
+    }
+    if (resSync && resSync.exito) {
+      optimistaFn();
+      alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
+      cargarMesasDesdeBackend();
+      cargarKDSDesdeBackend();
+      return;
+    }
+    if (resSync && !resSync.exito) {
+      alert('Error: ' + (resSync.error || 'No se pudo procesar la comanda'));
+      return;
+    }
+  }
+
+  // Fallback directo en caso de no estar inicializado el sincronizador
   try {
     const res = await fetch('/api/comandas/enviar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mesaId: estado.mesaActiva.id,
-        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
-        items: estado.mesaActiva.items,
-        happyHourActivo: estado.happyHourActivo
-      })
+      body: JSON.stringify(payloadComanda)
     });
-    const data = await res.json();
-    if (tieneNuevosCocina) {
-      sonarCampanaCocina();
-    }
+    optimistaFn();
     alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
-    estado.mesaActiva.items.forEach(it => it.enviado = true);
-    actualizarBotonEnviarComanda();
-    
-    // CERRAR EL MENÚ DE UNA VEZ
-    document.getElementById('modalComandero').classList.remove('active');
-    
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
   } catch (e) {
-    if (tieneNuevosCocina) {
-      sonarCampanaCocina();
-    }
-    estado.mesaActiva.items.forEach(it => it.enviado = true);
-    actualizarBotonEnviarComanda();
-    document.getElementById('modalComandero').classList.remove('active');
+    optimistaFn();
   }
 });
 
