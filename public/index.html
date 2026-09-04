@@ -1500,23 +1500,85 @@
     </div>
   </div>
 
-  <!-- SPLIT BILLS -->
+  <!-- SPLIT BILLS (DIVIDIR CUENTA INTERACTIVO) -->
   <div class="modal-backdrop" id="modalSplitBill">
     <div class="modal-dialog split-dialog">
       <div class="dialog-header">
         <div>
           <h3>✂️ Separar y Dividir Cuenta (Split Bills)</h3>
-          <small id="splitMesaTitulo">Mesa 1 • Total: ₡ 0.00</small>
+          <small id="splitMesaTitulo">Mesa 1 • Total: ₡ 0</small>
         </div>
-        <button class="btn-icon-close" id="btnCloseSplitModal">✕</button>
+        <div class="split-header-controls">
+          <div class="split-persons-counter-widget" title="Cantidad de personas para dividir la cuenta">
+            <span class="widget-icon">👥</span>
+            <button type="button" class="btn-split-counter" id="btnSplitMenosPersonas" title="Quitar persona">-</button>
+            <span class="split-counter-label" id="splitPersonasCountLabel">2 Personas</span>
+            <button type="button" class="btn-split-counter" id="btnSplitMasPersonas" title="Agregar persona">+</button>
+          </div>
+          <button class="btn-icon-close" id="btnCloseSplitModal">✕</button>
+        </div>
       </div>
+      
       <div class="split-mode-selector">
-        <button class="split-mode-btn active" data-mode="items">Por Ítems / Consumos Individuales</button>
-        <button class="split-mode-btn" data-mode="equal">En Partes Iguales (Split Equitativo)</button>
+        <button class="split-mode-btn active" data-mode="items">🎯 Por Ítems (Arrastrar a Personas)</button>
+        <button class="split-mode-btn" data-mode="equal">⚖️ En Partes Iguales (Split Equitativo)</button>
       </div>
+
       <div class="split-body-items active" id="splitModeItemsBody">
-        <div class="split-columns-wrapper" id="splitPersonsContainer"></div>
+        <div class="split-drag-workspace">
+          <!-- COLUMNA IZQUIERDA: CONSUMO DISPONIBLE DE LA MESA -->
+          <div class="split-side-col left-col">
+            <div class="split-col-header">
+              <div class="col-title">
+                <span>📦 Consumo de la Mesa</span>
+                <span class="badge-pending" id="splitItemsRemainingBadge">0 pendientes</span>
+              </div>
+              <small class="col-subtitle">Arrastra a la derecha o toca para asignar</small>
+            </div>
+            <div class="split-col-items-list" id="splitAvailableItemsList"></div>
+          </div>
+
+          <!-- COLUMNA DERECHA: TARJETA DE PERSONA ACTIVA -->
+          <div class="split-side-col right-col" id="splitActivePersonCard">
+            <div class="split-col-header highlight">
+              <div class="col-title">
+                <span id="splitActivePersonTitle">👤 Persona 1</span>
+                <span class="badge-active-tag">Asignando</span>
+              </div>
+              <small class="col-subtitle">Suelta aquí los consumos de esta persona</small>
+            </div>
+            
+            <div class="split-dropzone" id="splitActivePersonDropzone">
+              <div class="dropzone-empty-hint" id="splitDropzoneHint">
+                <span class="hint-icon">🎯</span>
+                <p>Arrastra los platillos o bebidas aquí<br><small>o toca un ítem de la izquierda para moverlo</small></p>
+              </div>
+              <div class="split-assigned-items-list" id="splitAssignedItemsList"></div>
+            </div>
+
+            <div class="split-active-footer">
+              <div class="split-calc-breakdown">
+                <div class="calc-row"><span>Subtotal:</span><strong id="splitActiveSubtotal">₡ 0</strong></div>
+                <div class="calc-row"><span>10% Servicio + 13% IVA:</span><strong id="splitActiveImpuestos">₡ 0</strong></div>
+                <div class="calc-row total"><span>Total Persona:</span><strong id="splitActiveTotal">₡ 0</strong></div>
+              </div>
+              <button type="button" class="btn-save-person" id="btnGuardarPersonaActiva">
+                💾 Guardar y Pasar al Siguiente ➡️
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- COLA / CARRUSEL INFERIOR DE PERSONAS GUARDADAS -->
+        <div class="split-saved-queue-section">
+          <div class="queue-header">
+            <h4>📋 Personas en la Cuenta (<span id="splitQueueProgress">0 de 2 listas</span>)</h4>
+            <small>Toca una persona para editar sus ítems o cobrarla directamente</small>
+          </div>
+          <div class="split-saved-queue-carousel" id="splitSavedPersonsQueue"></div>
+        </div>
       </div>
+
       <div class="split-body-equal" id="splitModeEqualBody">
         <div class="equal-split-controls">
           <label style="font-weight:700; font-size:1.1rem;">¿Entre cuántas personas dividen la cuenta?</label>
@@ -1527,14 +1589,15 @@
           </div>
           <div class="equal-result-box">
             <span>Cada persona debe pagar exactamente:</span>
-            <h2 id="splitMontoPorPersona">₡ 0.00</h2>
+            <h2 id="splitMontoPorPersona">₡ 0</h2>
             <small>Incluye 10% servicio y 13% IVA</small>
           </div>
         </div>
       </div>
+
       <div class="dialog-footer">
-        <button class="btn-sec" id="btnCancelarSplit">Cancelar</button>
-        <button class="btn-pri" id="btnProcederCobroSplit">💵 Proceder al Cobro Separado</button>
+        <button class="btn-sec" id="btnCancelarSplit">Cerrar</button>
+        <button class="btn-pri" id="btnCobrarTodasDivididas" style="display:none;">💵 Cobrar Cuentas Divididas</button>
       </div>
     </div>
   </div>
