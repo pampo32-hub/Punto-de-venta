@@ -569,9 +569,9 @@ if (typeof window !== 'undefined') {
   window.formatearTooltipEspera = formatearTooltipEspera;
 }
 
-// Formateo de moneda
+// Formateo de moneda sin decimales según requerimiento
 function formatCRC(num) {
-  return '₡ ' + (Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 // Formateo de montos en mesas sin decimales según requerimiento
@@ -4812,9 +4812,15 @@ if (typeof setInterval !== 'undefined') {
 // MÓDULOS DE ADMINISTRADOR: DASHBOARD, INVENTARIO & AUDITORÍA
 // ============================================================================
 
-// 1. DASHBOARD DE MÉTRICAS
-async function cargarDashboardMetricas() {
+// 1. DASHBOARD DE MÉTRICAS & HISTORIAL DE TICKETS
+window.cargarDashboardMetricas = async function(mostrarToast = false) {
   try {
+    const btnAct = document.getElementById('btnActualizarMetricas');
+    if (btnAct) {
+      btnAct.classList.add('loading');
+      btnAct.textContent = '⏳ Actualizando...';
+    }
+
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch('/api/admin/metricas/dashboard', {
       headers: { 'x-user-rol': rol }
@@ -4824,103 +4830,549 @@ async function cargarDashboardMetricas() {
 
     // KPIs
     const r = data.resumen;
-    document.getElementById('kpiVentasHoy').textContent = formatCRC(r.totalVentasHoy || 0);
+    const elVentas = document.getElementById('kpiVentasHoy');
+    if (elVentas) elVentas.textContent = formatCRC(r.totalVentasHoy || 0);
     const diffSign = r.diferenciaAyer >= 0 ? '+' : '';
-    document.getElementById('kpiComparativaAyer').textContent = `vs ayer: ${diffSign}${r.diferenciaAyer}%`;
-    document.getElementById('kpiComparativaAyer').style.color = r.diferenciaAyer >= 0 ? '#10b981' : '#ef4444';
-    document.getElementById('kpiCuentasCobradas').textContent = r.cuentasHoy || 0;
-    document.getElementById('kpiTicketPromedio').textContent = formatCRC(r.ticketPromedio || 0);
-    document.getElementById('kpiTiempoCocina').textContent = `${r.tiempoPromedioCocinaMin || 0} min`;
+    const elDiff = document.getElementById('kpiComparativaAyer');
+    if (elDiff) {
+      elDiff.textContent = `vs ayer: ${diffSign}${r.diferenciaAyer}%`;
+      elDiff.style.color = r.diferenciaAyer >= 0 ? '#10b981' : '#ef4444';
+    }
+    const elCuentas = document.getElementById('kpiCuentasCobradas');
+    if (elCuentas) elCuentas.textContent = r.cuentasHoy || 0;
+    const elProm = document.getElementById('kpiTicketPromedio');
+    if (elProm) elProm.textContent = formatCRC(r.ticketPromedio || 0);
+    const elCocina = document.getElementById('kpiTiempoCocina');
+    if (elCocina) elCocina.textContent = `${r.tiempoPromedioCocinaMin || 0} min`;
 
     // Gráfico de Horas Pico
     const chartContainer = document.getElementById('peakHoursChartContainer');
-    chartContainer.innerHTML = '';
-    const maxVenta = Math.max(1, ...data.ventasPorHora.map(h => h.total));
+    if (chartContainer) {
+      chartContainer.innerHTML = '';
+      const maxVenta = Math.max(1, ...data.ventasPorHora.map(h => h.total));
 
-    data.ventasPorHora.forEach(h => {
-      const pct = Math.round((h.total / maxVenta) * 100);
-      const row = document.createElement('div');
-      row.className = 'peak-hour-row';
-      row.innerHTML = `
-        <span class="peak-hour-label">${h.hora}</span>
-        <div class="peak-hour-track">
-          <div class="peak-hour-bar" style="width:${pct}%;"></div>
-        </div>
-        <span class="peak-hour-val">${h.total > 0 ? formatCRC(h.total) : '—'}</span>
-      `;
-      chartContainer.appendChild(row);
-    });
+      data.ventasPorHora.forEach(h => {
+        const pct = Math.round((h.total / maxVenta) * 100);
+        const row = document.createElement('div');
+        row.className = 'peak-hour-row';
+        row.innerHTML = `
+          <span class="peak-hour-label">${h.hora}</span>
+          <div class="peak-hour-track">
+            <div class="peak-hour-bar" style="width:${pct}%;"></div>
+          </div>
+          <span class="peak-hour-val">${h.total > 0 ? formatCRC(h.total) : '—'}</span>
+        `;
+        chartContainer.appendChild(row);
+      });
+    }
 
     // Top Sellers
     const topContainer = document.getElementById('topSellersContainer');
-    topContainer.innerHTML = '';
-    if (!data.topProductos || !data.topProductos.length) {
-      topContainer.innerHTML = '<div style="color:#9ca3af; padding:12px; text-align:center;">Sin ventas registradas hoy todavía.</div>';
-    } else {
-      data.topProductos.forEach((p, idx) => {
-        const item = document.createElement('div');
-        item.className = 'top-seller-item';
-        item.innerHTML = `
-          <div style="display:flex; align-items:center; gap:8px;">
-            <strong style="color:#f59e0b; font-size:1rem; width:20px;">#${idx + 1}</strong>
-            <div>
-              <span class="top-seller-name">${escapeHtml(p.nombre_producto)}</span>
-              <div style="font-size:0.75rem; color:#9ca3af;">${formatCRC(p.total_recaudado)}</div>
+    if (topContainer) {
+      topContainer.innerHTML = '';
+      if (!data.topProductos || !data.topProductos.length) {
+        topContainer.innerHTML = '<div style="color:#9ca3af; padding:12px; text-align:center;">Sin ventas registradas hoy todavía.</div>';
+      } else {
+        data.topProductos.forEach((p, idx) => {
+          const item = document.createElement('div');
+          item.className = 'top-seller-item';
+          item.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong style="color:#f59e0b; font-size:1rem; width:20px;">#${idx + 1}</strong>
+              <div>
+                <span class="top-seller-name">${escapeHtml(p.nombre_producto)}</span>
+                <div style="font-size:0.75rem; color:#9ca3af;">${formatCRC(p.total_recaudado)}</div>
+              </div>
             </div>
-          </div>
-          <span class="top-seller-count">${p.total_unidades} ordenados</span>
-        `;
-        topContainer.appendChild(item);
-      });
+            <span class="top-seller-count">${p.total_unidades} ordenados</span>
+          `;
+          topContainer.appendChild(item);
+        });
+      }
     }
 
     // Ranking de Meseros
     const waitersContainer = document.getElementById('waitersRankingContainer');
-    waitersContainer.innerHTML = '';
-    if (!data.meseros || !data.meseros.length) {
-      waitersContainer.innerHTML = '<div style="color:#9ca3af; padding:12px; text-align:center;">Sin actividad de meseros hoy.</div>';
-    } else {
-      data.meseros.forEach(m => {
-        const item = document.createElement('div');
-        item.className = 'waiter-item';
-        item.innerHTML = `
-          <div>
-            <strong style="color:#f3f4f6;">👤 ${escapeHtml(m.nombre)}</strong>
-            <div style="font-size:0.75rem; color:#9ca3af;">${m.cuentas} cuentas cerradas</div>
-          </div>
-          <div style="text-align:right;">
-            <strong style="color:#34d399;">${formatCRC(m.ventas)}</strong>
-            <div style="font-size:0.75rem; color:#f59e0b;">Propina: ${formatCRC(m.propinas)}</div>
-          </div>
-        `;
-        waitersContainer.appendChild(item);
-      });
+    if (waitersContainer) {
+      waitersContainer.innerHTML = '';
+      if (!data.meseros || !data.meseros.length) {
+        waitersContainer.innerHTML = '<div style="color:#9ca3af; padding:12px; text-align:center;">Sin actividad de meseros hoy.</div>';
+      } else {
+        data.meseros.forEach(m => {
+          const item = document.createElement('div');
+          item.className = 'waiter-item';
+          item.innerHTML = `
+            <div>
+              <strong style="color:#f3f4f6;">👤 ${escapeHtml(m.nombre)}</strong>
+              <div style="font-size:0.75rem; color:#9ca3af;">${m.cuentas} cuentas cerradas</div>
+            </div>
+            <div style="text-align:right;">
+              <strong style="color:#34d399;">${formatCRC(m.ventas)}</strong>
+              <div style="font-size:0.75rem; color:#f59e0b;">Propina: ${formatCRC(m.propinas)}</div>
+            </div>
+          `;
+          waitersContainer.appendChild(item);
+        });
+      }
     }
 
     // Alertas de Stock Crítico
     const stockContainer = document.getElementById('criticalStockContainer');
-    stockContainer.innerHTML = '';
-    if (!data.alertasStock || !data.alertasStock.length) {
-      stockContainer.innerHTML = '<div style="color:#34d399; padding:12px; text-align:center;">✅ Todos los insumos tienen stock óptimo.</div>';
-    } else {
-      data.alertasStock.forEach(s => {
-        const isAgotado = s.stock_actual <= 0;
-        const item = document.createElement('div');
-        item.className = 'critical-stock-item';
-        item.innerHTML = `
-          <div>
-            <strong style="color:${isAgotado ? '#ef4444' : '#f59e0b'};">${isAgotado ? '⛔' : '⚠️'} ${escapeHtml(s.nombre)}</strong>
-            <div style="font-size:0.75rem; color:#9ca3af;">Mínimo requerido: ${s.stock_minimo} ${s.unidad_medida}</div>
-          </div>
-          <span class="stock-pill ${isAgotado ? 'agotado' : 'bajo'}">${s.stock_actual} ${s.unidad_medida}</span>
-        `;
-        stockContainer.appendChild(item);
-      });
+    if (stockContainer) {
+      stockContainer.innerHTML = '';
+      if (!data.alertasStock || !data.alertasStock.length) {
+        stockContainer.innerHTML = '<div style="color:#34d399; padding:12px; text-align:center;">✅ Todos los insumos tienen stock óptimo.</div>';
+      } else {
+        data.alertasStock.forEach(s => {
+          const isAgotado = s.stock_actual <= 0;
+          const item = document.createElement('div');
+          item.className = 'critical-stock-item';
+          item.innerHTML = `
+            <div>
+              <strong style="color:${isAgotado ? '#ef4444' : '#f59e0b'};">${isAgotado ? '⛔' : '⚠️'} ${escapeHtml(s.nombre)}</strong>
+              <div style="font-size:0.75rem; color:#9ca3af;">Mínimo requerido: ${s.stock_minimo} ${s.unidad_medida}</div>
+            </div>
+            <span class="stock-pill ${isAgotado ? 'agotado' : 'bajo'}">${s.stock_actual} ${s.unidad_medida}</span>
+          `;
+          stockContainer.appendChild(item);
+        });
+      }
+    }
+
+    if (mostrarToast && typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('📊 ¡Métricas del Dashboard actualizadas con éxito!', 'success');
     }
   } catch (e) {
     console.error('Error cargando métricas:', e);
+  } finally {
+    const btnAct = document.getElementById('btnActualizarMetricas');
+    if (btnAct) {
+      btnAct.classList.remove('loading');
+      btnAct.textContent = '🔄 Actualizar Métricas';
+    }
   }
+};
+
+// Historial de Tickets Global
+let listaTicketsGlobal = [];
+
+window.abrirModalHistorialTickets = async function() {
+  const modal = document.getElementById('modalHistorialTickets');
+  if (modal) modal.classList.add('active');
+  await cargarHistorialTickets();
+};
+
+window.cerrarModalHistorialTickets = function() {
+  const modal = document.getElementById('modalHistorialTickets');
+  if (modal) modal.classList.remove('active');
+};
+
+window.cargarHistorialTickets = async function() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/admin/tickets-historial', {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al obtener historial de tickets');
+    const data = await res.json();
+    listaTicketsGlobal = data.tickets || [];
+
+    const elTotal = document.getElementById('historialTotalTickets');
+    if (elTotal) elTotal.textContent = data.totalTickets || listaTicketsGlobal.length;
+    const elVentas = document.getElementById('historialTotalVentas');
+    if (elVentas) elVentas.textContent = formatCRC(data.totalVentas || 0);
+    const totalProp = listaTicketsGlobal.reduce((acc, t) => acc + (t.propina || 0), 0);
+    const elProp = document.getElementById('historialTotalPropinas');
+    if (elProp) elProp.textContent = formatCRC(totalProp);
+
+    filtrarListaTickets();
+  } catch (e) {
+    console.error('Error al cargar tickets:', e);
+  }
+};
+
+window.filtrarListaTickets = function() {
+  const query = (document.getElementById('txtBuscarTicket')?.value || '').toLowerCase().trim();
+  const metodoFiltro = document.getElementById('selectFiltroMetodoTicket')?.value || 'todos';
+
+  const filtrados = listaTicketsGlobal.filter(t => {
+    const matchMetodo = (metodoFiltro === 'todos' || t.metodo_pago === metodoFiltro);
+    if (!matchMetodo) return false;
+
+    if (!query) return true;
+    const tNum = (t.numero_orden || '').toLowerCase();
+    const tMesa = (t.mesa || '').toLowerCase();
+    const tMesero = (t.mesero || '').toLowerCase();
+    const tCliente = (t.cliente || '').toLowerCase();
+    const tItems = (t.items || []).map(it => it.nombre_producto.toLowerCase()).join(' ');
+
+    return tNum.includes(query) || tMesa.includes(query) || tMesero.includes(query) || tCliente.includes(query) || tItems.includes(query);
+  });
+
+  renderListaTickets(filtrados);
+};
+
+function renderListaTickets(tickets) {
+  const container = document.getElementById('listaTicketsContainer');
+  const contadorEl = document.getElementById('lblTicketsContador');
+  if (!container) return;
+
+  if (contadorEl) contadorEl.textContent = `Mostrando ${tickets.length} de ${listaTicketsGlobal.length} tickets`;
+  container.innerHTML = '';
+
+  if (!tickets.length) {
+    container.innerHTML = `
+      <div style="grid-column: 1/-1; text-align:center; padding:40px 20px; color:#94a3b8; background:#1e293b; border-radius:12px; border:1px solid #334155;">
+        <div style="font-size:2.5rem; margin-bottom:8px;">🧾</div>
+        <strong style="color:#f8fafc; font-size:1.1rem;">No se encontraron tickets cobrados</strong>
+        <p style="margin:4px 0 0 0; font-size:0.85rem;">Prueba ajustando los filtros de búsqueda.</p>
+      </div>
+    `;
+    return;
+  }
+
+  tickets.forEach(t => {
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    `;
+    card.onmouseenter = () => { card.style.borderColor = '#38bdf8'; card.style.transform = 'translateY(-2px)'; };
+    card.onmouseleave = () => { card.style.borderColor = '#334155'; card.style.transform = 'translateY(0)'; };
+
+    // Badge método
+    let iconMetodo = '💵';
+    let colorMetodo = '#10b981';
+    if (t.metodo_pago === 'Tarjeta') { iconMetodo = '💳'; colorMetodo = '#38bdf8'; }
+    else if (t.metodo_pago === 'SINPE') { iconMetodo = '📱'; colorMetodo = '#a855f7'; }
+
+    // Fecha formateada
+    let fechaHoraStr = 'Hoy';
+    if (t.fecha_pago) {
+      const d = new Date(t.fecha_pago);
+      fechaHoraStr = d.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' }) + ' • ' + d.toLocaleDateString('es-CR');
+    }
+
+    const itemsHtml = (t.items || []).map(it => `
+      <div style="display:flex; justify-content:space-between; font-size:0.82rem; color:#cbd5e1; padding:2px 0;">
+        <span><strong>${it.cantidad}x</strong> ${escapeHtml(it.nombre_producto)}</span>
+        <span style="color:#94a3b8;">${formatCRC(it.subtotal || it.precio_unitario * it.cantidad)}</span>
+      </div>
+    `).join('');
+
+    card.innerHTML = `
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+          <div>
+            <span style="font-weight:800; color:#f8fafc; font-size:1.05rem;">${escapeHtml(t.numero_orden)}</span>
+            <div style="font-size:0.8rem; color:#38bdf8; font-weight:700;">📍 ${escapeHtml(t.mesa)}</div>
+          </div>
+          <span style="background:${colorMetodo}20; color:${colorMetodo}; border:1px solid ${colorMetodo}40; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:700;">
+            ${iconMetodo} ${escapeHtml(t.metodo_pago)}
+          </span>
+        </div>
+
+        <div style="font-size:0.78rem; color:#94a3b8; display:flex; flex-direction:column; gap:2px; margin-bottom:10px; border-bottom:1px dashed #334155; padding-bottom:8px;">
+          <span>👤 Atendido por: <strong style="color:#e2e8f0;">${escapeHtml(t.mesero)}</strong></span>
+          <span>👤 Cliente: <strong style="color:#e2e8f0;">${escapeHtml(t.cliente)}</strong></span>
+          <span>🕒 ${fechaHoraStr}</span>
+        </div>
+
+        <div style="max-height:110px; overflow-y:auto; margin-bottom:10px; padding-right:4px;">
+          ${itemsHtml}
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #334155; padding-top:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-size:0.85rem; color:#94a3b8;">Total Cancelado:</span>
+          <span style="font-size:1.25rem; font-weight:800; color:#34d399;">${formatCRC(t.total)}</span>
+        </div>
+
+        <button type="button" class="btn-tool" onclick="imprimirTicketIndividual(${t.id})" style="width:100%; justify-content:center; background:#0284c7; border-color:#38bdf8; color:#fff; font-weight:700; padding:8px 0; border-radius:8px; cursor:pointer;">
+          🖨️ Re-Imprimir Ticket
+        </button>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
 }
+
+window.imprimirTicketIndividual = function(ticketId) {
+  const ticket = listaTicketsGlobal.find(t => t.id === ticketId);
+  if (!ticket) return;
+
+  const fechaStr = new Date(ticket.fecha_pago || Date.now()).toLocaleString('es-CR');
+  const itemsRows = (ticket.items || []).map(it => `
+    <tr>
+      <td style="text-align:left; padding:4px 0;">${it.cantidad}x ${escapeHtml(it.nombre_producto)}</td>
+      <td style="text-align:right; padding:4px 0;">${formatCRC(it.subtotal || it.precio_unitario * it.cantidad)}</td>
+    </tr>
+  `).join('');
+
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Ticket ${ticket.numero_orden}</title>
+      <style>
+        body {
+          font-family: 'Courier New', Courier, monospace;
+          width: 280px;
+          margin: 0 auto;
+          padding: 10px;
+          color: #000;
+          font-size: 13px;
+        }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .divider { border-top: 1px dashed #000; margin: 8px 0; }
+        .double-divider { border-top: 2px solid #000; margin: 8px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        .bold { font-weight: bold; }
+        @media print {
+          body { width: 100%; padding: 0; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="text-center">
+        <h2 style="margin:0; font-size:18px;">GASTROBAR FUEGO & BRASAS</h2>
+        <div style="font-size:11px;">Restaurante, Bar & Lounge</div>
+        <div style="font-size:11px;">Cédula Jurídica: 3-101-987654</div>
+        <div style="font-size:11px;">Tel: 2222-3344 • San José, Costa Rica</div>
+      </div>
+      <div class="double-divider"></div>
+      <div><strong>TIQUETE:</strong> ${ticket.numero_orden}</div>
+      <div><strong>FECHA:</strong> ${fechaStr}</div>
+      <div><strong>UBICACIÓN:</strong> ${ticket.mesa}</div>
+      <div><strong>MESERO:</strong> ${ticket.mesero}</div>
+      <div><strong>CLIENTE:</strong> ${ticket.cliente}</div>
+      <div class="divider"></div>
+      <table>
+        <thead>
+          <tr style="border-bottom:1px solid #000;">
+            <th style="text-align:left;">CANT / PRODUCTO</th>
+            <th style="text-align:right;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <table>
+        <tr>
+          <td>Subtotal Neto:</td>
+          <td class="text-right">${formatCRC(ticket.subtotal)}</td>
+        </tr>
+        <tr>
+          <td>Servicio Salón (10%):</td>
+          <td class="text-right">${formatCRC(ticket.servicio)}</td>
+        </tr>
+        <tr>
+          <td>I.V.A (13%):</td>
+          <td class="text-right">${formatCRC(ticket.iva)}</td>
+        </tr>
+        <tr class="bold" style="font-size:15px;">
+          <td style="padding-top:4px;">TOTAL CANCELADO:</td>
+          <td class="text-right" style="padding-top:4px;">${formatCRC(ticket.total)}</td>
+        </tr>
+      </table>
+      <div class="divider"></div>
+      <div><strong>Forma de Pago:</strong> ${ticket.metodo_pago}</div>
+      <div><strong>Propina Voluntaria:</strong> ${formatCRC(ticket.propina)}</div>
+      <div class="double-divider"></div>
+      <div class="text-center" style="font-size:11px; margin-top:6px;">
+        ¡Muchas gracias por su preferencia!<br>
+        Emitido por Sistema POS Conexa
+      </div>
+    </body>
+    </html>
+  `;
+
+  const win = window.open('', '_blank', 'width=380,height=580');
+  if (win) {
+    win.document.write(printContent);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+    }, 300);
+  }
+};
+
+window.imprimirReporteVentasCompleto = function() {
+  if (!listaTicketsGlobal.length) {
+    alert('No hay tickets para imprimir en el reporte.');
+    return;
+  }
+
+  const hoyStr = new Date().toLocaleDateString('es-CR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const totalVentas = listaTicketsGlobal.reduce((acc, t) => acc + t.total, 0);
+  const totalPropinas = listaTicketsGlobal.reduce((acc, t) => acc + (t.propina || 0), 0);
+  const ticketPromedio = Math.round(totalVentas / listaTicketsGlobal.length);
+
+  // Desglose métodos
+  const metodos = {};
+  listaTicketsGlobal.forEach(t => {
+    const m = t.metodo_pago || 'Efectivo';
+    if (!metodos[m]) metodos[m] = { cant: 0, total: 0 };
+    metodos[m].cant++;
+    metodos[m].total += t.total;
+  });
+
+  // Desglose meseros
+  const meseros = {};
+  listaTicketsGlobal.forEach(t => {
+    const mes = t.mesero || 'General';
+    if (!meseros[mes]) meseros[mes] = { cuentas: 0, total: 0, propinas: 0 };
+    meseros[mes].cuentas++;
+    meseros[mes].total += t.total;
+    meseros[mes].propinas += (t.propina || 0);
+  });
+
+  const filasTickets = listaTicketsGlobal.map((t, idx) => `
+    <tr style="border-bottom:1px solid #e2e8f0; font-size:11px;">
+      <td style="padding:6px;">#${idx + 1} - ${escapeHtml(t.numero_orden)}</td>
+      <td style="padding:6px;">${escapeHtml(t.mesa)}</td>
+      <td style="padding:6px;">${escapeHtml(t.mesero)}</td>
+      <td style="padding:6px;">${escapeHtml(t.metodo_pago)}</td>
+      <td style="padding:6px; text-align:right; font-weight:bold;">${formatCRC(t.total)}</td>
+    </tr>
+  `).join('');
+
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Reporte de Ventas y Tickets</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; color: #1e293b; font-size: 13px; }
+        h1, h2, h3 { margin: 4px 0; }
+        .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .kpi-box { border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; text-align: center; background: #f8fafc; }
+        .kpi-title { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+        .kpi-val { font-size: 18px; font-weight: bold; color: #0f172a; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        th { background: #f1f5f9; text-align: left; padding: 8px 6px; font-size: 11px; border-bottom: 2px solid #cbd5e1; }
+        .section-title { font-size: 14px; font-weight: bold; margin: 16px 0 8px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+        @media print { body { margin: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>GASTROBAR FUEGO & BRASAS</h1>
+        <div style="font-size:13px; color:#475569;">REPORTE GENERAL DE VENTAS Y TICKETS COBRADOS</div>
+        <div style="font-size:12px; color:#64748b;">Fecha: ${hoyStr}</div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-box">
+          <div class="kpi-title">Cuentas Cobradas</div>
+          <div class="kpi-val">${listaTicketsGlobal.length}</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-title">Ventas Totales</div>
+          <div class="kpi-val">${formatCRC(totalVentas)}</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-title">Ticket Promedio</div>
+          <div class="kpi-val">${formatCRC(ticketPromedio)}</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-title">Propinas Totales</div>
+          <div class="kpi-val">${formatCRC(totalPropinas)}</div>
+        </div>
+      </div>
+
+      <div class="section-title">📊 Resumen por Método de Pago</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Método de Pago</th>
+            <th style="text-align:center;">Cuentas</th>
+            <th style="text-align:right;">Total Recaudado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(metodos).map(([met, d]) => `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:6px;"><strong>${met}</strong></td>
+              <td style="padding:6px; text-align:center;">${d.cant}</td>
+              <td style="padding:6px; text-align:right; font-weight:bold;">${formatCRC(d.total)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="section-title">👥 Rendimiento por Salonero / Mesero</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Mesero</th>
+            <th style="text-align:center;">Cuentas Atendidas</th>
+            <th style="text-align:right;">Propinas</th>
+            <th style="text-align:right;">Venta Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(meseros).map(([mes, d]) => `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:6px;"><strong>${escapeHtml(mes)}</strong></td>
+              <td style="padding:6px; text-align:center;">${d.cuentas}</td>
+              <td style="padding:6px; text-align:right; color:#b45309;">${formatCRC(d.propinas)}</td>
+              <td style="padding:6px; text-align:right; font-weight:bold;">${formatCRC(d.total)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="section-title">🧾 Detalle Individual de Tickets Emitidos</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Ticket / Orden</th>
+            <th>Mesa</th>
+            <th>Mesero</th>
+            <th>Método</th>
+            <th style="text-align:right;">Monto Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasTickets}
+        </tbody>
+      </table>
+
+      <div style="text-align:center; font-size:11px; color:#64748b; margin-top:20px; border-top:1px solid #cbd5e1; padding-top:10px;">
+        Generado automáticamente por el Sistema POS Conexa • ${new Date().toLocaleTimeString('es-CR')}
+      </div>
+    </body>
+    </html>
+  `;
+
+  const win = window.open('', '_blank', 'width=880,height=750');
+  if (win) {
+    win.document.write(printContent);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+    }, 300);
+  }
+};
 
 // 2. CONTROL DE INVENTARIO
 estado.inventario = [];
