@@ -64,6 +64,7 @@ db.serialize(() => {
   db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
   db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
+  db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1752,14 +1753,15 @@ app.post('/api/comandas/enviar', async (req, res) => {
     await descontarInventarioPorItems(itemsProcesados);
 
     // 7. Recalcular totales de orden
-    const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
+    const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
     let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
 
     // Usar el estado de HH del servidor (fuente de verdad), no el del cliente
     let descuentoHH = 0;
     if (happyHourEstado.activo) {
       rows.forEach(r => {
-        if (r.prod_happy_hour) {
+        const esCerveza = Boolean(r.prod_happy_hour || r.prod_categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(r.nombre_producto || ''));
+        if (esCerveza) {
           const pares = Math.floor(r.cantidad / 2);
           descuentoHH += pares * r.precio_unitario;
         }
@@ -2502,414 +2504,9 @@ app.post('/api/admin/auditoria/registrar', async (req, res) => {
   }
 });
 
-// --- SEEDER DE VENTAS FICTICIAS REALISTAS PARA DASHBOARD & TICKETS ---
-async function sembrarVentasFicticiasSiNecesario(forzar = false) {
-  try {
-    const hoyInicio = new Date();
-    hoyInicio.setHours(0, 0, 0, 0);
-    const hoyISO = hoyInicio.toISOString();
-
-    const countRow = await dbGet('SELECT COUNT(*) as count FROM Pagos WHERE fecha_hora >= ?', [hoyISO]);
-    if (!forzar && countRow && countRow.count >= 15) {
-      return;
-    }
-
-    console.log('🌱 Sembrando ventas ficticias para el Dashboard de Métricas y Tickets...');
-
-    // Limpiar órdenes/pagos gigantes de pruebas de estrés si existen
-    await dbRun('DELETE FROM Pagos WHERE monto > 500000');
-    await dbRun('DELETE FROM Ordenes WHERE total > 500000');
-    await dbRun('DELETE FROM DetalleOrden WHERE subtotal > 500000');
-
-    // Caja activa
-    let caja = await dbGet("SELECT id FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
-    let cajaId = caja ? caja.id : 1;
-
-    const fechaHoy = new Date();
-    const yyyy = fechaHoy.getFullYear();
-    const mm = String(fechaHoy.getMonth() + 1).padStart(2, '0');
-    const dd = String(fechaHoy.getDate()).padStart(2, '0');
-    const fechaBase = `${yyyy}-${mm}-${dd}`;
-
-    const ventasFicticias = [
-      {
-        num: 'ORD-001',
-        mesaId: 1,
-        cliente: 'María Vargas',
-        mesero: 'Juan Jival',
-        horaStr: '11:30',
-        metodo: 'Efectivo',
-        items: [
-          { prodId: 67, nombre: 'Casado con bistec encebollado', cant: 2, precio: 3800, dest: 'cocina', minPrep: 14 },
-          { prodId: 1, nombre: 'Imperial Regular', cant: 2, precio: 1800, dest: 'barra', minPrep: 3 },
-          { prodId: 64, nombre: 'Tres leches tradicional', cant: 1, precio: 2800, dest: 'cocina', minPrep: 5 }
-        ]
-      },
-      {
-        num: 'ORD-002',
-        mesaId: 2,
-        cliente: 'Carlos Jiménez',
-        mesero: 'Carlos Solano',
-        horaStr: '12:15',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 8, nombre: 'Chifrijo Tradicional', cant: 1, precio: 4500, dest: 'cocina', minPrep: 12 },
-          { prodId: 79, nombre: 'Imperial Silver', cant: 1, precio: 1800, dest: 'barra', minPrep: 2 }
-        ]
-      },
-      {
-        num: 'ORD-003',
-        mesaId: 3,
-        cliente: 'Elena Castro',
-        mesero: 'Sofía Morales',
-        horaStr: '12:45',
-        metodo: 'SINPE',
-        items: [
-          { prodId: 67, nombre: 'Casado con pollo a la plancha', cant: 2, precio: 3500, dest: 'cocina', minPrep: 15 },
-          { prodId: 100, nombre: 'Fresco de Cas', cant: 2, precio: 1800, dest: 'barra', minPrep: 4 },
-          { prodId: 68, nombre: 'Flan de caramelo', cant: 2, precio: 2600, dest: 'cocina', minPrep: 4 }
-        ]
-      },
-      {
-        num: 'ORD-004',
-        mesaId: 4,
-        cliente: 'Andrés Mora',
-        mesero: 'Juan Jival',
-        horaStr: '13:15',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 46, nombre: 'Arroz con camarones', cant: 1, precio: 5500, dest: 'cocina', minPrep: 16 },
-          { prodId: 81, nombre: 'Pilsen 6.0', cant: 1, precio: 2000, dest: 'barra', minPrep: 2 },
-          { prodId: 69, nombre: 'Torta chilena', cant: 1, precio: 3000, dest: 'cocina', minPrep: 5 }
-        ]
-      },
-      {
-        num: 'ORD-005',
-        mesaId: 5,
-        cliente: 'Familia González',
-        mesero: 'Carlos Solano',
-        horaStr: '13:50',
-        metodo: 'Efectivo',
-        items: [
-          { prodId: 67, nombre: 'Casado con carne mechada', cant: 3, precio: 3800, dest: 'cocina', minPrep: 15 },
-          { prodId: 78, nombre: 'Imperial Light', cant: 3, precio: 1800, dest: 'barra', minPrep: 3 },
-          { prodId: 53, nombre: 'Caldosa', cant: 1, precio: 3000, dest: 'cocina', minPrep: 8 }
-        ]
-      },
-      {
-        num: 'ORD-006',
-        mesaId: 6,
-        cliente: 'Daniela Solís',
-        mesero: 'Sofía Morales',
-        horaStr: '14:25',
-        metodo: 'SINPE',
-        items: [
-          { prodId: 44, nombre: 'Arroz con pollo tradicional', cant: 2, precio: 4200, dest: 'cocina', minPrep: 14 },
-          { prodId: 102, nombre: 'Fresco de Guanábana en leche', cant: 2, precio: 2300, dest: 'barra', minPrep: 5 },
-          { prodId: 74, nombre: 'Granizado / Copo tradicional', cant: 2, precio: 2500, dest: 'cocina', minPrep: 6 }
-        ]
-      },
-      {
-        num: 'ORD-007',
-        mesaId: 7,
-        cliente: 'David Rojas',
-        mesero: 'Juan Jival',
-        horaStr: '15:10',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 67, nombre: 'Casado con chuleta de cerdo', cant: 1, precio: 3800, dest: 'cocina', minPrep: 13 },
-          { prodId: 82, nombre: 'Bavaria Gold', cant: 1, precio: 2200, dest: 'barra', minPrep: 2 }
-        ]
-      },
-      {
-        num: 'ORD-008',
-        mesaId: 8,
-        cliente: 'Mesa de Amigos',
-        mesero: 'Carlos Solano',
-        horaStr: '15:55',
-        metodo: 'Efectivo',
-        items: [
-          { prodId: 8, nombre: 'Chifrijo Tradicional', cant: 2, precio: 4500, dest: 'cocina', minPrep: 13 },
-          { prodId: 1, nombre: 'Imperial Regular', cant: 4, precio: 1800, dest: 'barra', minPrep: 3 },
-          { prodId: 9, nombre: 'Alitas BBQ / Búfalo (8 uds)', cant: 1, precio: 4900, dest: 'cocina', minPrep: 15 }
-        ]
-      },
-      {
-        num: 'ORD-009',
-        mesaId: 9,
-        cliente: 'Gabriela Alvarado',
-        mesero: 'Sofía Morales',
-        horaStr: '16:35',
-        metodo: 'SINPE',
-        items: [
-          { prodId: 67, nombre: 'Casado con pollo en salsa', cant: 1, precio: 3500, dest: 'cocina', minPrep: 12 },
-          { prodId: 104, nombre: 'Fresco de Mora', cant: 1, precio: 1800, dest: 'barra', minPrep: 3 }
-        ]
-      },
-      {
-        num: 'ORD-010',
-        mesaId: 10,
-        cliente: 'Roberto Quesada',
-        mesero: 'Juan Jival',
-        horaStr: '17:20',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 45, nombre: 'Arroz cantones tico', cant: 2, precio: 4500, dest: 'cocina', minPrep: 14 },
-          { prodId: 3, nombre: 'Corona Extra', cant: 2, precio: 2500, dest: 'barra', minPrep: 3 },
-          { prodId: 65, nombre: 'Cuatro leches', cant: 1, precio: 3000, dest: 'cocina', minPrep: 4 }
-        ]
-      },
-      {
-        num: 'ORD-011',
-        mesaId: 11,
-        cliente: 'Patricia Navarro',
-        mesero: 'Carlos Solano',
-        horaStr: '18:10',
-        metodo: 'Efectivo',
-        items: [
-          { prodId: 67, nombre: 'Casado con pescado', cant: 2, precio: 4500, dest: 'cocina', minPrep: 15 },
-          { prodId: 105, nombre: 'Agua de Sapo', cant: 2, precio: 2000, dest: 'barra', minPrep: 3 }
-        ]
-      },
-      {
-        num: 'ORD-012',
-        mesaId: 12,
-        cliente: 'Luis Fernández',
-        mesero: 'Sofía Morales',
-        horaStr: '18:50',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 89, nombre: 'Vigorón costarricense', cant: 1, precio: 4000, dest: 'cocina', minPrep: 11 },
-          { prodId: 86, nombre: 'Rock Ice Limo-Ness', cant: 1, precio: 1800, dest: 'barra', minPrep: 2 }
-        ]
-      },
-      {
-        num: 'ORD-013',
-        mesaId: 13,
-        cliente: 'Esteban Chacón',
-        mesero: 'Juan Jival',
-        horaStr: '19:35',
-        metodo: 'SINPE',
-        items: [
-          { prodId: 10, nombre: 'Ceviche Mixto con Aguacate', cant: 1, precio: 4800, dest: 'cocina', minPrep: 10 },
-          { prodId: 84, nombre: 'Bavaria Dark', cant: 2, precio: 2200, dest: 'barra', minPrep: 3 },
-          { prodId: 115, nombre: 'Chiliguaro', cant: 1, precio: 1500, dest: 'barra', minPrep: 2 }
-        ]
-      },
-      {
-        num: 'ORD-014',
-        mesaId: 14,
-        cliente: 'Mauricio Brenes',
-        mesero: 'Carlos Solano',
-        horaStr: '20:20',
-        metodo: 'Efectivo',
-        items: [
-          { prodId: 1, nombre: 'Imperial Regular', cant: 3, precio: 1800, dest: 'barra', minPrep: 3 },
-          { prodId: 97, nombre: 'Shot de Cacique con limón y sal', cant: 2, precio: 1500, dest: 'barra', minPrep: 2 }
-        ]
-      },
-      {
-        num: 'ORD-015',
-        mesaId: 15,
-        cliente: 'Valeria Montero',
-        mesero: 'Sofía Morales',
-        horaStr: '21:05',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 71, nombre: 'Patacones con carne desmechada', cant: 2, precio: 3800, dest: 'cocina', minPrep: 13 },
-          { prodId: 96, nombre: 'Caipirinha Tica', cant: 2, precio: 3500, dest: 'barra', minPrep: 4 },
-          { prodId: 66, nombre: 'Arroz con leche', cant: 2, precio: 2500, dest: 'cocina', minPrep: 4 }
-        ]
-      },
-      {
-        num: 'ORD-016',
-        mesaId: 16,
-        cliente: 'Jorge Abarca',
-        mesero: 'Juan Jival',
-        horaStr: '21:45',
-        metodo: 'Efectivo',
-        items: [
-          { prodId: 67, nombre: 'Casado con carne mechada', cant: 1, precio: 3800, dest: 'cocina', minPrep: 12 },
-          { prodId: 109, nombre: 'Imperial Ultra', cant: 1, precio: 2000, dest: 'barra', minPrep: 2 },
-          { prodId: 108, nombre: 'Café chorreado tradicional', cant: 1, precio: 1500, dest: 'barra', minPrep: 4 }
-        ]
-      },
-      {
-        num: 'ORD-017',
-        mesaId: null,
-        cliente: 'Karla Ureña (Para Llevar)',
-        mesero: 'Carlos Solano',
-        horaStr: '22:15',
-        metodo: 'SINPE',
-        items: [
-          { prodId: 67, nombre: 'Casado con bistec encebollado', cant: 2, precio: 3800, dest: 'cocina', minPrep: 14 },
-          { prodId: 103, nombre: 'Fresco de Maracuyá', cant: 2, precio: 1800, dest: 'barra', minPrep: 3 }
-        ]
-      },
-      {
-        num: 'ORD-018',
-        mesaId: 1,
-        cliente: 'Alejandro Ruiz',
-        mesero: 'Sofía Morales',
-        horaStr: '22:45',
-        metodo: 'Tarjeta',
-        items: [
-          { prodId: 8, nombre: 'Chifrijo Tradicional', cant: 1, precio: 4500, dest: 'cocina', minPrep: 12 },
-          { prodId: 2, nombre: 'Pilsen', cant: 2, precio: 1800, dest: 'barra', minPrep: 2 },
-          { prodId: 64, nombre: 'Tres leches tradicional', cant: 1, precio: 2800, dest: 'cocina', minPrep: 4 }
-        ]
-      }
-    ];
-
-    for (const v of ventasFicticias) {
-      const horaParts = v.horaStr.split(':');
-      const horaNum = parseInt(horaParts[0]);
-      const minNum = parseInt(horaParts[1]);
-
-      const dPedido = new Date(fechaHoy);
-      dPedido.setHours(horaNum, minNum, 0, 0);
-      const fechaPedidoISO = dPedido.toISOString();
-
-      const dCierre = new Date(dPedido.getTime() + 35 * 60000);
-      const fechaCierreISO = dCierre.toISOString();
-
-      let subtotal = 0;
-      v.items.forEach(it => { subtotal += it.precio * it.cant; });
-      const serv10 = Math.round(subtotal * 0.10);
-      const iva13 = Math.round(subtotal * 0.13);
-      const total = subtotal + serv10 + iva13;
-      const propina = Math.round(total * 0.10);
-
-      const ordRes = await dbRun(
-        `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, tipo, cliente, mesero, fecha_apertura, fecha_cierre, estado, subtotal, servicio_10, iva_13, total)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'pagada', ?, ?, ?, ?)`,
-        [v.num, v.mesaId, v.mesaId ? 'mesa' : 'llevar', v.cliente, v.mesero, fechaPedidoISO, fechaCierreISO, subtotal, serv10, iva13, total]
-      );
-      const ordenId = ordRes.lastID;
-
-      for (const it of v.items) {
-        const itemSub = it.precio * it.cant;
-        const dListo = new Date(dPedido.getTime() + it.minPrep * 60000);
-        await dbRun(
-          `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, destino, estado_comanda, hora_pedido, hora_listo, creado_en)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?)`,
-          [ordenId, it.prodId, it.nombre, it.precio, it.cant, itemSub, it.dest, fechaPedidoISO, dListo.toISOString(), fechaPedidoISO]
-        );
-      }
-
-      await dbRun(
-        `INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, fecha_hora)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-        [ordenId, cajaId, v.mesero, v.metodo, total, propina, fechaCierreISO]
-      );
-    }
-
-    console.log(`✅ ${ventasFicticias.length} ventas ficticias sembradas exitosamente.`);
-  } catch (e) {
-    console.error('Error al sembrar ventas ficticias:', e);
-  }
-}
-
-// Ejecutar seeder en arranque
-setTimeout(() => {
-  sembrarVentasFicticiasSiNecesario(false);
-}, 1000);
-
-// Endpoint manual para resembrar ventas si se solicita
-app.post('/api/admin/metricas/sembrar-ventas', verificarAdmin, async (req, res) => {
-  try {
-    await sembrarVentasFicticiasSiNecesario(true);
-    res.json({ message: 'Ventas ficticias sembradas correctamente' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// --- HISTORIAL DE TICKETS & CUENTAS COBRADAS ---
-app.get('/api/admin/tickets-historial', verificarAdmin, async (req, res) => {
-  try {
-    await sembrarVentasFicticiasSiNecesario(false);
-
-    const hoyInicio = new Date();
-    hoyInicio.setHours(0, 0, 0, 0);
-    const hoyISO = hoyInicio.toISOString();
-
-    const ordenes = await dbAll(`
-      SELECT o.id, o.numero_orden, o.mesa_id, m.numero as mesa_numero,
-             o.tipo, o.cliente, o.mesero, o.fecha_apertura, o.fecha_cierre, o.subtotal,
-             o.descuento_happy_hour, o.servicio_10, o.iva_13, o.total, o.estado,
-             p.metodo as metodo_pago, p.monto as monto_pagado, p.propina, p.cambio, p.fecha_hora as fecha_pago
-      FROM Ordenes o
-      LEFT JOIN Mesas m ON o.mesa_id = m.id
-      LEFT JOIN Pagos p ON o.id = p.orden_id
-      WHERE o.estado = 'pagada' AND o.total > 0
-      ORDER BY o.id DESC
-    `);
-
-    const ordenIds = ordenes.map(o => o.id);
-    let itemsByOrden = {};
-    if (ordenIds.length > 0) {
-      const placeholders = ordenIds.map(() => '?').join(',');
-      const allItems = await dbAll(
-        `SELECT orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, destino 
-         FROM DetalleOrden 
-         WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado'
-         ORDER BY id ASC`,
-        ordenIds
-      );
-      for (const it of allItems) {
-        if (!itemsByOrden[it.orden_id]) itemsByOrden[it.orden_id] = [];
-        itemsByOrden[it.orden_id].push(it);
-      }
-    }
-
-    const tickets = ordenes.map(o => {
-      const numMesa = String(o.mesa_numero || '').trim();
-      let mesaLabel = 'Mesa General';
-      if (numMesa) {
-        mesaLabel = numMesa.toLowerCase().startsWith('mesa') || numMesa.toLowerCase().startsWith('barra') || numMesa.toLowerCase().startsWith('terraza') 
-          ? numMesa 
-          : `Mesa ${numMesa}`;
-      } else if (o.tipo === 'llevar') {
-        mesaLabel = 'Para Llevar';
-      }
-
-      return {
-        id: o.id,
-        numero_orden: o.numero_orden || `ORD-${String(o.id).padStart(3, '0')}`,
-        mesa: mesaLabel,
-        cliente: o.cliente || 'Cliente General',
-        mesero: o.mesero || 'General',
-        fecha_apertura: o.fecha_apertura,
-        fecha_cierre: o.fecha_cierre || o.fecha_pago,
-        fecha_pago: o.fecha_pago || o.fecha_cierre,
-        metodo_pago: o.metodo_pago || 'Efectivo',
-        subtotal: Math.round(o.subtotal || 0),
-        descuento: Math.round(o.descuento_happy_hour || 0),
-        servicio: Math.round(o.servicio_10 || 0),
-        iva: Math.round(o.iva_13 || 0),
-        total: Math.round(o.total || (o.monto_pagado || 0)),
-        propina: Math.round(o.propina || 0),
-        cambio: Math.round(o.cambio || 0),
-        items: itemsByOrden[o.id] || []
-      };
-    });
-
-    res.json({
-      totalTickets: tickets.length,
-      totalVentas: tickets.reduce((acc, t) => acc + t.total, 0),
-      tickets
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // --- DASHBOARD & MÉTRICAS EN TIEMPO REAL ---
 app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
   try {
-    await sembrarVentasFicticiasSiNecesario(false);
-
     const hoyInicio = new Date();
     hoyInicio.setHours(0, 0, 0, 0);
     const hoyISO = hoyInicio.toISOString();
@@ -2956,7 +2553,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
         cantPlatosConTiempo++;
       }
     }
-    const tiempoPromedioCocinaMin = cantPlatosConTiempo > 0 ? Math.round(sumaMinutos / cantPlatosConTiempo) : 14;
+    const tiempoPromedioCocinaMin = cantPlatosConTiempo > 0 ? Math.round(sumaMinutos / cantPlatosConTiempo) : 0;
 
     // 4. Top 5 Productos Más Vendidos
     const topProductos = await dbAll(`
@@ -3019,7 +2616,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       resumen: {
         totalVentasHoy,
         totalVentasAyer,
-        diferenciaAyer: totalVentasAyer > 0 ? Math.round(((totalVentasHoy - totalVentasAyer) / totalVentasAyer) * 100) : 15,
+        diferenciaAyer: totalVentasAyer > 0 ? Math.round(((totalVentasHoy - totalVentasAyer) / totalVentasAyer) * 100) : 0,
         cuentasHoy,
         ticketPromedio,
         propinasHoy,

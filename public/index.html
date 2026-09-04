@@ -476,20 +476,17 @@
               <div class="kpi-icon">💰</div>
               <div class="kpi-info">
                 <span class="kpi-label">Ventas Totales Hoy</span>
-                <strong class="kpi-val" id="kpiVentasHoy">₡ 0</strong>
+                <strong class="kpi-val" id="kpiVentasHoy">₡ 0.00</strong>
                 <small class="kpi-sub" id="kpiComparativaAyer">vs ayer: 0%</small>
               </div>
             </div>
 
-            <div class="kpi-card kpi-tickets kpi-clickable" id="btnVerCuentasCobradas" onclick="abrirModalHistorialTickets()" style="cursor:pointer; border:1px solid rgba(56,189,248,0.4); box-shadow:0 4px 12px rgba(56,189,248,0.15); transition:transform 0.2s, box-shadow 0.2s;" title="👆 Clic aquí para ver todos los tickets impresos y reimprimir">
+            <div class="kpi-card kpi-tickets">
               <div class="kpi-icon">🧾</div>
               <div class="kpi-info">
-                <span class="kpi-label" style="display:flex; justify-content:space-between; align-items:center;">
-                  Cuentas Cobradas
-                  <span style="font-size:0.65rem; background:#0284c7; color:#fff; padding:2px 6px; border-radius:4px; font-weight:700;">VER 🔍</span>
-                </span>
+                <span class="kpi-label">Cuentas Cobradas</span>
                 <strong class="kpi-val" id="kpiCuentasCobradas">0</strong>
-                <small class="kpi-sub" style="color:#38bdf8; font-weight:600;">Ver tickets impresos & reporte ➔</small>
+                <small class="kpi-sub">Mesas atendidas hoy</small>
               </div>
             </div>
 
@@ -497,7 +494,7 @@
               <div class="kpi-icon">🎯</div>
               <div class="kpi-info">
                 <span class="kpi-label">Ticket Promedio</span>
-                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0</strong>
+                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0.00</strong>
                 <small class="kpi-sub">Gasto promedio por mesa</small>
               </div>
             </div>
@@ -1841,79 +1838,6 @@
       <div class="dialog-footer">
         <button class="btn-sec" onclick="cerrarModalNuevoInsumo()">Cancelar</button>
         <button class="btn-pri" onclick="guardarNuevoInsumo()">💾 Registrar Insumo</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: HISTORIAL DE TICKETS & CUENTAS COBRADAS -->
-  <div class="modal-backdrop" id="modalHistorialTickets">
-    <div class="modal-dialog" style="max-width:980px; width:95%; max-height:92vh; display:flex; flex-direction:column; background:#0f172a; border:1px solid #334155; box-shadow:0 25px 50px -12px rgba(0,0,0,0.7);">
-      <div class="dialog-header" style="background:#1e293b; border-bottom:1px solid #334155; padding:16px 20px;">
-        <div>
-          <h3 style="margin:0; font-size:1.3rem; color:#f8fafc; display:flex; align-items:center; gap:10px;">
-            🧾 Historial de Tickets Impresos & Cuentas Cobradas
-          </h3>
-          <small id="subtituloHistorialTickets" style="color:#94a3b8; font-size:0.85rem;">Detalle de todas las ventas y tiquetes emitidos en el sistema</small>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button type="button" class="btn-tool" style="background:#059669; border-color:#10b981; color:#fff; font-weight:700; display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; cursor:pointer;" onclick="imprimirReporteVentasCompleto()">
-            🖨️ Imprimir Reporte Completo
-          </button>
-          <button type="button" class="btn-close-modal" onclick="cerrarModalHistorialTickets()" style="background:transparent; border:none; color:#94a3b8; font-size:1.3rem; cursor:pointer;">✕</button>
-        </div>
-      </div>
-
-      <div class="dialog-body" style="overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px; background:#0f172a;">
-        <!-- KPI SUMMARY BAR -->
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; background:#1e293b; padding:16px; border-radius:12px; border:1px solid #334155;">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div style="font-size:2rem; background:rgba(56,189,248,0.15); padding:10px; border-radius:10px;">🧾</div>
-            <div>
-              <span style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Cuentas Cobradas</span>
-              <div style="font-size:1.4rem; font-weight:800; color:#38bdf8;" id="historialTotalTickets">0</div>
-            </div>
-          </div>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div style="font-size:2rem; background:rgba(52,211,153,0.15); padding:10px; border-radius:10px;">💰</div>
-            <div>
-              <span style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Total Recaudado</span>
-              <div style="font-size:1.4rem; font-weight:800; color:#34d399;" id="historialTotalVentas">₡ 0</div>
-            </div>
-          </div>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div style="font-size:2rem; background:rgba(245,158,11,0.15); padding:10px; border-radius:10px;">🪙</div>
-            <div>
-              <span style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Propinas Registradas</span>
-              <div style="font-size:1.4rem; font-weight:800; color:#f59e0b;" id="historialTotalPropinas">₡ 0</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- SEARCH & ACTIONS BAR -->
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-          <div style="flex:1; min-width:260px; position:relative;">
-            <input type="text" id="txtBuscarTicket" placeholder="🔍 Buscar por ticket #, mesa, mesero, cliente o platillo..." style="width:100%; padding:10px 14px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#fff; font-size:0.95rem;" oninput="filtrarListaTickets()" />
-          </div>
-          <select id="selectFiltroMetodoTicket" onchange="filtrarListaTickets()" style="padding:10px 14px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#fff; font-size:0.95rem;">
-            <option value="todos">Todos los Métodos</option>
-            <option value="Efectivo">💵 Efectivo</option>
-            <option value="Tarjeta">💳 Tarjeta</option>
-            <option value="SINPE">📱 SINPE Móvil</option>
-          </select>
-          <button type="button" class="btn-sec" onclick="cargarHistorialTickets()" style="padding:10px 16px; border-radius:8px; background:#334155; border:1px solid #475569; color:#fff; font-weight:600; cursor:pointer;">
-            🔄 Refrescar
-          </button>
-        </div>
-
-        <!-- TICKETS GRID / LIST -->
-        <div id="listaTicketsContainer" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(360px, 1fr)); gap:14px; max-height:55vh; overflow-y:auto; padding-right:4px;">
-          <!-- Renderizado dinámico de tarjetas de tickets -->
-        </div>
-      </div>
-
-      <div class="dialog-footer" style="background:#1e293b; border-top:1px solid #334155; padding:14px 20px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:0.85rem; color:#94a3b8;" id="lblTicketsContador">Mostrando 0 tickets</span>
-        <button type="button" class="btn-sec" onclick="cerrarModalHistorialTickets()" style="padding:8px 18px; border-radius:8px;">Cerrar</button>
       </div>
     </div>
   </div>

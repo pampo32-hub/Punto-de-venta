@@ -205,6 +205,105 @@ body {
   border: 1px solid var(--border);
 }
 
+/* HAPPY HOUR TOPBAR PILL */
+.happy-hour-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #ec4899, #8b5cf6);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(236, 72, 153, 0.45);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.happy-hour-pill:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.7);
+}
+
+.happy-hour-pill:active {
+  transform: scale(0.97);
+}
+
+.happy-hour-pill.inactive {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow: none;
+  opacity: 0.75;
+}
+
+.happy-hour-pill.inactive:hover {
+  opacity: 1;
+  border-color: #4b5563;
+}
+
+.happy-hour-pill .hh-icon {
+  font-size: 1.25rem;
+}
+
+.happy-hour-pill .hh-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.happy-hour-pill .hh-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #fff;
+}
+
+.happy-hour-pill .hh-info small {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.happy-hour-pill.inactive .hh-info small {
+  color: #9ca3af;
+}
+
+/* BADGES PROMO 2x1 EN TARJETAS */
+.prod-card-one-tap {
+  position: relative;
+}
+
+.prod-badge-promo {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: linear-gradient(135deg, #ec4899, #f43f5e);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 2px 7px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.6);
+  letter-spacing: 0.3px;
+  animation: pulsePromo 2s infinite ease-in-out;
+  z-index: 2;
+}
+
+@keyframes pulsePromo {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.hh-promo-badge {
+  display: inline-block;
+  background: rgba(236, 72, 153, 0.2);
+  border: 1px solid rgba(236, 72, 153, 0.5);
+  color: #f472b6;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
 .status-indicator.online {
   width: 10px;
   height: 10px;

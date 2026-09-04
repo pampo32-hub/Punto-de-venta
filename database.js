@@ -605,8 +605,9 @@ function initDb() {
       });
     });
 
-    // Mapear productos anteriores a sus nuevas categorías correctas
-    db.run("UPDATE Productos SET categoria_id = 4 WHERE LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%cerveza%'");
+    // Mapear productos anteriores a sus nuevas categorías correctas y activar Happy Hour en cervezas
+    db.run("UPDATE Productos SET categoria_id = 4, happy_hour = 1 WHERE LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%cerveza%'");
+    db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4");
     db.run("UPDATE Productos SET categoria_id = 5 WHERE LOWER(nombre) LIKE '%mojito%' OR LOWER(nombre) LIKE '%margarita%' OR LOWER(nombre) LIKE '%gin tonic%' OR LOWER(nombre) LIKE '%chiliguaro%' OR LOWER(nombre) LIKE '%guaro%' OR LOWER(nombre) LIKE '%coctel%' OR LOWER(nombre) LIKE '%shot%'");
     db.run("UPDATE Productos SET categoria_id = 6 WHERE LOWER(nombre) LIKE '%fresco%' OR LOWER(nombre) LIKE '%refresco%' OR LOWER(nombre) LIKE '%café%' OR LOWER(nombre) LIKE '%cafe%' OR LOWER(nombre) LIKE '%agua%' OR LOWER(nombre) LIKE '%horchata%' OR LOWER(nombre) LIKE '%resbaladera%'");
     db.run("UPDATE Productos SET categoria_id = 2 WHERE LOWER(nombre) LIKE '%patacon%' OR LOWER(nombre) LIKE '%yuca%' OR LOWER(nombre) LIKE '%chorreada%' OR LOWER(nombre) LIKE '%ceviche%' OR LOWER(nombre) LIKE '%empanada%' OR LOWER(nombre) LIKE '%tamal%' OR LOWER(nombre) LIKE '%alita%' OR LOWER(nombre) LIKE '%caldosa%'");
