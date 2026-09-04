@@ -2742,6 +2742,12 @@ async function abrirComanderoMesa(mesaId) {
   renderCatalogoComandero();
   if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
   document.getElementById('modalComandero').classList.add('active');
+  if (typeof aplicarPersonalizacionAlDOM === 'function') {
+    aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
+  }
+  if (_modoEdicionGlobalActivo && typeof toggleContentEditableLive === 'function') {
+    toggleContentEditableLive(true);
+  }
 }
 
 document.getElementById('btnCloseComandero').addEventListener('click', () => {
@@ -3650,6 +3656,12 @@ function iniciarDivisionCuentas() {
   calcularSplitIgual();
 
   document.getElementById('modalSplitBill').classList.add('active');
+  if (typeof aplicarPersonalizacionAlDOM === 'function') {
+    aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
+  }
+  if (_modoEdicionGlobalActivo && typeof toggleContentEditableLive === 'function') {
+    toggleContentEditableLive(true);
+  }
 }
 
 function cambiarCantidadPersonasSplit(delta) {
@@ -6029,16 +6041,18 @@ window.aplicarPersonalizacionAlDOM = function(config) {
   if (config.elementStyles) {
     Object.entries(config.elementStyles).forEach(([selector, styles]) => {
       try {
-        const el = document.querySelector(selector);
-        if (el && styles) {
-          if (styles.bgColor) el.style.backgroundColor = styles.bgColor;
-          if (styles.textColor) el.style.color = styles.textColor;
-          if (styles.fontSize) el.style.fontSize = styles.fontSize;
-          if (styles.borderRadius) el.style.borderRadius = styles.borderRadius;
-          if (styles.padding) el.style.padding = styles.padding;
-          if (styles.display && styles.display !== 'default') el.style.display = styles.display;
-          if (styles.customCSS) el.style.cssText += ';' + styles.customCSS;
-          if (styles.text !== undefined && styles.text !== '') el.innerHTML = styles.text;
+        const els = document.querySelectorAll(selector);
+        if (els.length > 0 && styles) {
+          els.forEach(el => {
+            if (styles.bgColor) el.style.backgroundColor = styles.bgColor;
+            if (styles.textColor) el.style.color = styles.textColor;
+            if (styles.fontSize) el.style.fontSize = styles.fontSize;
+            if (styles.borderRadius) el.style.borderRadius = styles.borderRadius;
+            if (styles.padding) el.style.padding = styles.padding;
+            if (styles.display && styles.display !== 'default') el.style.display = styles.display;
+            if (styles.customCSS) el.style.cssText += ';' + styles.customCSS;
+            if (styles.text !== undefined && styles.text !== '') el.innerHTML = styles.text;
+          });
         }
       } catch (_) {}
     });
@@ -6148,10 +6162,23 @@ window.aplicarCSSCustomEnVivo = function(cssText) {
   marcarCambiosPendientes(true);
 };
 
-// Guarda la personalización en el backend para el local actual
+// Guarda la personalización en el backend para el local actual y sale del Modo Edición
 window.guardarPersonalizacionPaginaTotal = async function() {
+  // 1. Commit inmediato del elemento actualmente enfocado (si se estaba editando in-place)
+  if (document.activeElement && document.activeElement.isContentEditable) {
+    if (typeof commitElementText === 'function') {
+      commitElementText(document.activeElement);
+    }
+  }
+
+  // 2. Cerrar modal inspector si está abierto
+  if (typeof cerrarModalInspectorLive === 'function') {
+    cerrarModalInspectorLive();
+  }
+
   const nid = estado.negocioActual?.id || 1;
   const nombreNegocio = estado.negocioActual?.nombre || 'este local';
+
   try {
     const res = await fetch('/api/dev/personalizacion-pagina', {
       method: 'POST',
@@ -6162,8 +6189,17 @@ window.guardarPersonalizacionPaginaTotal = async function() {
       })
     });
     if (!res.ok) throw new Error('Error al guardar en el servidor');
-    marcarCambiosPendientes(false);
-    mostrarNotificacionCentro(`💾 ¡Personalización guardada permanentemente para "${nombreNegocio}"!`, 'success');
+
+    // 3. Salir automáticamente del Modo Edición en toda la pantalla y en modales
+    if (typeof marcarCambiosPendientes === 'function') marcarCambiosPendientes(false);
+    if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
+
+    // 4. Re-aplicar cambios consolidados al DOM
+    if (typeof aplicarPersonalizacionAlDOM === 'function') {
+      aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
+    }
+
+    mostrarNotificacionCentro(`💾 ¡Personalización guardada para "${nombreNegocio}" y Modo Edición finalizado!`, 'success');
   } catch (e) {
     mostrarNotificacionCentro('❌ Error guardando personalización: ' + e.message, 'error');
   }
@@ -6348,6 +6384,26 @@ window.toggleModoInspeccionLive = function(activo) {
   }
 };
 
+// Helper para registrar inmediatamente texto en memoria y encender botón guardar
+function commitElementText(el) {
+  if (!el) return;
+  const selector = obtenerSelectorUnico(el);
+  if (!selector) return;
+
+  if (!estado.personalizacionPagina.elementStyles) estado.personalizacionPagina.elementStyles = {};
+  if (!estado.personalizacionPagina.elementStyles[selector]) estado.personalizacionPagina.elementStyles[selector] = {};
+  estado.personalizacionPagina.elementStyles[selector].text = el.innerHTML;
+  marcarCambiosPendientes(true);
+}
+
+function handleContentEditableInput(e) {
+  commitElementText(e.target);
+}
+
+function handleContentEditableBlur(e) {
+  commitElementText(e.target);
+}
+
 // Activa/desactiva edición de texto por doble clic
 window.toggleContentEditableLive = function(activo) {
   _modoContentEditableActivo = activo;
@@ -6365,24 +6421,17 @@ window.toggleContentEditableLive = function(activo) {
 
     if (activo) {
       el.setAttribute('contenteditable', 'true');
+      el.removeEventListener('input', handleContentEditableInput);
+      el.removeEventListener('blur', handleContentEditableBlur);
+      el.addEventListener('input', handleContentEditableInput);
       el.addEventListener('blur', handleContentEditableBlur);
     } else {
       el.removeAttribute('contenteditable');
+      el.removeEventListener('input', handleContentEditableInput);
       el.removeEventListener('blur', handleContentEditableBlur);
     }
   });
 };
-
-function handleContentEditableBlur(e) {
-  const el = e.target;
-  const selector = obtenerSelectorUnico(el);
-  if (!selector) return;
-
-  if (!estado.personalizacionPagina.elementStyles) estado.personalizacionPagina.elementStyles = {};
-  if (!estado.personalizacionPagina.elementStyles[selector]) estado.personalizacionPagina.elementStyles[selector] = {};
-  estado.personalizacionPagina.elementStyles[selector].text = el.innerHTML;
-  marcarCambiosPendientes(true);
-}
 
 function handleLiveMouseOver(e) {
   if (!_modoInspeccionActivo) return;
@@ -6502,24 +6551,58 @@ window.eliminarElementoSeleccionadoLive = function() {
   mostrarNotificacionCentro('🗑️ Elemento ocultado en la página', 'info');
 };
 
-// Helper: genera un selector CSS único para un elemento
+// Helper: genera un selector CSS único y estable para cualquier elemento
 function obtenerSelectorUnico(el) {
   if (!el || el === document.body) return 'body';
-  if (el.id) return '#' + el.id;
 
-  const tag = el.tagName.toLowerCase();
-  const classes = [...el.classList].filter(c => !c.startsWith('dev-')).join('.');
-  if (classes) return `${tag}.${classes}`;
-
-  if (el.parentElement) {
-    const siblings = [...el.parentElement.children].filter(c => c.tagName === el.tagName);
-    if (siblings.length > 1) {
-      const idx = siblings.indexOf(el) + 1;
-      return `${obtenerSelectorUnico(el.parentElement)} > ${tag}:nth-of-type(${idx})`;
-    }
-    return `${obtenerSelectorUnico(el.parentElement)} > ${tag}`;
+  // Si tiene ID propio único que no sea de modales del sistema
+  if (el.id && !el.id.startsWith('liveInsp') && !el.id.startsWith('modalEditor') && !el.id.startsWith('modalConfirm')) {
+    try {
+      if (document.querySelectorAll('#' + el.id).length === 1) {
+        return '#' + el.id;
+      }
+    } catch (_) {}
   }
-  return tag;
+
+  const ignored = new Set([
+    'active', 'show', 'open', 'selected', 'hover', 'focus', 'has-changes',
+    'activo', 'dev-modal-action', 'dev-inspect-hover', 'dev-element-selected'
+  ]);
+
+  function construirPaso(curr) {
+    if (!curr || curr === document.body) return '';
+    if (curr.id && !curr.id.startsWith('liveInsp') && !curr.id.startsWith('modalEditor') && !curr.id.startsWith('modalConfirm')) {
+      return '#' + curr.id;
+    }
+
+    const tag = curr.tagName.toLowerCase();
+    const cleanClasses = [...curr.classList].filter(c => !ignored.has(c) && !c.startsWith('dev-'));
+    let part = tag;
+    if (cleanClasses.length > 0) {
+      part += '.' + cleanClasses[0];
+    }
+
+    if (curr.parentElement) {
+      const sameTagSiblings = [...curr.parentElement.children].filter(c => {
+        if (cleanClasses.length > 0) {
+          return c.tagName === curr.tagName && c.classList.contains(cleanClasses[0]);
+        }
+        return c.tagName === curr.tagName;
+      });
+      if (sameTagSiblings.length > 1) {
+        const idx = sameTagSiblings.indexOf(curr) + 1;
+        part += `:nth-of-type(${idx})`;
+      }
+
+      const parentPath = construirPaso(curr.parentElement);
+      if (parentPath) {
+        return parentPath + ' > ' + part;
+      }
+    }
+    return part;
+  }
+
+  return construirPaso(el) || el.tagName.toLowerCase();
 }
 
 // Inicializar piso y personalización al cargar la página
