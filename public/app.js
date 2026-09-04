@@ -877,6 +877,7 @@ function aplicarEnrutamientoPorRol() {
   cargarMenuDesdeBackend();
   cargarKDSDesdeBackend();
   cargarCajaDesdeBackend();
+  cargarPisoSalonDesdeBackend();
 }
 
 // Helpers globales para acceso directo a módulos de Admin desde cualquier vista
@@ -891,6 +892,7 @@ window.irAPuntoDeVentaAdmin = function() {
   cargarMenuDesdeBackend();
   cargarKDSDesdeBackend();
   cargarCajaDesdeBackend();
+  cargarPisoSalonDesdeBackend();
 };
 
 window.abrirPanelAdmin = function() {
@@ -1843,6 +1845,10 @@ function renderSalón(filtroZona = null) {
   const canvas = document.getElementById('mesasCanvasView');
   if (!canvas) return;
   canvas.innerHTML = '';
+
+  if (estado.pisoSalonActual) {
+    aplicarClasePisoSalon(estado.pisoSalonActual);
+  }
 
   const pisoActivo = estado.pisoActual || 1;
   actualizarBotonPisoSalon();
@@ -4315,6 +4321,10 @@ function renderEditorPlano() {
   if (!canvas) return;
   canvas.innerHTML = '';
 
+  if (estado.pisoSalonActual) {
+    aplicarClasePisoSalon(estado.pisoSalonActual);
+  }
+
   const pisoActivoEditor = estado.pisoActualEditor || 1;
   actualizarBotonPisoEditor();
 
@@ -5704,6 +5714,8 @@ if (typeof module !== 'undefined' && module.exports) {
 // ============================================================================
 
 const CATALOGO_PISOS_SALON = [
+  // Por defecto
+  { id: 'piso-default',        nombre: 'Fondo Original (Oscuro)', icono: '⬛', categoria: 'solido', tag: 'Estándar' },
   // Maderas
   { id: 'piso-madera-oscura',  nombre: 'Madera Oscura',   icono: '🪵', categoria: 'madera',   tag: 'Popular' },
   { id: 'piso-madera-clara',   nombre: 'Madera Clara',    icono: '🪵', categoria: 'madera',   tag: '' },
@@ -5734,6 +5746,7 @@ let _pisoSeleccionadoPrevio = null;
 
 // Aplica clase CSS al salón y editor con máxima prioridad
 window.aplicarClasePisoSalon = function(pisoId) {
+  estado.pisoSalonActual = pisoId;
   const salon  = document.getElementById('salonContainer');
   const editor = document.getElementById('editorBoard');
   const targets = [salon, editor].filter(Boolean);
@@ -5742,7 +5755,11 @@ window.aplicarClasePisoSalon = function(pisoId) {
     // Quitar todas las clases de piso anteriores
     const clasesARemover = [...el.classList].filter(c => c.startsWith('piso-'));
     clasesARemover.forEach(c => el.classList.remove(c));
-    if (pisoId && pisoId !== 'ninguno') el.classList.add(pisoId);
+    if (pisoId && pisoId !== 'ninguno' && pisoId !== 'piso-default') {
+      el.classList.add(pisoId);
+    } else {
+      el.classList.add('piso-default');
+    }
   });
 };
 
@@ -5752,10 +5769,10 @@ window.cargarPisoSalonDesdeBackend = async function() {
     const res = await fetch('/api/salon/piso-fondo');
     if (!res.ok) return;
     const data = await res.json();
-    if (data && data.pisoId) {
-      window.aplicarClasePisoSalon(data.pisoId);
-      _pisoSeleccionadoPrevio = data.pisoId;
-    }
+    const piso = (data && data.pisoId) ? data.pisoId : 'piso-default';
+    estado.pisoSalonActual = piso;
+    window.aplicarClasePisoSalon(piso);
+    _pisoSeleccionadoPrevio = piso;
   } catch (_) {}
 };
 
@@ -5763,7 +5780,7 @@ window.cargarPisoSalonDesdeBackend = async function() {
 window.abrirModalSelectorPiso = function() {
   const modal = document.getElementById('modalSelectorPiso');
   if (!modal) return;
-  _pisoSeleccionadoPrevio = null;
+  _pisoSeleccionadoPrevio = estado.pisoSalonActual || 'piso-default';
   const inputFiltro = document.getElementById('inputFiltroPiso');
   const selectCat   = document.getElementById('selectCategoriaPiso');
   if (inputFiltro) inputFiltro.value = '';
@@ -5802,7 +5819,7 @@ window.renderPisosSelectionGrid = function(pisos) {
   if (!grid) return;
 
   const salon = document.getElementById('salonContainer');
-  const pisoActual = salon ? [...salon.classList].find(c => c.startsWith('piso-')) : null;
+  const pisoActual = estado.pisoSalonActual || (salon ? [...salon.classList].find(c => c.startsWith('piso-')) : 'piso-default');
 
   if (!pisos || pisos.length === 0) {
     grid.innerHTML = '<p style="color:#64748b; text-align:center; padding:30px; grid-column:1/-1;">No se encontraron pisos con ese filtro.</p>';
@@ -5830,7 +5847,7 @@ window.seleccionarPisoPrevio = function(pisoId) {
 
   const txt = document.getElementById('txtPisoSeleccionado');
   const piso = CATALOGO_PISOS_SALON.find(p => p.id === pisoId);
-  if (txt && piso) txt.textContent = `${piso.icono} ${piso.nombre} — seleccionado`;
+  if (txt && piso) txt.textContent = `${piso.icono} ${piso.nombre} — seleccionado (Vista previa activa)`;
 
   // Actualizar tarjeta activa en el grid
   document.querySelectorAll('#pisosSelectionGrid .piso-card-item').forEach(card => {
@@ -5854,8 +5871,10 @@ window.guardarPisoSalonSeleccionado = async function() {
       body: JSON.stringify({ pisoId: _pisoSeleccionadoPrevio })
     });
     if (!res.ok) throw new Error('Error al guardar');
+    estado.pisoSalonActual = _pisoSeleccionadoPrevio;
+    window.aplicarClasePisoSalon(_pisoSeleccionadoPrevio);
     const piso = CATALOGO_PISOS_SALON.find(p => p.id === _pisoSeleccionadoPrevio);
-    mostrarNotificacionCentro(`✅ Piso "${piso ? piso.nombre : ''}" aplicado al salón`, 'success');
+    mostrarNotificacionCentro(`✅ Piso "${piso ? piso.nombre : ''}" guardado permanentemente en el salón`, 'success');
     cerrarModalSelectorPiso();
   } catch (e) {
     mostrarNotificacionCentro('❌ Error al guardar el piso: ' + e.message, 'error');

@@ -4989,12 +4989,35 @@ body.is-admin .admin-only-tab {
 
 
 /* ================================================================= */
-/* TEXTURAS DE PISO DEL SALÓN — salon-container & editor-board       */
+/* MODAL: SELECTOR DE PISO DEL SALÓN                                */
 /* ================================================================= */
+#modalSelectorPiso {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(8px);
+  z-index: 99990 !important;
+  align-items: center;
+  justify-content: center;
+}
+#modalSelectorPiso.active {
+  display: flex !important;
+}
 
 /* Base sin piso */
 #salonContainer, #editorBoard, .salon-container, .editor-board { 
   transition: background 0.3s ease !important; 
+}
+
+/* === DEFECTO / OSCURO === */
+#salonContainer.piso-default, .salon-container.piso-default, #editorBoard.piso-default, .editor-board.piso-default {
+  background-color: #060911 !important;
+  background-image: none !important;
+}
+.piso-preview-thumb.piso-default {
+  background: #060911 !important;
+  border: 1px dashed #334155 !important;
 }
 
 /* === MADERAS === */
