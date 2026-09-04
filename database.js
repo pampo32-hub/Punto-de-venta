@@ -418,6 +418,35 @@ function initDb() {
     fotosPlatillos.forEach(f => {
       db.run('UPDATE Productos SET imagen_url = ? WHERE codigo = ? OR id = ?', [f.img, f.cod, f.id]);
     });
+
+    // Sembrar Mesas Iniciales si no existen
+    db.get('SELECT COUNT(*) as count FROM Mesas', (err, row) => {
+      if (!err && (!row || row.count === 0)) {
+        const mesasIniciales = [
+          { numero: 'Mesa 1', zona_id: 1, capacidad: 4, forma: 'square', x: 25, y: 25, ancho: 135, alto: 115 },
+          { numero: 'Mesa 2', zona_id: 1, capacidad: 4, forma: 'square', x: 185, y: 25, ancho: 135, alto: 115 },
+          { numero: 'Mesa 3', zona_id: 1, capacidad: 4, forma: 'round', x: 345, y: 25, ancho: 135, alto: 115 },
+          { numero: 'Mesa 4', zona_id: 1, capacidad: 4, forma: 'square', x: 25, y: 175, ancho: 135, alto: 115 },
+          { numero: 'Barra 1', zona_id: 2, capacidad: 1, forma: 'silla', x: 530, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Barra 2', zona_id: 2, capacidad: 1, forma: 'silla', x: 635, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Barra 3', zona_id: 2, capacidad: 1, forma: 'silla', x: 740, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Barra 4', zona_id: 2, capacidad: 1, forma: 'silla', x: 845, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Silla Barra 7', zona_id: 2, capacidad: 1, forma: 'silla', x: 950, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Silla Barra 6', zona_id: 2, capacidad: 1, forma: 'silla', x: 1055, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Mesa VIP', zona_id: 4, capacidad: 8, forma: 'square', x: 530, y: 165, ancho: 200, alto: 130 },
+          { numero: 'Terraza 1', zona_id: 3, capacidad: 4, forma: 'square', x: 25, y: 325, ancho: 140, alto: 120 },
+          { numero: 'Terraza 2', zona_id: 3, capacidad: 4, forma: 'square', x: 195, y: 325, ancho: 140, alto: 120 }
+        ];
+        mesasIniciales.forEach(m => {
+          db.run(
+            `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, forma, x, y, ancho, alto, estado)
+             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 'libre')`,
+            [m.numero, m.zona_id, m.capacidad, m.forma, m.x, m.y, m.ancho, m.alto]
+          );
+        });
+        console.log('🌱 Mesas iniciales sembradas con distribución limpia y ordenada.');
+      }
+    });
   });
 }
 

@@ -221,7 +221,7 @@
         <button class="nav-pill active" data-view="salon">
           <span class="pill-icon">🗺️</span> Salón & Mesas
         </button>
-        <button class="nav-pill" data-view="editor-plano">
+        <button class="nav-pill admin-only-tab" data-view="editor-plano">
           <span class="pill-icon">📐</span> Editor Salón
         </button>
         <button class="nav-pill" data-view="kds">
@@ -247,6 +247,15 @@
 
       <!-- BOTONES DE ADMINISTRACIÓN (ADMIN & DEV) -->
       <div class="admin-extra-actions" id="adminExtraActions">
+        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('metricas')" title="Ver Métricas y Dashboard en tiempo real">
+          📊 Dashboard
+        </button>
+        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('inventario')" title="Control de Inventario y Existencias">
+          📦 Inventario
+        </button>
+        <button class="btn-topbar-tool btn-admin-highlight" onclick="abrirModuloAdmin('auditoria')" title="Bitácora de Auditoría y Seguridad">
+          🛡️ Auditoría
+        </button>
         <button class="btn-topbar-tool" id="btnAdminPersonal" title="Gestionar meseros y cajeros">
           👥 Personal
         </button>
@@ -265,10 +274,7 @@
           <span class="user-title" id="userProfileBadge">Usuario (Salonero)</span>
           <small class="user-subtitle">Turno Activo</small>
         </div>
-        <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión">
-          <span>🚪</span>
-          <span>Salir</span>
-        </button>
+        <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión">🚪</button>
       </div>
     </header>
 
@@ -305,7 +311,7 @@
             <button class="btn-quick-action" id="btnGestionarAgotados">
               ⛔ Lista Agotados (86)
             </button>
-            <button class="btn-quick-action" id="btnIrEditorSalon">
+            <button class="btn-quick-action admin-only-action" id="btnIrEditorSalon">
               📐 Diseñar Salón
             </button>
           </div>
@@ -320,12 +326,13 @@
       <section id="view-editor-plano" class="pos-view">
         <div class="view-subbar">
           <div class="editor-help-text">
-            <strong>📐 Diseñador del Local:</strong> Arrastra y suelta las mesas a su posición física real. Agrega nuevas mesas y guarda los cambios.
+            <strong>📐 Diseñador del Local:</strong> Arrastra y suelta las mesas a su posición física real. Los cambios se auto-guardan permanentemente para todos los usuarios.
           </div>
           <div class="editor-actions">
             <button class="btn-tool" id="btnAgregarMesaCuadrada">➕ Mesa Cuadrada</button>
             <button class="btn-tool" id="btnAgregarMesaRedonda">➕ Mesa Redonda</button>
             <button class="btn-tool" id="btnAgregarBarra">➕ Silla de Barra</button>
+            <button class="btn-tool" id="btnAutoOrganizarPlano" title="Reorganizar todas las mesas en una cuadrícula limpia sin solapes" style="background:rgba(16,185,129,0.18); border-color:#10b981; color:#6ee7b7; font-weight:700;">✨ Cuadrícula Automática</button>
             <button class="btn-save-plan" id="btnGuardarPlano">💾 Guardar Distribución</button>
           </div>
         </div>

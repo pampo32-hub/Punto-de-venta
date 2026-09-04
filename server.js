@@ -641,9 +641,96 @@ app.post('/api/mesas/posiciones', async (req, res) => {
           pos.id
         ]);
       }
+      // Guardar instantáneamente en ConfigNegocio como la distribución maestra oficial del admin
+      await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('distribucion_mesas_admin', ?)", [
+        JSON.stringify(posiciones)
+      ]);
     }
     io.emit('mesas_reorganizadas', { posiciones });
     res.json({ message: 'Distribución física del salón guardada exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Auto-guardado instantáneo de una mesa al soltar o redimensionar
+app.post('/api/mesas/posiciones/auto', async (req, res) => {
+  try {
+    const { id, x, y, ancho, alto } = req.body;
+    if (id != null && x != null && y != null) {
+      await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto) WHERE id = ?', [
+        x,
+        y,
+        ancho || null,
+        alto || null,
+        id
+      ]);
+
+      // Actualizar el snapshot maestro de mesas en ConfigNegocio
+      const todas = await dbAll('SELECT id, x, y, ancho, alto FROM Mesas');
+      await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('distribucion_mesas_admin', ?)", [
+        JSON.stringify(todas)
+      ]);
+
+      io.emit('mesas_reorganizadas', { mesaId: id, x, y, ancho, alto });
+      return res.json({ ok: true });
+    }
+    res.status(400).json({ error: 'Datos de posición incompletos' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reorganizar automáticamente en una cuadrícula limpia y espaciada (sin solapes)
+app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
+  try {
+    const mesas = await dbAll('SELECT * FROM Mesas ORDER BY zona_id ASC, id ASC');
+    let salonX = 25, salonY = 25;
+    let barraX = 530, barraY = 25;
+    let terrazaX = 25, terrazaY = 325;
+    let vipX = 530, vipY = 165;
+    const nuevasPos = [];
+
+    for (const m of mesas) {
+      const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+      let x, y, w, h;
+
+      if (m.zona_id === 2 || esSilla) {
+        // Barra
+        w = 85; h = 95;
+        x = barraX; y = barraY;
+        barraX += 105;
+      } else if (m.zona_id === 3 || (m.numero && m.numero.toLowerCase().includes('terraza'))) {
+        // Terraza
+        w = 140; h = 120;
+        x = terrazaX; y = terrazaY;
+        terrazaX += 170;
+      } else if (m.zona_id === 4 || (m.numero && m.numero.toLowerCase().includes('vip'))) {
+        // VIP
+        w = 200; h = 130;
+        x = vipX; y = vipY;
+        vipX += 230;
+      } else {
+        // Salón Principal
+        w = 135; h = 115;
+        x = salonX; y = salonY;
+        salonX += 160;
+        if (salonX > 400) {
+          salonX = 25;
+          salonY += 145;
+        }
+      }
+
+      await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = ?, alto = ? WHERE id = ?', [x, y, w, h, m.id]);
+      nuevasPos.push({ id: m.id, x, y, ancho: w, alto: h });
+    }
+
+    await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('distribucion_mesas_admin', ?)", [
+      JSON.stringify(nuevasPos)
+    ]);
+
+    io.emit('mesas_reorganizadas', { posiciones: nuevasPos });
+    res.json({ ok: true, message: 'Salón reorganizado perfectamente en cuadrícula sin solapes', posiciones: nuevasPos });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

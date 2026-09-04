@@ -681,14 +681,16 @@ function aplicarEnrutamientoPorRol() {
   if (esAdmin) {
     if (adminTools) adminTools.style.display = 'flex';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+    document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'inline-flex');
     if (perfilBadge && u.rol === 'admin') {
       perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(Admin)</small>`;
     }
   } else {
     if (adminTools) adminTools.style.display = 'none';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'none');
     const activeNav = document.querySelector('.nav-pill.active');
-    if (activeNav && ['metricas', 'inventario', 'auditoria'].includes(activeNav.dataset.view)) {
+    if (activeNav && ['metricas', 'inventario', 'auditoria', 'editor-plano'].includes(activeNav.dataset.view)) {
       const salonTab = document.querySelector('.nav-pill[data-view="salon"]');
       if (salonTab) salonTab.click();
     }
@@ -1235,10 +1237,10 @@ async function cargarMesasDesdeBackend() {
         zonaNombre: zonaObj ? zonaObj.nombre : 'Salón Principal',
         capacidad: m.capacidad,
         estado: m.estado,
-        x: m.x || 40,
-        y: m.y || 40,
-        ancho: m.ancho || ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 95 : 130),
-        alto: m.alto || ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 105 : 120),
+        x: (m.x !== null && m.x !== undefined && !isNaN(Number(m.x))) ? Number(m.x) : 40,
+        y: (m.y !== null && m.y !== undefined && !isNaN(Number(m.y))) ? Number(m.y) : 40,
+        ancho: (m.ancho !== null && m.ancho !== undefined && !isNaN(Number(m.ancho))) ? Number(m.ancho) : ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 85 : 135),
+        alto: (m.alto !== null && m.alto !== undefined && !isNaN(Number(m.alto))) ? Number(m.alto) : ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 95 : 115),
         forma: (m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 'silla' : (m.forma || 'square'),
         orden_activa_id: m.orden_activa_id,
         orden_total: m.orden_total || 0,
@@ -3153,6 +3155,10 @@ function renderEditorPlano() {
         window.removeEventListener('mouseup', onMouseUp);
         window.removeEventListener('touchmove', onMouseMove);
         window.removeEventListener('touchend', onMouseUp);
+
+        if (origX !== m.x || origY !== m.y) {
+          autoGuardarPosicionMesa(m);
+        }
       };
 
       window.addEventListener('mousemove', onMouseMove);
@@ -3208,6 +3214,8 @@ function renderEditorPlano() {
           window.removeEventListener('mouseup', onResizeUp);
           window.removeEventListener('touchmove', onResizeMove);
           window.removeEventListener('touchend', onResizeUp);
+
+          autoGuardarPosicionMesa(m);
         };
 
         window.addEventListener('pointermove', onResizeMove);
@@ -3228,16 +3236,36 @@ function renderEditorPlano() {
   });
 }
 
+// Auto-guardado instantáneo y silencioso en BD para que ningún usuario pierda la distribución
+async function autoGuardarPosicionMesa(m) {
+  if (!m || !m.id) return;
+  try {
+    const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+    await fetch('/api/mesas/posiciones/auto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: m.id,
+        x: Math.round(m.x),
+        y: Math.round(m.y),
+        ancho: Math.round(m.ancho || (esSilla ? 85 : 135)),
+        alto: Math.round(m.alto || (esSilla ? 95 : 115))
+      })
+    });
+  } catch (_) {}
+}
+
 window.cambiarTamanoMesa = function(mesaId, delta) {
   const m = estado.mesas.find(item => item.id === mesaId);
   if (!m) return;
   const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
-  const currentW = m.ancho || (esSilla ? 95 : 130);
-  const currentH = m.alto || (esSilla ? 105 : 120);
+  const currentW = m.ancho || (esSilla ? 85 : 135);
+  const currentH = m.alto || (esSilla ? 95 : 115);
 
   m.ancho = Math.max(60, Math.min(350, currentW + delta));
   m.alto = Math.max(60, Math.min(350, currentH + delta));
   renderEditorPlano();
+  autoGuardarPosicionMesa(m);
 };
 
 
@@ -3246,10 +3274,10 @@ document.getElementById('btnGuardarPlano').addEventListener('click', async () =>
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
     return {
       id: m.id,
-      x: m.x,
-      y: m.y,
-      ancho: m.ancho || (esSilla ? 95 : 130),
-      alto: m.alto || (esSilla ? 105 : 120)
+      x: Math.round(m.x),
+      y: Math.round(m.y),
+      ancho: Math.round(m.ancho || (esSilla ? 85 : 135)),
+      alto: Math.round(m.alto || (esSilla ? 95 : 115))
     };
   });
   try {
@@ -3258,11 +3286,26 @@ document.getElementById('btnGuardarPlano').addEventListener('click', async () =>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ posiciones })
     });
-    mostrarNotificacionCentro('💾 ¡Distribución física guardada en la base de datos!', 'success');
+    mostrarNotificacionCentro('💾 ¡Distribución física guardada permanentemente para todos los usuarios!', 'success');
   } catch (e) {
     mostrarNotificacionCentro('💾 ¡Distribución guardada!', 'info');
   }
   document.querySelector('.nav-pill[data-view="salon"]').click();
+});
+
+document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', async () => {
+  if (!confirm('¿Deseas reorganizar automáticamente todas las mesas y sillas en una cuadrícula limpia y espaciada sin solapes?')) return;
+  try {
+    const res = await fetch('/api/mesas/posiciones/reorganizar-cuadricula', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      mostrarNotificacionCentro('✨ Salón reorganizado perfectamente en cuadrícula sin solapes', 'success');
+      await cargarMesasDesdeBackend();
+      renderEditorPlano();
+    }
+  } catch (e) {
+    alert('Error al reorganizar cuadrícula: ' + e.message);
+  }
 });
 
 document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', async () => {
