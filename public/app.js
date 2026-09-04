@@ -669,8 +669,24 @@ window.actualizarBotonPisoSalon = function() {
 
   const hayCuentaPedidaOtroPiso = mesasOtroPiso.some(m => m.estado === 'cuenta' || m.pidio_cuenta_qr === 1 || m.cuenta_pedida);
 
-  const customStyles = estado.personalizacionPagina?.elementStyles?.['#btnTogglePisoSalon'];
-  const customTexto = customStyles?.text || estado.personalizacionPagina?.textos?.['#btnTogglePisoSalon']?.valor;
+  let customStyles = null;
+  if (estado.personalizacionPagina?.elementStyles) {
+    for (const [k, val] of Object.entries(estado.personalizacionPagina.elementStyles)) {
+      if (k === '#btnTogglePisoSalon' || k === 'btnTogglePisoSalon' || k.includes('btnTogglePisoSalon')) {
+        customStyles = val;
+        break;
+      }
+    }
+  }
+  let customTexto = customStyles?.text;
+  if (!customTexto && estado.personalizacionPagina?.textos) {
+    for (const [k, val] of Object.entries(estado.personalizacionPagina.textos)) {
+      if (k === '#btnTogglePisoSalon' || k === 'btnTogglePisoSalon' || k.includes('btnTogglePisoSalon')) {
+        customTexto = val.valor;
+        break;
+      }
+    }
+  }
 
   if (estado.pisoActual === 2) {
     btn.innerHTML = hayCuentaPedidaOtroPiso 
@@ -690,13 +706,16 @@ window.actualizarBotonPisoSalon = function() {
     btn.classList.remove('alerta-piso-cuenta');
   }
 
-  // Re-aplicar estilos visuales personalizados si existen
+  // Re-aplicar estilos visuales personalizados si existen con !important para sobreescribir gradientes
   if (customStyles) {
-    if (customStyles.bgColor) btn.style.backgroundColor = customStyles.bgColor;
-    if (customStyles.textColor) btn.style.color = customStyles.textColor;
-    if (customStyles.fontSize) btn.style.fontSize = customStyles.fontSize;
-    if (customStyles.borderRadius) btn.style.borderRadius = customStyles.borderRadius;
-    if (customStyles.padding) btn.style.padding = customStyles.padding;
+    if (customStyles.bgColor) {
+      btn.style.setProperty('background', customStyles.bgColor, 'important');
+      btn.style.setProperty('background-image', 'none', 'important');
+    }
+    if (customStyles.textColor) btn.style.setProperty('color', customStyles.textColor, 'important');
+    if (customStyles.fontSize) btn.style.setProperty('font-size', customStyles.fontSize, 'important');
+    if (customStyles.borderRadius) btn.style.setProperty('border-radius', customStyles.borderRadius, 'important');
+    if (customStyles.padding) btn.style.setProperty('padding', customStyles.padding, 'important');
     if (customStyles.customCSS) btn.style.cssText += ';' + customStyles.customCSS;
   }
 };
@@ -728,8 +747,24 @@ window.actualizarBotonPisoEditor = function() {
     }
   }
   if (btnToggle) {
-    const customStyles = estado.personalizacionPagina?.elementStyles?.['#btnTogglePisoEditor'];
-    const customTexto = customStyles?.text || estado.personalizacionPagina?.textos?.['#btnTogglePisoEditor']?.valor;
+    let customStyles = null;
+    if (estado.personalizacionPagina?.elementStyles) {
+      for (const [k, val] of Object.entries(estado.personalizacionPagina.elementStyles)) {
+        if (k === '#btnTogglePisoEditor' || k === 'btnTogglePisoEditor' || k.includes('btnTogglePisoEditor')) {
+          customStyles = val;
+          break;
+        }
+      }
+    }
+    let customTexto = customStyles?.text;
+    if (!customTexto && estado.personalizacionPagina?.textos) {
+      for (const [k, val] of Object.entries(estado.personalizacionPagina.textos)) {
+        if (k === '#btnTogglePisoEditor' || k === 'btnTogglePisoEditor' || k.includes('btnTogglePisoEditor')) {
+          customTexto = val.valor;
+          break;
+        }
+      }
+    }
 
     if (estado.pisoActualEditor === 2) {
       btnToggle.innerHTML = (customTexto && customTexto.includes('Primer') ? customTexto : '🏢 Ver Primer Piso ↙');
@@ -740,11 +775,14 @@ window.actualizarBotonPisoEditor = function() {
     }
 
     if (customStyles) {
-      if (customStyles.bgColor) btnToggle.style.backgroundColor = customStyles.bgColor;
-      if (customStyles.textColor) btnToggle.style.color = customStyles.textColor;
-      if (customStyles.fontSize) btnToggle.style.fontSize = customStyles.fontSize;
-      if (customStyles.borderRadius) btnToggle.style.borderRadius = customStyles.borderRadius;
-      if (customStyles.padding) btnToggle.style.padding = customStyles.padding;
+      if (customStyles.bgColor) {
+        btnToggle.style.setProperty('background', customStyles.bgColor, 'important');
+        btnToggle.style.setProperty('background-image', 'none', 'important');
+      }
+      if (customStyles.textColor) btnToggle.style.setProperty('color', customStyles.textColor, 'important');
+      if (customStyles.fontSize) btnToggle.style.setProperty('font-size', customStyles.fontSize, 'important');
+      if (customStyles.borderRadius) btnToggle.style.setProperty('border-radius', customStyles.borderRadius, 'important');
+      if (customStyles.padding) btnToggle.style.setProperty('padding', customStyles.padding, 'important');
       if (customStyles.customCSS) btnToggle.style.cssText += ';' + customStyles.customCSS;
     }
   }
@@ -2131,6 +2169,13 @@ function renderSalón(filtroZona = null) {
     agregarDragMesa(card, m, canvas);
     canvas.appendChild(card);
   });
+
+  if (typeof aplicarPersonalizacionAlDOM === 'function') {
+    aplicarPersonalizacionAlDOM();
+  }
+  if (typeof _modoContentEditableActivo !== 'undefined' && _modoContentEditableActivo && typeof toggleContentEditableLive === 'function') {
+    toggleContentEditableLive(true);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -3060,6 +3105,13 @@ function renderKDS() {
     `;
     container.appendChild(card);
   });
+
+  if (typeof aplicarPersonalizacionAlDOM === 'function') {
+    aplicarPersonalizacionAlDOM();
+  }
+  if (typeof _modoContentEditableActivo !== 'undefined' && _modoContentEditableActivo && typeof toggleContentEditableLive === 'function') {
+    toggleContentEditableLive(true);
+  }
 }
 
 window.despacharKDSBackend = async function(detalleId) {
@@ -4577,6 +4629,13 @@ function renderEditorPlano() {
 
     canvas.appendChild(el);
   });
+
+  if (typeof aplicarPersonalizacionAlDOM === 'function') {
+    aplicarPersonalizacionAlDOM();
+  }
+  if (typeof _modoContentEditableActivo !== 'undefined' && _modoContentEditableActivo && typeof toggleContentEditableLive === 'function') {
+    toggleContentEditableLive(true);
+  }
 }
 
 // Auto-guardado instantáneo y silencioso en BD para que ningún usuario pierda la distribución
@@ -6028,20 +6087,60 @@ window.cargarPersonalizacionPagina = async function(negocioId) {
   }
 };
 
+// Inyecta reglas CSS directamente en el <head> con !important para persistencia total frente a re-renders
+window.inyectarEstilosPersonalizadosHead = function(elementStyles) {
+  let styleEl = document.getElementById('dynamicLiveCustomRules');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'dynamicLiveCustomRules';
+    document.head.appendChild(styleEl);
+  }
+  if (!elementStyles || Object.keys(elementStyles).length === 0) {
+    styleEl.innerHTML = '';
+    return;
+  }
+  let rules = [];
+  for (const [sel, st] of Object.entries(elementStyles)) {
+    if (!st || !sel) continue;
+    let props = [];
+    if (st.bgColor) {
+      props.push(`background: ${st.bgColor} !important;`);
+      props.push(`background-image: none !important;`);
+    }
+    if (st.textColor) props.push(`color: ${st.textColor} !important;`);
+    if (st.fontSize) props.push(`font-size: ${st.fontSize} !important;`);
+    if (st.borderRadius) props.push(`border-radius: ${st.borderRadius} !important;`);
+    if (st.padding) props.push(`padding: ${st.padding} !important;`);
+    if (st.display && st.display !== 'default') props.push(`display: ${st.display} !important;`);
+    if (st.customCSS) props.push(st.customCSS);
+    if (props.length > 0) {
+      rules.push(`${sel} { ${props.join(' ')} }`);
+    }
+  }
+  styleEl.innerHTML = rules.join('\n');
+};
+
 // Aplica todos los textos, variables CSS y estilos guardados en el DOM
 window.aplicarPersonalizacionAlDOM = function(config) {
+  if (!config) config = estado.personalizacionPagina;
   if (!config) return;
 
-  // 1. Textos directos
+  // 1. Inyectar reglas CSS prioritarias en <head>
+  if (typeof window.inyectarEstilosPersonalizadosHead === 'function') {
+    window.inyectarEstilosPersonalizadosHead(config.elementStyles);
+  }
+
+  // 2. Textos directos
   if (config.textos) {
     Object.entries(config.textos).forEach(([key, item]) => {
       try {
         if (!item || item.valor === undefined) return;
+        const cleanId = key.startsWith('#') ? key.slice(1) : key;
         if (item.tipo === 'id-text') {
-          const el = document.getElementById(key);
+          const el = document.getElementById(cleanId);
           if (el) el.textContent = item.valor;
         } else if (item.tipo === 'placeholder') {
-          const el = document.getElementById(key);
+          const el = document.getElementById(cleanId);
           if (el) el.placeholder = item.valor;
         } else if (item.tipo === 'selector-text') {
           document.querySelectorAll(key).forEach(el => el.textContent = item.valor);
@@ -6059,14 +6158,14 @@ window.aplicarPersonalizacionAlDOM = function(config) {
     });
   }
 
-  // 2. Variables CSS
+  // 3. Variables CSS
   if (config.cssVars) {
     Object.entries(config.cssVars).forEach(([varName, varVal]) => {
       if (varVal) document.documentElement.style.setProperty(varName, varVal);
     });
   }
 
-  // 3. CSS Custom
+  // 4. CSS Custom
   if (config.customCSS) {
     let styleEl = document.getElementById('dynamicCustomCSS');
     if (!styleEl) {
@@ -6077,19 +6176,22 @@ window.aplicarPersonalizacionAlDOM = function(config) {
     styleEl.innerHTML = config.customCSS;
   }
 
-  // 4. Estilos individuales de elementos
+  // 5. Aplicar textos y estilos inline a elementos existentes en el DOM
   if (config.elementStyles) {
     Object.entries(config.elementStyles).forEach(([selector, styles]) => {
       try {
         const els = document.querySelectorAll(selector);
         if (els.length > 0 && styles) {
           els.forEach(el => {
-            if (styles.bgColor) el.style.backgroundColor = styles.bgColor;
-            if (styles.textColor) el.style.color = styles.textColor;
-            if (styles.fontSize) el.style.fontSize = styles.fontSize;
-            if (styles.borderRadius) el.style.borderRadius = styles.borderRadius;
-            if (styles.padding) el.style.padding = styles.padding;
-            if (styles.display && styles.display !== 'default') el.style.display = styles.display;
+            if (styles.bgColor) {
+              el.style.setProperty('background', styles.bgColor, 'important');
+              el.style.setProperty('background-image', 'none', 'important');
+            }
+            if (styles.textColor) el.style.setProperty('color', styles.textColor, 'important');
+            if (styles.fontSize) el.style.setProperty('font-size', styles.fontSize, 'important');
+            if (styles.borderRadius) el.style.setProperty('border-radius', styles.borderRadius, 'important');
+            if (styles.padding) el.style.setProperty('padding', styles.padding, 'important');
+            if (styles.display && styles.display !== 'default') el.style.setProperty('display', styles.display, 'important');
             if (styles.customCSS) el.style.cssText += ';' + styles.customCSS;
             if (styles.text !== undefined && styles.text !== '') el.innerHTML = styles.text;
           });
@@ -6098,7 +6200,7 @@ window.aplicarPersonalizacionAlDOM = function(config) {
     });
   }
 
-  // Sincronizar botones dinámicos de cambio de piso
+  // 6. Sincronizar botones dinámicos de cambio de piso
   if (typeof window.actualizarBotonPisoSalon === 'function') {
     try { window.actualizarBotonPisoSalon(); } catch (_) {}
   }
@@ -6236,6 +6338,17 @@ window.guardarPersonalizacionPaginaTotal = async function() {
   const nid = estado.negocioActual?.id || 1;
   const nombreNegocio = estado.negocioActual?.nombre || 'este local';
 
+  const btnsGuardar = [
+    document.getElementById('btnGuardarCambiosTop'),
+    document.getElementById('btnGuardarCambiosComandero'),
+    document.getElementById('btnGuardarCambiosSplit')
+  ].filter(Boolean);
+
+  btnsGuardar.forEach(b => {
+    b.disabled = true;
+    b.innerHTML = '⏳ Guardando...';
+  });
+
   try {
     const res = await fetch('/api/dev/personalizacion-pagina', {
       method: 'POST',
@@ -6259,6 +6372,11 @@ window.guardarPersonalizacionPaginaTotal = async function() {
     mostrarNotificacionCentro(`💾 ¡Personalización guardada para "${nombreNegocio}" y Modo Edición finalizado!`, 'success');
   } catch (e) {
     mostrarNotificacionCentro('❌ Error guardando personalización: ' + e.message, 'error');
+  } finally {
+    btnsGuardar.forEach(b => {
+      b.disabled = false;
+      b.innerHTML = '💾 Guardar';
+    });
   }
 };
 
@@ -6472,6 +6590,7 @@ window.toggleContentEditableLive = function(activo) {
       el.closest('#devLiveEditBar') ||
       el.closest('#modalEditorElementoLive') ||
       el.closest('#modalConfirmacionAccion') ||
+      el.closest('#modalNotificacionCentro') ||
       el.closest('#modalSelectorPiso') ||
       el.closest('#developerPortalView')
     ) return;
@@ -6499,6 +6618,7 @@ function handleLiveMouseOver(e) {
     target.closest('#devLiveEditBar') ||
     target.closest('#modalEditorElementoLive') ||
     target.closest('#modalConfirmacionAccion') ||
+    target.closest('#modalNotificacionCentro') ||
     target.closest('#modalSelectorPiso') ||
     target.closest('#developerPortalView')
   ) return;
@@ -6519,6 +6639,7 @@ function handleLiveElementClick(e) {
     target.closest('#devLiveEditBar') ||
     target.closest('#modalEditorElementoLive') ||
     target.closest('#modalConfirmacionAccion') ||
+    target.closest('#modalNotificacionCentro') ||
     target.closest('#modalSelectorPiso') ||
     target.closest('#developerPortalView')
   ) return;
@@ -6576,27 +6697,42 @@ window.aplicarCambioElementoActual = function(prop, valor) {
     el.innerHTML = valor;
     estado.personalizacionPagina.elementStyles[selector].text = valor;
   } else if (prop === 'bgColor') {
-    el.style.backgroundColor = valor;
+    el.style.setProperty('background', valor, 'important');
+    el.style.setProperty('background-image', 'none', 'important');
     estado.personalizacionPagina.elementStyles[selector].bgColor = valor;
   } else if (prop === 'textColor') {
-    el.style.color = valor;
+    el.style.setProperty('color', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].textColor = valor;
   } else if (prop === 'fontSize') {
-    el.style.fontSize = valor;
+    el.style.setProperty('font-size', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].fontSize = valor;
   } else if (prop === 'borderRadius') {
-    el.style.borderRadius = valor;
+    el.style.setProperty('border-radius', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].borderRadius = valor;
   } else if (prop === 'padding') {
-    el.style.padding = valor;
+    el.style.setProperty('padding', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].padding = valor;
   } else if (prop === 'display') {
-    el.style.display = valor === 'none' ? 'none' : '';
+    el.style.setProperty('display', valor === 'none' ? 'none' : '', 'important');
     estado.personalizacionPagina.elementStyles[selector].display = valor;
   } else if (prop === 'customCSS') {
     el.style.cssText += ';' + valor;
     estado.personalizacionPagina.elementStyles[selector].customCSS = valor;
   }
+
+  // Inyectar de inmediato las reglas en HEAD para asegurar prioridad CSS absoluta
+  if (typeof window.inyectarEstilosPersonalizadosHead === 'function') {
+    window.inyectarEstilosPersonalizadosHead(estado.personalizacionPagina.elementStyles);
+  }
+
+  // Sincronizar botones de piso si fueron el elemento modificado
+  if (el.id === 'btnTogglePisoSalon' || selector.includes('btnTogglePisoSalon')) {
+    if (typeof window.actualizarBotonPisoSalon === 'function') window.actualizarBotonPisoSalon();
+  }
+  if (el.id === 'btnTogglePisoEditor' || selector.includes('btnTogglePisoEditor')) {
+    if (typeof window.actualizarBotonPisoEditor === 'function') window.actualizarBotonPisoEditor();
+  }
+
   marcarCambiosPendientes(true);
 };
 
@@ -6613,7 +6749,7 @@ function obtenerSelectorUnico(el) {
   if (!el || el === document.body) return 'body';
 
   // Si tiene ID propio único que no sea de modales del sistema
-  if (el.id && !el.id.startsWith('liveInsp') && !el.id.startsWith('modalEditor') && !el.id.startsWith('modalConfirm')) {
+  if (el.id && !el.id.startsWith('liveInsp') && !el.id.startsWith('modalEditor') && !el.id.startsWith('modalConfirm') && !el.id.startsWith('modalNotificacion')) {
     try {
       if (document.querySelectorAll('#' + el.id).length === 1) {
         return '#' + el.id;
@@ -6628,7 +6764,7 @@ function obtenerSelectorUnico(el) {
 
   function construirPaso(curr) {
     if (!curr || curr === document.body) return '';
-    if (curr.id && !curr.id.startsWith('liveInsp') && !curr.id.startsWith('modalEditor') && !curr.id.startsWith('modalConfirm')) {
+    if (curr.id && !curr.id.startsWith('liveInsp') && !curr.id.startsWith('modalEditor') && !curr.id.startsWith('modalConfirm') && !curr.id.startsWith('modalNotificacion')) {
       return '#' + curr.id;
     }
 
@@ -6646,18 +6782,16 @@ function obtenerSelectorUnico(el) {
       part += `[data-view="${curr.getAttribute('data-view')}"]`;
     } else if (curr.getAttribute('data-kds-dest')) {
       part += `[data-kds-dest="${curr.getAttribute('data-kds-dest')}"]`;
+    } else if (curr.getAttribute('data-mesa-id')) {
+      part += `[data-mesa-id="${curr.getAttribute('data-mesa-id')}"]`;
     }
 
     if (curr.parentElement) {
-      const sameTagSiblings = [...curr.parentElement.children].filter(c => {
-        if (cleanClasses.length > 0) {
-          return c.tagName === curr.tagName && c.classList.contains(cleanClasses[0]);
+      if (!curr.getAttribute('data-zona') && !curr.getAttribute('data-view') && !curr.getAttribute('data-kds-dest') && !curr.getAttribute('data-mesa-id')) {
+        const childIdx = Array.prototype.indexOf.call(curr.parentElement.children, curr) + 1;
+        if (curr.parentElement.children.length > 1) {
+          part += `:nth-child(${childIdx})`;
         }
-        return c.tagName === curr.tagName;
-      });
-      if (sameTagSiblings.length > 1 && !curr.getAttribute('data-zona') && !curr.getAttribute('data-view')) {
-        const idx = sameTagSiblings.indexOf(curr) + 1;
-        part += `:nth-of-type(${idx})`;
       }
 
       const parentPath = construirPaso(curr.parentElement);
