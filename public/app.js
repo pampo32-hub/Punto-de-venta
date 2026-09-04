@@ -6155,6 +6155,7 @@ window.aplicarCambioPrevia = function(clave, valor, tipo) {
     const cleanId = clave.startsWith('#') ? clave.substring(1) : clave;
     const el = document.getElementById(cleanId);
     if (el) el.textContent = valor;
+    estado.personalizacionPagina.textos[clave] = { tipo: 'id-text', valor };
     estado.personalizacionPagina.textos[cleanId] = { tipo: 'id-text', valor };
     estado.personalizacionPagina.textos['#' + cleanId] = { tipo: 'id-text', valor };
     if (cleanId === 'btnTogglePisoSalon' && typeof window.actualizarBotonPisoSalon === 'function') {
