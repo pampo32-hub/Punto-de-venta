@@ -1291,26 +1291,60 @@ async function cargarMenuDesdeBackend() {
   } catch (e) {}
 }
 
-window.categoriaActivaComandero = 'todos';
+window.categoriaActivaComandero = null; // null = Vista de Categorías Principal
 
 function renderCatalogoComandero() {
   const chipsContainer = document.getElementById('comCategoryChips');
-  chipsContainer.innerHTML = `
-    <button class="cat-chip active" onclick="filtrarCatalogo('todos', this)">🍽️ Todos</button>
-    ${estado.categorias.map(c => `<button class="cat-chip" onclick="filtrarCatalogo(${c.id}, this)">${c.icono || '🍽️'} ${c.nombre}</button>`).join('')}
-  `;
+  if (chipsContainer) {
+    chipsContainer.innerHTML = `
+      <button class="cat-chip ${window.categoriaActivaComandero === null ? 'active' : ''}" onclick="volverACategoriasComandero(this)">📂 Categorías</button>
+      ${(estado.categorias || []).map(c => `<button class="cat-chip ${window.categoriaActivaComandero === c.id ? 'active' : ''}" onclick="seleccionarCategoriaComandero(${c.id}, this)">${c.icono || '🍽️'} ${c.nombre}</button>`).join('')}
+    `;
+  }
 
-  window.categoriaActivaComandero = 'todos';
   const txtSearch = document.getElementById('txtBuscarProductoComandero');
   if (txtSearch) txtSearch.value = '';
   filtrarProductosComandero();
 }
 
-window.filtrarCatalogo = function(catId, elBtn) {
-  document.querySelectorAll('.cat-chip').forEach(b => b.classList.remove('active'));
-  if (elBtn) elBtn.classList.add('active');
+window.seleccionarCategoriaComandero = function(catId, elBtn) {
   window.categoriaActivaComandero = catId;
+  document.querySelectorAll('.cat-chip').forEach(b => b.classList.remove('active'));
+  if (elBtn) {
+    elBtn.classList.add('active');
+  } else {
+    const chips = document.querySelectorAll('.cat-chip');
+    chips.forEach(c => {
+      if (c.getAttribute('onclick')?.includes(`seleccionarCategoriaComandero(${catId}`)) {
+        c.classList.add('active');
+      }
+    });
+  }
+  const txtSearch = document.getElementById('txtBuscarProductoComandero');
+  if (txtSearch) txtSearch.value = '';
   filtrarProductosComandero();
+};
+
+window.volverACategoriasComandero = function(elBtn) {
+  window.categoriaActivaComandero = null;
+  document.querySelectorAll('.cat-chip').forEach(b => b.classList.remove('active'));
+  if (elBtn) {
+    elBtn.classList.add('active');
+  } else {
+    const chips = document.querySelectorAll('.cat-chip');
+    if (chips[0]) chips[0].classList.add('active');
+  }
+  const txtSearch = document.getElementById('txtBuscarProductoComandero');
+  if (txtSearch) txtSearch.value = '';
+  filtrarProductosComandero();
+};
+
+window.filtrarCatalogo = function(catId, elBtn) {
+  if (catId === 'todos' || catId === 'categorias' || catId === null) {
+    volverACategoriasComandero(elBtn);
+  } else {
+    seleccionarCategoriaComandero(catId, elBtn);
+  }
 };
 
 window.filtrarProductosComandero = function() {
@@ -1318,21 +1352,27 @@ window.filtrarProductosComandero = function() {
   const btnClear = document.getElementById('btnClearSearchComandero');
   if (btnClear) btnClear.style.display = query ? 'inline-block' : 'none';
 
-  let prods = estado.productos || [];
-
-  if (window.categoriaActivaComandero && window.categoriaActivaComandero !== 'todos') {
-    prods = prods.filter(p => p.catId === window.categoriaActivaComandero || p.categoria_id === window.categoriaActivaComandero);
-  }
-
+  // 1. Si hay búsqueda por texto libre: filtra sobre todo el menú
   if (query) {
     const palabras = query.split(/\s+/);
-    prods = prods.filter(p => {
+    const prods = (estado.productos || []).filter(p => {
       const matchTexto = `${p.nombre || ''} ${p.categoria || ''} ${p.codigo || ''} ${p.descripcion || ''}`.toLowerCase();
       return palabras.every(palabra => matchTexto.includes(palabra));
     });
+    renderGridProductos(prods, true);
+    return;
   }
 
-  renderGridProductos(prods);
+  // 2. Si no hay búsqueda y no hay categoría seleccionada -> Vista de Categorías
+  if (window.categoriaActivaComandero === null || window.categoriaActivaComandero === 'categorias') {
+    renderGridCategorias();
+    return;
+  }
+
+  // 3. Si hay categoría seleccionada -> Productos de esa categoría
+  const catId = window.categoriaActivaComandero;
+  const prods = (estado.productos || []).filter(p => p.catId === catId || p.categoria_id === catId);
+  renderGridProductos(prods, false, catId);
 };
 
 window.limpiarBuscadorComandero = function() {
@@ -1344,9 +1384,112 @@ window.limpiarBuscadorComandero = function() {
   filtrarProductosComandero();
 };
 
-function renderGridProductos(prods) {
+function renderGridCategorias() {
   const grid = document.getElementById('comProductsGrid');
-  const prodsHtml = prods.map(p => {
+  if (!grid) return;
+  grid.classList.add('categories-view');
+
+  const cats = estado.categorias || [];
+  const prods = estado.productos || [];
+
+  const cardsHtml = cats.map(cat => {
+    const totalEnCat = prods.filter(p => p.catId === cat.id || p.categoria_id === cat.id).length;
+    return `
+      <div class="com-cat-card" onclick="seleccionarCategoriaComandero(${cat.id})" title="Ver platillos de ${cat.nombre}">
+        <div class="com-cat-icon-badge">${cat.icono || '🍽️'}</div>
+        <div class="com-cat-info">
+          <h4 class="com-cat-title">${cat.nombre}</h4>
+          <span class="com-cat-count">${totalEnCat} platillos / bebidas</span>
+        </div>
+        <span class="com-cat-arrow">➔</span>
+      </div>
+    `;
+  }).join('');
+
+  const btnAddHtml = `
+    <div class="com-cat-card com-cat-card-add" onclick="abrirModalNuevoProducto()" title="Agregar nuevo producto y precio">
+      <div class="com-cat-icon-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">➕</div>
+      <div class="com-cat-info">
+        <h4 class="com-cat-title" style="color: #10b981;">Nuevo Producto</h4>
+        <span class="com-cat-count">Crear nuevo ítem y precio</span>
+      </div>
+    </div>
+  `;
+
+  grid.innerHTML = cardsHtml + btnAddHtml;
+}
+
+function renderGridProductos(prods, isSearchMode = false, catId = null) {
+  const grid = document.getElementById('comProductsGrid');
+  if (!grid) return;
+  grid.classList.remove('categories-view');
+
+  let headerNavHtml = '';
+  if (!isSearchMode && catId) {
+    const cat = (estado.categorias || []).find(c => c.id === catId);
+    const catNombre = cat ? `${cat.icono || '🍽️'} ${cat.nombre}` : 'Categoría';
+    headerNavHtml = `
+      <div class="com-cat-nav-bar" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 10px 14px; border-radius: 12px; margin-bottom: 6px; border: 1px solid #334155;">
+        <button class="btn-volver-categorias" onclick="volverACategoriasComandero()">
+          ⬅️ Volver a Categorías
+        </button>
+        <strong style="color: #f8fafc; font-size: 0.95rem;">${catNombre}</strong>
+      </div>
+    `;
+  } else if (isSearchMode) {
+    headerNavHtml = `
+      <div class="com-cat-nav-bar" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: rgba(56, 189, 248, 0.12); padding: 8px 14px; border-radius: 10px; margin-bottom: 6px; border: 1px solid rgba(56, 189, 248, 0.3);">
+        <span style="color: #38bdf8; font-size: 0.85rem; font-weight: 700;">🔍 Resultados de búsqueda (${prods.length} encontrados)</span>
+        <button class="btn-volver-categorias" onclick="limpiarBuscadorComandero()" style="padding: 4px 10px; font-size: 0.8rem;">
+          ✕ Limpiar búsqueda
+        </button>
+      </div>
+    `;
+  }
+
+  let specialCardsHtml = '';
+  let standardProds = [...prods];
+
+  // Si estamos en Comidas Principales (catId === 1) y NO estamos en búsqueda libre:
+  if (!isSearchMode && (catId === 1 || (catId && String(catId) === '1'))) {
+    // 1. Casados agrupados
+    const casados = standardProds.filter(p => p.nombre.toLowerCase().includes('casado'));
+    if (casados.length > 0) {
+      specialCardsHtml += `
+        <div class="prod-card-one-tap prod-card-special-group" onclick="abrirModalSeleccionCasado()" style="border: 2px solid #f59e0b; background: linear-gradient(145deg, #1e293b, #292524); position: relative;">
+          <div class="prod-card-thumb-special" style="font-size: 2.2rem; margin-bottom: 6px; text-align: center;">🍽️</div>
+          <span class="prod-badge-special" style="position: absolute; top: 8px; right: 8px; background: #f59e0b; color: #000; font-size: 0.7rem; font-weight: 800; padding: 2px 8px; border-radius: 6px;">Solo Casado</span>
+          <div class="prod-card-content">
+            <span class="prod-card-name" style="font-size: 1.05rem; color: #fbbf24;">Solo Casado</span>
+            <small style="color: #94a3b8; font-size: 0.72rem; display: block; margin-top: 2px;">Elige proteína / acompañamiento</small>
+            <span class="prod-card-price" style="color: #34d399; margin-top: 6px;">₡4,500</span>
+          </div>
+        </div>
+      `;
+      // Ocultamos los casados individuales del listado directo para evitar repetición
+      standardProds = standardProds.filter(p => !p.nombre.toLowerCase().includes('casado'));
+    }
+
+    // 2. Arroces agrupados
+    const arroces = standardProds.filter(p => p.nombre.toLowerCase().startsWith('arroz con') || p.nombre.toLowerCase() === 'arroz de la casa');
+    if (arroces.length > 0) {
+      specialCardsHtml += `
+        <div class="prod-card-one-tap prod-card-special-group" onclick="abrirModalSeleccionArroz()" style="border: 2px solid #38bdf8; background: linear-gradient(145deg, #1e293b, #172554); position: relative;">
+          <div class="prod-card-thumb-special" style="font-size: 2.2rem; margin-bottom: 6px; text-align: center;">🍚</div>
+          <span class="prod-badge-special" style="position: absolute; top: 8px; right: 8px; background: #38bdf8; color: #000; font-size: 0.7rem; font-weight: 800; padding: 2px 8px; border-radius: 6px;">Solo Arroz</span>
+          <div class="prod-card-content">
+            <span class="prod-card-name" style="font-size: 1.05rem; color: #7dd3fc;">Arroces Especiales</span>
+            <small style="color: #94a3b8; font-size: 0.72rem; display: block; margin-top: 2px;">Elige pollo, camarones, mariscos...</small>
+            <span class="prod-card-price" style="color: #34d399; margin-top: 6px;">Desde ₡5,000</span>
+          </div>
+        </div>
+      `;
+      // Ocultamos los arroces individuales del listado directo
+      standardProds = standardProds.filter(p => !(p.nombre.toLowerCase().startsWith('arroz con') || p.nombre.toLowerCase() === 'arroz de la casa'));
+    }
+  }
+
+  const prodsHtml = standardProds.map(p => {
     const isPromo = estado.happyHourActivo && p.happyHour;
     const imgHtml = p.imagen_url 
       ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />`
@@ -1372,8 +1515,140 @@ function renderGridProductos(prods) {
     </div>
   `;
 
-  grid.innerHTML = prodsHtml + btnAddHtml;
+  grid.innerHTML = headerNavHtml + specialCardsHtml + prodsHtml + btnAddHtml;
 }
+
+// ============================================================================
+// MODALES DE SELECCIÓN DE VARIANTES (CASADOS & ARROCES)
+// ============================================================================
+window.abrirModalSeleccionCasado = function() {
+  const modal = document.getElementById('modalSeleccionVariante');
+  const title = document.getElementById('txtTituloVarianteModal');
+  const subtitle = document.getElementById('txtSubtituloVarianteModal');
+  const body = document.getElementById('bodyOpcionesVariante');
+  if (!modal || !body) return;
+
+  title.innerHTML = '🍽️ Solo Casado';
+  subtitle.textContent = 'Selecciona la opción de carne o proteína deseada:';
+
+  const casados = (estado.productos || []).filter(p => p.nombre.toLowerCase().includes('casado'));
+  
+  const ordenDeseado = [
+    'Casado con carne mechada',
+    'Casado con bistec encebollado',
+    'Casado con chuleta de cerdo',
+    'Casado con pollo en salsa',
+    'Casado con pescado frito',
+    'Casado con pollo a la plancha'
+  ];
+
+  let casadosOrdenados = [];
+  ordenDeseado.forEach(nombre => {
+    const item = casados.find(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+    if (item) casadosOrdenados.push(item);
+  });
+  casados.forEach(c => {
+    if (!casadosOrdenados.includes(c)) casadosOrdenados.push(c);
+  });
+
+  const icons = {
+    'carne mechada': '🥩',
+    'bistec encebollado': '🥩',
+    'chuleta de cerdo': '🍖',
+    'pollo en salsa': '🍗',
+    'pescado frito': '🐟',
+    'pollo a la plancha': '🍗'
+  };
+
+  body.innerHTML = casadosOrdenados.map(c => {
+    let icon = '🍽️';
+    const n = c.nombre.toLowerCase();
+    for (const [k, v] of Object.entries(icons)) {
+      if (n.includes(k)) { icon = v; break; }
+    }
+    const nombreOpcion = c.nombre.replace(/^casado con /i, '').replace(/^casado /i, '');
+    const nombreCap = nombreOpcion.charAt(0).toUpperCase() + nombreOpcion.slice(1);
+
+    return `
+      <button class="variante-option-card" onclick="seleccionarOpcionVariante(${c.id})">
+        <div style="font-size: 2rem; margin-bottom: 6px;">${icon}</div>
+        <strong style="font-size: 1.05rem; color: #f8fafc; text-align: center; margin-bottom: 4px;">${nombreCap}</strong>
+        <span style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px;">${c.nombre}</span>
+        <span style="font-size: 1.1rem; font-weight: 800; color: #34d399;">${formatCRC(c.precio)}</span>
+      </button>
+    `;
+  }).join('');
+
+  modal.classList.add('active');
+};
+
+window.abrirModalSeleccionArroz = function() {
+  const modal = document.getElementById('modalSeleccionVariante');
+  const title = document.getElementById('txtTituloVarianteModal');
+  const subtitle = document.getElementById('txtSubtituloVarianteModal');
+  const body = document.getElementById('bodyOpcionesVariante');
+  if (!modal || !body) return;
+
+  title.innerHTML = '🍚 Arroces Especiales';
+  subtitle.textContent = 'Selecciona el tipo de arroz para agregar al pedido:';
+
+  const arroces = (estado.productos || []).filter(p => p.nombre.toLowerCase().startsWith('arroz con') || p.nombre.toLowerCase() === 'arroz de la casa');
+
+  const ordenDeseado = [
+    'Arroz con pollo',
+    'Arroz con camarones',
+    'Arroz con calamares',
+    'Arroz con mariscos',
+    'Arroz de la casa'
+  ];
+
+  let arrocesOrdenados = [];
+  ordenDeseado.forEach(nombre => {
+    const item = arroces.find(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+    if (item) arrocesOrdenados.push(item);
+  });
+  arroces.forEach(c => {
+    if (!arrocesOrdenados.includes(c)) arrocesOrdenados.push(c);
+  });
+
+  const icons = {
+    'pollo': '🍗',
+    'camarones': '🍤',
+    'calamares': '🦑',
+    'mariscos': '🦞',
+    'de la casa': '🍲'
+  };
+
+  body.innerHTML = arrocesOrdenados.map(c => {
+    let icon = '🍚';
+    const n = c.nombre.toLowerCase();
+    for (const [k, v] of Object.entries(icons)) {
+      if (n.includes(k)) { icon = v; break; }
+    }
+
+    return `
+      <button class="variante-option-card" onclick="seleccionarOpcionVariante(${c.id})">
+        <div style="font-size: 2rem; margin-bottom: 6px;">${icon}</div>
+        <strong style="font-size: 1.05rem; color: #f8fafc; text-align: center; margin-bottom: 4px;">${c.nombre}</strong>
+        <span style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px;">Cocina caliente</span>
+        <span style="font-size: 1.1rem; font-weight: 800; color: #34d399;">${formatCRC(c.precio)}</span>
+      </button>
+    `;
+  }).join('');
+
+  modal.classList.add('active');
+};
+
+window.cerrarModalSeleccionVariante = function() {
+  const modal = document.getElementById('modalSeleccionVariante');
+  if (modal) modal.classList.remove('active');
+};
+
+window.seleccionarOpcionVariante = function(prodId) {
+  cerrarModalSeleccionVariante();
+  agregarAlTicketOneTap(prodId);
+};
+
 
 window.agregarAlTicketOneTap = function(prodId) {
   if (!estado.mesaActiva) return;
@@ -2325,6 +2600,7 @@ async function abrirComanderoMesa(mesaId) {
 
   renderTicketItems();
   actualizarBotonEnviarComanda();
+  renderCatalogoComandero();
   if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
   document.getElementById('modalComandero').classList.add('active');
 }
