@@ -5,6 +5,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const db = require('./database');
+const printerService = require('./printerService');
 
 const app = express();
 const server = http.createServer(app);
@@ -1621,6 +1622,7 @@ app.post('/api/comandas/enviar', async (req, res) => {
 
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+    const mesaNumero = mesa.nombre || mesa.numero || `Mesa ${mesaId}`;
 
     // 1. Identificar items nuevos no enviados previamente
     const nuevosItems = items.filter(it => !it.id_detalle_existente && !it.enviado);
@@ -1784,6 +1786,48 @@ app.post('/api/comandas/enviar', async (req, res) => {
       io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina });
     }
 
+    // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
+    let ticketCocina = null;
+    let ticketBarra = null;
+    if (nuevasComandas.length > 0) {
+      const itemsCocina = nuevasComandas.filter(c => c.destino === 'cocina');
+      const itemsBarra = nuevasComandas.filter(c => c.destino === 'barra');
+
+      if (itemsCocina.length > 0) {
+        const tInfoCocina = printerService.generarTicketComanda({
+          ordenId,
+          comandaNumero,
+          mesaNumero,
+          mesero,
+          items: itemsCocina,
+          destino: 'cocina',
+          fechaHora: ahora
+        });
+        ticketCocina = await printerService.procesarImpresion({
+          destinoImpresora: 'cocina',
+          ticketInfo: tInfoCocina,
+          io
+        });
+      }
+
+      if (itemsBarra.length > 0) {
+        const tInfoBarra = printerService.generarTicketComanda({
+          ordenId,
+          comandaNumero,
+          mesaNumero,
+          mesero,
+          items: itemsBarra,
+          destino: 'barra',
+          fechaHora: ahora
+        });
+        ticketBarra = await printerService.procesarImpresion({
+          destinoImpresora: 'barra',
+          ticketInfo: tInfoBarra,
+          io
+        });
+      }
+    }
+
     // Notificar siempre al salón de mesa actualizada
     io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesa, total });
 
@@ -1792,7 +1836,9 @@ app.post('/api/comandas/enviar', async (req, res) => {
       ordenId,
       total,
       estado: nuevoEstadoMesa,
-      tieneCocina: tieneNuevosCocina
+      tieneCocina: tieneNuevosCocina,
+      ticketCocina: ticketCocina ? ticketCocina.ticketVisual : null,
+      ticketBarra: ticketBarra ? ticketBarra.ticketVisual : null
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2066,8 +2112,43 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
       [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
     );
 
+    // Obtener información del negocio y mesa para el tiquete impreso
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
+    const mesa = orden.mesa_id ? await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
+    const mesaNumero = mesa ? mesa.numero : 'Mesa';
+
+    let ticketGenerado = null;
+
     if (liquidar_total) {
       await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+
+      // Consultar todos los ítems de la orden para el tiquete final
+      const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+
+      const tInfoLiquidacion = printerService.generarTicketLiquidacion({
+        negocio,
+        ordenId,
+        numeroOrden: orden.numero_orden,
+        mesaNumero,
+        mesero,
+        cliente: orden.cliente,
+        metodoPago: metodo,
+        subtotal: orden.subtotal,
+        descuentoHH: orden.descuento_happy_hour,
+        servicio: orden.servicio_10,
+        iva: orden.iva_13,
+        total: orden.total,
+        recibido: monto,
+        cambio,
+        items: itemsOrden,
+        fechaHora: ahora
+      });
+
+      ticketGenerado = await printerService.procesarImpresion({
+        destinoImpresora: 'caja',
+        ticketInfo: tInfoLiquidacion,
+        io
+      });
 
       if (orden.mesa_id) {
         await dbRun(
@@ -2081,7 +2162,12 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
         io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
       }
 
-      res.json({ message: 'Cobro completado y mesa liberada', ordenId, es_parcial: false });
+      res.json({
+        message: 'Cobro completado y mesa liberada',
+        ordenId,
+        es_parcial: false,
+        ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
+      });
     } else {
       // PAGO PARCIAL
       if (Array.isArray(items_pagados) && items_pagados.length > 0) {
@@ -2129,11 +2215,43 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
         [nuevoSubtotal, servicio10, iva13, nuevoTotal, ordenId]
       );
 
+      // Generar ticket térmico de pago parcial
+      const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((it.precio || 0) * (it.cantidad || 1)), 0);
+      const impParcial = subParcial * 0.23;
+      const personaNombre = req.body.persona_nombre || 'Cliente';
+
+      const tInfoParcial = printerService.generarTicketPagoParcial({
+        negocio,
+        ordenId,
+        mesaNumero,
+        personaNombre,
+        mesero,
+        metodoPago: metodo,
+        montoCobrado: monto,
+        subtotal: subParcial,
+        impuestos: impParcial,
+        itemsPagados: items_pagados || [],
+        saldoRestanteMesa: nuevoTotal,
+        fechaHora: ahora
+      });
+
+      ticketGenerado = await printerService.procesarImpresion({
+        destinoImpresora: 'caja',
+        ticketInfo: tInfoParcial,
+        io
+      });
+
       if (orden.mesa_id) {
         io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
       }
 
-      res.json({ message: 'Cobro parcial registrado con éxito', ordenId, es_parcial: true, saldo_restante: nuevoTotal });
+      res.json({
+        message: 'Cobro parcial registrado con éxito',
+        ordenId,
+        es_parcial: true,
+        saldo_restante: nuevoTotal,
+        ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
+      });
     }
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2814,6 +2932,114 @@ app.post('/api/sistema/actualizaciones/aplicar', async (req, res) => {
 });
 
 // ============================================================================
+// 12. IMPRESORAS TÉRMICAS ESC/POS (80MM) & SIMULADOR DE PUERTO TCP 9100
+// ============================================================================
+// Obtener configuración e historial de impresiones
+app.get('/api/impresoras/config', (req, res) => {
+  res.json({
+    impresoras: printerService.printerConfig,
+    historial: printerService.historialImpresiones
+  });
+});
+
+// Actualizar configuración de impresoras (Caja, Cocina, Barra)
+app.post('/api/impresoras/config', (req, res) => {
+  const { destino, nombre, tipo, ip, puerto, activa } = req.body;
+  if (!destino || !printerService.printerConfig[destino]) {
+    return res.status(400).json({ error: 'Destino de impresora inválido (caja, cocina, barra)' });
+  }
+
+  printerService.printerConfig[destino] = {
+    ...printerService.printerConfig[destino],
+    nombre: nombre || printerService.printerConfig[destino].nombre,
+    tipo: tipo || printerService.printerConfig[destino].tipo,
+    ip: ip || printerService.printerConfig[destino].ip,
+    puerto: Number(puerto) || printerService.printerConfig[destino].puerto,
+    activa: activa !== undefined ? Boolean(activa) : printerService.printerConfig[destino].activa
+  };
+
+  io.emit('impresoras_config_actualizada', printerService.printerConfig);
+  res.json({ message: 'Configuración de impresora actualizada', config: printerService.printerConfig[destino] });
+});
+
+// Prueba de impresión manual desde el monitor
+app.post('/api/impresoras/test', async (req, res) => {
+  try {
+    const { destino = 'caja' } = req.body;
+    const ahora = new Date().toISOString();
+
+    const tInfoTest = printerService.generarTicketLiquidacion({
+      negocio: {
+        nombre: 'GastroBar Fuego & Brasas',
+        slogan: 'Restaurante, Bar & Lounge',
+        telefono: '2222-0000 / 8888-9999',
+        direccion: 'San José, Costa Rica'
+      },
+      ordenId: 'TEST-99',
+      numeroOrden: 'TEST-99',
+      mesaNumero: 'Mesa 1 (Test)',
+      mesero: 'Administrador',
+      cliente: 'Prueba de Impresión',
+      metodoPago: 'Efectivo',
+      subtotal: 10000,
+      descuentoHH: 1800,
+      servicio: 820,
+      iva: 1066,
+      total: 10086,
+      recibido: 15000,
+      cambio: 4914,
+      items: [
+        { nombre: 'Imperial Regular (2x1 Promo)', precio_unitario: 1800, cantidad: 2, subtotal: 3600 },
+        { nombre: 'Casado con carne mechada', precio_unitario: 4500, cantidad: 1, subtotal: 4500 },
+        { nombre: 'Chiliguaro Especial', precio_unitario: 1500, cantidad: 1, subtotal: 1500 }
+      ],
+      fechaHora: ahora
+    });
+
+    const reg = await printerService.procesarImpresion({
+      destinoImpresora: destino,
+      ticketInfo: tInfoTest,
+      io
+    });
+
+    res.json({ message: 'Ticket de prueba despachado con éxito', registro: reg });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Emulador Servidor Socket TCP en puerto 9100 (Receptor virtual de datos RAW ESC/POS)
+const net = require('net');
+const tcpPrinterServer = net.createServer((socket) => {
+  const clientAddr = `${socket.remoteAddress}:${socket.remotePort}`;
+  console.log(`🖨️ [SIMULADOR PUERTO 9100] Conexión entrante desde ${clientAddr}`);
+
+  let bufferBytes = [];
+
+  socket.on('data', (chunk) => {
+    bufferBytes.push(chunk);
+  });
+
+  socket.on('end', () => {
+    const totalBuffer = Buffer.concat(bufferBytes);
+    console.log(`🖨️ [SIMULADOR PUERTO 9100] Recibidos ${totalBuffer.length} bytes RAW ESC/POS desde ${clientAddr}`);
+  });
+
+  socket.on('error', (err) => {
+    console.log('🖨️ [SIMULADOR PUERTO 9100] Error socket:', err.message);
+  });
+});
+
+tcpPrinterServer.listen(9100, () => {
+  console.log('🖨️ Receptor Virtual ESC/POS activo en Puerto TCP 9100 (Simulador Listo)');
+});
+tcpPrinterServer.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.log('🖨️ Puerto TCP 9100 ya en uso (Servicio existente activo)');
+  }
+});
+
+// ============================================================================
 // INICIAR SERVIDOR & EXPORTAR (ENTRYPOINT & TEST HARNESS)
 // ============================================================================
 if (require.main === module) {
@@ -2823,6 +3049,7 @@ if (require.main === module) {
     console.log('📍 Puerto: ' + PORT);
     console.log('🌐 URL Local: http://localhost:' + PORT);
     console.log('📱 Acceso Móvil / Tablet: http://<IP-DE-TU-PC>:' + PORT);
+    console.log('🖨️ Impresión Térmica 80mm: ESC/POS en Puerto TCP 9100');
     console.log('========================================================');
   });
 }

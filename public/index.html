@@ -1366,6 +1366,20 @@
             </div>
           </div>
 
+          <!-- 8. Impresoras Térmicas 80mm & Simulador -->
+          <div class="admin-panel-card card-impresoras" onclick="abrirModalMonitorImpresoras()">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">🖨️</div>
+              <span class="admin-card-tag system">ESC/POS</span>
+            </div>
+            <h4>Impresoras Térmicas (80mm)</h4>
+            <p>Configurar puertos de red TCP 9100, simular comandas de cocina/barra y tickets de cobro en vivo.</p>
+            <div class="admin-card-action">
+              <span>Configurar & Simular</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1838,6 +1852,129 @@
       <div class="dialog-footer">
         <button class="btn-sec" onclick="cerrarModalNuevoInsumo()">Cancelar</button>
         <button class="btn-pri" onclick="guardarNuevoInsumo()">💾 Registrar Insumo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: VISOR / SIMULADOR DE IMPRESIÓN TÉRMICA 80MM (TICKET EN VIVO) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalVisorTicket" style="z-index: 100020;">
+    <div class="modal-dialog thermal-viewer-dialog" style="width: 440px; max-width: 94vw; max-height: 92vh; background: #0b1120; border: 1px solid rgba(56, 189, 248, 0.4); box-shadow: 0 25px 60px rgba(0,0,0,0.9); border-radius: 16px;">
+      <div class="dialog-header" style="background: #0f172a; padding: 14px 18px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">🖨️</span>
+          <div>
+            <h3 style="margin:0; font-size:1.1rem; color:#f8fafc;" id="txtTituloVisorTicket">Impresora Térmica (80 mm)</h3>
+            <small style="color:#38bdf8; font-weight:700;" id="txtSubtituloVisorTicket">Comando ESC/POS • Puerto TCP 9100</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalVisorTicket()">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 16px; background: #070b14; display:flex; justify-content:center; overflow-y:auto;">
+        <!-- CONTENEDOR EXACTO DE PAPEL CONTINUO TÉRMICO 80MM -->
+        <div class="receipt-paper-80mm" id="receiptPaperContainer">
+          <div class="receipt-cut-edge top"></div>
+          <div class="receipt-inner" id="receiptContentHtml">
+            <!-- Contenido dinámico del ticket -->
+          </div>
+          <div class="receipt-cut-edge bottom"></div>
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="background:#0f172a; padding: 12px 18px; display:flex; justify-content:space-between; align-items:center;">
+        <span class="badge-tag" style="background:rgba(16,185,129,0.15); color:#34d399; font-size:0.75rem;">⚡ 80mm • 48 cols</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-sec" onclick="cerrarModalVisorTicket()">Cerrar</button>
+          <button class="btn-pri" id="btnEjecutarPrintNativo" onclick="ejecutarImpresionNativa()" style="background:linear-gradient(135deg,#0284c7,#0369a1); font-weight:800;">
+            🖨️ Imprimir / PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: MONITOR & CONFIGURACIÓN DE IMPRESORAS TÉRMICAS (ADMIN & DEV) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalMonitorImpresoras" style="z-index: 100010;">
+    <div class="modal-dialog" style="width: 820px; max-width: 95vw; max-height: 90vh; background: #0f172a; border: 1px solid #334155; border-radius: 16px;">
+      <div class="dialog-header" style="padding: 16px 20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:1.8rem;">🖨️</span>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#fff;">Control de Impresoras Térmicas (80 mm)</h3>
+            <small style="color:#94a3b8;">Configuración de puertos de red ESC/POS (TCP 9100) y bitácora de transmisión en vivo</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalMonitorImpresoras()">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 18px 20px;">
+        <!-- PANELES DE ESTADO DE IMPRESORAS -->
+        <div class="printer-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px;">
+          
+          <!-- Impresora Caja -->
+          <div class="printer-card" style="background:#1e293b; border:1px solid #38bdf8; border-radius:12px; padding:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:#f8fafc; font-size:0.95rem;">💵 Impresora Caja</strong>
+              <span class="badge-tag" style="background:rgba(16,185,129,0.2); color:#34d399;">Activa</span>
+            </div>
+            <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:10px;">Para facturas, pagos completos y parciales.</p>
+            <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:10px;">
+              <div><strong>Tipo:</strong> Socket TCP / Virtual</div>
+              <div><strong>Puerto:</strong> <code>9100 (ESC/POS)</code></div>
+            </div>
+            <button class="btn-sec" onclick="probarImpresoraBackend('caja')" style="width:100%; font-size:0.8rem; padding:6px;">🧪 Probar Impresión</button>
+          </div>
+
+          <!-- Impresora Cocina -->
+          <div class="printer-card" style="background:#1e293b; border:1px solid #f59e0b; border-radius:12px; padding:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:#f8fafc; font-size:0.95rem;">🍳 Impresora Cocina</strong>
+              <span class="badge-tag" style="background:rgba(16,185,129,0.2); color:#34d399;">Activa</span>
+            </div>
+            <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:10px;">Comandas de comidas, tiempos y notas.</p>
+            <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:10px;">
+              <div><strong>Tipo:</strong> Socket TCP / Virtual</div>
+              <div><strong>Puerto:</strong> <code>9101 (ESC/POS)</code></div>
+            </div>
+            <button class="btn-sec" onclick="probarImpresoraBackend('cocina')" style="width:100%; font-size:0.8rem; padding:6px;">🧪 Probar Impresión</button>
+          </div>
+
+          <!-- Impresora Barra -->
+          <div class="printer-card" style="background:#1e293b; border:1px solid #ec4899; border-radius:12px; padding:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:#f8fafc; font-size:0.95rem;">🍸 Impresora Barra</strong>
+              <span class="badge-tag" style="background:rgba(16,185,129,0.2); color:#34d399;">Activa</span>
+            </div>
+            <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:10px;">Cervezas 2x1, cocteles y refrescos.</p>
+            <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:10px;">
+              <div><strong>Tipo:</strong> Socket TCP / Virtual</div>
+              <div><strong>Puerto:</strong> <code>9102 (ESC/POS)</code></div>
+            </div>
+            <button class="btn-sec" onclick="probarImpresoraBackend('barra')" style="width:100%; font-size:0.8rem; padding:6px;">🧪 Probar Impresión</button>
+          </div>
+
+        </div>
+
+        <!-- LOG / BITÁCORA DE TRANSMISIÓN DE BYTES EN VIVO -->
+        <div style="border-top: 1px solid #334155; padding-top: 16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h4 style="margin:0; color:#f8fafc; font-size:0.95rem;">📡 Bitácora de Transmisiones de Impresión Recientes</h4>
+            <span style="font-size:0.78rem; color:#38bdf8;" id="txtPrinterLogCount">0 eventos registrados</span>
+          </div>
+
+          <div style="max-height: 220px; overflow-y:auto; background:#090d16; border:1px solid #1e293b; border-radius:10px; padding:10px;" id="printerLogsContainer">
+            <!-- Filas dinámicas de log -->
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#94a3b8; font-size:0.8rem;">🟢 Servidor Socket TCP 9100 Escuchando en vivo</span>
+        <button class="btn-sec" onclick="cerrarModalMonitorImpresoras()">Cerrar</button>
       </div>
     </div>
   </div>

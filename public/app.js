@@ -2751,7 +2751,6 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
     }
-    alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
     estado.mesaActiva.items.forEach(it => it.enviado = true);
     actualizarBotonEnviarComanda();
     
@@ -2760,6 +2759,12 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
+
+    if (data.ticketCocina || data.ticketBarra) {
+      mostrarVisorTicketTermico(data.ticketCocina || data.ticketBarra);
+    } else {
+      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!', 'success');
+    }
   } catch (e) {
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
@@ -3070,9 +3075,10 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
   }
 
+  let dataCobro = null;
   if (ordenId) {
     try {
-      await fetch(`/api/ordenes/${ordenId}/cobrar`, {
+      const resCobro = await fetch(`/api/ordenes/${ordenId}/cobrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3082,16 +3088,17 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           cambio,
           mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
           liquidar_total: esLiquidacionFinal,
+          persona_nombre: personaCobrada ? personaCobrada.nombre : 'Cliente',
           items_pagados: personaCobrada ? personaCobrada.items : []
         })
       });
+      dataCobro = await resCobro.json();
     } catch (e) {
       console.error('Error al registrar cobro:', e);
     }
   }
 
   if (esLiquidacionFinal) {
-    alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
     if (estado.mesaActiva) {
       estado.mesaActiva.estado = 'libre';
       estado.mesaActiva.items = [];
@@ -3134,8 +3141,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       renderComanda();
     }
 
-    alert(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado!\n\n• Monto cobrado: ${formatCRCSinDecimales(totalNum)}\n• Tiquete impreso.\n• Mesa permanece abierta con productos pendientes.`);
-
     estado.cobroSplitPersonaIndex = null;
     document.getElementById('modalCobro').classList.remove('active');
 
@@ -3147,6 +3152,13 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     renderSplitPersonaActiva();
     renderSplitColaPersonas();
     document.getElementById('modalSplitBill').classList.add('active');
+  }
+
+  // Mostrar ticket térmico en pantalla si fue generado
+  if (dataCobro && dataCobro.ticket) {
+    mostrarVisorTicketTermico(dataCobro.ticket);
+  } else {
+    mostrarNotificacionCentro(esLiquidacionFinal ? `✅ ¡Cuenta de ${mesaNumero} liquidada!` : `✅ ¡Cobro parcial realizado!`, 'success');
   }
 
   await cargarMesasDesdeBackend();
@@ -5241,6 +5253,351 @@ function filtrarTablaAuditoria() {
 
   renderTablaAuditoria(filtrados);
 }
+
+// ============================================================================
+// 13. MOTOR DE IMPRESIÓN TÉRMICA (80MM), VISOR VIRTUAL & MONITOR DE PUERTOS
+// ============================================================================
+
+window.ticketActivoParaImprimir = null;
+
+/**
+ * Renderiza un ticket térmico de 80mm en el visor virtual
+ */
+window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
+  if (!ticketData) return;
+  window.ticketActivoParaImprimir = ticketData;
+
+  const modal = document.getElementById('modalVisorTicket');
+  const container = document.getElementById('receiptContentHtml');
+  const txtTitulo = document.getElementById('txtTituloVisorTicket');
+  const txtSub = document.getElementById('txtSubtituloVisorTicket');
+  if (!modal || !container) return;
+
+  let html = '';
+
+  if (ticketData.tipo === 'comanda') {
+    if (txtTitulo) txtTitulo.textContent = `🖨️ ${ticketData.titulo || 'Comanda'}`;
+    if (txtSub) txtSub.textContent = `Destino: ${ticketData.destino ? ticketData.destino.toUpperCase() : 'COCINA'} • ESC/POS 80mm`;
+
+    html = `
+      <div class="receipt-header">
+        <div class="receipt-logo">${ticketData.destino === 'barra' ? '🍸' : '🍳'}</div>
+        <div class="receipt-brand-name">*** ${ticketData.titulo || 'COMANDA'} ***</div>
+        <div class="receipt-type-badge">MESA: ${ticketData.mesa}</div>
+        <div class="receipt-sub">Orden #${ticketData.ordenId || 1} • Comanda #${ticketData.comandaNumero || 1}</div>
+        <div class="receipt-sub">Salonero: ${ticketData.mesero || 'General'}</div>
+        <div class="receipt-sub">${ticketData.fechaHora}</div>
+      </div>
+
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th style="width:18%;">CANT</th>
+            <th style="width:62%;">PLATILLO / PRODUCTO</th>
+            <th style="width:20%; text-align:right;">TIEMPO</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(ticketData.items || []).map(it => {
+            const cLabel = it.curso === 1 ? 'Entrada' : it.curso === 3 ? 'Postre' : 'Fuerte';
+            return `
+              <tr>
+                <td><strong>${it.cantidad}x</strong></td>
+                <td>
+                  <span class="receipt-item-title">${escapeHtml(it.nombre)}</span>
+                  ${it.notas ? `<div class="receipt-item-note">⚠️ ${escapeHtml(it.notas)}</div>` : ''}
+                  ${it.origenMesa ? `<div class="receipt-item-note" style="color:#0284c7;">(Orig: Mesa ${it.origenMesa})</div>` : ''}
+                </td>
+                <td style="text-align:right; font-size:10.5px; font-weight:700;">[${cLabel}]</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+
+      <div class="receipt-divider"></div>
+      <div style="display:flex; justify-content:space-between; font-weight:900; font-size:13px; padding:4px 0;">
+        <span>TOTAL ARTÍCULOS:</span>
+        <span>${ticketData.totalItems || (ticketData.items || []).reduce((a, b) => a + Number(b.cantidad), 0)}</span>
+      </div>
+
+      <div class="receipt-footer">
+        <div>• NOTIFICACIÓN DE COCINA / BARRA •</div>
+        <div>Corte automático ejecutado en puerto ESC/POS</div>
+      </div>
+    `;
+  } else if (ticketData.tipo === 'pago_parcial') {
+    if (txtTitulo) txtTitulo.textContent = `💵 Pago Parcial - ${ticketData.personaNombre || 'Cliente'}`;
+    if (txtSub) txtSub.textContent = `Mesa ${ticketData.mesa} • Comprobante Individual 80mm`;
+
+    html = `
+      <div class="receipt-header">
+        <div class="receipt-logo">🍸</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-type-badge">COMPROBANTE PAGO PARCIAL</div>
+        <div style="font-size:14px; font-weight:900; margin:4px 0;">MESA ${ticketData.mesa} - ${ticketData.personaNombre.toUpperCase()}</div>
+        <div class="receipt-sub">Orden #${ticketData.ordenId} • Salonero: ${ticketData.mesero || 'General'}</div>
+        <div class="receipt-sub">${ticketData.fechaHora}</div>
+      </div>
+
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th style="width:18%;">CANT</th>
+            <th style="width:52%;">CONSUMO INDIVIDUAL</th>
+            <th style="width:30%; text-align:right;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(ticketData.items || []).map(it => `
+            <tr>
+              <td><strong>${it.cantidad}x</strong></td>
+              <td><span class="receipt-item-title">${escapeHtml(it.nombre)}</span></td>
+              <td style="text-align:right;"><strong>${formatCRCSinDecimales(it.totalLinea || (it.precioUnitario * it.cantidad))}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="receipt-divider"></div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
+          <span>Subtotal Consumo:</span>
+          <strong>${formatCRCSinDecimales(ticketData.subtotal)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>10% Serv + 13% IVA:</span>
+          <strong>${formatCRCSinDecimales(ticketData.impuestos)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado">
+          <span>PAGADO:</span>
+          <span>${formatCRCSinDecimales(ticketData.total)}</span>
+        </div>
+        <div class="receipt-calc-line" style="margin-top:6px;">
+          <span>Método de Pago:</span>
+          <strong>${ticketData.metodoPago || 'Efectivo'}</strong>
+        </div>
+        <div class="receipt-calc-line" style="color:#b91c1c; font-weight:900; margin-top:4px;">
+          <span>Saldo Restante Mesa:</span>
+          <span>${formatCRCSinDecimales(ticketData.saldoRestanteMesa)}</span>
+        </div>
+      </div>
+
+      <div class="receipt-footer">
+        <div>Estado: Mesa permanece ABIERTA</div>
+        <div>con consumos pendientes.</div>
+        <div style="margin-top:4px;">¡Gracias por su visita!</div>
+      </div>
+    `;
+  } else {
+    // Ticket de Liquidación / Venta Final
+    if (txtTitulo) txtTitulo.textContent = `🧾 Factura / Ticket - Mesa ${ticketData.mesa}`;
+    if (txtSub) txtSub.textContent = `Orden #${ticketData.numeroOrden || ticketData.ordenId} • Liquidación Final 80mm`;
+
+    html = `
+      <div class="receipt-header">
+        <div class="receipt-logo">🔥</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-sub">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div class="receipt-sub">Tel: ${ticketData.negocio?.tel || '2222-0000 / 8888-9999'}</div>
+        <div class="receipt-sub">San José, Costa Rica</div>
+        <div class="receipt-sub">Céd. Jurídica: 3-101-789456</div>
+        <div class="receipt-type-badge">COMPROBANTE DE PAGO</div>
+      </div>
+
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-row">
+          <span>Factura / Orden:</span>
+          <strong>#${ticketData.numeroOrden || ticketData.ordenId}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>Mesa: ${ticketData.mesa}</span>
+          <span>Salonero: ${ticketData.mesero || 'General'}</span>
+        </div>
+        <div class="receipt-meta-row">
+          <span>Cliente:</span>
+          <strong>${escapeHtml(ticketData.cliente || 'Cliente General')}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>Fecha/Hora:</span>
+          <span>${ticketData.fechaHora}</span>
+        </div>
+      </div>
+
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th style="width:16%;">CANT</th>
+            <th style="width:54%;">DESCRIPCIÓN</th>
+            <th style="width:30%; text-align:right;">PRECIO</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(ticketData.items || []).map(it => `
+            <tr>
+              <td><strong>${it.cantidad}x</strong></td>
+              <td>
+                <span class="receipt-item-title">${escapeHtml(it.nombre)}</span>
+                ${it.notas ? `<div class="receipt-item-note">(${escapeHtml(it.notas)})</div>` : ''}
+              </td>
+              <td style="text-align:right;"><strong>${formatCRCSinDecimales(it.totalLinea || (it.precioUnitario * it.cantidad))}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="receipt-divider"></div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
+          <span>Subtotal:</span>
+          <strong>${formatCRCSinDecimales(ticketData.subtotal)}</strong>
+        </div>
+        ${ticketData.descuentoHH > 0 ? `
+          <div class="receipt-calc-line" style="color:#d946ef; font-weight:800;">
+            <span>Descuento Happy Hour 2x1:</span>
+            <span>-${formatCRCSinDecimales(ticketData.descuentoHH)}</span>
+          </div>
+        ` : ''}
+        <div class="receipt-calc-line">
+          <span>10% Servicio (Ley):</span>
+          <strong>${formatCRCSinDecimales(ticketData.servicio)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>13% I.V.A.:</span>
+          <strong>${formatCRCSinDecimales(ticketData.iva)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado">
+          <span>TOTAL A PAGAR:</span>
+          <span>${formatCRCSinDecimales(ticketData.total)}</span>
+        </div>
+        <div class="receipt-calc-line" style="margin-top:6px;">
+          <span>Método de Pago:</span>
+          <strong>${ticketData.metodoPago || 'Efectivo'}</strong>
+        </div>
+        ${ticketData.metodoPago === 'Efectivo' && ticketData.recibido > 0 ? `
+          <div class="receipt-calc-line">
+            <span>Monto Recibido:</span>
+            <strong>${formatCRCSinDecimales(ticketData.recibido)}</strong>
+          </div>
+          <div class="receipt-calc-line">
+            <span>Cambio / Vuelto:</span>
+            <strong style="color:#059669;">${formatCRCSinDecimales(ticketData.cambio)}</strong>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="receipt-footer">
+        <div style="font-size:18px; margin: 6px 0;">📱 [ Código QR de Factura ]</div>
+        <div>¡Muchas gracias por su preferencia!</div>
+        <div>Esperamos servirle de nuevo muy pronto.</div>
+        <div style="margin-top:4px; font-size:9.5px; color:#555;">Autorizado mediante resolución DGT-R-033-2019</div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+  modal.classList.add('active');
+
+  if (autoImprimir) {
+    setTimeout(() => {
+      ejecutarImpresionNativa();
+    }, 300);
+  }
+};
+
+window.cerrarModalVisorTicket = function() {
+  const modal = document.getElementById('modalVisorTicket');
+  if (modal) modal.classList.remove('active');
+};
+
+window.ejecutarImpresionNativa = function() {
+  window.print();
+};
+
+/**
+ * Monitor & Configuración de Impresoras Térmicas
+ */
+window.abrirModalMonitorImpresoras = async function() {
+  const modal = document.getElementById('modalMonitorImpresoras');
+  if (modal) modal.classList.add('active');
+  await cargarHistorialImpresoras();
+};
+
+window.cerrarModalMonitorImpresoras = function() {
+  const modal = document.getElementById('modalMonitorImpresoras');
+  if (modal) modal.classList.remove('active');
+};
+
+async function cargarHistorialImpresoras() {
+  try {
+    const res = await fetch('/api/impresoras/config');
+    const data = await res.json();
+    renderLogsImpresora(data.historial || []);
+  } catch (e) {}
+}
+
+function renderLogsImpresora(logs = []) {
+  const container = document.getElementById('printerLogsContainer');
+  const countEl = document.getElementById('txtPrinterLogCount');
+  if (countEl) countEl.textContent = `${logs.length} transmisiones registradas`;
+  if (!container) return;
+
+  if (!logs.length) {
+    container.innerHTML = '<div style="color:#9ca3af; text-align:center; padding:16px; font-size:0.85rem;">No hay eventos de impresión registrados aún. Al enviar comandas o cobrar se registrarán aquí.</div>';
+    return;
+  }
+
+  container.innerHTML = logs.map(l => {
+    const hora = new Date(l.timestamp).toLocaleTimeString('es-CR');
+    const esOk = l.estado === 'impreso';
+    const tagBg = esOk ? 'rgba(16,185,129,0.2)' : 'rgba(56,189,248,0.2)';
+    const tagColor = esOk ? '#34d399' : '#38bdf8';
+
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding:8px 6px; font-size:0.82rem;">
+        <div>
+          <span style="color:#94a3b8; font-size:0.75rem;">[${hora}]</span>
+          <strong style="color:#f8fafc; margin-left:6px;">${escapeHtml(l.impresoraNombre)}</strong>
+          <span style="margin-left:6px; color:#cbd5e1;">- ${escapeHtml(l.titulo)} (${escapeHtml(l.mesa)})</span>
+          <div style="font-size:0.72rem; color:#64748b; margin-top:2px;">${escapeHtml(l.detalleConexion)} • Buffer: ${l.bytes} bytes</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="background:${tagBg}; color:${tagColor}; font-size:0.7rem; font-weight:800; padding:2px 8px; border-radius:4px;">
+            ${l.estado.toUpperCase()}
+          </span>
+          <button class="btn-tool" style="padding:3px 8px; font-size:0.72rem;" onclick='mostrarVisorTicketTermico(${JSON.stringify(l.ticketVisual)})'>👁️ Ver</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.probarImpresoraBackend = async function(destino) {
+  try {
+    const res = await fetch('/api/impresoras/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destino })
+    });
+    const data = await res.json();
+    mostrarNotificacionCentro(`🖨️ ${data.message}`, 'success');
+    if (data.registro && data.registro.ticketVisual) {
+      mostrarVisorTicketTermico(data.registro.ticketVisual);
+    }
+    await cargarHistorialImpresoras();
+  } catch (e) {
+    alert('Error al probar impresora: ' + e.message);
+  }
+};
+
+// Escuchar eventos en vivo de Socket.IO para impresiones
+try {
+  if (typeof socket !== 'undefined' && socket) {
+    socket.on('ticket_impreso', (reg) => {
+      cargarHistorialImpresoras();
+    });
+  }
+} catch (_) {}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
