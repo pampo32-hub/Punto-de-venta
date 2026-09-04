@@ -119,6 +119,186 @@ window.guardarNuevoProducto = async function() {
   }
 };
 
+window.abrirModalActualizaciones = async function() {
+  const modal = document.getElementById('modalActualizaciones');
+  if (modal) modal.classList.add('active');
+
+  const txtVer = document.getElementById('txtUpdateVersionActual');
+  const txtRev = document.getElementById('txtUpdateUltimaRevision');
+  const iconStatus = document.getElementById('iconUpdateStatus');
+  const titleStatus = document.getElementById('titleUpdateStatus');
+  const descStatus = document.getElementById('descUpdateStatus');
+  const boxDetails = document.getElementById('boxUpdateDetails');
+  const btnAplicar = document.getElementById('btnAplicarUpdate');
+
+  if (iconStatus) iconStatus.textContent = '⏳';
+  if (titleStatus) titleStatus.textContent = 'Consultando estado...';
+  if (descStatus) descStatus.textContent = 'Verificando con el repositorio en GitHub...';
+  if (boxDetails) boxDetails.style.display = 'none';
+  if (btnAplicar) btnAplicar.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/sistema/actualizaciones/estado');
+    const data = await res.json();
+    if (txtVer) txtVer.textContent = `v${data.version || '1.0.0'}`;
+    if (txtRev) {
+      txtRev.textContent = data.ultimaRevision 
+        ? new Date(data.ultimaRevision).toLocaleString('es-CR')
+        : 'Aún no se ha realizado';
+    }
+
+    if (data.actualizacionDisponible) {
+      if (iconStatus) iconStatus.textContent = '🚀';
+      if (titleStatus) {
+        titleStatus.textContent = '¡Nueva versión disponible para instalar!';
+        titleStatus.style.color = '#34d399';
+      }
+      if (descStatus) {
+        descStatus.textContent = data.commitMsg ? `Mejoras: ${data.commitMsg}` : 'Hay nuevas funciones y correcciones disponibles.';
+      }
+      if (boxDetails) {
+        boxDetails.style.display = 'block';
+        boxDetails.innerHTML = `<strong>Último Commit:</strong> <code>${data.ultimoCommit || ''}</code> ${data.commitDate ? `(${new Date(data.commitDate).toLocaleString('es-CR')})` : ''}`;
+      }
+      if (btnAplicar) btnAplicar.style.display = 'inline-block';
+    } else {
+      if (iconStatus) iconStatus.textContent = '✅';
+      if (titleStatus) {
+        titleStatus.textContent = 'El sistema está actualizado';
+        titleStatus.style.color = '#f8fafc';
+      }
+      if (descStatus) descStatus.textContent = 'Tienes la versión más reciente instalada y protegida.';
+    }
+  } catch (e) {
+    if (iconStatus) iconStatus.textContent = '⚠️';
+    if (titleStatus) titleStatus.textContent = 'Modo Local / Sin conexión a internet';
+    if (descStatus) descStatus.textContent = 'El sistema funciona perfectamente en la red del restaurante. Cuando haya internet podrás buscar actualizaciones.';
+  }
+};
+
+window.cerrarModalActualizaciones = function() {
+  const modal = document.getElementById('modalActualizaciones');
+  if (modal) modal.classList.remove('active');
+};
+
+window.buscarActualizacionesManual = async function() {
+  const btn = document.getElementById('btnBuscarUpdatesManual');
+  const iconStatus = document.getElementById('iconUpdateStatus');
+  const titleStatus = document.getElementById('titleUpdateStatus');
+  const descStatus = document.getElementById('descUpdateStatus');
+  const boxDetails = document.getElementById('boxUpdateDetails');
+  const btnAplicar = document.getElementById('btnAplicarUpdate');
+  const txtRev = document.getElementById('txtUpdateUltimaRevision');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Buscando...';
+  }
+  if (iconStatus) iconStatus.textContent = '🔍';
+  if (titleStatus) titleStatus.textContent = 'Buscando actualizaciones en GitHub...';
+  if (descStatus) descStatus.textContent = 'Comprobando si hay mejoras disponibles en el repositorio...';
+  if (boxDetails) boxDetails.style.display = 'none';
+  if (btnAplicar) btnAplicar.style.display = 'none';
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/sistema/actualizaciones/buscar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': rol
+      },
+      body: JSON.stringify({ rol })
+    });
+    const data = await res.json();
+
+    if (txtRev) txtRev.textContent = new Date().toLocaleString('es-CR');
+
+    if (!data.ok) {
+      if (iconStatus) iconStatus.textContent = '⚠️';
+      if (titleStatus) {
+        titleStatus.textContent = 'No se pudo conectar a GitHub';
+        titleStatus.style.color = '#fbbf24';
+      }
+      if (descStatus) descStatus.textContent = data.error || 'Verifica que la computadora tenga salida a internet.';
+      return;
+    }
+
+    if (data.hayNuevaVersion) {
+      if (iconStatus) iconStatus.textContent = '🚀';
+      if (titleStatus) {
+        titleStatus.textContent = '¡Nueva versión disponible para instalar!';
+        titleStatus.style.color = '#34d399';
+      }
+      if (descStatus) {
+        descStatus.textContent = data.commitMsg ? `Mejoras: ${data.commitMsg}` : 'Hay nuevas funciones disponibles.';
+      }
+      if (boxDetails) {
+        boxDetails.style.display = 'block';
+        boxDetails.innerHTML = `<strong>Versión:</strong> <code>${data.latestSha || ''}</code> ${data.commitDate ? `(${new Date(data.commitDate).toLocaleString('es-CR')})` : ''}`;
+      }
+      if (btnAplicar) btnAplicar.style.display = 'inline-block';
+      mostrarNotificacionCentro('🚀 ¡Se encontró una nueva actualización disponible!', 'success');
+    } else {
+      if (iconStatus) iconStatus.textContent = '✅';
+      if (titleStatus) {
+        titleStatus.textContent = '¡El sistema está al día!';
+        titleStatus.style.color = '#34d399';
+      }
+      if (descStatus) descStatus.textContent = 'No hay nuevas actualizaciones. Tienes la última versión instalada.';
+      mostrarNotificacionCentro('✅ El sistema ya tiene la versión más reciente.', 'success');
+    }
+  } catch (e) {
+    if (iconStatus) iconStatus.textContent = '⚠️';
+    if (titleStatus) titleStatus.textContent = 'Error al consultar actualizaciones';
+    if (descStatus) descStatus.textContent = e.message;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔍 Buscar Ahora';
+    }
+  }
+};
+
+window.aplicarActualizacionSistema = async function() {
+  if (!confirm('¿Deseas descargar e instalar la actualización ahora?\n\nLa base de datos (ventas, mesas, facturas) se mantendrá 100% segura e intacta.')) {
+    return;
+  }
+
+  const btn = document.getElementById('btnAplicarUpdate');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Instalando...';
+  }
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const res = await fetch('/api/sistema/actualizaciones/aplicar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': rol
+      },
+      body: JSON.stringify({ rol })
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      alert('🎉 ¡Actualización instalada con éxito!\n\nEl sistema se recargará en este momento con las nuevas funciones.');
+      window.location.reload();
+    } else {
+      alert('❌ ' + (data.error || 'No se pudo aplicar la actualización.'));
+    }
+  } catch (e) {
+    alert('❌ Error al actualizar: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 Instalar Actualización';
+    }
+  }
+};
+
 window.guardarNuevoNombreMesa = async function() {
   if (!mesaParaRenombrar) return;
   const txtNuevo = document.getElementById('txtRenombrarMesaNuevo');
@@ -288,6 +468,15 @@ try {
     socket.on('mesa_renombrada', () => cargarMesasDesdeBackend());
     socket.on('producto_creado', () => cargarMenuDesdeBackend());
     socket.on('menu_actualizado', () => cargarMenuDesdeBackend());
+    socket.on('actualizacion_disponible', (d) => {
+      if (estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'developer')) {
+        mostrarNotificacionCentro(`🔔 ¡Nueva versión disponible (${d.latestSha || ''})! Puedes instalarla en "Actualizaciones".`, 'info');
+      }
+    });
+    socket.on('sistema_actualizado', () => {
+      mostrarNotificacionCentro('🚀 El sistema ha sido actualizado con éxito.', 'success');
+      setTimeout(() => window.location.reload(), 2000);
+    });
     socket.on('cliente_pidio_cuenta', (d) => {
       sonarCampanaCocina();
       if (typeof mostrarNotificacionCentro === 'function') {

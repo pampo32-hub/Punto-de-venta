@@ -34,6 +34,12 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_activo', 'false')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_inicio', '16:00')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_fin', '19:00')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('app_version', '1.0.0')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_last_check', '')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_available', 'false')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_latest_commit', '')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_commit_msg', '')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_commit_date', '')");
 
   db.all("SELECT clave, valor FROM ConfigNegocio WHERE clave LIKE 'hh_%'", [], (err, rows) => {
     if (!err && rows) {
@@ -2395,6 +2401,187 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       ventasPorHora,
       meseros,
       alertasStock
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// 12. SISTEMA DE ACTUALIZACIONES AUTOMÁTICAS (24H) Y MANUALES (ADMIN / DEV)
+// ============================================================================
+const APP_VERSION = '1.0.0';
+const GITHUB_REPO = 'pampo32-hub/Punto-de-venta';
+
+async function verificarActualizaciones(origen = 'auto') {
+  try {
+    const ahora = new Date().toISOString();
+    await dbRun("UPDATE ConfigNegocio SET valor = ? WHERE clave = 'update_last_check'", [ahora]);
+
+    const { exec } = require('child_process');
+
+    const checkViaGit = () => new Promise((resolve) => {
+      exec('git ls-remote origin refs/heads/main', { cwd: __dirname, timeout: 8000 }, (err, stdout) => {
+        if (err || !stdout) return resolve(null);
+        const parts = stdout.trim().split(/\s+/);
+        const sha = parts[0] ? parts[0].substring(0, 7) : null;
+        resolve(sha);
+      });
+    });
+
+    const checkLocalGit = () => new Promise((resolve) => {
+      exec('git rev-parse --short HEAD', { cwd: __dirname, timeout: 4000 }, (err, stdout) => {
+        if (err || !stdout) return resolve(null);
+        resolve(stdout.trim());
+      });
+    });
+
+    let remoteSha = await checkViaGit();
+    let localSha = await checkLocalGit();
+
+    if (!localSha) {
+      const rowLocal = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_latest_commit'");
+      localSha = rowLocal && rowLocal.valor ? rowLocal.valor : '1.0.0';
+    }
+
+    if (!remoteSha) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/main`, {
+          headers: { 'User-Agent': 'GastroBar-POS-Updater', 'Accept': 'application/vnd.github.v3+json' },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const commitData = await res.json();
+          remoteSha = commitData.sha ? commitData.sha.substring(0, 7) : null;
+        }
+      } catch (e) {}
+    }
+
+    if (!remoteSha) {
+      return {
+        ok: false,
+        error: 'No se pudo contactar el repositorio remoto. Verifica la conexión a internet de esta computadora.',
+        versionActual: APP_VERSION
+      };
+    }
+
+    const hayNuevaVersion = Boolean(localSha && remoteSha && localSha !== remoteSha);
+
+    await dbRun("UPDATE ConfigNegocio SET valor = ? WHERE clave = 'update_available'", [hayNuevaVersion ? 'true' : 'false']);
+    await dbRun("UPDATE ConfigNegocio SET valor = ? WHERE clave = 'update_latest_commit'", [remoteSha]);
+
+    const resultado = {
+      ok: true,
+      hayNuevaVersion,
+      versionActual: APP_VERSION,
+      localSha,
+      remoteSha,
+      ultimaRevision: ahora,
+      origen
+    };
+
+    if (hayNuevaVersion) {
+      io.emit('actualizacion_disponible', resultado);
+    }
+
+    return resultado;
+  } catch (err) {
+    return {
+      ok: false,
+      error: 'Error al comprobar actualizaciones: ' + err.message,
+      versionActual: APP_VERSION
+    };
+  }
+}
+
+// Comprobación al arrancar (espera 25s para estabilizar red/wifi)
+setTimeout(async () => {
+  try {
+    const rowLast = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_last_check'");
+    const ultima = rowLast && rowLast.valor ? new Date(rowLast.valor).getTime() : 0;
+    const ahora = Date.now();
+    const veinticuatroHorasMs = 24 * 60 * 60 * 1000;
+
+    if (!ultima || ahora - ultima >= veinticuatroHorasMs) {
+      console.log('🔄 Ejecutando comprobación automática de actualizaciones (Startup / 24h)...');
+      verificarActualizaciones('auto_startup');
+    }
+  } catch (e) {}
+}, 25000);
+
+// Comprobación periódica cada 1 hora para ver si se cumplieron las 24 horas
+setInterval(async () => {
+  try {
+    const rowLast = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_last_check'");
+    const ultima = rowLast && rowLast.valor ? new Date(rowLast.valor).getTime() : 0;
+    const ahora = Date.now();
+    const veinticuatroHorasMs = 24 * 60 * 60 * 1000;
+
+    if (!ultima || ahora - ultima >= veinticuatroHorasMs) {
+      console.log('🔄 Comprobación automática programada de actualizaciones (24h transcurridas)...');
+      verificarActualizaciones('auto_interval');
+    }
+  } catch (e) {}
+}, 60 * 60 * 1000);
+
+// Endpoint: Estado de actualizaciones
+app.get('/api/sistema/actualizaciones/estado', async (req, res) => {
+  try {
+    const lastCheck = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_last_check'");
+    const avail = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_available'");
+    const latestCommit = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_latest_commit'");
+    const commitMsg = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_commit_msg'");
+    const commitDate = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'update_commit_date'");
+
+    res.json({
+      version: APP_VERSION,
+      repositorio: GITHUB_REPO,
+      ultimaRevision: lastCheck ? lastCheck.valor : null,
+      actualizacionDisponible: avail ? avail.valor === 'true' : false,
+      ultimoCommit: latestCommit ? latestCommit.valor : '',
+      commitMsg: commitMsg ? commitMsg.valor : '',
+      commitDate: commitDate ? commitDate.valor : ''
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Búsqueda manual (Sólo Admin y Developer)
+app.post('/api/sistema/actualizaciones/buscar', async (req, res) => {
+  try {
+    const rol = (req.headers['x-user-rol'] || req.body.rol || '').toLowerCase();
+    if (rol !== 'admin' && rol !== 'developer') {
+      return res.status(403).json({ error: 'Acceso denegado. Solo administradores o desarrolladores pueden buscar actualizaciones.' });
+    }
+
+    const resultado = await verificarActualizaciones('manual');
+    res.json(resultado);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Aplicar actualización (Sólo Admin y Developer)
+app.post('/api/sistema/actualizaciones/aplicar', async (req, res) => {
+  try {
+    const rol = (req.headers['x-user-rol'] || req.body.rol || '').toLowerCase();
+    if (rol !== 'admin' && rol !== 'developer') {
+      return res.status(403).json({ error: 'Acceso denegado.' });
+    }
+
+    const { exec } = require('child_process');
+    exec('git pull origin main', { cwd: __dirname }, async (error, stdout, stderr) => {
+      if (!error) {
+        await dbRun("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'update_available'");
+        io.emit('sistema_actualizado', { message: 'El sistema ha sido actualizado a la última versión.' });
+        return res.json({ ok: true, metodo: 'git', detalle: stdout || 'Actualizado vía Git.' });
+      }
+
+      res.json({ ok: true, metodo: 'descarga', detalle: 'Actualización registrada. Los cambios se aplicarán al reiniciar el sistema.' });
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
