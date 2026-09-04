@@ -5250,6 +5250,23 @@ function filtrarTablaAuditoria() {
 
 window.ticketActivoParaImprimir = null;
 
+function sonarBeepImpresora() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1600, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(2200, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.22);
+  } catch (_) {}
+}
+
 /**
  * Renderiza un ticket térmico de 80mm en el visor virtual
  */
@@ -5258,10 +5275,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
   window.ticketActivoParaImprimir = ticketData;
 
   const modal = document.getElementById('modalVisorTicket');
-  const container = document.getElementById('receiptContentHtml');
+  const container = document.getElementById('visorTicketContenido') || document.getElementById('receiptContentHtml');
   const txtTitulo = document.getElementById('txtTituloVisorTicket');
   const txtSub = document.getElementById('txtSubtituloVisorTicket');
   if (!modal || !container) return;
+
+  sonarBeepImpresora();
 
   let html = '';
 
