@@ -1,4 +1,4 @@
-﻿const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { startTestServer } = require('../helpers/test-server');
 
@@ -80,5 +80,21 @@ describe('Tier 7: Modular SaaS Architecture & Licensing Hub', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.planNombre, 'Plan Smart Gastro');
     assert.deepEqual(res.body.modulosActivos, customModulos);
+  });
+
+  it('T7.5: Disabling split_bill restricts module access and excludes it from active list', async () => {
+    // 1. Set modules without split_bill
+    const sinSplit = ['pos_core', 'kds_cocina', 'offline_first'];
+    const putRes = await req('/api/dev/negocios/1/modulos', 'PUT', {
+      modulos_activos: sinSplit,
+      plan_nombre: 'Plan Básico Sin Split'
+    });
+    assert.equal(putRes.status, 200);
+
+    // 2. Query active modules
+    const res = await req('/api/negocio/actual/modulos?negocioId=1');
+    assert.equal(res.status, 200);
+    assert.ok(!res.body.modulosActivos.includes('split_bill'), 'split_bill must not be in active modules');
+    assert.ok(res.body.modulosActivos.includes('pos_core'));
   });
 });

@@ -1251,7 +1251,7 @@ window.renderizarListaModulos = function() {
     const isBase = m.esBase;
 
     return `
-      <div class="modulo-item-card ${isActivo ? 'activo' : ''} ${isBase ? 'is-base' : ''}" id="cardModulo_${m.id}">
+      <div class="modulo-item-card ${isActivo ? 'activo' : ''} ${isBase ? 'is-base' : ''}" id="cardModulo_${m.id}" onclick="if (!event.target.closest('.switch-toggle-label')) toggleModuloItem('${m.id}')">
         <div class="modulo-icon-box">${m.icono}</div>
         <div class="modulo-info">
           <div class="modulo-header-row">
@@ -1289,6 +1289,11 @@ window.toggleModuloItem = function(modId) {
     }
   }
 
+  const chk = document.getElementById(`chkModulo_${modId}`);
+  if (chk) {
+    chk.checked = _modulosSeleccionadosSet.has(modId);
+  }
+
   document.querySelectorAll('.btn-plan-preset').forEach(b => b.classList.remove('active'));
   const badge = document.getElementById('planActualBadge');
   if (badge) badge.textContent = 'Plan Personalizado';
@@ -1321,6 +1326,9 @@ window.aplicarPresetPlan = function(tipo) {
 
   const badge = document.getElementById('planActualBadge');
   if (badge) badge.textContent = planNombre;
+
+  const btnPreset = document.querySelector(`.btn-plan-preset[onclick*="${tipo}"]`);
+  if (btnPreset) btnPreset.classList.add('active');
 
   renderizarListaModulos();
   actualizarResumenModulosUI();
@@ -1372,10 +1380,11 @@ document.getElementById('btnGuardarModulosNegocio')?.addEventListener('click', a
       document.getElementById('modalModulosNegocio')?.classList.remove('active');
       cargarNegociosDev();
 
-      // Si el negocio editado es el activo actualmente en pantalla, actualizar restricciones en vivo
+      // Si el negocio editado es el activo actualmente en pantalla o sesión, actualizar restricciones en vivo
       if (estado.negocioActual && Number(estado.negocioActual.id) === Number(_negocioModulosActivoId)) {
         estado.negocioActual.modulos_activos = modulosArray;
         estado.negocioActual.plan_nombre = planNombre;
+        sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
         aplicarRestriccionesModulos();
       }
     } else {
@@ -1399,6 +1408,12 @@ document.getElementById('btnCancelarModulosNegocio')?.addEventListener('click', 
 // FEATURE-FLAGS Y RESTRICCIONES EN VIVO POR MÓDULO
 // ============================================================================
 window.tieneModulo = function(moduloKey) {
+  if (!estado.negocioActual) {
+    try {
+      const s = sessionStorage.getItem('pos_negocio');
+      if (s) estado.negocioActual = JSON.parse(s);
+    } catch (_) {}
+  }
   if (!estado.negocioActual) return true;
   const modulos = estado.negocioActual.modulos_activos;
   if (!modulos || modulos === 'all') return true;
@@ -1424,37 +1439,62 @@ window.aplicarRestriccionesModulos = function() {
   const tieneInventario = tieneModulo('inventario_recetas');
   const tieneQR = tieneModulo('menu_qr');
   const tieneAutoPago = tieneModulo('auto_pago_qr');
+  const tieneOffline = tieneModulo('offline_first');
 
-  // 1. KDS
-  document.querySelectorAll('.nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds').forEach(el => {
+  // 1. KDS Cocina & Barra
+  document.querySelectorAll('.nav-pill[data-view="kds"], .nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds').forEach(el => {
     el.style.display = tieneKDS ? '' : 'none';
   });
 
-  // 2. Split Bill
-  const btnSplit = document.getElementById('btnDividirCuentaModal');
+  // 2. Split Bill (Dividir Cuentas)
+  const btnSplit = document.getElementById('btnAbrirSplitBill');
   if (btnSplit) {
     btnSplit.style.display = tieneSplit ? '' : 'none';
   }
+  document.querySelectorAll('.btn-btn-cmd.split, .btn-split-trigger').forEach(el => {
+    el.style.display = tieneSplit ? '' : 'none';
+  });
 
-  // 3. Inventario
-  document.querySelectorAll('.admin-only-tab[onclick*="inventario"], button[onclick*="abrirModuloAdmin(\'inventario\')"]').forEach(el => {
+  // 3. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
+  const btnMoverUnir = document.getElementById('btnAbrirMoverUnirModal');
+  if (btnMoverUnir) {
+    btnMoverUnir.style.display = tieneMesasPromos ? '' : 'none';
+  }
+  const hhSwitch = document.getElementById('hhSwitchInput');
+  if (hhSwitch) {
+    if (!tieneMesasPromos) {
+      hhSwitch.disabled = true;
+      const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
+      if (hhBar) {
+        hhBar.style.opacity = '0.5';
+        hhBar.title = 'Módulo Mesas Avanzadas & Happy Hour no contratado';
+      }
+    } else {
+      hhSwitch.disabled = false;
+      const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
+      if (hhBar) {
+        hhBar.style.opacity = '1';
+        hhBar.title = '';
+      }
+    }
+  }
+
+  // 4. Inventario & Escandallos
+  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-view-tab[data-view="inventario"], .admin-only-tab[onclick*="inventario"], button[onclick*="abrirModuloAdmin(\'inventario\')"]').forEach(el => {
     el.style.display = tieneInventario ? '' : 'none';
   });
 
-  // 4. Happy Hour & Promociones
-  const hhSwitch = document.getElementById('hhSwitchInput');
-  if (hhSwitch && !tieneMesasPromos) {
-    hhSwitch.disabled = true;
-    const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
-    if (hhBar) hhBar.title = 'Módulo Mesas Avanzadas & Happy Hour no contratado';
-  } else if (hhSwitch) {
-    hhSwitch.disabled = false;
-  }
+  // 5. Menú QR & Auto-Pago
+  const btnVerQRs = document.getElementById('btnVerTodosQRs');
+  if (btnVerQRs) btnVerQRs.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
 
-  // 5. Menú QR
-  const btnQR = document.getElementById('btnAbrirModalQR');
-  if (btnQR) {
-    btnQR.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
+  const btnQrMesa = document.getElementById('btnVerQrMesaCliente');
+  if (btnQrMesa) btnQrMesa.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
+
+  // 6. Offline-First
+  const netBadge = document.getElementById('netStatusBadge');
+  if (netBadge) {
+    netBadge.style.display = tieneOffline ? '' : 'none';
   }
 };
 
@@ -1465,6 +1505,7 @@ window.abrirPosComoNegocio = async function(negocioId) {
     const neg = negocios.find(n => n.id === negocioId);
     if (neg) {
       estado.negocioActual = neg;
+      sessionStorage.setItem('pos_negocio', JSON.stringify(neg));
       actualizarBrandingNegocio(neg);
       aplicarRestriccionesModulos();
 
@@ -2283,6 +2324,9 @@ async function cargarMesasDesdeBackend() {
     }
 
     renderSalón();
+    if (typeof aplicarRestriccionesModulos === 'function') {
+      aplicarRestriccionesModulos();
+    }
     if (document.getElementById('view-editor-plano')?.classList.contains('active')) {
       renderEditorPlano();
     }
@@ -3253,6 +3297,9 @@ async function abrirComanderoMesa(mesaId) {
   actualizarBotonEnviarComanda();
   renderCatalogoComandero();
   if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
+  if (typeof aplicarRestriccionesModulos === 'function') {
+    aplicarRestriccionesModulos();
+  }
   document.getElementById('modalComandero').classList.add('active');
   if (typeof aplicarPersonalizacionAlDOM === 'function') {
     aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
@@ -4146,6 +4193,10 @@ function initSplitBills() {
   const btnAbrir = document.getElementById('btnAbrirSplitBill');
   if (btnAbrir) {
     btnAbrir.addEventListener('click', () => {
+      if (typeof tieneModulo === 'function' && !tieneModulo('split_bill')) {
+        alert('⚠️ El módulo de División de Cuentas (Split Bills) no está contratado en este restaurante.');
+        return;
+      }
       if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
         alert('No hay consumos en esta mesa para dividir.');
         return;
@@ -4218,6 +4269,10 @@ function initSplitBills() {
 }
 
 function iniciarDivisionCuentas() {
+  if (typeof tieneModulo === 'function' && !tieneModulo('split_bill')) {
+    alert('⚠️ El módulo de División de Cuentas (Split Bills) no está contratado en este restaurante.');
+    return;
+  }
   const totalNum = estado.mesaActiva.total || (estado.mesaActiva.subtotal ? estado.mesaActiva.subtotal * 1.23 : 0);
   const totalTxt = formatCRCSinDecimales(totalNum);
   const numRaw = String(estado.mesaActiva.numero || '');
@@ -5655,6 +5710,21 @@ document.addEventListener('DOMContentLoaded', () => {
   if (userGuardado) {
     estado.usuarioActual = JSON.parse(userGuardado);
     estado.negocioActual = negGuardado ? JSON.parse(negGuardado) : null;
+    if (estado.negocioActual && estado.negocioActual.id) {
+      fetch(`/api/dev/negocios/${estado.negocioActual.id}/modulos`)
+        .then(r => r.json())
+        .then(d => {
+          if (d && d.modulosActivos) {
+            estado.negocioActual.modulos_activos = d.modulosActivos;
+            estado.negocioActual.plan_nombre = d.planNombre;
+            sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+            if (typeof aplicarRestriccionesModulos === 'function') {
+              aplicarRestriccionesModulos();
+            }
+          }
+        })
+        .catch(() => {});
+    }
     aplicarEnrutamientoPorRol();
   } else {
     document.getElementById('landingLoginView').classList.add('active');
