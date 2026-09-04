@@ -3598,8 +3598,8 @@ function initNavegacion() {
     });
   });
 
-  document.getElementById('btnIrEditorSalon').addEventListener('click', () => {
-    document.querySelector('.nav-pill[data-view="editor-plano"]').click();
+  document.getElementById('btnIrEditorSalon')?.addEventListener('click', () => {
+    abrirModuloAdmin('editor-plano');
   });
 }
 
