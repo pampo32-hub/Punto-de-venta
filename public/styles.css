@@ -2720,6 +2720,19 @@ textarea:focus, select:focus, input:focus {
   font-weight: 800;
   font-size: 0.8rem;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-phone-pedir-cuenta:disabled,
+.btn-phone-pedir-cuenta.disabled {
+  background: #334155 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+  opacity: 0.65 !important;
+  filter: grayscale(0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* TABLA DE PROPINAS / TIP POOL */

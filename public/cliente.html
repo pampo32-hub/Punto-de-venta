@@ -270,6 +270,18 @@
       transform: scale(0.98);
     }
 
+    .btn-pedir-cuenta-mesero:disabled,
+    .btn-pedir-cuenta-mesero.disabled {
+      background: #334155 !important;
+      color: #94a3b8 !important;
+      cursor: not-allowed !important;
+      box-shadow: none !important;
+      transform: none !important;
+      opacity: 0.65 !important;
+      filter: grayscale(0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
     .btn-ver-menu-link {
       display: block;
       width: 100%;
@@ -571,6 +583,41 @@
           document.getElementById('bottomStickyBar').classList.remove('visible');
           mostrarSeccion('menu');
         }
+
+        // Sincronizar estado del temporizador de 2 minutos para solicitar mesero
+        const cuentaAbierta = Boolean(datosMesa.orden && datosMesa.mesa && datosMesa.mesa.estado !== 'libre');
+        if (cuentaAbierta) {
+          let tsSolicitud = null;
+          try {
+            const lsVal = localStorage.getItem('solicitar_mesero_ts_' + mesaId);
+            if (lsVal) tsSolicitud = Number(lsVal);
+          } catch (_) {}
+
+          if (!tsSolicitud && datosMesa.mesa && datosMesa.mesa.hora_pidio_cuenta && datosMesa.mesa.pidio_cuenta_qr) {
+            tsSolicitud = new Date(datosMesa.mesa.hora_pidio_cuenta).getTime();
+          }
+
+          if (tsSolicitud) {
+            const transcurrido = Math.floor((Date.now() - tsSolicitud) / 1000);
+            const restante = 120 - transcurrido;
+            if (restante > 0) {
+              iniciarTemporizadorSolicitarMesero(restante);
+            } else {
+              const btn = document.getElementById('btnPedirCuenta');
+              if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('disabled');
+                btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero / Pedir Factura';
+              }
+            }
+          }
+        } else {
+          if (_cuentaTimerInterval) {
+            clearInterval(_cuentaTimerInterval);
+            _cuentaTimerInterval = null;
+          }
+          try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+        }
       } catch (e) {
         console.error('Error cargando datos del cliente:', e);
       }
@@ -663,21 +710,102 @@
       }
     };
 
+    let _cuentaTimerInterval = null;
+
+    function iniciarTemporizadorSolicitarMesero(segundosRestantes) {
+      if (_cuentaTimerInterval) {
+        clearInterval(_cuentaTimerInterval);
+        _cuentaTimerInterval = null;
+      }
+
+      const btn = document.getElementById('btnPedirCuenta');
+      const notif = document.getElementById('notifCuentaEnviada');
+      if (!btn) return;
+
+      btn.disabled = true;
+      btn.classList.add('disabled');
+      if (notif) {
+        notif.style.display = 'block';
+        notif.innerHTML = '✅ <strong>¡Salonero notificado!</strong> El personal se acerca a tu mesa con el datáfono o tu factura.';
+      }
+
+      let segs = Math.max(0, Math.round(segundosRestantes));
+
+      function tick() {
+        if (segs <= 0) {
+          clearInterval(_cuentaTimerInterval);
+          _cuentaTimerInterval = null;
+
+          // Si la cuenta sigue sin cerrarse / cobrarse, se vuelve a activar el botón
+          const cuentaSigueAbierta = Boolean(
+            datosMesa && datosMesa.orden && datosMesa.mesa && datosMesa.mesa.estado !== 'libre'
+          );
+
+          if (cuentaSigueAbierta) {
+            btn.disabled = false;
+            btn.classList.remove('disabled');
+            btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero / Pedir Factura';
+            btn.style.background = '';
+            if (notif) {
+              notif.innerHTML = '🔔 ¿Aún no llega el personal? Puedes volver a solicitar la cuenta pulsando el botón.';
+            }
+            try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+          } else {
+            btn.disabled = true;
+            btn.classList.add('disabled');
+            btn.innerHTML = '✅ Cuenta Cerrada';
+            if (notif) {
+              notif.innerHTML = '✅ La cuenta de tu mesa ya fue cancelada. ¡Muchas gracias por tu visita!';
+            }
+            try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+          }
+          return;
+        }
+
+        const mins = Math.floor(segs / 60);
+        const rem = (segs % 60).toString().padStart(2, '0');
+        btn.innerHTML = `⏳ Mesero Solicitado (Reintentar en ${mins}:${rem})`;
+        segs--;
+      }
+
+      tick();
+      _cuentaTimerInterval = setInterval(tick, 1000);
+    }
+
     window.solicitarCuentaAlSalonero = async function() {
+      const btn = document.getElementById('btnPedirCuenta');
+      if (btn && btn.disabled) return;
+
+      const ahora = Date.now();
+      try { localStorage.setItem('solicitar_mesero_ts_' + mesaId, ahora.toString()); } catch (_) {}
+
+      // Desactivar inmediatamente y comenzar la cuenta regresiva de 2 minutos
+      iniciarTemporizadorSolicitarMesero(120);
+
       try {
         await fetch('/api/cliente/mesa/' + mesaId + '/pedir-cuenta', { method: 'POST' });
-        document.getElementById('notifCuentaEnviada').style.display = 'block';
-        document.getElementById('btnPedirCuenta').textContent = '✅ Cuenta Solicitada al Mesero';
-        document.getElementById('btnPedirCuenta').style.background = '#059669';
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error enviando solicitud de mesero:', e);
+      }
     };
 
     try {
       const socket = io();
       socket.on('nueva_comanda', (d) => {
-        if (d.mesaId === Number(mesaId)) cargarDatosCliente();
+        if (d && d.mesaId === Number(mesaId)) cargarDatosCliente();
       });
-      socket.on('mesa_actualizada', () => cargarDatosCliente());
+      socket.on('mesa_actualizada', (d) => {
+        if (d && (d.mesaId === Number(mesaId) || d.id === Number(mesaId))) {
+          if (d.estado === 'libre' || d.total === 0) {
+            if (_cuentaTimerInterval) {
+              clearInterval(_cuentaTimerInterval);
+              _cuentaTimerInterval = null;
+            }
+            try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+          }
+        }
+        cargarDatosCliente();
+      });
     } catch (e) {}
 
     document.addEventListener('DOMContentLoaded', cargarDatosCliente);

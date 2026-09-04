@@ -63,6 +63,7 @@ db.serialize(() => {
   db.run("ALTER TABLE Ordenes ADD COLUMN transferida_de TEXT", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN piso INTEGER DEFAULT 1", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN hora_pidio_cuenta TEXT", () => {});
   db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
   db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
@@ -549,7 +550,8 @@ app.get('/api/mesas', async (req, res) => {
         if (m.estado !== 'libre' || m.pidio_cuenta_qr) {
           m.estado = 'libre';
           m.pidio_cuenta_qr = 0;
-          dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
+          m.hora_pidio_cuenta = null;
+          dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
         }
         m.transferida_de = null;
         m.unida_con = null;
@@ -955,7 +957,7 @@ app.post('/api/mesas/mover', async (req, res) => {
 
     // 3. Table A is emptied and returns to a normal empty state with no residual labels
     await dbRun(
-      "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+      "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [origenMesaId]
     );
 
@@ -2152,7 +2154,7 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
 
       if (orden.mesa_id) {
         await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
           [orden.mesa_id]
         );
         await dbRun(
@@ -2354,13 +2356,14 @@ app.post('/api/cliente/mesa/:id/pedir-cuenta', async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
-    await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1 WHERE id = ?", [mesaId]);
+    const ahora = new Date().toISOString();
+    await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = ? WHERE id = ?", [ahora, mesaId]);
     await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [mesaId]);
 
-    io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesa.numero });
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1 });
+    io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesa.numero, hora_pidio_cuenta: ahora });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
 
-    res.json({ message: 'Solicitud enviada al mesero' });
+    res.json({ message: 'Solicitud enviada al mesero', hora_pidio_cuenta: ahora });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

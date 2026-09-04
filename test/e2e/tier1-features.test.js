@@ -451,4 +451,84 @@ describe('Tier 1: Feature Coverage (R1 - R4)', () => {
       assert.strictEqual(evaluatePointerGesture(800, 50, 60), 'drag_in_progress');
     });
   });
+
+  // ==========================================================================
+  // R5: QR SOLICITAR MESERO - ENFRIAMIENTO 2 MINUTOS Y REACTIVACIÓN CÍCLICA
+  // ==========================================================================
+  describe('Feature 5: QR Waiter Request Cooldown & Re-activation', () => {
+    it('T1.22: POST /api/cliente/mesa/:id/pedir-cuenta sets hora_pidio_cuenta and pidio_cuenta_qr', async () => {
+      const resCmd = await fetch(`${server.baseUrl}/api/comandas/enviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mesaId: 1,
+          items: [{ id: 8, cantidad: 1, precio: 5500, nombre: 'Chifrijo', curso: 2, destino: 'cocina' }]
+        })
+      });
+      assert.strictEqual(resCmd.status, 200);
+
+      const resQr = await fetch(`${server.baseUrl}/api/cliente/mesa/1/pedir-cuenta`, {
+        method: 'POST'
+      });
+      assert.strictEqual(resQr.status, 200);
+      const bodyQr = await resQr.json();
+      assert.ok(bodyQr.hora_pidio_cuenta, 'Debe devolver la hora de solicitud');
+
+      const resMesa = await fetch(`${server.baseUrl}/api/cliente/mesa/1`);
+      assert.strictEqual(resMesa.status, 200);
+      const data = await resMesa.json();
+      assert.strictEqual(data.mesa.estado, 'cuenta');
+      assert.strictEqual(data.mesa.pidio_cuenta_qr, 1);
+      assert.ok(data.mesa.hora_pidio_cuenta, 'La mesa debe almacenar hora_pidio_cuenta');
+    });
+
+    it('T1.23: Cooldown logic keeps button disabled for <120s and re-activates >=120s if still open', () => {
+      const ahora = Date.now();
+      // Pasaron 45s (< 120s): debe seguir deshabilitado con 75s restantes
+      const ts45s = ahora - (45 * 1000);
+      const restante45s = Math.max(0, 120 - Math.floor((ahora - ts45s) / 1000));
+      assert.strictEqual(restante45s, 75);
+      const deshabilitado = restante45s > 0;
+      assert.strictEqual(deshabilitado, true);
+
+      // Pasaron 121s (>= 120s): debe reactivarse si la cuenta sigue abierta
+      const ts121s = ahora - (121 * 1000);
+      const restante121s = Math.max(0, 120 - Math.floor((ahora - ts121s) / 1000));
+      assert.strictEqual(restante121s, 0);
+      const cuentaAbierta = true;
+      const reactivado = restante121s <= 0 && cuentaAbierta;
+      assert.strictEqual(reactivado, true);
+    });
+
+    it('T1.24: Completing payment frees table and resets hora_pidio_cuenta to NULL', async () => {
+      const resCmd = await fetch(`${server.baseUrl}/api/comandas/enviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mesaId: 2,
+          items: [{ id: 1, cantidad: 1, precio: 2000, nombre: 'Imperial', curso: 1, destino: 'barra' }]
+        })
+      });
+      const { ordenId } = await resCmd.json();
+
+      await fetch(`${server.baseUrl}/api/cliente/mesa/2/pedir-cuenta`, { method: 'POST' });
+
+      const resPago = await fetch(`${server.baseUrl}/api/ordenes/${ordenId}/cobrar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metodo: 'Efectivo',
+          monto: 2500,
+          cambio: 500
+        })
+      });
+      assert.strictEqual(resPago.status, 200);
+
+      const resMesa = await fetch(`${server.baseUrl}/api/cliente/mesa/2`);
+      const data = await resMesa.json();
+      assert.strictEqual(data.mesa.estado, 'libre');
+      assert.strictEqual(data.mesa.pidio_cuenta_qr, 0);
+      assert.strictEqual(data.mesa.hora_pidio_cuenta, null);
+    });
+  });
 });

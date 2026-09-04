@@ -706,8 +706,14 @@ window.actualizarBotonPisoSalon = function() {
     btn.classList.remove('alerta-piso-cuenta');
   }
 
+  // Re-aplicar estilos visuales personalizados si existen
   // Re-aplicar estilos visuales personalizados si existen con !important para sobreescribir gradientes
   if (customStyles) {
+    if (customStyles.bgColor) btn.style.backgroundColor = customStyles.bgColor;
+    if (customStyles.textColor) btn.style.color = customStyles.textColor;
+    if (customStyles.fontSize) btn.style.fontSize = customStyles.fontSize;
+    if (customStyles.borderRadius) btn.style.borderRadius = customStyles.borderRadius;
+    if (customStyles.padding) btn.style.padding = customStyles.padding;
     if (customStyles.bgColor) {
       btn.style.setProperty('background', customStyles.bgColor, 'important');
       btn.style.setProperty('background-image', 'none', 'important');
@@ -775,6 +781,11 @@ window.actualizarBotonPisoEditor = function() {
     }
 
     if (customStyles) {
+      if (customStyles.bgColor) btnToggle.style.backgroundColor = customStyles.bgColor;
+      if (customStyles.textColor) btnToggle.style.color = customStyles.textColor;
+      if (customStyles.fontSize) btnToggle.style.fontSize = customStyles.fontSize;
+      if (customStyles.borderRadius) btnToggle.style.borderRadius = customStyles.borderRadius;
+      if (customStyles.padding) btnToggle.style.padding = customStyles.padding;
       if (customStyles.bgColor) {
         btnToggle.style.setProperty('background', customStyles.bgColor, 'important');
         btnToggle.style.setProperty('background-image', 'none', 'important');
@@ -4349,18 +4360,80 @@ function initQrCliente() {
     btnClose.addEventListener('click', () => document.getElementById('modalQrCliente').classList.remove('active'));
   }
 
+  let _phoneMockupTimerInterval = null;
+
+  function iniciarTemporizadorPhoneMockup(mesaId, segundosRestantes) {
+    if (_phoneMockupTimerInterval) {
+      clearInterval(_phoneMockupTimerInterval);
+      _phoneMockupTimerInterval = null;
+    }
+
+    const btn = document.getElementById('btnClientePideCuentaWeb');
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.classList.add('disabled');
+
+    let segs = Math.max(0, Math.round(segundosRestantes));
+
+    function tick() {
+      const sel = document.getElementById('qrSelectMesa');
+      const currentMesaId = sel ? Number(sel.value) : null;
+      if (currentMesaId && currentMesaId !== Number(mesaId)) {
+        clearInterval(_phoneMockupTimerInterval);
+        _phoneMockupTimerInterval = null;
+        return;
+      }
+
+      if (segs <= 0) {
+        clearInterval(_phoneMockupTimerInterval);
+        _phoneMockupTimerInterval = null;
+
+        const mesaObj = estado.mesas.find(m => m.id === Number(mesaId));
+        const sigueAbierta = Boolean(mesaObj && mesaObj.estado !== 'libre');
+
+        if (sigueAbierta) {
+          btn.disabled = false;
+          btn.classList.remove('disabled');
+          btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero';
+          try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+        } else {
+          btn.disabled = true;
+          btn.classList.add('disabled');
+          btn.innerHTML = '✅ Mesa Libre';
+          try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+        }
+        return;
+      }
+
+      const mins = Math.floor(segs / 60);
+      const rem = (segs % 60).toString().padStart(2, '0');
+      btn.innerHTML = `⏳ Mesero Solicitado (${mins}:${rem})`;
+      segs--;
+    }
+
+    tick();
+    _phoneMockupTimerInterval = setInterval(tick, 1000);
+  }
+
   const btnPideCuentaWeb = document.getElementById('btnClientePideCuentaWeb');
   if (btnPideCuentaWeb) {
     btnPideCuentaWeb.addEventListener('click', async () => {
-      const mesaId = Number(document.getElementById('qrSelectMesa').value) || (estado.mesaActiva ? estado.mesaActiva.id : 1);
+      if (btnPideCuentaWeb.disabled) return;
+      const sel = document.getElementById('qrSelectMesa');
+      const mesaId = Number(sel ? sel.value : (estado.mesaActiva ? estado.mesaActiva.id : 1));
+
+      const ahora = Date.now();
+      try { localStorage.setItem('solicitar_mesero_ts_' + mesaId, ahora.toString()); } catch (_) {}
+      iniciarTemporizadorPhoneMockup(mesaId, 120);
+
       try {
         await fetch('/api/cliente/mesa/' + mesaId + '/pedir-cuenta', { method: 'POST' });
       } catch (e) {}
+
       sonarCampanaCocina();
-      alert('📱 ¡Aviso enviado al mesero! La mesa solicitó la cuenta.');
-      document.getElementById('modalQrCliente').classList.remove('active');
-      if (document.getElementById('modalComandero')) {
-        document.getElementById('modalComandero').classList.remove('active');
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('📱 ¡Aviso enviado al mesero! La mesa solicitó la cuenta.', 'warning');
       }
       cargarMesasDesdeBackend();
     });
@@ -4408,6 +4481,46 @@ window.cargarQrMesaSeleccionada = async function() {
           </div>
         `).join('');
         document.getElementById('phoneClientTotal').textContent = formatCRC(dataCliente.orden ? dataCliente.orden.total : 0);
+      }
+    }
+
+    // Sincronizar estado del botón en el mockup del teléfono
+    const btnPhone = document.getElementById('btnClientePideCuentaWeb');
+    if (btnPhone) {
+      if (!dataCliente.items || !dataCliente.items.length || (dataCliente.mesa && dataCliente.mesa.estado === 'libre')) {
+        btnPhone.disabled = true;
+        btnPhone.classList.add('disabled');
+        btnPhone.innerHTML = '✅ Mesa Libre (Sin cuenta)';
+        if (_phoneMockupTimerInterval) {
+          clearInterval(_phoneMockupTimerInterval);
+          _phoneMockupTimerInterval = null;
+        }
+      } else {
+        let tsSolicitud = null;
+        try {
+          const lsVal = localStorage.getItem('solicitar_mesero_ts_' + mesaId);
+          if (lsVal) tsSolicitud = Number(lsVal);
+        } catch (_) {}
+
+        if (!tsSolicitud && dataCliente.mesa.hora_pidio_cuenta && dataCliente.mesa.pidio_cuenta_qr) {
+          tsSolicitud = new Date(dataCliente.mesa.hora_pidio_cuenta).getTime();
+        }
+
+        if (tsSolicitud) {
+          const transcurrido = Math.floor((Date.now() - tsSolicitud) / 1000);
+          const restante = 120 - transcurrido;
+          if (restante > 0) {
+            iniciarTemporizadorPhoneMockup(mesaId, restante);
+          } else {
+            btnPhone.disabled = false;
+            btnPhone.classList.remove('disabled');
+            btnPhone.innerHTML = '🙋 Solicitar la Cuenta al Mesero';
+          }
+        } else {
+          btnPhone.disabled = false;
+          btnPhone.classList.remove('disabled');
+          btnPhone.innerHTML = '🙋 Solicitar la Cuenta al Mesero';
+        }
       }
     }
   } catch (e) {
@@ -6125,6 +6238,7 @@ window.aplicarPersonalizacionAlDOM = function(config) {
   if (!config) config = estado.personalizacionPagina;
   if (!config) return;
 
+  // 1. Textos directos
   // 1. Inyectar reglas CSS prioritarias en <head>
   if (typeof window.inyectarEstilosPersonalizadosHead === 'function') {
     window.inyectarEstilosPersonalizadosHead(config.elementStyles);
@@ -6137,10 +6251,10 @@ window.aplicarPersonalizacionAlDOM = function(config) {
         if (!item || item.valor === undefined) return;
         const cleanId = key.startsWith('#') ? key.slice(1) : key;
         if (item.tipo === 'id-text') {
-          const el = document.getElementById(cleanId);
+          const el = document.getElementById(cleanId) || document.getElementById(key);
           if (el) el.textContent = item.valor;
         } else if (item.tipo === 'placeholder') {
-          const el = document.getElementById(cleanId);
+          const el = document.getElementById(cleanId) || document.getElementById(key);
           if (el) el.placeholder = item.valor;
         } else if (item.tipo === 'selector-text') {
           document.querySelectorAll(key).forEach(el => el.textContent = item.valor);
@@ -6158,6 +6272,7 @@ window.aplicarPersonalizacionAlDOM = function(config) {
     });
   }
 
+  // 2. Variables CSS
   // 3. Variables CSS
   if (config.cssVars) {
     Object.entries(config.cssVars).forEach(([varName, varVal]) => {
@@ -6200,6 +6315,7 @@ window.aplicarPersonalizacionAlDOM = function(config) {
     });
   }
 
+  // Sincronizar botones dinámicos de cambio de piso
   // 6. Sincronizar botones dinámicos de cambio de piso
   if (typeof window.actualizarBotonPisoSalon === 'function') {
     try { window.actualizarBotonPisoSalon(); } catch (_) {}
@@ -6697,22 +6813,28 @@ window.aplicarCambioElementoActual = function(prop, valor) {
     el.innerHTML = valor;
     estado.personalizacionPagina.elementStyles[selector].text = valor;
   } else if (prop === 'bgColor') {
+    el.style.backgroundColor = valor;
     el.style.setProperty('background', valor, 'important');
     el.style.setProperty('background-image', 'none', 'important');
     estado.personalizacionPagina.elementStyles[selector].bgColor = valor;
   } else if (prop === 'textColor') {
+    el.style.color = valor;
     el.style.setProperty('color', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].textColor = valor;
   } else if (prop === 'fontSize') {
+    el.style.fontSize = valor;
     el.style.setProperty('font-size', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].fontSize = valor;
   } else if (prop === 'borderRadius') {
+    el.style.borderRadius = valor;
     el.style.setProperty('border-radius', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].borderRadius = valor;
   } else if (prop === 'padding') {
+    el.style.padding = valor;
     el.style.setProperty('padding', valor, 'important');
     estado.personalizacionPagina.elementStyles[selector].padding = valor;
   } else if (prop === 'display') {
+    el.style.display = valor === 'none' ? 'none' : '';
     el.style.setProperty('display', valor === 'none' ? 'none' : '', 'important');
     estado.personalizacionPagina.elementStyles[selector].display = valor;
   } else if (prop === 'customCSS') {
