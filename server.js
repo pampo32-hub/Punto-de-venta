@@ -2050,7 +2050,7 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 app.post('/api/ordenes/:id/cobrar', async (req, res) => {
   try {
     const ordenId = req.params.id;
-    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival' } = req.body;
+    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival', liquidar_total = true, items_pagados = [] } = req.body;
     const ahora = new Date().toISOString();
 
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
@@ -2064,21 +2064,75 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
       [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
     );
 
-    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+    if (liquidar_total) {
+      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
 
-    if (orden.mesa_id) {
-      await dbRun(
-        "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
-        [orden.mesa_id]
+      if (orden.mesa_id) {
+        await dbRun(
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+          [orden.mesa_id]
+        );
+        await dbRun(
+          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+          [orden.mesa_id, orden.mesa_id]
+        );
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+      }
+
+      res.json({ message: 'Cobro completado y mesa liberada', ordenId, es_parcial: false });
+    } else {
+      // PAGO PARCIAL
+      if (Array.isArray(items_pagados) && items_pagados.length > 0) {
+        for (const item of items_pagados) {
+          const qty = Number(item.cantidad) || 1;
+          const detalleItems = await dbAll(
+            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+            [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto]
+          );
+
+          let restanteADescontar = qty;
+          for (const det of detalleItems) {
+            if (restanteADescontar <= 0) break;
+            if (det.cantidad <= restanteADescontar) {
+              restanteADescontar -= det.cantidad;
+              await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE id = ?", [det.id]);
+            } else {
+              const nuevaCant = det.cantidad - restanteADescontar;
+              const nuevoSub = nuevaCant * det.precio_unitario;
+              await dbRun("UPDATE DetalleOrden SET cantidad = ?, subtotal = ? WHERE id = ?", [nuevaCant, nuevoSub, det.id]);
+
+              const subPagado = restanteADescontar * det.precio_unitario;
+              await dbRun(
+                "INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?)",
+                [det.orden_id, det.producto_id, det.nombre_producto, det.precio_unitario, restanteADescontar, subPagado, det.notas, det.curso, det.destino, det.hora_pedido, det.hora_listo, det.creado_en, det.origen_mesa_numero, det.comanda_numero || 1]
+              );
+              restanteADescontar = 0;
+            }
+          }
+        }
+      }
+
+      // Recalcular subtotal y total de la orden con los ítems activos no pagados
+      const itemsActivos = await dbAll(
+        "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'",
+        [ordenId]
       );
+      const nuevoSubtotal = itemsActivos.reduce((acc, it) => acc + (it.precio_unitario * it.cantidad), 0);
+      const servicio10 = Math.round(nuevoSubtotal * 0.10);
+      const iva13 = Math.round(nuevoSubtotal * 0.13);
+      const nuevoTotal = nuevoSubtotal + servicio10 + iva13;
+
       await dbRun(
-        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-        [orden.mesa_id, orden.mesa_id]
+        "UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+        [nuevoSubtotal, servicio10, iva13, nuevoTotal, ordenId]
       );
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+
+      if (orden.mesa_id) {
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
+      }
+
+      res.json({ message: 'Cobro parcial registrado con éxito', ordenId, es_parcial: true, saldo_restante: nuevoTotal });
     }
-
-    res.json({ message: 'Cobro completado y mesa liberada', ordenId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

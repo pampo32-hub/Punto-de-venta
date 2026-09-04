@@ -2978,15 +2978,36 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', () => {
   estado.cobroSplitPersonaIndex = null;
 
   const totalTxt = document.getElementById('comTotal').textContent;
-  document.getElementById('cobroMesaTitulo').textContent = estado.mesaActiva.numero;
+  const lblTitulo = document.getElementById('lblTituloCobroModal');
+  if (lblTitulo) lblTitulo.textContent = '💵 Cobrar y Liquidar Cuenta';
+  const btnCobrar = document.getElementById('btnFinalizarCobro');
+  if (btnCobrar) {
+    btnCobrar.textContent = '✅ Liquidar, Imprimir & Liberar Mesa';
+    btnCobrar.className = 'btn-pri success';
+  }
+
+  document.getElementById('cobroMesaTitulo').textContent = estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa';
   document.getElementById('cobroTotalDisplay').textContent = totalTxt;
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0.00';
   document.getElementById('modalCobro').classList.add('active');
 });
 
-document.getElementById('btnCloseCobroModal').addEventListener('click', () => document.getElementById('modalCobro').classList.remove('active'));
-document.getElementById('btnCancelarCobro').addEventListener('click', () => document.getElementById('modalCobro').classList.remove('active'));
+document.getElementById('btnCloseCobroModal').addEventListener('click', () => {
+  document.getElementById('modalCobro').classList.remove('active');
+  if (estado.cobroSplitPersonaIndex != null) {
+    document.getElementById('modalSplitBill').classList.add('active');
+    estado.cobroSplitPersonaIndex = null;
+  }
+});
+
+document.getElementById('btnCancelarCobro').addEventListener('click', () => {
+  document.getElementById('modalCobro').classList.remove('active');
+  if (estado.cobroSplitPersonaIndex != null) {
+    document.getElementById('modalSplitBill').classList.add('active');
+    estado.cobroSplitPersonaIndex = null;
+  }
+});
 
 document.querySelectorAll('.pay-method-tab').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -3025,13 +3046,14 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   const cambio = Math.max(0, recibido - totalNum);
 
   const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
-  const mesaNumero = estado.mesaActiva ? estado.mesaActiva.numero : 'Mesa';
+  const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
 
   const esCobroSplitPersona = (estado.cobroSplitPersonaIndex != null && splitState && splitState.personas && splitState.personas[estado.cobroSplitPersonaIndex]);
+  let personaCobrada = null;
   let esLiquidacionFinal = true;
 
   if (esCobroSplitPersona) {
-    const personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
+    personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
     personaCobrada.guardada = true;
     personaCobrada.pagada = true;
 
@@ -3039,7 +3061,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     const personasConItemsSinPagar = splitState.personas.filter(p => !p.pagada && p.items && p.items.length > 0);
     const itemsEnMesaSinAsignar = (splitState.itemsDisponibles || []).filter(it => it.cantidad > 0);
     esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
-    estado.cobroSplitPersonaIndex = null;
   }
 
   if (ordenId) {
@@ -3053,10 +3074,13 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           propina: Math.round(totalNum * 0.10),
           cambio,
           mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
-          liquidar_total: esLiquidacionFinal
+          liquidar_total: esLiquidacionFinal,
+          items_pagados: personaCobrada ? personaCobrada.items : []
         })
       });
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error al registrar cobro:', e);
+    }
   }
 
   if (esLiquidacionFinal) {
@@ -3070,16 +3094,52 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       estado.mesaActiva.pidio_cuenta_qr = 0;
       estado.mesaActiva.cuenta_pedida = false;
     }
+    estado.cobroSplitPersonaIndex = null;
     document.getElementById('modalCobro').classList.remove('active');
     document.getElementById('modalComandero').classList.remove('active');
     document.getElementById('modalSplitBill').classList.remove('active');
   } else {
-    alert(`✅ ¡Pago registrado con éxito!\n\n• Tiquete impreso.\n• Mesa permanece abierta con saldo pendiente.`);
-    document.getElementById('modalCobro').classList.remove('active');
-    if (document.getElementById('modalSplitBill').classList.contains('active')) {
-      renderSplitPersonaActiva();
-      renderSplitColaPersonas();
+    // Cobro parcial:
+    // 1. Descontar los productos pagados de estado.mesaActiva.items
+    if (personaCobrada && personaCobrada.items && estado.mesaActiva && estado.mesaActiva.items) {
+      personaCobrada.items.forEach(pItem => {
+        let restante = pItem.cantidad;
+        for (let i = 0; i < estado.mesaActiva.items.length; i++) {
+          const mItem = estado.mesaActiva.items[i];
+          if (mItem.nombre === pItem.nombre || mItem.id === pItem.producto_id || mItem.producto_id === pItem.producto_id) {
+            if (mItem.cantidad <= restante) {
+              restante -= mItem.cantidad;
+              estado.mesaActiva.items.splice(i, 1);
+              i--;
+            } else {
+              mItem.cantidad -= restante;
+              mItem.subtotal = mItem.cantidad * mItem.precio;
+              restante = 0;
+            }
+            if (restante <= 0) break;
+          }
+        }
+      });
     }
+
+    // Recalcular y renderizar comanda en vivo
+    if (typeof renderComanda === 'function') {
+      renderComanda();
+    }
+
+    alert(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado!\n\n• Monto cobrado: ${formatCRCSinDecimales(totalNum)}\n• Tiquete impreso.\n• Mesa permanece abierta con productos pendientes.`);
+
+    estado.cobroSplitPersonaIndex = null;
+    document.getElementById('modalCobro').classList.remove('active');
+
+    // Volver a la división de cuentas para continuar cobrando a las siguientes personas
+    const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && p.items && p.items.length > 0);
+    if (sigPersonaIdx !== -1) {
+      splitState.personaActivaIndex = sigPersonaIdx;
+    }
+    renderSplitPersonaActiva();
+    renderSplitColaPersonas();
+    document.getElementById('modalSplitBill').classList.add('active');
   }
 
   await cargarMesasDesdeBackend();
@@ -3886,14 +3946,15 @@ function renderSplitColaPersonas() {
   if (!carousel) return;
 
   carousel.innerHTML = '';
-  const guardadasCount = splitState.personas.filter(p => p.guardada).length;
+  const guardadasCount = splitState.personas.filter(p => p.guardada || p.pagada).length;
   if (progressEl) progressEl.textContent = `${guardadasCount} de ${splitState.personas.length} listas`;
 
   splitState.personas.forEach((p, idx) => {
     recalcularPersona(p);
     const card = document.createElement('div');
     const esActiva = (idx === splitState.personaActivaIndex);
-    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''}`;
+    const yaPagada = p.pagada;
+    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''} ${yaPagada ? 'paid-card' : ''}`;
 
     const totalItems = (p.items || []).reduce((acc, it) => acc + it.cantidad, 0);
     const summaryTxt = totalItems > 0 
@@ -3902,15 +3963,15 @@ function renderSplitColaPersonas() {
 
     card.innerHTML = `
       <div class="card-head">
-        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''}</span>
+        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''} ${yaPagada ? '<small style="color:#10b981; font-weight:bold;">(Pagado ✅)</small>' : ''}</span>
         <span class="card-total">${formatCRCSinDecimales(p.total)}</span>
       </div>
       <div class="card-items-summary" title="${escapeHtml(summaryTxt)}">
         ${escapeHtml(summaryTxt)}
       </div>
       <div class="card-actions">
-        <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
-        <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
+        <button type="button" class="btn-edit-split" ${yaPagada ? 'disabled style="opacity:0.5;"' : ''} onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
+        <button type="button" class="btn-pay-split" ${yaPagada ? 'disabled style="opacity:0.5; background:#10b981;"' : ''} onclick="cobrarPersonaSplit(${idx})">${yaPagada ? '✅ Pagado' : '💵 Pago Parcial'}</button>
       </div>
     `;
 
@@ -3932,10 +3993,23 @@ window.cobrarPersonaSplit = function(personaIndex) {
     alert('Esta persona no tiene productos asignados para cobrar.');
     return;
   }
+  if (p.pagada) {
+    alert(`Esta persona (${p.nombre}) ya realizó su pago.`);
+    return;
+  }
   estado.cobroSplitPersonaIndex = personaIndex;
   document.getElementById('modalSplitBill').classList.remove('active');
 
-  document.getElementById('cobroMesaTitulo').textContent = `${estado.mesaActiva.numero} - ${p.nombre}`;
+  const lblTitulo = document.getElementById('lblTituloCobroModal');
+  if (lblTitulo) lblTitulo.textContent = `💵 Cobro Parcial - ${p.nombre}`;
+  const btnCobrar = document.getElementById('btnFinalizarCobro');
+  if (btnCobrar) {
+    btnCobrar.textContent = '✅ Cobrar';
+    btnCobrar.className = 'btn-pri success';
+  }
+
+  const mesaNom = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
+  document.getElementById('cobroMesaTitulo').textContent = `${mesaNom} - ${p.nombre}`;
   document.getElementById('cobroTotalDisplay').textContent = formatCRCSinDecimales(p.total);
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0';

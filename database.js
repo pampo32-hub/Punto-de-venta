@@ -545,18 +545,18 @@ function initDb() {
       { cat: 3, nombre: 'Prestiños con miel de caña', precio: 2500, destino: 'cocina', curso: 3 },
 
       // 4. Cervezas (cat: 4)
-      { cat: 4, nombre: 'Imperial Regular', precio: 1800, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/imperial_regular.jpg' },
-      { cat: 4, nombre: 'Imperial Light', precio: 1800, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/imperial_light.jpg' },
-      { cat: 4, nombre: 'Imperial Silver', precio: 1800, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/imperial_silver.jpg' },
-      { cat: 4, nombre: 'Imperial Ultra', precio: 2000, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/imperial_ultra.jpg' },
-      { cat: 4, nombre: 'Pilsen', precio: 1800, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/pilsen.jpg' },
-      { cat: 4, nombre: 'Pilsen 6.0', precio: 2000, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/pilsen_6_0.jpg' },
-      { cat: 4, nombre: 'Bavaria Gold', precio: 2200, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/bavaria_gold.jpg' },
-      { cat: 4, nombre: 'Bavaria Light', precio: 2200, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/bavaria_light.jpg' },
-      { cat: 4, nombre: 'Bavaria Dark', precio: 2200, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/bavaria_dark.jpg' },
-      { cat: 4, nombre: 'Bavaria Masters', precio: 2500, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/bavaria_masters.jpg' },
-      { cat: 4, nombre: 'Rock Ice', precio: 1800, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/rock_ice.jpg' },
-      { cat: 4, nombre: 'Rock Ice Limo-Ness', precio: 1800, destino: 'barra', curso: 1, imagen_url: '/img/cervezas/rock_limon_sal.jpg' },
+      { cat: 4, nombre: 'Imperial Regular', precio: 1800, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Imperial Light', precio: 1800, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Imperial Silver', precio: 1800, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Imperial Ultra', precio: 2000, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Pilsen', precio: 1800, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Pilsen 6.0', precio: 2000, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Bavaria Gold', precio: 2200, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Bavaria Light', precio: 2200, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Bavaria Dark', precio: 2200, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Bavaria Masters', precio: 2500, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Rock Ice', precio: 1800, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Rock Ice Limo-Ness', precio: 1800, destino: 'barra', curso: 1 },
       { cat: 4, nombre: 'Cerveza Artesanal Treintaycinco', precio: 3500, destino: 'barra', curso: 1 },
       { cat: 4, nombre: 'Cerveza Artesanal Costa Rica Beer Factory', precio: 3500, destino: 'barra', curso: 1 },
       { cat: 4, nombre: 'Cerveza Artesanal Domingo Siete', precio: 3500, destino: 'barra', curso: 1 },
@@ -589,18 +589,17 @@ function initDb() {
     ];
 
     productosOficiales.forEach(prod => {
-      db.get('SELECT id, imagen_url FROM Productos WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?))', [prod.nombre], (err, existing) => {
-        const imgUrlFinal = prod.imagen_url || (existing ? existing.imagen_url : null);
+      db.get('SELECT id FROM Productos WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?))', [prod.nombre], (err, existing) => {
         if (!err && existing) {
           db.run(
-            `UPDATE Productos SET categoria_id = ?, precio = ?, destino = ?, curso = ?, imagen_url = ?, activo = 1 WHERE id = ?`,
-            [prod.cat, prod.precio, prod.destino, prod.curso, imgUrlFinal, existing.id]
+            `UPDATE Productos SET categoria_id = ?, precio = ?, destino = ?, curso = ?, activo = 1 WHERE id = ?`,
+            [prod.cat, prod.precio, prod.destino, prod.curso, existing.id]
           );
         } else if (!err && !existing) {
           db.run(
-            `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, activo, agotado, happy_hour)
-             VALUES (1, ?, ?, ?, ?, ?, ?, 1, 0, 0)`,
-            [prod.cat, prod.nombre, prod.precio, prod.destino, prod.curso, imgUrlFinal]
+            `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, activo, agotado, happy_hour)
+             VALUES (1, ?, ?, ?, ?, ?, 1, 0, 0)`,
+            [prod.cat, prod.nombre, prod.precio, prod.destino, prod.curso]
           );
         }
       });
@@ -608,8 +607,6 @@ function initDb() {
 
     // Mapear productos anteriores a sus nuevas categorías correctas
     db.run("UPDATE Productos SET categoria_id = 4 WHERE LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%cerveza%'");
-    db.run("UPDATE Productos SET imagen_url = '/img/cervezas/imperial_regular.jpg' WHERE LOWER(nombre) = 'imperial regular'");
-    db.run("UPDATE Productos SET imagen_url = '/img/cervezas/pilsen.jpg' WHERE LOWER(nombre) = 'pilsen'");
     db.run("UPDATE Productos SET categoria_id = 5 WHERE LOWER(nombre) LIKE '%mojito%' OR LOWER(nombre) LIKE '%margarita%' OR LOWER(nombre) LIKE '%gin tonic%' OR LOWER(nombre) LIKE '%chiliguaro%' OR LOWER(nombre) LIKE '%guaro%' OR LOWER(nombre) LIKE '%coctel%' OR LOWER(nombre) LIKE '%shot%'");
     db.run("UPDATE Productos SET categoria_id = 6 WHERE LOWER(nombre) LIKE '%fresco%' OR LOWER(nombre) LIKE '%refresco%' OR LOWER(nombre) LIKE '%café%' OR LOWER(nombre) LIKE '%cafe%' OR LOWER(nombre) LIKE '%agua%' OR LOWER(nombre) LIKE '%horchata%' OR LOWER(nombre) LIKE '%resbaladera%'");
     db.run("UPDATE Productos SET categoria_id = 2 WHERE LOWER(nombre) LIKE '%patacon%' OR LOWER(nombre) LIKE '%yuca%' OR LOWER(nombre) LIKE '%chorreada%' OR LOWER(nombre) LIKE '%ceviche%' OR LOWER(nombre) LIKE '%empanada%' OR LOWER(nombre) LIKE '%tamal%' OR LOWER(nombre) LIKE '%alita%' OR LOWER(nombre) LIKE '%caldosa%'");
