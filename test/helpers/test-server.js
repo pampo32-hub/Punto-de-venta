@@ -4,26 +4,26 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
 const fs = require('fs');
-const DB_PATH = path.join(__dirname, '../../pos.db');
-const DB_BACKUP_PATH = path.join(__dirname, '../../pos.db.test-bak');
+const DB_MAIN_PATH = path.join(__dirname, '../../pos.db');
+const DB_PATH = path.join(__dirname, '../../pos.test.db');
 
-// Backup original db on module load if not already backed up
+// Create isolated test db copy from main db
 try {
-  if (fs.existsSync(DB_PATH) && !fs.existsSync(DB_BACKUP_PATH)) {
-    fs.copyFileSync(DB_PATH, DB_BACKUP_PATH);
+  if (fs.existsSync(DB_MAIN_PATH)) {
+    fs.copyFileSync(DB_MAIN_PATH, DB_PATH);
   }
 } catch (_) {}
 
-function restoreOriginalDb() {
+function cleanupTestDb() {
   try {
-    if (fs.existsSync(DB_BACKUP_PATH)) {
-      fs.copyFileSync(DB_BACKUP_PATH, DB_PATH);
+    if (fs.existsSync(DB_PATH)) {
+      fs.unlinkSync(DB_PATH);
     }
   } catch (_) {}
 }
 
 process.on('exit', () => {
-  restoreOriginalDb();
+  cleanupTestDb();
 });
 
 
@@ -85,6 +85,7 @@ async function startTestServer() {
       ...process.env,
       PORT: String(port),
       NODE_ENV: 'test',
+      POS_DB_PATH: DB_PATH,
       SUPERVISOR_PIN: '1234'
     },
     stdio: ['pipe', 'pipe', 'pipe']
@@ -360,7 +361,8 @@ function formatearNombreItemConOrigen(item, mesaActualNumero) {
 module.exports = {
   startTestServer,
   getFreePort,
-  restoreOriginalDb,
+  cleanupTestDb,
+  restoreOriginalDb: cleanupTestDb,
   evaluarBotonComanda,
   evaluarEstadoMesaKDS,
   formatearTooltipEspera,
