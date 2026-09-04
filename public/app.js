@@ -58,36 +58,273 @@ window.abrirModalRenombrarMesa = function(mesaId, nombreActual) {
   if (modal) modal.classList.add('active');
 };
 
-window.abrirModalNuevoProducto = function() {
+window.seleccionarEmojiCat = function(emoji) {
+  const txt = document.getElementById('txtNuevaCatIcono');
+  if (txt) txt.value = emoji;
+};
+
+window.setShotMl = function(ml) {
+  const txt = document.getElementById('txtKardexShotMl');
+  if (txt) {
+    txt.value = ml;
+    window.recalcularInfoShotKardex();
+  }
+};
+
+window.cambiarTipoKardexProducto = function() {
+  const tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
+  const boxShot = document.getElementById('boxKardexShotConfig');
+  const boxUnidad = document.getElementById('boxKardexUnidadConfig');
+  const badge = document.getElementById('badgeKardexEstado');
+
+  if (boxShot) boxShot.style.display = (tipo === 'shot') ? 'block' : 'none';
+  if (boxUnidad) boxUnidad.style.display = (tipo === 'unidad') ? 'block' : 'none';
+
+  if (badge) {
+    if (tipo === 'shot') {
+      badge.textContent = '🍸 Shot / Trago';
+      badge.style.background = 'rgba(2, 132, 199, 0.2)';
+      badge.style.color = '#38bdf8';
+    } else if (tipo === 'unidad') {
+      badge.textContent = '📦 Unidad Completa';
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#34d399';
+    } else {
+      badge.textContent = 'Sin vincular';
+      badge.style.background = '#1e293b';
+      badge.style.color = '#94a3b8';
+    }
+  }
+
+  if (tipo === 'shot') {
+    window.recalcularInfoShotKardex();
+  }
+};
+
+window.recalcularInfoShotKardex = function() {
+  const selBot = document.getElementById('selectKardexBotella');
+  const txtMl = document.getElementById('txtKardexShotMl');
+  const info = document.getElementById('infoKardexCalculoShot');
+  if (!selBot || !info) return;
+
+  const opt = selBot.options[selBot.selectedIndex];
+  if (!opt || !opt.value) {
+    info.innerHTML = '⚠️ Por favor selecciona una botella de licor del Kárdex.';
+    return;
+  }
+
+  const capacidad = parseFloat(opt.dataset.capacidad) || 750;
+  const costo = parseFloat(opt.dataset.costo) || 0;
+  const stock = parseFloat(opt.dataset.stock) || 0;
+  const ml = parseFloat(txtMl?.value) || 30;
+
+  if (ml <= 0) {
+    info.innerHTML = '⚠️ Ingresa una medida de shot válida en ml (mayor a 0).';
+    return;
+  }
+
+  const fraccion = Math.round((ml / capacidad) * 10000) / 10000;
+  const shotsPorBotella = Math.round((capacidad / ml) * 10) / 10;
+  const costoShot = Math.round(costo * fraccion);
+
+  info.innerHTML = `
+    <strong>🍸 Deducción configurada:</strong> Cada venta descuenta <strong>${ml} ml</strong> de la botella de ${capacidad} ml.<br>
+    📊 <strong>Rendimiento:</strong> ~${shotsPorBotella} shots por botella | Fracción: ${fraccion} bot.<br>
+    💰 <strong>Costo estimado por trago:</strong> ${formatCRC(costoShot)} (Costo botella: ${formatCRC(costo)}) | <strong>Stock actual:</strong> ${stock} bot.
+  `;
+};
+
+function poblarSelectoresKardexProducto(insumoIdSeleccionado = null, tipoPre = 'ninguno', mlPre = 30) {
+  const selBot = document.getElementById('selectKardexBotella');
+  const selUni = document.getElementById('selectKardexInsumoUnidad');
+  const inv = estado.inventario || [];
+
+  // Licores para shots: insumos con es_licor = 1 o categoria Licores
+  if (selBot) {
+    const licores = inv.filter(i => i.es_licor || /licor|destilado|whisky|ron|tequila|vodka|cacique|gin/i.test(i.categoria || '') || /licor|destilado|whisky|ron|tequila|vodka|cacique|gin/i.test(i.nombre || ''));
+    if (!licores.length) {
+      selBot.innerHTML = '<option value="">(No hay botellas de licor registradas en Kárdex)</option>';
+    } else {
+      selBot.innerHTML = licores.map(i => {
+        const cap = i.capacidad_ml || 750;
+        const selected = (insumoIdSeleccionado && Number(insumoIdSeleccionado) === Number(i.id)) ? 'selected' : '';
+        return `<option value="${i.id}" data-capacidad="${cap}" data-costo="${i.costo_unitario || 0}" data-stock="${i.stock_actual}" ${selected}>
+          🍾 ${i.nombre} (${cap}ml) — Stock: ${i.stock_actual} bot.
+        </option>`;
+      }).join('');
+    }
+  }
+
+  // Insumos generales para unidad completa
+  if (selUni) {
+    if (!inv.length) {
+      selUni.innerHTML = '<option value="">(No hay insumos registrados en Kárdex)</option>';
+    } else {
+      selUni.innerHTML = inv.map(i => {
+        const selected = (insumoIdSeleccionado && Number(insumoIdSeleccionado) === Number(i.id)) ? 'selected' : '';
+        return `<option value="${i.id}" ${selected}>
+          📦 ${i.nombre} (${i.categoria || 'General'}) — Stock: ${i.stock_actual} ${i.unidad_medida}
+        </option>`;
+      }).join('');
+    }
+  }
+
+  const txtMl = document.getElementById('txtKardexShotMl');
+  if (txtMl && mlPre) txtMl.value = mlPre;
+
+  const selTipo = document.getElementById('selectKardexTipo');
+  if (selTipo) selTipo.value = tipoPre;
+
+  window.cambiarTipoKardexProducto();
+}
+
+window.abrirModalNuevoProducto = async function() {
   const modal = document.getElementById('modalAgregarProducto');
+  const txtId = document.getElementById('txtNuevoProdId');
   const txtNombre = document.getElementById('txtNuevoProdNombre');
   const txtPrecio = document.getElementById('txtNuevoProdPrecio');
   const selCat = document.getElementById('selectNuevoProdCategoria');
   const selDest = document.getElementById('selectNuevoProdDestino');
   const txtImg = document.getElementById('txtNuevoProdImagen');
   const selCurso = document.getElementById('selectNuevoProdCurso');
+  const boxNuevaCat = document.getElementById('boxNuevaCategoriaCampos');
+  const txtNuevaCatNombre = document.getElementById('txtNuevaCatNombre');
+  const txtNuevaCatIcono = document.getElementById('txtNuevaCatIcono');
+  const iconHeader = document.getElementById('iconModalProducto');
+  const titleHeader = document.getElementById('titleModalProducto');
+  const subHeader = document.getElementById('subModalProducto');
 
+  if (iconHeader) iconHeader.textContent = '➕';
+  if (titleHeader) titleHeader.textContent = 'Agregar Producto';
+  if (subHeader) subHeader.textContent = 'Crear nuevo producto y precio en el catálogo';
+
+  if (txtId) txtId.value = '';
   if (txtNombre) txtNombre.value = '';
   if (txtPrecio) txtPrecio.value = '';
   if (txtImg) txtImg.value = '';
   if (selCurso) selCurso.value = '2';
+  if (boxNuevaCat) boxNuevaCat.style.display = 'none';
+  if (txtNuevaCatNombre) txtNuevaCatNombre.value = '';
+  if (txtNuevaCatIcono) txtNuevaCatIcono.value = '🍾';
+
+  // Asegurar que inventario esté cargado para los selectores de Kárdex
+  if (!estado.inventario || !estado.inventario.length) {
+    try {
+      const resInv = await fetch('/api/admin/inventario');
+      if (resInv.ok) estado.inventario = await resInv.json();
+    } catch(e) {}
+  }
 
   if (selCat) {
-    selCat.innerHTML = (estado.categorias || []).map(c => 
+    const cats = estado.categorias || [];
+    let opts = cats.map(c => 
       `<option value="${c.id}" data-destino="${c.destino || 'cocina'}">${c.icono || '🍽️'} ${c.nombre}</option>`
     ).join('');
+    opts += `<option value="__nueva__" style="color:#38bdf8; font-weight:700;">➕ Crear nueva categoría...</option>`;
+    selCat.innerHTML = opts;
 
-    // Ajustar destino y curso automáticamente según la categoría elegida
     selCat.onchange = function() {
-      const opt = selCat.options[selCat.selectedIndex];
-      const dest = opt ? opt.getAttribute('data-destino') : 'cocina';
-      if (selDest) selDest.value = dest || 'cocina';
-      if (selCurso) selCurso.value = (dest === 'barra' ? '1' : '2');
+      if (selCat.value === '__nueva__') {
+        if (boxNuevaCat) boxNuevaCat.style.display = 'block';
+        if (txtNuevaCatNombre) txtNuevaCatNombre.focus();
+      } else {
+        if (boxNuevaCat) boxNuevaCat.style.display = 'none';
+        const opt = selCat.options[selCat.selectedIndex];
+        const dest = opt ? opt.getAttribute('data-destino') : 'cocina';
+        if (selDest) selDest.value = dest || 'cocina';
+        if (selCurso) selCurso.value = (dest === 'barra' ? '1' : '2');
+      }
     };
     if (selCat.options.length > 0) {
       selCat.dispatchEvent(new Event('change'));
     }
   }
+
+  poblarSelectoresKardexProducto(null, 'ninguno', 30);
+
+  if (modal) modal.classList.add('active');
+  setTimeout(() => {
+    if (txtNombre) txtNombre.focus();
+  }, 100);
+};
+
+window.abrirModalEditarProducto = async function(prodId) {
+  const modal = document.getElementById('modalAgregarProducto');
+  const txtId = document.getElementById('txtNuevoProdId');
+  const txtNombre = document.getElementById('txtNuevoProdNombre');
+  const txtPrecio = document.getElementById('txtNuevoProdPrecio');
+  const selCat = document.getElementById('selectNuevoProdCategoria');
+  const selDest = document.getElementById('selectNuevoProdDestino');
+  const txtImg = document.getElementById('txtNuevoProdImagen');
+  const selCurso = document.getElementById('selectNuevoProdCurso');
+  const boxNuevaCat = document.getElementById('boxNuevaCategoriaCampos');
+  const iconHeader = document.getElementById('iconModalProducto');
+  const titleHeader = document.getElementById('titleModalProducto');
+  const subHeader = document.getElementById('subModalProducto');
+
+  const prod = (estado.productos || []).find(p => p.id === prodId);
+  if (!prod) {
+    alert('Producto no encontrado');
+    return;
+  }
+
+  if (iconHeader) iconHeader.textContent = '✏️';
+  if (titleHeader) titleHeader.textContent = `Editar: ${prod.nombre}`;
+  if (subHeader) subHeader.textContent = 'Modificar precio, categoría o vincular al Kárdex';
+
+  if (txtId) txtId.value = prod.id;
+  if (txtNombre) txtNombre.value = prod.nombre || '';
+  if (txtPrecio) txtPrecio.value = prod.precio !== undefined ? prod.precio : '';
+  if (txtImg) txtImg.value = prod.imagen_url || '';
+  if (selDest) selDest.value = prod.destino || 'cocina';
+  if (selCurso) selCurso.value = String(prod.curso || 2);
+  if (boxNuevaCat) boxNuevaCat.style.display = 'none';
+
+  // Asegurar inventario en estado
+  if (!estado.inventario || !estado.inventario.length) {
+    try {
+      const resInv = await fetch('/api/admin/inventario');
+      if (resInv.ok) estado.inventario = await resInv.json();
+    } catch(e) {}
+  }
+
+  if (selCat) {
+    const cats = estado.categorias || [];
+    let opts = cats.map(c => 
+      `<option value="${c.id}" data-destino="${c.destino || 'cocina'}" ${c.id === prod.categoria_id ? 'selected' : ''}>${c.icono || '🍽️'} ${c.nombre}</option>`
+    ).join('');
+    opts += `<option value="__nueva__" style="color:#38bdf8; font-weight:700;">➕ Crear nueva categoría...</option>`;
+    selCat.innerHTML = opts;
+
+    selCat.onchange = function() {
+      if (selCat.value === '__nueva__') {
+        if (boxNuevaCat) boxNuevaCat.style.display = 'block';
+      } else {
+        if (boxNuevaCat) boxNuevaCat.style.display = 'none';
+        const opt = selCat.options[selCat.selectedIndex];
+        const dest = opt ? opt.getAttribute('data-destino') : 'cocina';
+        if (selDest) selDest.value = dest || 'cocina';
+        if (selCurso) selCurso.value = (dest === 'barra' ? '1' : '2');
+      }
+    };
+  }
+
+  // Consultar vinculación Kárdex actual
+  let linkData = { vinculado: false, kardex_tipo: 'ninguno', insumo_id: null, ml_shot: 30 };
+  try {
+    const resLink = await fetch(`/api/productos/${prodId}/kardex-link`);
+    if (resLink.ok) {
+      linkData = await resLink.json();
+    }
+  } catch(e) {
+    console.warn('No se pudo obtener enlace kardex:', e);
+  }
+
+  poblarSelectoresKardexProducto(
+    linkData.insumo_id,
+    linkData.vinculado ? linkData.kardex_tipo : 'ninguno',
+    linkData.ml_shot || 30
+  );
 
   if (modal) modal.classList.add('active');
   setTimeout(() => {
@@ -101,6 +338,10 @@ window.cerrarModalNuevoProducto = function() {
 };
 
 window.guardarNuevoProducto = async function() {
+  const txtId = document.getElementById('txtNuevoProdId');
+  const prodId = txtId ? txtId.value : '';
+  const isEditing = Boolean(prodId);
+
   const txtNombre = document.getElementById('txtNuevoProdNombre');
   const txtPrecio = document.getElementById('txtNuevoProdPrecio');
   const selCat = document.getElementById('selectNuevoProdCategoria');
@@ -124,38 +365,111 @@ window.guardarNuevoProducto = async function() {
     return;
   }
 
-  const categoria_id = selCat ? selCat.value : null;
+  let categoria_id = selCat ? selCat.value : null;
+
+  // Si se seleccionó "+ Crear nueva categoría..."
+  if (categoria_id === '__nueva__') {
+    const txtNuevaCatNombre = document.getElementById('txtNuevaCatNombre');
+    const txtNuevaCatIcono = document.getElementById('txtNuevaCatIcono');
+    const selNuevaCatDestino = document.getElementById('selectNuevaCatDestino');
+
+    const nuevaCatNombre = (txtNuevaCatNombre ? txtNuevaCatNombre.value : '').trim();
+    const nuevaCatIcono = (txtNuevaCatIcono ? txtNuevaCatIcono.value : '🍾').trim() || '🍾';
+    const nuevaCatDestino = selNuevaCatDestino ? selNuevaCatDestino.value : 'barra';
+
+    if (!nuevaCatNombre) {
+      alert('Por favor escribe el nombre de la nueva categoría.');
+      if (txtNuevaCatNombre) txtNuevaCatNombre.focus();
+      return;
+    }
+
+    try {
+      const resCat = await fetch('/api/categorias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: nuevaCatNombre,
+          icono: nuevaCatIcono,
+          destino: nuevaCatDestino
+        })
+      });
+      const dataCat = await resCat.json();
+      if (!resCat.ok) {
+        alert('❌ Error al crear categoría: ' + (dataCat.error || 'No se pudo crear'));
+        return;
+      }
+      categoria_id = dataCat.categoria ? dataCat.categoria.id : null;
+    } catch (e) {
+      alert('❌ Error creando categoría: ' + e.message);
+      return;
+    }
+  }
+
   const destino = selDest ? selDest.value : 'cocina';
   const imagen_url = (txtImg ? txtImg.value : '').trim();
   const curso = selCurso ? selCurso.value : 2;
 
+  // Datos Kárdex
+  const kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
+  let insumo_id = null;
+  let ml_shot = 30;
+  let cantidad_descuento = 1;
+
+  if (kardex_tipo === 'shot') {
+    insumo_id = document.getElementById('selectKardexBotella')?.value;
+    ml_shot = parseFloat(document.getElementById('txtKardexShotMl')?.value) || 30;
+    if (!insumo_id) {
+      alert('Por favor selecciona la botella del Kárdex de la cual se descontarán los shots.');
+      return;
+    }
+  } else if (kardex_tipo === 'unidad') {
+    insumo_id = document.getElementById('selectKardexInsumoUnidad')?.value;
+    cantidad_descuento = 1;
+    if (!insumo_id) {
+      alert('Por favor selecciona el insumo del Kárdex que se descontará por unidad.');
+      return;
+    }
+  }
+
+  const payload = {
+    nombre,
+    precio,
+    categoria_id,
+    destino,
+    curso,
+    imagen_url,
+    kardex_tipo,
+    insumo_id,
+    ml_shot,
+    cantidad_descuento
+  };
+
   try {
-    const res = await fetch('/api/productos', {
-      method: 'POST',
+    const url = isEditing ? `/api/productos/${prodId}` : '/api/productos';
+    const method = isEditing ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nombre,
-        precio,
-        categoria_id,
-        destino,
-        curso,
-        imagen_url
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ ' + (data.error || 'No se pudo registrar el producto'));
+      alert('❌ ' + (data.error || 'No se pudo guardar el producto'));
       return;
     }
 
     window.cerrarModalNuevoProducto();
-    mostrarNotificacionCentro(`✅ Producto "${nombre}" (₡${precio}) agregado exitosamente`, 'success');
+    mostrarNotificacionCentro(`✅ Producto "${nombre}" guardado exitosamente`, 'success');
 
     // Recargar catálogo y menú
     await cargarMenuDesdeBackend();
+    if (typeof cargarInventarioAdmin === 'function') {
+      cargarInventarioAdmin();
+    }
   } catch (e) {
-    alert('❌ Error al agregar producto: ' + e.message);
+    alert('❌ Error al guardar producto: ' + e.message);
   }
 };
 
@@ -2090,6 +2404,8 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     }
   }
 
+  const esAdminODev = estado.usuario && (estado.usuario.rol === 'admin' || estado.usuario.rol === 'developer');
+
   const prodsHtml = standardProds.map(p => {
     const esCerveza = Boolean(p.happyHour || p.happy_hour || p.catId === 4 || p.categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(p.nombre || ''));
     const isPromo = estado.happyHourActivo && esCerveza;
@@ -2097,8 +2413,13 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
       ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />`
       : `<div class="prod-card-no-thumb">🍽️</div>`;
 
+    const btnEditHtml = esAdminODev
+      ? `<button class="btn-card-edit-prod" onclick="event.stopPropagation(); abrirModalEditarProducto(${p.id});" title="Editar producto y vincular al Kárdex">✏️</button>`
+      : '';
+
     return `
-      <div class="prod-card-one-tap ${p.agotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})">
+      <div class="prod-card-one-tap ${p.agotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" style="position: relative;">
+        ${btnEditHtml}
         ${imgHtml}
         ${isPromo ? '<span class="prod-badge-promo">🍸 2x1</span>' : ''}
         <div class="prod-card-content">
@@ -6007,7 +6328,6 @@ function renderTablaInventario(items) {
   tbody.innerHTML = '';
 
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#9ca3af;">No se encontraron insumos registrados.</td></tr>';
     return;
   }
@@ -6031,16 +6351,13 @@ function renderTablaInventario(items) {
     }
 
     tr.innerHTML = `
-      <td><strong>${escapeHtml(ins.nombre)}</strong></td>
       <td>${nombreHtml}</td>
       <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
-      <td><strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
       <td>
         <strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small>
         ${stockExtraHtml}
       </td>
       <td>${ins.stock_minimo} <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small></td>
-      <td>${formatCRC(ins.costo_unitario || 0)}</td>
       <td>
         ${formatCRC(ins.costo_unitario || 0)}
         ${costoExtraHtml}
@@ -6051,7 +6368,6 @@ function renderTablaInventario(items) {
           ${ins.estado_stock === 'agotado' ? '⛔ Agotado' : ins.estado_stock === 'bajo' ? '⚠️ Bajo Stock' : '✅ Normal'}
         </span>
       </td>
-      <td style="text-align:right;">
       <td style="text-align:right; white-space:nowrap;">
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#374151; border-color:#6b7280;" onclick="abrirModalEditarInsumo(${ins.id})" title="Editar Insumo">✏️</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>

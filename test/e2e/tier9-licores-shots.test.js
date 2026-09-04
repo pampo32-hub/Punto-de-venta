@@ -205,4 +205,116 @@ describe('Tier 9: Control de Licores, Botellas y Medidas de Shots Configurables 
     assert.ok(res.body.insumo.rendimiento_shots > 0);
     assert.ok(Array.isArray(res.body.movimientos));
   });
+
+  it('T9.7: Creación de categoría dinámica al vuelo y vinculación directa al crear producto con shot manual de 45ml', async () => {
+    // 1. Crear categoría nueva "Aguardientes" con emoji 🍾 y destino barra
+    const catRes = await req('/api/categorias', 'POST', {
+      nombre: 'Aguardientes y Licores Ticos',
+      icono: '🍾',
+      destino: 'barra'
+    });
+    assert.equal(catRes.status, 201);
+    assert.ok(catRes.body.categoria);
+    assert.equal(catRes.body.categoria.nombre, 'Aguardientes y Licores Ticos');
+    assert.equal(catRes.body.categoria.icono, '🍾');
+    assert.equal(catRes.body.categoria.destino, 'barra');
+    const nuevaCatId = catRes.body.categoria.id;
+
+    // 2. Crear insumo de botella de 1 Litro (1000ml)
+    const insumoRes = await req('/api/admin/inventario', 'POST', {
+      nombre: 'Cacique 1000ml Bar',
+      categoria: 'Aguardientes y Licores Ticos',
+      unidad_medida: 'botellas',
+      stock_actual: 10,
+      stock_minimo: 2,
+      costo_unitario: 8000,
+      es_licor: 1,
+      capacidad_ml: 1000,
+      medida_shot_ml: 30
+    });
+    assert.equal(insumoRes.status, 201);
+    const insumoId = insumoRes.body.id;
+
+    // 3. Crear producto "Shot de Cacique Especial" con categoría nueva y vinculado a la botella con shot manual de 45ml
+    const prodRes = await req('/api/productos', 'POST', {
+      nombre: 'Shot de Cacique Especial',
+      precio: 1200,
+      categoria_id: nuevaCatId,
+      destino: 'barra',
+      curso: 1,
+      kardex_tipo: 'shot',
+      insumo_id: insumoId,
+      ml_shot: 45
+    });
+    assert.equal(prodRes.status, 201);
+    const prodId = prodRes.body.producto.id;
+
+    // 4. Consultar /api/productos/:id/kardex-link
+    const linkRes = await req(`/api/productos/${prodId}/kardex-link`);
+    assert.equal(linkRes.status, 200);
+    assert.equal(linkRes.body.vinculado, true);
+    assert.equal(linkRes.body.kardex_tipo, 'shot');
+    assert.equal(linkRes.body.insumo_id, insumoId);
+    assert.equal(linkRes.body.ml_shot, 45);
+    // 45 / 1000 = 0.045
+    assert.equal(linkRes.body.cantidad, 0.045);
+
+    // 5. Enviar comanda con 2 shots (2 * 45ml = 90ml = 0.090 botellas)
+    const orderRes = await req('/api/comandas/enviar', 'POST', {
+      mesaId: 1,
+      mesero: 'Salonero Bar',
+      items: [
+        { id: prodId, nombre: 'Shot de Cacique Especial', cantidad: 2, precio: 1200, destino: 'barra' }
+      ]
+    });
+    assert.equal(orderRes.status, 200);
+
+    // 6. Verificar stock restante: 10 - 0.09 = 9.91
+    const checkRes = await req(`/api/admin/inventario/${insumoId}`);
+    assert.equal(checkRes.status, 200);
+    assert.equal(checkRes.body.stock_actual, 9.91);
+
+    // 7. Verificar Kardex
+    const kardexRes = await req(`/api/admin/inventario/${insumoId}/kardex`);
+    assert.ok(kardexRes.body.movimientos.length > 0);
+    const mov = kardexRes.body.movimientos[0];
+    assert.equal(mov.tipo, 'venta');
+    assert.equal(mov.cantidad, 0.09);
+    assert.ok(mov.motivo.includes('Shot de Cacique Especial'));
+  });
+
+  it('T9.8: PUT /api/productos/:id actualiza datos del producto y su enlace con Kárdex', async () => {
+    // 1. Obtener un insumo de licor existente
+    const invRes = await req('/api/admin/inventario');
+    const ron = invRes.body.find(i => i.es_licor === 1);
+    assert.ok(ron);
+
+    // 2. Crear producto sin vincular
+    const pRes = await req('/api/productos', 'POST', {
+      nombre: 'Trago Simple Test',
+      precio: 2000,
+      categoria_id: 5,
+      destino: 'barra'
+    });
+    const prodId = pRes.body.producto.id;
+
+    // 3. Actualizar con PUT para vincularlo al Ron con shot de 30ml
+    const putRes = await req(`/api/productos/${prodId}`, 'PUT', {
+      nombre: 'Shot de Ron Bacardí Editado',
+      precio: 2200,
+      kardex_tipo: 'shot',
+      insumo_id: ron.id,
+      ml_shot: 30
+    });
+    assert.equal(putRes.status, 200);
+    assert.equal(putRes.body.producto.nombre, 'Shot de Ron Bacardí Editado');
+    assert.equal(putRes.body.producto.precio, 2200);
+
+    // 4. Verificar enlace actualizado
+    const linkRes = await req(`/api/productos/${prodId}/kardex-link`);
+    assert.equal(linkRes.status, 200);
+    assert.equal(linkRes.body.vinculado, true);
+    assert.equal(linkRes.body.insumo_id, ron.id);
+    assert.equal(linkRes.body.ml_shot, 30);
+  });
 });

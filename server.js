@@ -1773,10 +1773,51 @@ app.get('/api/menu', async (req, res) => {
   }
 });
 
-// Agregar nuevo producto y precio al menú
+// Crear nueva categoría en el menú y sincronizar
+app.post('/api/categorias', async (req, res) => {
+  try {
+    const { nombre, icono, destino } = req.body;
+    const nombreLimpio = (nombre || '').trim();
+    if (!nombreLimpio) {
+      return res.status(400).json({ error: 'El nombre de la categoría es obligatorio.' });
+    }
+    const iconoLimpio = (icono || '🍽️').trim();
+    const destinoLimpio = (destino === 'barra') ? 'barra' : 'cocina';
+
+    const existente = await dbGet('SELECT * FROM Categorias WHERE LOWER(nombre) = LOWER(?)', [nombreLimpio]);
+    if (existente) {
+      return res.json({ message: 'Categoría ya existe', categoria: existente });
+    }
+
+    const result = await dbRun(
+      'INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (1, ?, ?, ?)',
+      [nombreLimpio, iconoLimpio, destinoLimpio]
+    );
+    const nuevaCat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [result.lastID]);
+    io.emit('categoria_creada', nuevaCat);
+    io.emit('menu_actualizado');
+
+    res.status(201).json({ message: 'Categoría creada exitosamente', categoria: nuevaCat });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Agregar nuevo producto y precio al menú (con soporte de enlace a Kárdex / Recetas)
 app.post('/api/productos', async (req, res) => {
   try {
-    const { nombre, precio, categoria_id, destino, curso, imagen_url } = req.body;
+    const {
+      nombre,
+      precio,
+      categoria_id,
+      destino,
+      curso,
+      imagen_url,
+      kardex_tipo,
+      insumo_id,
+      ml_shot,
+      cantidad_descuento
+    } = req.body;
     const nombreLimpio = (nombre || '').trim();
     const precioNum = parseFloat(precio);
 
@@ -1813,11 +1854,153 @@ app.post('/api/productos', async (req, res) => {
       [catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
     );
 
-    const nuevoProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [result.lastID]);
+    const prodId = result.lastID;
+    const nuevoProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+
+    // Vinculación opcional al Kárdex
+    if (kardex_tipo === 'shot' && insumo_id) {
+      const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
+      if (insumo) {
+        const ml = Number(ml_shot) || Number(insumo.medida_shot_ml) || 30;
+        const capacidad = Number(insumo.capacidad_ml) || 750;
+        const fraccion = Math.round((ml / capacidad) * 10000) / 10000;
+        await dbRun(
+          'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
+          [prodId, insumo_id, fraccion]
+        );
+      }
+    } else if (kardex_tipo === 'unidad' && insumo_id) {
+      const cant = Number(cantidad_descuento) || 1;
+      await dbRun(
+        'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
+        [prodId, insumo_id, cant]
+      );
+      await dbRun('UPDATE Inventario SET producto_id = ? WHERE id = ?', [prodId, insumo_id]);
+    }
+
     io.emit('producto_creado', nuevoProd);
     io.emit('menu_actualizado');
 
     res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Obtener estado de vinculación a Kárdex de un producto
+app.get('/api/productos/:id/kardex-link', async (req, res) => {
+  try {
+    const prodId = req.params.id;
+    const receta = await dbGet(`
+      SELECT r.*, i.nombre as insumo_nombre, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots, i.stock_actual, i.unidad_medida, i.costo_unitario
+      FROM InventarioRecetas r
+      JOIN Inventario i ON r.insumo_id = i.id
+      WHERE r.producto_id = ?
+      LIMIT 1
+    `, [prodId]);
+
+    if (receta) {
+      const esShot = receta.es_licor && receta.cantidad < 1;
+      const mlShot = esShot ? Math.round(receta.cantidad * (receta.capacidad_ml || 750)) : (receta.medida_shot_ml || 30);
+      return res.json({
+        vinculado: true,
+        kardex_tipo: esShot ? 'shot' : (receta.cantidad === 1 ? 'unidad' : 'shot'),
+        insumo_id: receta.insumo_id,
+        insumo_nombre: receta.insumo_nombre,
+        cantidad: receta.cantidad,
+        ml_shot: mlShot,
+        capacidad_ml: receta.capacidad_ml,
+        unidad_medida: receta.unidad_medida,
+        costo_unitario: receta.costo_unitario
+      });
+    }
+
+    const insumoDirecto = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [prodId]);
+    if (insumoDirecto) {
+      return res.json({
+        vinculado: true,
+        kardex_tipo: 'unidad',
+        insumo_id: insumoDirecto.id,
+        insumo_nombre: insumoDirecto.nombre,
+        cantidad: 1,
+        ml_shot: insumoDirecto.medida_shot_ml,
+        capacidad_ml: insumoDirecto.capacidad_ml,
+        unidad_medida: insumoDirecto.unidad_medida,
+        costo_unitario: insumoDirecto.costo_unitario
+      });
+    }
+
+    res.json({ vinculado: false, kardex_tipo: 'ninguno' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Editar producto y actualizar vinculación al Kárdex
+app.put('/api/productos/:id', async (req, res) => {
+  try {
+    const prodId = req.params.id;
+    const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const {
+      nombre,
+      precio,
+      categoria_id,
+      destino,
+      curso,
+      imagen_url,
+      kardex_tipo,
+      insumo_id,
+      ml_shot,
+      cantidad_descuento
+    } = req.body;
+
+    const nombreLimpio = nombre ? nombre.trim() : prod.nombre;
+    const precioNum = precio !== undefined ? parseFloat(precio) : prod.precio;
+    const catId = categoria_id !== undefined ? Number(categoria_id) : prod.categoria_id;
+    const destinoFinal = destino ? destino.trim().toLowerCase() : prod.destino;
+    const cursoNum = curso !== undefined ? Number(curso) : prod.curso;
+    const imgUrl = imagen_url !== undefined ? imagen_url : prod.imagen_url;
+
+    await dbRun(
+      `UPDATE Productos 
+       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?
+       WHERE id = ?`,
+      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, prodId]
+    );
+
+    // Actualizar vinculación Kárdex si se especificó kardex_tipo
+    if (kardex_tipo !== undefined) {
+      await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
+      await dbRun('UPDATE Inventario SET producto_id = NULL WHERE producto_id = ?', [prodId]);
+
+      if (kardex_tipo === 'shot' && insumo_id) {
+        const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
+        if (insumo) {
+          const ml = Number(ml_shot) || Number(insumo.medida_shot_ml) || 30;
+          const capacidad = Number(insumo.capacidad_ml) || 750;
+          const fraccion = Math.round((ml / capacidad) * 10000) / 10000;
+          await dbRun(
+            'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
+            [prodId, insumo_id, fraccion]
+          );
+        }
+      } else if (kardex_tipo === 'unidad' && insumo_id) {
+        const cant = Number(cantidad_descuento) || 1;
+        await dbRun(
+          'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
+          [prodId, insumo_id, cant]
+        );
+        await dbRun('UPDATE Inventario SET producto_id = ? WHERE id = ?', [prodId, insumo_id]);
+      }
+    }
+
+    const actualizado = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+    io.emit('producto_actualizado', actualizado);
+    io.emit('menu_actualizado');
+
+    res.json({ message: 'Producto actualizado exitosamente', producto: actualizado });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

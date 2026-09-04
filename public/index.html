@@ -1728,32 +1728,72 @@
 
   <!-- MODAL AGREGAR PRODUCTO Y PRECIO AL MENÚ -->
   <div class="modal-backdrop" id="modalAgregarProducto">
-    <div class="modal-dialog" style="max-width:480px; width:92vw;">
+    <div class="modal-dialog" style="max-width:520px; width:92vw; max-height:92vh; overflow-y:auto;">
       <div class="dialog-header">
         <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:1.4rem;">➕</span>
+          <span style="font-size:1.4rem;" id="iconModalProducto">➕</span>
           <div>
-            <h3 style="margin:0; font-size:1.15rem;">Agregar Producto</h3>
-            <small style="color:var(--text-muted);">Crear nuevo producto y precio en el catálogo</small>
+            <h3 style="margin:0; font-size:1.15rem;" id="titleModalProducto">Agregar Producto</h3>
+            <small style="color:var(--text-muted);" id="subModalProducto">Crear nuevo producto y precio en el catálogo</small>
           </div>
         </div>
         <button class="btn-icon-close" onclick="cerrarModalNuevoProducto()">✕</button>
       </div>
       <div class="dialog-body" style="padding: 20px;">
+        <input type="hidden" id="txtNuevoProdId" value="" />
+
         <div class="field-row" style="margin-bottom: 14px;">
           <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">Nombre del Producto: <span style="color:#ef4444;">*</span></label>
-          <input type="text" id="txtNuevoProdNombre" class="select-styled" placeholder="Ej: Pizza Artesanal, Gin Tonic, Nachos..." style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
+          <input type="text" id="txtNuevoProdNombre" class="select-styled" placeholder="Ej: Shot Cacique, Cuarta de J&B, Imperial..." style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
         </div>
 
         <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
           <div>
             <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">Precio (₡ CRC): <span style="color:#ef4444;">*</span></label>
-            <input type="number" id="txtNuevoProdPrecio" class="select-styled" placeholder="Ej: 3500" min="0" step="any" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
+            <input type="number" id="txtNuevoProdPrecio" class="select-styled" placeholder="Ej: 1000" min="0" step="any" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
           </div>
           <div>
             <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">Categoría:</label>
             <select id="selectNuevoProdCategoria" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
             </select>
+          </div>
+        </div>
+
+        <!-- Panel de Creación de Nueva Categoría al Vuelo -->
+        <div id="boxNuevaCategoriaCampos" style="display:none; background:rgba(15,23,42,0.7); border:1px dashed #38bdf8; border-radius:10px; padding:12px; margin-bottom:14px;">
+          <div style="font-size:0.85rem; font-weight:700; color:#38bdf8; margin-bottom:8px;">✨ Nueva Categoría para el Menú y Kárdex:</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px;">
+            <div>
+              <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Nombre Categoría: <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="txtNuevaCatNombre" class="select-styled" placeholder="Ej: Licores, Aguardientes..." style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;" />
+            </div>
+            <div>
+              <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Destino:</label>
+              <select id="selectNuevaCatDestino" class="select-styled" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;">
+                <option value="barra" selected>🍸 Barra / Bebidas</option>
+                <option value="cocina">🍳 Cocina (KDS)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Icono / Emoji de la Categoría:</label>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="text" id="txtNuevaCatIcono" value="🍾" maxlength="4" style="width:48px; text-align:center; font-size:1.2rem; padding:6px; background:#1e293b; border:1px solid #475569; border-radius:6px; color:#fff;" />
+              <div id="gridSelectorEmojis" style="display:flex; flex-wrap:wrap; gap:4px;">
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍾')">🍾</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍸')">🍸</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍺')">🍺</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍷')">🍷</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🥃')">🥃</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍔')">🍔</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍕')">🍕</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🥩')">🥩</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🌮')">🌮</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('☕')">☕</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🍰')">🍰</button>
+                <button type="button" class="btn-emoji-quick" onclick="seleccionarEmojiCat('🥗')">🥗</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1772,6 +1812,63 @@
               <option value="2" selected>2 - Platos Fuertes</option>
               <option value="3">3 - Postres / Café</option>
             </select>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- SECCIÓN DE VINCULACIÓN CON STOCK DE KARDEX / INVENTARIO -->
+        <!-- ======================================================== -->
+        <div class="field-row" style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:14px; margin-bottom:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+            <label style="font-weight:700; font-size:0.9rem; color:#38bdf8; display:flex; align-items:center; gap:6px;">
+              <span>📦</span> Control de Inventario / Kárdex:
+            </label>
+            <span id="badgeKardexEstado" style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#1e293b; color:#94a3b8;">Sin vincular</span>
+          </div>
+
+          <div style="margin-bottom:10px;">
+            <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Tipo de Descuento:</label>
+            <select id="selectKardexTipo" class="select-styled" onchange="cambiarTipoKardexProducto()" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#1e293b; color:#fff; border-radius:6px;">
+              <option value="ninguno">⚪ No ligar a inventario (solo venta en comandero)</option>
+              <option value="shot">🍸 Descontar Shot / Trago de una Botella (Kárdex)</option>
+              <option value="unidad">📦 Descontar Unidad Completa (1 a 1 de una botella o insumo)</option>
+            </select>
+          </div>
+
+          <!-- Contenedor Config Shot -->
+          <div id="boxKardexShotConfig" style="display:none; background:rgba(30,41,59,0.7); border:1px solid #0284c7; border-radius:8px; padding:12px; margin-top:8px;">
+            <div style="margin-bottom:10px;">
+              <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Botella o Licor del Kárdex: <span style="color:#ef4444;">*</span></label>
+              <select id="selectKardexBotella" class="select-styled" onchange="recalcularInfoShotKardex()" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;">
+              </select>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px;">
+              <div>
+                <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Medida Shot / Trago (ml): <span style="color:#ef4444;">*</span></label>
+                <input type="number" id="txtKardexShotMl" min="1" step="any" value="30" oninput="recalcularInfoShotKardex()" class="select-styled" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;" placeholder="Ej: 30, 45, 60, 250" />
+              </div>
+              <div>
+                <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Medidas Rápidas:</label>
+                <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                  <button type="button" class="btn-tool" style="padding:4px 6px; font-size:0.75rem;" onclick="setShotMl(30)">1 oz (30ml)</button>
+                  <button type="button" class="btn-tool" style="padding:4px 6px; font-size:0.75rem;" onclick="setShotMl(45)">1.5 oz (45ml)</button>
+                  <button type="button" class="btn-tool" style="padding:4px 6px; font-size:0.75rem;" onclick="setShotMl(250)">Cuarta (250ml)</button>
+                </div>
+              </div>
+            </div>
+            <div id="infoKardexCalculoShot" style="font-size:0.8rem; color:#38bdf8; background:rgba(2,132,199,0.15); border:1px solid rgba(2,132,199,0.3); padding:8px 10px; border-radius:6px; line-height:1.4;">
+              ⏳ Selecciona una botella para calcular el rendimiento.
+            </div>
+          </div>
+
+          <!-- Contenedor Config Unidad Completa -->
+          <div id="boxKardexUnidadConfig" style="display:none; background:rgba(30,41,59,0.7); border:1px solid #10b981; border-radius:8px; padding:12px; margin-top:8px;">
+            <div style="margin-bottom:8px;">
+              <label style="display:block; font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">Insumo del Kárdex (Descuenta 1 unidad): <span style="color:#ef4444;">*</span></label>
+              <select id="selectKardexInsumoUnidad" class="select-styled" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:6px;">
+              </select>
+            </div>
+            <small style="color:#94a3b8; font-size:0.78rem;">Cada vez que se cobre o comande este producto, se restará exactamente 1 unidad completa del stock del Kárdex.</small>
           </div>
         </div>
 
@@ -2864,7 +2961,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.3.0"></script>
+  <script src="app.js?v=2.4.0"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
