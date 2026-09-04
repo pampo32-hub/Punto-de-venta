@@ -425,8 +425,10 @@ const estado = {
   itemModificando: null,
   splitPersonas: 4,
   splitColumnas: [],
-  happyHourActivo: true,
-  
+  // Estado de Pisos (1er y 2do Piso)
+  pisoActual: 1,
+  pisoActualEditor: 1,
+
   // Datos sincronizados con SQLite
   zonas: [],
   mesas: [],
@@ -572,10 +574,112 @@ if (typeof window !== 'undefined') {
   window.formatearTooltipEspera = formatearTooltipEspera;
 }
 
-// Audio Campana
+// Formateo de moneda
 function formatCRC(num) {
   return '₡ ' + (Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+// Formateo de montos en mesas sin decimales según requerimiento
+function formatCRCSinDecimales(num) {
+  return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// Control y Alternancia de Pisos (1er Piso y Segundo Piso)
+window.togglePisoActual = function() {
+  estado.pisoActual = (estado.pisoActual === 2 ? 1 : 2);
+  const tabs = document.querySelectorAll('.zone-tab');
+  tabs.forEach(t => t.classList.remove('active'));
+  if (estado.pisoActual === 2) {
+    const tab2 = document.querySelector('.zone-tab[data-zona="segundo"]');
+    if (tab2) tab2.classList.add('active');
+    else {
+      const tabTodas = document.querySelector('.zone-tab[data-zona="todas"]');
+      if (tabTodas) tabTodas.classList.add('active');
+    }
+  } else {
+    const tabTodas = document.querySelector('.zone-tab[data-zona="todas"]');
+    if (tabTodas) tabTodas.classList.add('active');
+  }
+  actualizarBotonPisoSalon();
+  renderSalón(estado.pisoActual === 2 ? 'segundo' : 'todas');
+};
+
+window.actualizarBotonPisoSalon = function() {
+  const btn = document.getElementById('btnTogglePisoSalon');
+  if (!btn) return;
+  if (estado.pisoActual === 2) {
+    btn.innerHTML = '🏢 Ver Primer Piso ↙';
+    btn.classList.add('piso-2-activo');
+  } else {
+    btn.innerHTML = '🏢 Ver Segundo Piso ↗';
+    btn.classList.remove('piso-2-activo');
+  }
+};
+
+window.cambiarPisoEditor = function(piso) {
+  estado.pisoActualEditor = Number(piso) || 1;
+  actualizarBotonPisoEditor();
+  renderEditorPlano();
+};
+
+window.togglePisoEditor = function() {
+  estado.pisoActualEditor = (estado.pisoActualEditor === 2 ? 1 : 2);
+  actualizarBotonPisoEditor();
+  renderEditorPlano();
+};
+
+window.actualizarBotonPisoEditor = function() {
+  const btn1 = document.getElementById('btnPiso1Editor');
+  const btn2 = document.getElementById('btnPiso2Editor');
+  const btnToggle = document.getElementById('btnTogglePisoEditor');
+
+  if (btn1 && btn2) {
+    if (estado.pisoActualEditor === 2) {
+      btn1.classList.remove('active');
+      btn2.classList.add('active');
+    } else {
+      btn1.classList.add('active');
+      btn2.classList.remove('active');
+    }
+  }
+  if (btnToggle) {
+    if (estado.pisoActualEditor === 2) {
+      btnToggle.innerHTML = '🏢 Ver Primer Piso ↙';
+      btnToggle.classList.add('piso-2-activo');
+    } else {
+      btnToggle.innerHTML = '🏢 Ver Segundo Piso ↗';
+      btnToggle.classList.remove('piso-2-activo');
+    }
+  }
+};
+
+// Modificar capacidad de personas de una mesa directamente desde Diseñar Salón
+window.cambiarCapacidadMesaPrompt = async function(mesaId, capActual) {
+  const m = estado.mesas.find(item => item.id === mesaId);
+  const nombre = m ? m.numero : `Mesa #${mesaId}`;
+  const input = prompt(`Modificar capacidad de comensales para ${nombre}:\n(Ingresa la cantidad de personas permitidas)`, capActual || 4);
+  if (input === null) return;
+  const numCap = parseInt(input.trim(), 10);
+  if (isNaN(numCap) || numCap < 1 || numCap > 100) {
+    alert('Por favor ingresa un número de personas válido entre 1 y 100.');
+    return;
+  }
+  try {
+    const res = await fetch(`/api/mesas/${mesaId}/capacidad`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ capacidad: numCap })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al actualizar capacidad');
+    if (m) m.capacidad = numCap;
+    renderEditorPlano();
+    renderSalón();
+    mostrarNotificacionCentro(`👥 Capacidad de ${nombre} actualizada a ${numCap} personas`, 'success');
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+};
 
 function sonarCampanaCocina() {
   try {
@@ -1267,12 +1371,14 @@ async function cargarMesasDesdeBackend() {
     estado.zonas = data.zonas || [];
     estado.mesas = (data.mesas || []).map(m => {
       const zonaObj = estado.zonas.find(z => z.id === m.zona_id);
+      const pisoNum = m.piso ? Number(m.piso) : (m.zona_id === 5 || (zonaObj && zonaObj.nombre.toLowerCase().includes('segundo')) ? 2 : 1);
       return {
         ...m,
         id: m.id,
         numero: m.numero,
-        zona: zonaObj ? zonaObj.nombre.toLowerCase().replace(/[^a-z]/g, '') : 'salon',
-        zonaNombre: zonaObj ? zonaObj.nombre : 'Salón Principal',
+        piso: pisoNum,
+        zona: zonaObj ? zonaObj.nombre.toLowerCase().replace(/[^a-z]/g, '') : (pisoNum === 2 ? 'segundopiso' : 'salon'),
+        zonaNombre: zonaObj ? zonaObj.nombre : (pisoNum === 2 ? 'Segundo Piso' : 'Salón Principal'),
         capacidad: m.capacidad,
         estado: m.estado,
         x: (m.x !== null && m.x !== undefined && !isNaN(Number(m.x))) ? Number(m.x) : 40,
@@ -1298,7 +1404,7 @@ async function cargarMesasDesdeBackend() {
     });
 
     renderSalón();
-    if (document.getElementById('view-editor-plano').classList.contains('active')) {
+    if (document.getElementById('view-editor-plano')?.classList.contains('active')) {
       renderEditorPlano();
     }
   } catch (e) {}
@@ -1320,8 +1426,11 @@ function aplicarEscalaTextoMesa(el, w, h, esSilla) {
   const numSpan = el.querySelector('.mesa-nombre-label, .m-num');
   if (numSpan) numSpan.style.fontSize = numFontSize;
 
-  const capSmall = el.querySelector('.mesa-cap-label, .m-footer span');
+  const capSmall = el.querySelector('.mesa-cap-label, .m-footer span, .m-cap-tag');
   if (capSmall) capSmall.style.fontSize = subFontSize;
+
+  const zonaSpan = el.querySelector('.m-zona-tag');
+  if (zonaSpan) zonaSpan.style.fontSize = subFontSize;
 
   const totalEl = el.querySelector('.m-total');
   if (totalEl) totalEl.style.fontSize = totalFontSize;
@@ -1332,9 +1441,15 @@ function renderSalón(filtroZona = 'todas') {
   if (!canvas) return;
   canvas.innerHTML = '';
 
-  const mesasFiltradas = filtroZona === 'todas' 
-    ? estado.mesas 
-    : estado.mesas.filter(m => m.zona && m.zona.includes(filtroZona));
+  const pisoActivo = estado.pisoActual || 1;
+  actualizarBotonPisoSalon();
+
+  const mesasFiltradas = estado.mesas.filter(m => {
+    const mesaPiso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+    if (mesaPiso !== pisoActivo) return false;
+    if (filtroZona === 'todas' || filtroZona === 'segundo') return true;
+    return m.zona && m.zona.includes(filtroZona);
+  });
 
   mesasFiltradas.forEach(m => {
     const card = document.createElement('div');
@@ -1384,16 +1499,16 @@ function renderSalón(filtroZona = 'todas') {
           </div>
         `;
       } else if (m.estado === 'abierta') {
-        headerText = `🍽️ Mesa Abierta (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'Sin pedidos pendientes'})`;
+        headerText = `🍽️ Mesa Abierta (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Sin pedidos pendientes'})`;
         listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Mesa abierta sin pedidos de cocina pendientes'];
       } else if (m.estado === 'activa') {
         headerText = `✅ Todos los platillos servidos (Activa)`;
         listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Comanda despachada por cocina'];
       } else if (m.todos_platillos && m.todos_platillos.length > 0) {
-        headerText = `✅ Pedidos entregados (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'Mesa Activa'})`;
+        headerText = `✅ Pedidos entregados (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Mesa Activa'})`;
         listItems = m.todos_platillos;
       } else {
-        headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRC(m.orden_total) : 'En consumo'})`;
+        headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'En consumo'})`;
         listItems = ['Mesa atendida por salonero'];
       }
 
@@ -1445,12 +1560,12 @@ function renderSalón(filtroZona = 'todas') {
         <span class="m-num">${m.numero} ${mergedBadgeHtml}</span>
         <span class="m-badge">${estadoEtiqueta}</span>
       </div>
-      <div class="m-total">${m.orden_total > 0 ? formatCRC(m.orden_total) : '—'}</div>
+      <div class="m-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
       ${cuentaQrHtml}
       ${waitChipHtml}
       <div class="m-footer">
-        <span>👥 ${m.capacidad}p</span>
-        <span>${m.zonaNombre ? m.zonaNombre.toUpperCase() : 'SALÓN'}</span>
+        ${!esSilla ? `<span class="m-cap-tag">👥 ${m.capacidad}p</span>` : ''}
+        <span class="m-zona-tag" title="${escapeHtml(m.zonaNombre || 'Salón')}">${escapeHtml(m.zonaNombre ? m.zonaNombre.toUpperCase() : 'SALÓN')}</span>
       </div>
       ${tooltipHtml}
     `;
@@ -2083,6 +2198,12 @@ document.querySelectorAll('.zone-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.zone-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
+    if (tab.dataset.zona === 'segundo') {
+      estado.pisoActual = 2;
+    } else if (['salon', 'barra', 'terraza', 'vip'].includes(tab.dataset.zona)) {
+      estado.pisoActual = 1;
+    }
+    actualizarBotonPisoSalon();
     renderSalón(tab.dataset.zona);
   });
 });
@@ -3134,9 +3255,18 @@ window.seleccionarDelBuscador = function(prodId) {
 // Editor Visual Plano con Cambio de Tamaño y Sillas de Barra
 function renderEditorPlano() {
   const canvas = document.getElementById('editorCanvas');
+  if (!canvas) return;
   canvas.innerHTML = '';
 
-  estado.mesas.forEach(m => {
+  const pisoActivoEditor = estado.pisoActualEditor || 1;
+  actualizarBotonPisoEditor();
+
+  const mesasPisoEditor = estado.mesas.filter(m => {
+    const mesaPiso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+    return mesaPiso === pisoActivoEditor;
+  });
+
+  mesasPisoEditor.forEach(m => {
     const el = document.createElement('div');
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
     el.className = `drag-mesa ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
@@ -3149,12 +3279,13 @@ function renderEditorPlano() {
     el.innerHTML = `
       <div class="mesa-size-controls">
         <button class="btn-mesa-size" title="Cambiar nombre de la mesa o silla" style="color:#38bdf8; border-color:#38bdf8;" onclick="event.stopPropagation(); abrirModalRenombrarMesa(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">✏️</button>
+        ${!esSilla ? `<button class="btn-mesa-size" title="Modificar cantidad de personas" style="color:#a78bfa; border-color:#a78bfa;" onclick="event.stopPropagation(); cambiarCapacidadMesaPrompt(${m.id}, ${m.capacidad})">👥</button>` : ''}
         <button class="btn-mesa-size" title="Reducir tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, -15)">-</button>
         <button class="btn-mesa-size" title="Aumentar tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, 15)">+</button>
         <button class="btn-mesa-size" title="Eliminar mesa o silla" style="color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); eliminarMesaDesdeEditor(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">🗑️</button>
       </div>
       <span class="mesa-nombre-label" style="cursor:pointer;" title="Clic para cambiar nombre" onclick="event.stopPropagation(); abrirModalRenombrarMesa(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">${m.numero} ✏️</span>
-      <small class="mesa-cap-label">👥 ${m.capacidad}p</small>
+      ${!esSilla ? `<small class="mesa-cap-label" style="cursor:pointer;" title="Clic para modificar cantidad de personas" onclick="event.stopPropagation(); cambiarCapacidadMesaPrompt(${m.id}, ${m.capacidad})">👥 ${m.capacidad}p ✏️</small>` : ''}
       <div class="mesa-resize-handle" title="Arrastrar para cambiar tamaño">↘</div>
     `;
 
@@ -3287,7 +3418,8 @@ async function autoGuardarPosicionMesa(m) {
         x: Math.round(m.x),
         y: Math.round(m.y),
         ancho: Math.round(m.ancho || (esSilla ? 85 : 135)),
-        alto: Math.round(m.alto || (esSilla ? 95 : 115))
+        alto: Math.round(m.alto || (esSilla ? 95 : 115)),
+        piso: m.piso || (estado.pisoActualEditor || 1)
       })
     });
   } catch (_) {}
@@ -3315,7 +3447,8 @@ document.getElementById('btnGuardarPlano').addEventListener('click', async () =>
       x: Math.round(m.x),
       y: Math.round(m.y),
       ancho: Math.round(m.ancho || (esSilla ? 85 : 135)),
-      alto: Math.round(m.alto || (esSilla ? 95 : 115))
+      alto: Math.round(m.alto || (esSilla ? 95 : 115)),
+      piso: m.piso || 1
     };
   });
   try {
@@ -3347,44 +3480,71 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
 });
 
 document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', async () => {
-  const num = 'Mesa ' + (estado.mesas.length + 1);
-  try {
-    await fetch('/api/mesas/crear', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ numero: num, zona_id: 1, capacidad: 4, forma: 'square', x: 60, y: 60 })
-    });
-    await cargarMesasDesdeBackend();
-  } catch (e) {}
-});
-
-document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async () => {
-  const num = 'Mesa ' + (estado.mesas.length + 1);
-  try {
-    await fetch('/api/mesas/crear', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ numero: num, zona_id: 1, capacidad: 4, forma: 'round', x: 80, y: 80 })
-    });
-    await cargarMesasDesdeBackend();
-  } catch (e) {}
-});
-
-document.getElementById('btnAgregarBarra').addEventListener('click', async () => {
-  const num = 'Silla Barra ' + (estado.mesas.filter(m => m.numero.includes('Barra')).length + 1);
+  const pisoActivo = estado.pisoActualEditor || 1;
+  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === pisoActivo);
+  const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         numero: num, 
-        zona_id: 2, 
+        zona_id: pisoActivo === 2 ? 5 : 1, 
+        capacidad: 4, 
+        forma: 'square', 
+        x: 60, 
+        y: 60,
+        piso: pisoActivo,
+        ancho: 135,
+        alto: 115
+      })
+    });
+    await cargarMesasDesdeBackend();
+  } catch (e) {}
+});
+
+document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async () => {
+  const pisoActivo = estado.pisoActualEditor || 1;
+  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === pisoActivo);
+  const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
+  try {
+    await fetch('/api/mesas/crear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        numero: num, 
+        zona_id: pisoActivo === 2 ? 5 : 1, 
+        capacidad: 4, 
+        forma: 'round', 
+        x: 80, 
+        y: 80,
+        piso: pisoActivo,
+        ancho: 130,
+        alto: 130
+      })
+    });
+    await cargarMesasDesdeBackend();
+  } catch (e) {}
+});
+
+document.getElementById('btnAgregarBarra').addEventListener('click', async () => {
+  const pisoActivo = estado.pisoActualEditor || 1;
+  const totalBarras = estado.mesas.filter(m => m.numero.includes('Barra')).length + 1;
+  const num = pisoActivo === 2 ? `Barra P2-${totalBarras}` : `Silla Barra ${totalBarras}`;
+  try {
+    await fetch('/api/mesas/crear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        numero: num, 
+        zona_id: pisoActivo === 2 ? 5 : 2, 
         capacidad: 1, 
         forma: 'silla', 
         x: 620, 
         y: 80,
-        ancho: 95,
-        alto: 105
+        ancho: 85,
+        alto: 95,
+        piso: pisoActivo
       })
     });
     await cargarMesasDesdeBackend();

@@ -516,10 +516,125 @@ body {
 }
 
 .m-footer {
-  font-size: 0.72rem;
+  font-size: var(--mesa-sub-size, 0.72rem);
   color: var(--text-muted);
   display: flex;
   justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+  margin-top: auto;
+  gap: 4px;
+}
+
+.m-footer .m-cap-tag {
+  font-size: var(--mesa-sub-size, 0.70rem);
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.m-footer .m-zona-tag {
+  margin-left: auto;
+  text-align: right;
+  font-size: var(--mesa-sub-size, 0.70rem);
+  color: #cbd5e1;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 65%;
+  line-height: 1.1;
+}
+
+/* Mesas Redondas: centrado abajo sin tapar monto */
+.mesa-render-card.round {
+  border-radius: 50%;
+  width: 130px;
+  height: 130px;
+  text-align: center;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px 12px 8px;
+}
+
+.mesa-render-card.round .m-header {
+  justify-content: center;
+}
+
+.mesa-render-card.round .m-total {
+  margin: 2px auto;
+  text-align: center;
+}
+
+.mesa-render-card.round .m-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  margin-top: auto;
+}
+
+.mesa-render-card.round .m-footer .m-zona-tag {
+  margin: 0 auto;
+  text-align: center;
+  max-width: 90%;
+}
+
+/* Sillas de Barra: nunca mostrar cantidad de personas */
+.mesa-render-card.silla .m-cap-tag,
+.drag-mesa.silla .mesa-cap-label {
+  display: none !important;
+}
+
+/* Botón Flotante de Cambio de Piso (Esquina) */
+.btn-floor-toggle {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+
+.btn-floor-toggle:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.55);
+}
+
+.btn-floor-toggle:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-floor-toggle.piso-2-activo {
+  background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+.btn-floor-toggle.piso-2-activo:hover {
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.55);
+}
+
+.editor-floor-selector .btn-tool.active {
+  background: #3b82f6 !important;
+  border-color: #60a5fa !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
 }
 
 /* Milestone 2: Chip de Espera y Tooltip de Tiempos y Platillos */

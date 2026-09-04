@@ -286,6 +286,7 @@
             <button class="zone-tab" data-zona="barra">Barra / Bar</button>
             <button class="zone-tab" data-zona="terraza">Terraza</button>
             <button class="zone-tab" data-zona="vip">Zona VIP</button>
+            <button class="zone-tab" data-zona="segundo">🏢 Segundo Piso</button>
           </div>
 
           <div class="salon-quick-tools">
@@ -305,6 +306,9 @@
         </div>
 
         <div class="salon-container" id="salonContainer">
+          <button class="btn-floor-toggle" id="btnTogglePisoSalon" onclick="togglePisoActual()" title="Alternar entre Primer y Segundo Piso">
+            🏢 Ver Segundo Piso ↗
+          </button>
           <div class="mesas-canvas-view" id="mesasCanvasView"></div>
         </div>
       </section>
@@ -317,6 +321,10 @@
           </div>
           <div class="editor-actions">
             <button class="btn-tool" id="btnVolverSalónDesdeEditor" onclick="document.querySelector('.nav-pill[data-view=\'salon\']').click()" style="background:#1f2937; border-color:#4b5563; color:#e5e7eb; font-weight:600;">⬅️ Volver al Salón</button>
+            <div class="editor-floor-selector" style="display:inline-flex; gap:6px; background:rgba(15,23,42,0.6); padding:3px 6px; border-radius:10px; border:1px solid rgba(255,255,255,0.1);">
+              <button type="button" class="btn-tool active" id="btnPiso1Editor" onclick="cambiarPisoEditor(1)" style="margin:0; font-weight:700;">🏢 1er Piso</button>
+              <button type="button" class="btn-tool" id="btnPiso2Editor" onclick="cambiarPisoEditor(2)" style="margin:0; font-weight:700;">🏢 2do Piso</button>
+            </div>
             <button class="btn-tool" id="btnAgregarMesaCuadrada">➕ Mesa Cuadrada</button>
             <button class="btn-tool" id="btnAgregarMesaRedonda">➕ Mesa Redonda</button>
             <button class="btn-tool" id="btnAgregarBarra">➕ Silla de Barra</button>
@@ -326,6 +334,9 @@
         </div>
 
         <div class="editor-board" id="editorBoard">
+          <button class="btn-floor-toggle" id="btnTogglePisoEditor" onclick="togglePisoEditor()" title="Alternar entre Primer y Segundo Piso">
+            🏢 Ver Segundo Piso ↗
+          </button>
           <div class="grid-backdrop"></div>
           <div class="editor-canvas" id="editorCanvas"></div>
         </div>

@@ -50,6 +50,9 @@ function initDb() {
     db.run("ALTER TABLE Mesas ADD COLUMN ancho INTEGER DEFAULT 130", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN alto INTEGER DEFAULT 120", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN transferida_de TEXT", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN piso INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
 
     // 3. Categorías
     db.run(`CREATE TABLE IF NOT EXISTS Categorias (
