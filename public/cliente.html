@@ -534,6 +534,8 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/offline-db.js"></script>
+  <script src="/offline-sync.js"></script>
   <script>
     function formatCRC(num) {
       return '₡ ' + (Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -555,73 +557,124 @@
     let menuCategorias = [];
 
     async function cargarDatosCliente() {
+      let resMesaOk = false;
+      let resMenuOk = false;
+
       try {
         const [resMesa, resMenu] = await Promise.all([
-          fetch('/api/cliente/mesa/' + mesaId),
-          fetch('/api/menu')
+          fetch('/api/cliente/mesa/' + mesaId).catch(() => null),
+          fetch('/api/menu').catch(() => null)
         ]);
 
-        datosMesa = await resMesa.json();
-        const dataMenu = await resMenu.json();
-        menuCategorias = dataMenu.categorias || [];
-        menuProductos = dataMenu.productos || [];
-
-        renderizarCabecera();
-        renderizarMenu();
-
-        // Si la mesa tiene consumos activos
-        if (datosMesa.orden && datosMesa.items && datosMesa.items.length > 0) {
-          renderizarCuenta();
-          // Preguntarle qué quiere ver: Menú o Cuenta
-          document.getElementById('choicePromptPanel').style.display = 'block';
-          document.getElementById('choiceTotalPreview').textContent = formatCRC(datosMesa.orden.total);
-          document.getElementById('btnVolverACuentaTop').style.display = 'block';
-          document.getElementById('bottomStickyBar').classList.add('visible');
-          document.getElementById('stickyTotalVal').textContent = formatCRC(datosMesa.orden.total);
-        } else {
-          // Si la mesa está libre, ir directo al menú
-          document.getElementById('choicePromptPanel').style.display = 'none';
-          document.getElementById('btnVolverACuentaTop').style.display = 'none';
-          document.getElementById('bottomStickyBar').classList.remove('visible');
-          mostrarSeccion('menu');
+        if (resMesa && resMesa.ok) {
+          datosMesa = await resMesa.json();
+          resMesaOk = true;
+          if (datosMesa && datosMesa.orden && window.PosOfflineDB) {
+            window.PosOfflineDB.guardarOrdenMesa(mesaId, datosMesa.orden, datosMesa.items).catch(() => {});
+          }
         }
 
-        // Sincronizar estado del temporizador de 2 minutos para solicitar mesero
-        const cuentaAbierta = Boolean(datosMesa.orden && datosMesa.mesa && datosMesa.mesa.estado !== 'libre');
-        if (cuentaAbierta) {
-          let tsSolicitud = null;
-          try {
-            const lsVal = localStorage.getItem('solicitar_mesero_ts_' + mesaId);
-            if (lsVal) tsSolicitud = Number(lsVal);
-          } catch (_) {}
-
-          if (!tsSolicitud && datosMesa.mesa && datosMesa.mesa.hora_pidio_cuenta && datosMesa.mesa.pidio_cuenta_qr) {
-            tsSolicitud = new Date(datosMesa.mesa.hora_pidio_cuenta).getTime();
+        if (resMenu && resMenu.ok) {
+          const dataMenu = await resMenu.json();
+          menuCategorias = dataMenu.categorias || [];
+          menuProductos = dataMenu.productos || [];
+          resMenuOk = true;
+          if (window.PosOfflineDB) {
+            window.PosOfflineDB.guardarCatalogo({ categorias: menuCategorias, productos: menuProductos }).catch(() => {});
           }
-
-          if (tsSolicitud) {
-            const transcurrido = Math.floor((Date.now() - tsSolicitud) / 1000);
-            const restante = 120 - transcurrido;
-            if (restante > 0) {
-              iniciarTemporizadorSolicitarMesero(restante);
-            } else {
-              const btn = document.getElementById('btnPedirCuenta');
-              if (btn) {
-                btn.disabled = false;
-                btn.classList.remove('disabled');
-                btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero / Pedir Factura';
-              }
-            }
-          }
-        } else {
-          if (_cuentaTimerInterval) {
-            clearInterval(_cuentaTimerInterval);
-            _cuentaTimerInterval = null;
-          }
-          try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
         }
       } catch (e) {
-        console.error('Error cargando datos del cliente:', e);
+        console.warn('[Cliente] Error en fetch:', e);
+      }
+
+      // Si no pudimos cargar el menú desde la red, cargarlo desde el almacenamiento local
+      if (!resMenuOk && window.PosOfflineDB) {
+        try {
+          const cat = await window.PosOfflineDB.obtenerCatalogo();
+          if (cat) {
+            menuCategorias = cat.categorias || [];
+            menuProductos = cat.productos || [];
+          }
+        } catch (eCat) {}
+      }
+
+      // Si no pudimos cargar la mesa o sus órdenes desde la red, cargar desde almacenamiento local
+      if (!resMesaOk && window.PosOfflineDB) {
+        try {
+          const localOrd = await window.PosOfflineDB.obtenerComandaLocalMesa(mesaId);
+          if (localOrd && (localOrd.orden || (localOrd.items && localOrd.items.length > 0))) {
+            datosMesa = {
+              mesa: { id: Number(mesaId), numero: mesaId, estado: localOrd.orden?.estado || 'esperando' },
+              orden: localOrd.orden,
+              items: localOrd.items,
+              negocio: { nombre: 'GastroBar Pro', slogan: 'Restaurante & Bar' }
+            };
+          }
+        } catch (eOrd) {}
+      }
+
+      if (!datosMesa) {
+        datosMesa = {
+          mesa: { id: Number(mesaId), numero: mesaId, estado: 'libre' },
+          orden: null,
+          items: [],
+          negocio: { nombre: 'GastroBar Pro', slogan: 'Restaurante & Bar' }
+        };
+      }
+
+      renderizarCabecera();
+      renderizarMenu();
+
+      // Si la mesa tiene consumos activos
+      if (datosMesa.orden && datosMesa.items && datosMesa.items.length > 0) {
+        renderizarCuenta();
+        // Preguntarle qué quiere ver: Menú o Cuenta
+        document.getElementById('choicePromptPanel').style.display = 'block';
+        document.getElementById('choiceTotalPreview').textContent = formatCRC(datosMesa.orden.total);
+        document.getElementById('btnVolverACuentaTop').style.display = 'block';
+        document.getElementById('bottomStickyBar').classList.add('visible');
+        document.getElementById('stickyTotalVal').textContent = formatCRC(datosMesa.orden.total);
+      } else {
+        // Si la mesa está libre, ir directo al menú
+        document.getElementById('choicePromptPanel').style.display = 'none';
+        document.getElementById('btnVolverACuentaTop').style.display = 'none';
+        document.getElementById('bottomStickyBar').classList.remove('visible');
+        mostrarSeccion('menu');
+      }
+
+      // Sincronizar estado del temporizador de 2 minutos para solicitar mesero
+      const cuentaAbierta = Boolean(datosMesa.orden && datosMesa.mesa && datosMesa.mesa.estado !== 'libre');
+      if (cuentaAbierta) {
+        let tsSolicitud = null;
+        try {
+          const lsVal = localStorage.getItem('solicitar_mesero_ts_' + mesaId);
+          if (lsVal) tsSolicitud = Number(lsVal);
+        } catch (_) {}
+
+        if (!tsSolicitud && datosMesa.mesa && datosMesa.mesa.hora_pidio_cuenta && datosMesa.mesa.pidio_cuenta_qr) {
+          tsSolicitud = new Date(datosMesa.mesa.hora_pidio_cuenta).getTime();
+        }
+
+        if (tsSolicitud) {
+          const transcurrido = Math.floor((Date.now() - tsSolicitud) / 1000);
+          const restante = 120 - transcurrido;
+          if (restante > 0) {
+            iniciarTemporizadorSolicitarMesero(restante);
+          } else {
+            const btn = document.getElementById('btnPedirCuenta');
+            if (btn) {
+              btn.disabled = false;
+              btn.classList.remove('disabled');
+              btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero / Pedir Factura';
+            }
+          }
+        }
+      } else {
+        if (_cuentaTimerInterval) {
+          clearInterval(_cuentaTimerInterval);
+          _cuentaTimerInterval = null;
+        }
+        try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
       }
     }
 
@@ -639,28 +692,38 @@
 
     function renderizarCuenta() {
       const itemsList = document.getElementById('cuentaItemsList');
-      document.getElementById('cuentaOrdenNumero').textContent = 'Orden #' + (datosMesa.orden.numero_orden || 'ACTIVA');
+      const numOrden = (datosMesa.orden && datosMesa.orden.numero_orden) 
+        ? ('Orden #' + datosMesa.orden.numero_orden) 
+        : (datosMesa.orden?.offline ? 'Orden (Local Offline)' : 'Orden Activa');
+      document.getElementById('cuentaOrdenNumero').textContent = numOrden;
 
-      itemsList.innerHTML = datosMesa.items.map(it => {
+      itemsList.innerHTML = (datosMesa.items || []).map(it => {
         const origenBadge = (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(datosMesa.mesa.numero))
           ? `<span style="display:inline-block; background:rgba(56,189,248,0.25); color:#38bdf8; font-size:0.75rem; font-weight:800; padding:2px 6px; border-radius:6px; margin-right:5px;">[${it.origen_mesa_numero.toString().toLowerCase().includes('mesa') ? it.origen_mesa_numero : 'Mesa ' + it.origen_mesa_numero}]</span>`
+          : '';
+
+        const nombre = it.nombre_producto || it.nombre || 'Producto';
+        const precioUnit = Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0;
+        const cant = Number(it.cantidad) || 1;
+        const offlineBadge = it.offlinePendiente 
+          ? `<span style="display:inline-block; background:rgba(245,158,11,0.15); color:#f59e0b; font-size:0.75rem; font-weight:800; padding:2px 6px; border-radius:6px; margin-left:5px;">🟡 En preparación</span>`
           : '';
 
         return `
           <div class="cuenta-item-row">
             <div class="item-qty-name">
-              <span class="item-title">${it.cantidad}x ${origenBadge}${it.nombre_producto}</span>
-              <span class="item-sub">${formatCRC(it.precio_unitario)} c/u ${it.notas ? '• ' + it.notas : ''}</span>
+              <span class="item-title">${cant}x ${origenBadge}${nombre} ${offlineBadge}</span>
+              <span class="item-sub">${formatCRC(precioUnit)} c/u ${it.notas ? '• ' + it.notas : ''}</span>
             </div>
-            <span class="item-total-price">${formatCRC(it.precio_unitario * it.cantidad)}</span>
+            <span class="item-total-price">${formatCRC(precioUnit * cant)}</span>
           </div>
         `;
       }).join('');
 
-      const sub = datosMesa.orden.subtotal || 0;
-      const serv = datosMesa.orden.servicio || Math.round(sub * 0.10);
-      const iva = datosMesa.orden.iva || Math.round(sub * 0.13);
-      const total = datosMesa.orden.total || (sub + serv + iva);
+      const sub = datosMesa.orden ? (datosMesa.orden.subtotal || 0) : 0;
+      const serv = datosMesa.orden ? (datosMesa.orden.servicio || datosMesa.orden.servicio_10 || Math.round(sub * 0.10)) : 0;
+      const iva = datosMesa.orden ? (datosMesa.orden.iva || datosMesa.orden.iva_13 || Math.round(sub * 0.13)) : 0;
+      const total = datosMesa.orden ? (datosMesa.orden.total || (sub + serv + iva)) : 0;
 
       document.getElementById('cuentaSubtotal').textContent = formatCRC(sub);
       document.getElementById('cuentaServicio').textContent = formatCRC(serv);
@@ -822,8 +885,6 @@
 
     document.addEventListener('DOMContentLoaded', cargarDatosCliente);
   </script>
-  <script src="/offline-db.js"></script>
-  <script src="/offline-sync.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

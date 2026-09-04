@@ -1925,6 +1925,20 @@ app.post('/api/sync/batch', async (req, res) => {
             io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), hora_pidio_cuenta: ahora });
             io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
           }
+        } else if (accion.tipo === 'COBRAR_ORDEN' || (accion.endpoint && accion.endpoint.includes('/cobrar'))) {
+          const payload = accion.payload || {};
+          let ordenId = payload.ordenId || (accion.endpoint ? accion.endpoint.split('/')[3] : null);
+          if (typeof ordenId === 'string' && ordenId.startsWith('offline_')) {
+            const mId = ordenId.replace('offline_', '');
+            const ord = await dbGet("SELECT id FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'cuenta_pedida', 'activa') ORDER BY id DESC LIMIT 1", [mId]);
+            if (ord) ordenId = ord.id;
+          }
+          if (ordenId && !isNaN(Number(ordenId))) {
+            const ord = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+            if (ord && typeof procesarCobroOrden === 'function') {
+              await procesarCobroOrden(ordenId, payload);
+            }
+          }
         } else {
           console.warn('[SyncBatch] Acción desconocida o sin handler específico:', accion.tipo);
         }
@@ -2200,166 +2214,169 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 // ============================================================================
 // 9. COBRO, CAJA & CONTROL DE PROPINAS (TIP POOL)
 // ============================================================================
-app.post('/api/ordenes/:id/cobrar', async (req, res) => {
-  try {
-    const ordenId = req.params.id;
-    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival', liquidar_total = true, items_pagados = [] } = req.body;
-    const ahora = new Date().toISOString();
+// Función reutilizable para procesar cobros de órdenes (usado por HTTP y Sync Batch)
+async function procesarCobroOrden(ordenId, { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival', liquidar_total = true, items_pagados = [], persona_nombre = 'Cliente' } = {}) {
+  const ahora = new Date().toISOString();
+  const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+  if (!orden) throw new Error('Orden no encontrada');
 
-    const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
-    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+  const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+  const cajaId = caja ? caja.id : null;
 
-    const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
-    const cajaId = caja ? caja.id : null;
+  await dbRun(
+    'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
+  );
 
-    await dbRun(
-      'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
-    );
+  // Obtener información del negocio y mesa para el tiquete impreso
+  const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
+  const mesa = orden.mesa_id ? await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
+  const mesaNumero = mesa ? mesa.numero : 'Mesa';
 
-    // Obtener información del negocio y mesa para el tiquete impreso
-    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
-    const mesa = orden.mesa_id ? await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
-    const mesaNumero = mesa ? mesa.numero : 'Mesa';
+  let ticketGenerado = null;
 
-    let ticketGenerado = null;
+  if (liquidar_total) {
+    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
 
-    if (liquidar_total) {
-      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+    // Consultar todos los ítems de la orden para el tiquete final
+    const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
 
-      // Consultar todos los ítems de la orden para el tiquete final
-      const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+    const tInfoLiquidacion = printerService.generarTicketLiquidacion({
+      negocio,
+      ordenId,
+      numeroOrden: orden.numero_orden,
+      mesaNumero,
+      mesero,
+      cliente: orden.cliente,
+      metodoPago: metodo,
+      subtotal: orden.subtotal,
+      descuentoHH: orden.descuento_happy_hour,
+      servicio: orden.servicio_10,
+      iva: orden.iva_13,
+      total: orden.total,
+      recibido: monto,
+      cambio,
+      items: itemsOrden,
+      fechaHora: ahora
+    });
 
-      const tInfoLiquidacion = printerService.generarTicketLiquidacion({
-        negocio,
-        ordenId,
-        numeroOrden: orden.numero_orden,
-        mesaNumero,
-        mesero,
-        cliente: orden.cliente,
-        metodoPago: metodo,
-        subtotal: orden.subtotal,
-        descuentoHH: orden.descuento_happy_hour,
-        servicio: orden.servicio_10,
-        iva: orden.iva_13,
-        total: orden.total,
-        recibido: monto,
-        cambio,
-        items: itemsOrden,
-        fechaHora: ahora
-      });
+    ticketGenerado = await printerService.procesarImpresion({
+      destinoImpresora: 'caja',
+      ticketInfo: tInfoLiquidacion,
+      io
+    });
 
-      ticketGenerado = await printerService.procesarImpresion({
-        destinoImpresora: 'caja',
-        ticketInfo: tInfoLiquidacion,
-        io
-      });
+    if (orden.mesa_id) {
+      await dbRun(
+        "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+        [orden.mesa_id]
+      );
+      await dbRun(
+        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+        [orden.mesa_id, orden.mesa_id]
+      );
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+    }
 
-      if (orden.mesa_id) {
-        await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
-          [orden.mesa_id]
+    return {
+      message: 'Cobro completado y mesa liberada',
+      ordenId,
+      es_parcial: false,
+      ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
+    };
+  } else {
+    // PAGO PARCIAL
+    if (Array.isArray(items_pagados) && items_pagados.length > 0) {
+      for (const item of items_pagados) {
+        const qty = Number(item.cantidad) || 1;
+        const detalleItems = await dbAll(
+          "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+          [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto]
         );
-        await dbRun(
-          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-          [orden.mesa_id, orden.mesa_id]
-        );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
-      }
 
-      res.json({
-        message: 'Cobro completado y mesa liberada',
-        ordenId,
-        es_parcial: false,
-        ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
-      });
-    } else {
-      // PAGO PARCIAL
-      if (Array.isArray(items_pagados) && items_pagados.length > 0) {
-        for (const item of items_pagados) {
-          const qty = Number(item.cantidad) || 1;
-          const detalleItems = await dbAll(
-            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
-            [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto]
-          );
+        let restanteADescontar = qty;
+        for (const det of detalleItems) {
+          if (restanteADescontar <= 0) break;
+          if (det.cantidad <= restanteADescontar) {
+            restanteADescontar -= det.cantidad;
+            await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE id = ?", [det.id]);
+          } else {
+            const nuevaCant = det.cantidad - restanteADescontar;
+            const nuevoSub = nuevaCant * det.precio_unitario;
+            await dbRun("UPDATE DetalleOrden SET cantidad = ?, subtotal = ? WHERE id = ?", [nuevaCant, nuevoSub, det.id]);
 
-          let restanteADescontar = qty;
-          for (const det of detalleItems) {
-            if (restanteADescontar <= 0) break;
-            if (det.cantidad <= restanteADescontar) {
-              restanteADescontar -= det.cantidad;
-              await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE id = ?", [det.id]);
-            } else {
-              const nuevaCant = det.cantidad - restanteADescontar;
-              const nuevoSub = nuevaCant * det.precio_unitario;
-              await dbRun("UPDATE DetalleOrden SET cantidad = ?, subtotal = ? WHERE id = ?", [nuevaCant, nuevoSub, det.id]);
-
-              const subPagado = restanteADescontar * det.precio_unitario;
-              await dbRun(
-                "INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?)",
-                [det.orden_id, det.producto_id, det.nombre_producto, det.precio_unitario, restanteADescontar, subPagado, det.notas, det.curso, det.destino, det.hora_pedido, det.hora_listo, det.creado_en, det.origen_mesa_numero, det.comanda_numero || 1]
-              );
-              restanteADescontar = 0;
-            }
+            const subPagado = restanteADescontar * det.precio_unitario;
+            await dbRun(
+              "INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?)",
+              [det.orden_id, det.producto_id, det.nombre_producto, det.precio_unitario, restanteADescontar, subPagado, det.notas, det.curso, det.destino, det.hora_pedido, det.hora_listo, det.creado_en, det.origen_mesa_numero, det.comanda_numero || 1]
+            );
+            restanteADescontar = 0;
           }
         }
       }
-
-      // Recalcular subtotal y total de la orden con los ítems activos no pagados
-      const itemsActivos = await dbAll(
-        "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'",
-        [ordenId]
-      );
-      const nuevoSubtotal = itemsActivos.reduce((acc, it) => acc + (it.precio_unitario * it.cantidad), 0);
-      const servicio10 = Math.round(nuevoSubtotal * 0.10);
-      const iva13 = Math.round(nuevoSubtotal * 0.13);
-      const nuevoTotal = nuevoSubtotal + servicio10 + iva13;
-
-      await dbRun(
-        "UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-        [nuevoSubtotal, servicio10, iva13, nuevoTotal, ordenId]
-      );
-
-      // Generar ticket térmico de pago parcial
-      const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((it.precio || 0) * (it.cantidad || 1)), 0);
-      const impParcial = subParcial * 0.23;
-      const personaNombre = req.body.persona_nombre || 'Cliente';
-
-      const tInfoParcial = printerService.generarTicketPagoParcial({
-        negocio,
-        ordenId,
-        mesaNumero,
-        personaNombre,
-        mesero,
-        metodoPago: metodo,
-        montoCobrado: monto,
-        subtotal: subParcial,
-        impuestos: impParcial,
-        itemsPagados: items_pagados || [],
-        saldoRestanteMesa: nuevoTotal,
-        fechaHora: ahora
-      });
-
-      ticketGenerado = await printerService.procesarImpresion({
-        destinoImpresora: 'caja',
-        ticketInfo: tInfoParcial,
-        io
-      });
-
-      if (orden.mesa_id) {
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
-      }
-
-      res.json({
-        message: 'Cobro parcial registrado con éxito',
-        ordenId,
-        es_parcial: true,
-        saldo_restante: nuevoTotal,
-        ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
-      });
     }
+
+    // Recalcular subtotal y total de la orden con los ítems activos no pagados
+    const itemsActivos = await dbAll(
+      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'",
+      [ordenId]
+    );
+    const nuevoSubtotal = itemsActivos.reduce((acc, it) => acc + (it.precio_unitario * it.cantidad), 0);
+    const servicio10 = Math.round(nuevoSubtotal * 0.10);
+    const iva13 = Math.round(nuevoSubtotal * 0.13);
+    const nuevoTotal = nuevoSubtotal + servicio10 + iva13;
+
+    await dbRun(
+      "UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+      [nuevoSubtotal, servicio10, iva13, nuevoTotal, ordenId]
+    );
+
+    // Generar ticket térmico de pago parcial
+    const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((it.precio || 0) * (it.cantidad || 1)), 0);
+    const impParcial = subParcial * 0.23;
+
+    const tInfoParcial = printerService.generarTicketPagoParcial({
+      negocio,
+      ordenId,
+      mesaNumero,
+      personaNombre: persona_nombre,
+      mesero,
+      metodoPago: metodo,
+      montoCobrado: monto,
+      subtotal: subParcial,
+      impuestos: impParcial,
+      itemsPagados: items_pagados || [],
+      saldoRestanteMesa: nuevoTotal,
+      fechaHora: ahora
+    });
+
+    ticketGenerado = await printerService.procesarImpresion({
+      destinoImpresora: 'caja',
+      ticketInfo: tInfoParcial,
+      io
+    });
+
+    if (orden.mesa_id) {
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
+    }
+
+    return {
+      message: 'Cobro parcial registrado con éxito',
+      ordenId,
+      es_parcial: true,
+      saldo_restante: nuevoTotal,
+      ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
+    };
+  }
+}
+
+app.post('/api/ordenes/:id/cobrar', async (req, res) => {
+  try {
+    const ordenId = req.params.id;
+    const resultado = await procesarCobroOrden(ordenId, req.body);
+    res.json(resultado);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.message === 'Orden no encontrada' ? 404 : 500).json({ error: e.message });
   }
 });
 

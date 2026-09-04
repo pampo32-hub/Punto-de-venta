@@ -570,6 +570,11 @@ try {
   }
 } catch (e) {}
 
+// Recargar mesas automáticamente cuando se complete una sincronización offline
+window.addEventListener('pos:sincronizado', () => {
+  cargarMesasDesdeBackend();
+});
+
 // Milestone 2 Domain Helpers
 function escapeHtml(str) {
   if (!str) return '';
@@ -1966,6 +1971,24 @@ async function cargarMesasDesdeBackend() {
       };
     });
 
+    // Superponer comandas y consumos locales guardados offline si existen
+    if (window.PosOfflineDB && estado.mesas && estado.mesas.length > 0) {
+      try {
+        for (const m of estado.mesas) {
+          const localOrd = await window.PosOfflineDB.obtenerComandaLocalMesa(m.id);
+          if (localOrd && localOrd.orden && localOrd.items && localOrd.items.length > 0) {
+            if (m.estado === 'libre' || localOrd.tienePendientes) {
+              m.estado = localOrd.orden.estado || 'esperando';
+              m.orden_total = localOrd.orden.total || m.orden_total || 0;
+              m.orden_activa_id = m.orden_activa_id || localOrd.orden.id;
+              m.platos_pendientes = localOrd.items;
+              m.items_pendientes = localOrd.items;
+            }
+          }
+        }
+      } catch (eOff) {}
+    }
+
     renderSalón();
     if (document.getElementById('view-editor-plano')?.classList.contains('active')) {
       renderEditorPlano();
@@ -1980,12 +2003,25 @@ async function cargarMesasDesdeBackend() {
         const cached = await window.PosOfflineDB.obtenerMesas();
         if (cached && cached.length > 0) {
           estado.mesas = cached;
+          for (const m of estado.mesas) {
+            try {
+              const localOrd = await window.PosOfflineDB.obtenerComandaLocalMesa(m.id);
+              if (localOrd && localOrd.orden && localOrd.items && localOrd.items.length > 0) {
+                m.estado = localOrd.orden.estado || 'esperando';
+                m.orden_total = localOrd.orden.total || 0;
+                m.orden_activa_id = localOrd.orden.id;
+                m.platos_pendientes = localOrd.items;
+                m.items_pendientes = localOrd.items;
+              }
+            } catch (eOrd) {}
+          }
           renderSalón();
         }
       } catch (errDb) {}
     }
   }
 }
+window.cargarMesas = cargarMesasDesdeBackend;
 
 function aplicarEscalaTextoMesa(el, w, h, esSilla) {
   if (!el) return;
@@ -2801,33 +2837,92 @@ document.querySelectorAll('.zone-tab').forEach(tab => {
 });
 
 async function abrirComanderoMesa(mesaId) {
-  const mesa = estado.mesas.find(m => m.id === mesaId);
+  const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId)) || { id: Number(mesaId), numero: mesaId, items: [] };
   if (!mesa) return;
 
   estado.mesaActiva = mesa;
   document.getElementById('comMesaNumero').textContent = mesa.numero;
   document.getElementById('comMesaZona').textContent = (mesa.zonaNombre || 'SALÓN').toUpperCase();
 
+  let data = null;
+
+  // 1. Intentar consultar orden activa al servidor si creemos que hay red
+  if (navigator.onLine && (!window.PosOfflineSync || window.PosOfflineSync.isOnline)) {
+    try {
+      const res = await fetch('/api/ordenes/mesa/' + mesaId);
+      if (res.ok) {
+        data = await res.json();
+        if (data && data.orden && window.PosOfflineDB) {
+          window.PosOfflineDB.guardarOrdenMesa(mesaId, data.orden, data.items).catch(() => {});
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 2. Comprobar datos locales de IndexedDB (por caída de conexión, fallback o ítems pendientes en Outbox)
+  if (window.PosOfflineDB) {
+    try {
+      const local = await window.PosOfflineDB.obtenerComandaLocalMesa(mesaId);
+      if (local && (local.orden || (local.items && local.items.length > 0))) {
+        if (!data || !data.orden) {
+          data = local;
+        } else if (local.items && local.items.length > 0) {
+          // Fusionar ítems pendientes de offline con los del servidor
+          const existingIds = new Set((data.items || []).map(i => i.id_detalle_existente || i.id));
+          local.items.forEach(it => {
+            if (it.offlinePendiente && !existingIds.has(it.id_detalle_existente)) {
+              data.items = data.items || [];
+              data.items.push(it);
+            }
+          });
+        }
+      }
+    } catch (e) {}
+  }
+
   try {
-    const res = await fetch('/api/ordenes/mesa/' + mesaId);
-    const data = await res.json();
-    if (data.orden) {
-      document.getElementById('comTicketOrdenId').textContent = 'Orden #' + data.orden.numero_orden;
+    if (data && (data.orden || (data.items && data.items.length > 0))) {
+      if (!data.orden) {
+        const sub = data.items.reduce((acc, it) => acc + (Number(it.precio_unitario != null ? it.precio_unitario : it.precio) * (Number(it.cantidad) || 1)), 0);
+        const serv = Math.round(sub * 0.10);
+        const iva = Math.round(sub * 0.13);
+        data.orden = {
+          id: 'offline_' + mesa.id,
+          numero_orden: 'OFFLINE-' + (mesa.numero || mesa.id),
+          mesa_id: mesa.id,
+          subtotal: sub,
+          servicio_10: serv,
+          iva_13: iva,
+          total: sub + serv + iva,
+          estado: 'esperando',
+          offline: true
+        };
+      }
+
+      document.getElementById('comTicketOrdenId').textContent = data.orden.offline 
+        ? 'Orden (Local Offline)' 
+        : ('Orden #' + (data.orden.numero_orden || data.orden.id));
       mesa.orden_id = data.orden.id;
       mesa.items = (data.items || []).map(it => ({
-        id_detalle_existente: it.id,
-        id: it.producto_id,
-        nombre: it.nombre_producto,
-        precio: it.precio_unitario,
-        cantidad: it.cantidad,
-        notas: it.notas,
+        id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
+        id: it.producto_id || it.id,
+        nombre: it.nombre_producto || it.nombre,
+        precio: Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0,
+        cantidad: Number(it.cantidad) || 1,
+        notas: it.notas || '',
         curso: it.curso || 2,
-        destino: it.destino,
-        origen_mesa_numero: it.origen_mesa_numero,
-        enviado: true
+        destino: it.destino || 'cocina',
+        origen_mesa_numero: it.origen_mesa_numero || null,
+        enviado: it.enviado !== false,
+        offlinePendiente: Boolean(it.offlinePendiente)
       }));
 
-      // Detectar si hay ítems de otras mesas unidas o si la mesa es secundaria unida
+      // Si la mesa tenía pedidos offline, asegurar que el estado visual de la mesa refleje consumo
+      if (mesa.items.length > 0 && mesa.estado === 'libre') {
+        mesa.estado = 'esperando';
+        mesa.orden_total = data.orden.total || 0;
+      }
+
       // Detectar si la mesa está activamente unida a otra mesa
       const esUnidaReal = Boolean(mesa.es_mesa_unida || mesa.unida_con || (mesa.mesas_unidas && mesa.mesas_unidas.length > 0) || mesa.es_mesa_secundaria_unida || mesa.grupo_mesas);
 
@@ -2858,7 +2953,7 @@ async function abrirComanderoMesa(mesaId) {
       }
     }
   } catch (e) {
-    mesa.items = [];
+    console.warn('[Comandero] Error procesando comanda:', e);
   }
 
   renderTicketItems();
@@ -2905,10 +3000,16 @@ function renderTicketItems() {
       ? `<span class="hh-promo-badge">🍸 2x1</span>`
       : '';
 
+    const estadoEnvioBadge = it.enviado 
+      ? (it.offlinePendiente 
+          ? '<small style="color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.15); padding:1px 6px; border-radius:4px;">🟡 Guardado offline</small>' 
+          : '<small style="color:#10b981;">✓ Enviado</small>')
+      : '';
+
     return `
       <div class="ticket-item-row">
         <div class="ticket-item-top">
-          <span class="t-name">${origenBadge}${it.nombre} ${promoBadge} ${cursoBadge} ${it.enviado ? '<small style="color:#10b981;">✓ Enviado</small>' : ''}</span>
+          <span class="t-name">${origenBadge}${it.nombre} ${promoBadge} ${cursoBadge} ${estadoEnvioBadge}</span>
           <span class="t-price">${formatCRC(it.precio * it.cantidad)}</span>
         </div>
         ${it.notas ? `<div class="ticket-item-notes">⚠️ ${it.notas}</div>` : ''}
@@ -3015,9 +3116,40 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
     }
-    estado.mesaActiva.items.forEach(it => it.enviado = true);
+    const esOffline = !navigator.onLine || (window.PosOfflineSync && !window.PosOfflineSync.isOnline);
+    estado.mesaActiva.items.forEach(it => {
+      it.enviado = true;
+      if (esOffline) {
+        it.offlinePendiente = true;
+      }
+    });
+
+    const sub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+    const serv = Math.round(sub * 0.10);
+    const iva = Math.round(sub * 0.13);
+    const tot = sub + serv + iva;
+
+    estado.mesaActiva.estado = tieneNuevosCocina ? 'esperando' : 'abierta';
+    estado.mesaActiva.orden_total = tot;
+
+    // Guardar copia local de la orden en IndexedDB para persistencia ante reingresos
+    if (window.PosOfflineDB) {
+      window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, {
+        id: estado.mesaActiva.orden_id || ('offline_' + estado.mesaActiva.id),
+        numero_orden: 'OFFLINE-' + (estado.mesaActiva.numero || estado.mesaActiva.id),
+        mesa_id: estado.mesaActiva.id,
+        subtotal: sub,
+        servicio_10: serv,
+        iva_13: iva,
+        total: tot,
+        estado: estado.mesaActiva.estado,
+        offline: esOffline
+      }, estado.mesaActiva.items).catch(() => {});
+    }
+
     actualizarBotonEnviarComanda();
     document.getElementById('modalComandero').classList.remove('active');
+    renderSalón();
   };
 
   if (window.PosOfflineSync) {
@@ -3035,7 +3167,10 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
       return;
     }
     if (resSync && resSync.exito) {
-      optimistaFn();
+      estado.mesaActiva.items.forEach(it => {
+        it.enviado = true;
+        it.offlinePendiente = false;
+      });
       alert(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina!' : '💾 ¡Comanda guardada con éxito!');
       cargarMesasDesdeBackend();
       cargarKDSDesdeBackend();
@@ -3370,29 +3505,45 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
   }
 
+  const payloadCobro = {
+    ordenId,
+    metodo,
+    monto: totalNum,
+    propina: Math.round(totalNum * 0.10),
+    cambio,
+    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+    liquidar_total: esLiquidacionFinal,
+    items_pagados: personaCobrada ? personaCobrada.items : []
+  };
+
   if (ordenId) {
-    try {
-      await fetch(`/api/ordenes/${ordenId}/cobrar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          metodo,
-          monto: totalNum,
-          propina: Math.round(totalNum * 0.10),
-          cambio,
-          mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
-          liquidar_total: esLiquidacionFinal,
-          items_pagados: personaCobrada ? personaCobrada.items : []
-        })
+    if (window.PosOfflineSync) {
+      await window.PosOfflineSync.ejecutarConRespaldo({
+        tipo: 'COBRAR_ORDEN',
+        endpoint: `/api/ordenes/${ordenId}/cobrar`,
+        metodo: 'POST',
+        payload: payloadCobro,
+        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
       });
-    } catch (e) {
-      console.error('Error al registrar cobro:', e);
+    } else {
+      try {
+        await fetch(`/api/ordenes/${ordenId}/cobrar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadCobro)
+        });
+      } catch (e) {
+        console.error('Error al registrar cobro:', e);
+      }
     }
   }
 
   if (esLiquidacionFinal) {
     alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
     if (estado.mesaActiva) {
+      if (window.PosOfflineDB) {
+        window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
+      }
       estado.mesaActiva.estado = 'libre';
       estado.mesaActiva.items = [];
       estado.mesaActiva.orden_id = null;
@@ -3427,6 +3578,21 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           }
         }
       });
+      if (window.PosOfflineDB) {
+        const remSub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const remServ = Math.round(remSub * 0.10);
+        const remIva = Math.round(remSub * 0.13);
+        window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, {
+          id: estado.mesaActiva.orden_id,
+          numero_orden: estado.mesaActiva.numero,
+          mesa_id: estado.mesaActiva.id,
+          subtotal: remSub,
+          servicio_10: remServ,
+          iva_13: remIva,
+          total: remSub + remServ + remIva,
+          estado: 'esperando'
+        }, estado.mesaActiva.items).catch(() => {});
+      }
     }
 
     // Recalcular y renderizar comanda en vivo

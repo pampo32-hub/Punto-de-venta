@@ -434,3 +434,4 @@
     PosOfflineSync.init();
   }
 })(typeof window !== 'undefined' ? window : this);
+

@@ -1,13 +1,13 @@
 /**
  * offline-db.js - Almacenamiento Local en IndexedDB para GastroBar POS
- * Proporciona soporte Offline-First para catálogo, mesas y cola Outbox.
+ * Proporciona soporte Offline-First para catálogo, mesas, órdenes activas y cola Outbox.
  */
 
 (function (window) {
   'use strict';
 
   const DB_NAME = 'gastrobar_pos_offline';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
 
   let dbInstance = null;
 
@@ -41,6 +41,11 @@
         // 4. Metadatos de sincronización
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'clave' });
+        }
+
+        // 5. Órdenes y comandas activas locales por mesa
+        if (!db.objectStoreNames.contains('ordenes')) {
+          db.createObjectStore('ordenes', { keyPath: 'mesaId' });
         }
       };
 
@@ -133,6 +138,53 @@
     },
 
     /**
+     * Guarda o actualiza la orden y sus platillos para una mesa específica
+     */
+    guardarOrdenMesa: async function (mesaId, orden, items) {
+      const db = await abrirDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('ordenes', 'readwrite');
+        const store = tx.objectStore('ordenes');
+        store.put({
+          mesaId: Number(mesaId),
+          orden: orden || null,
+          items: Array.isArray(items) ? items : [],
+          actualizado: new Date().toISOString()
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    },
+
+    /**
+     * Obtiene la orden guardada de una mesa
+     */
+    obtenerOrdenMesa: async function (mesaId) {
+      const db = await abrirDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('ordenes', 'readonly');
+        const store = tx.objectStore('ordenes');
+        const req = store.get(Number(mesaId));
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = (e) => reject(e.target.error);
+      });
+    },
+
+    /**
+     * Limpia la orden de una mesa (al pagar o liberar)
+     */
+    limpiarOrdenMesa: async function (mesaId) {
+      const db = await abrirDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('ordenes', 'readwrite');
+        const store = tx.objectStore('ordenes');
+        const req = store.delete(Number(mesaId));
+        req.onsuccess = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    },
+
+    /**
      * Encola una acción en el Outbox para su posterior sincronización
      */
     encolarAccion: async function ({ tipo, endpoint, metodo = 'POST', payload = {}, descripcion = '' }) {
@@ -179,6 +231,91 @@
         };
         req.onerror = (e) => reject(e.target.error);
       });
+    },
+
+    /**
+     * Obtiene la comanda completa de una mesa combinando el caché previo
+     * y los pedidos que estén acumulados en la cola Outbox sin conexión.
+     */
+    obtenerComandaLocalMesa: async function (mesaId) {
+      const numMesaId = Number(mesaId);
+      const guardada = await PosOfflineDB.obtenerOrdenMesa(numMesaId).catch(() => null);
+      const pendientes = await PosOfflineDB.obtenerAccionesPendientes().catch(() => []);
+
+      let orden = guardada ? guardada.orden : null;
+      let items = guardada && guardada.items ? [...guardada.items] : [];
+
+      // Buscar acciones de enviar comanda pendientes para esta mesa
+      const comandaAcciones = pendientes.filter(
+        (a) =>
+          (a.tipo === 'ENVIAR_COMANDA' || (a.endpoint && a.endpoint.includes('/comandas/enviar'))) &&
+          Number(a.payload?.mesaId || a.payload?.mesa_id) === numMesaId
+      );
+
+      for (const accion of comandaAcciones) {
+        const payloadItems = accion.payload?.items || [];
+        for (const it of payloadItems) {
+          const prodId = it.producto_id || it.id;
+          const nombreProd = it.nombre_producto || it.nombre;
+          const precioProd = Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0;
+          const cantidadProd = Number(it.cantidad) || 1;
+
+          // Si ya existía un ítem offline igual, se actualiza cantidad
+          const existente = items.find(
+            (ex) => (ex.id === prodId || ex.producto_id === prodId) && ex.nombre === nombreProd && ex.offlinePendiente
+          );
+
+          if (existente) {
+            existente.cantidad += cantidadProd;
+          } else {
+            items.push({
+              id_detalle_existente: null,
+              id: prodId,
+              producto_id: prodId,
+              nombre: nombreProd,
+              nombre_producto: nombreProd,
+              precio: precioProd,
+              precio_unitario: precioProd,
+              cantidad: cantidadProd,
+              notas: it.notas || '',
+              curso: it.curso || 2,
+              destino: it.destino || 'cocina',
+              origen_mesa_numero: it.origen_mesa_numero || null,
+              enviado: true,
+              offlinePendiente: true
+            });
+          }
+        }
+      }
+
+      if (items.length > 0 && !orden) {
+        const subtotal = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const servicio = Math.round(subtotal * 0.1);
+        const iva = Math.round(subtotal * 0.13);
+        const total = subtotal + servicio + iva;
+
+        orden = {
+          id: 'offline_' + numMesaId,
+          numero_orden: 'OFFLINE-' + numMesaId,
+          mesa_id: numMesaId,
+          subtotal,
+          servicio_10: servicio,
+          iva_13: iva,
+          total,
+          estado: 'esperando',
+          offline: true
+        };
+      } else if (orden && items.length > 0) {
+        const subtotal = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const servicio = Math.round(subtotal * 0.1);
+        const iva = Math.round(subtotal * 0.13);
+        orden.subtotal = subtotal;
+        orden.servicio_10 = servicio;
+        orden.iva_13 = iva;
+        orden.total = subtotal + servicio + iva;
+      }
+
+      return { orden, items, tienePendientes: comandaAcciones.length > 0 };
     },
 
     /**
