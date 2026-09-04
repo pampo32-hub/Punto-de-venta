@@ -61,6 +61,7 @@ db.serialize(() => {
   db.run("ALTER TABLE Mesas ADD COLUMN transferida_de TEXT", () => {});
   db.run("ALTER TABLE Ordenes ADD COLUMN transferida_de TEXT", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN piso INTEGER DEFAULT 1", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
   db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
 
@@ -542,7 +543,12 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
-      } else if (!m.orden_activa_id || m.estado === 'libre') {
+      } else if (!m.orden_activa_id) {
+        if (m.estado !== 'libre' || m.pidio_cuenta_qr) {
+          m.estado = 'libre';
+          m.pidio_cuenta_qr = 0;
+          dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
+        }
         m.transferida_de = null;
         m.unida_con = null;
         m.mesas_unidas = [];
@@ -1605,7 +1611,8 @@ app.post('/api/happy-hour', async (req, res) => {
 
 app.post('/api/comandas/enviar', async (req, res) => {
   try {
-    const { mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false } = req.body;
+    const mesaId = req.body.mesaId || req.body.mesa_id;
+    const { mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false } = req.body;
     if (!Array.isArray(items) || !items.length) {
       return res.status(400).json({ error: 'La comanda no contiene productos' });
     }
@@ -2043,7 +2050,7 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 app.post('/api/ordenes/:id/cobrar', async (req, res) => {
   try {
     const ordenId = req.params.id;
-    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival', esParcial = false } = req.body;
+    const { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival' } = req.body;
     const ahora = new Date().toISOString();
 
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
@@ -2057,36 +2064,21 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
       [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
     );
 
-    const pagosRes = await dbGet('SELECT COALESCE(SUM(monto), 0) as totalPagado FROM Pagos WHERE orden_id = ?', [ordenId]);
-    const totalPagado = pagosRes ? Number(pagosRes.totalPagado) : Number(monto);
-    const totalOrden = Number(orden.total) || 0;
-    const saldoPendiente = Math.max(0, totalOrden - totalPagado);
+    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
 
-    const esPagoTotal = !esParcial && (saldoPendiente <= 5 || totalOrden === 0);
-
-    if (esPagoTotal) {
-      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
-
-      if (orden.mesa_id) {
-        await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
-          [orden.mesa_id]
-        );
-        await dbRun(
-          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-          [orden.mesa_id, orden.mesa_id]
-        );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
-      }
-
-      res.json({ message: 'Cobro total completado y mesa liberada', ordenId, pagadaCompletamente: true, saldoPendiente: 0 });
-    } else {
-      if (orden.mesa_id) {
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'ocupada', total: saldoPendiente });
-      }
-
-      res.json({ message: 'Pago parcial registrado. Mesa permanece abierta.', ordenId, pagadaCompletamente: false, saldoPendiente });
+    if (orden.mesa_id) {
+      await dbRun(
+        "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0 WHERE id = ?",
+        [orden.mesa_id]
+      );
+      await dbRun(
+        'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+        [orden.mesa_id, orden.mesa_id]
+      );
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
     }
+
+    res.json({ message: 'Cobro completado y mesa liberada', ordenId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2182,24 +2174,23 @@ app.get('/api/cliente/mesa/:mesaId', async (req, res) => {
   }
 });
 
-app.post('/api/cliente/mesa/:mesaId/pedir-cuenta', async (req, res) => {
+app.post('/api/cliente/mesa/:id/pedir-cuenta', async (req, res) => {
   try {
-    const mesaId = req.params.mesaId;
-    await dbRun("UPDATE Mesas SET estado = 'cuenta' WHERE id = ?", [mesaId]);
+    const mesaId = req.params.id || req.params.mesaId;
+    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1 WHERE id = ?", [mesaId]);
     await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [mesaId]);
 
-    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesa ? mesa.numero : 'Mesa' });
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta' });
+    io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesa.numero });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1 });
 
     res.json({ message: 'Solicitud enviada al mesero' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
-
-
-
 
 // ============================================================================
 // ENDPOINTS PARA EL CLIENTE (ESCANEÓ QR EN MESA)
@@ -2224,21 +2215,6 @@ app.get('/api/cliente/mesa/:id', async (req, res) => {
       orden: orden || null,
       items
     });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post('/api/cliente/mesa/:id/pedir-cuenta', async (req, res) => {
-  try {
-    const mesaId = req.params.id;
-    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
-
-    await dbRun('UPDATE Mesas SET estado = "cuenta" WHERE id = ?', [mesaId]);
-    io.emit('cliente_pidio_cuenta', { mesaId, mesaNumero: mesa.numero });
-    io.emit('mesa_actualizada', { id: mesaId, estado: 'cuenta' });
-    res.json({ message: 'Cuenta solicitada exitosamente al salonero' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

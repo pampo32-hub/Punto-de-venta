@@ -510,11 +510,6 @@ try {
     });
     socket.on('producto_visual_cambiado', () => cargarMenuDesdeBackend());
     socket.on('mesas_reorganizadas', () => cargarMesasDesdeBackend());
-    socket.on('cliente_pidio_cuenta', (d) => {
-      sonarCampanaCocina();
-      alert(`📱 ¡Aviso de Cliente!\n\nEl cliente de la ${d.mesaNumero} ha solicitado la cuenta.`);
-      cargarMesasDesdeBackend();
-    });
     socket.on('happy_hour_cambio', (data) => {
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
     });
@@ -585,8 +580,8 @@ function formatCRCSinDecimales(num) {
 }
 
 // Control y Alternancia de Pisos (1er Piso y Segundo Piso)
-window.togglePisoActual = function() {
-  estado.pisoActual = (estado.pisoActual === 2 ? 1 : 2);
+window.cambiarPisoSalon = function(piso) {
+  estado.pisoActual = Number(piso) || 1;
   const tabs = document.querySelectorAll('.zone-tab');
   tabs.forEach(t => t.classList.remove('active'));
   if (estado.pisoActual === 2) {
@@ -602,6 +597,10 @@ window.togglePisoActual = function() {
   }
   actualizarBotonPisoSalon();
   renderSalón(estado.pisoActual === 2 ? 'segundo' : 'todas');
+};
+
+window.togglePisoActual = function() {
+  window.cambiarPisoSalon(estado.pisoActual === 2 ? 1 : 2);
 };
 
 window.actualizarBotonPisoSalon = function() {
@@ -1487,7 +1486,7 @@ function aplicarEscalaTextoMesa(el, w, h, esSilla) {
   if (totalEl) totalEl.style.fontSize = totalFontSize;
 }
 
-function renderSalón(filtroZona = 'todas') {
+function renderSalón(filtroZona = null) {
   const canvas = document.getElementById('mesasCanvasView');
   if (!canvas) return;
   canvas.innerHTML = '';
@@ -1495,11 +1494,15 @@ function renderSalón(filtroZona = 'todas') {
   const pisoActivo = estado.pisoActual || 1;
   actualizarBotonPisoSalon();
 
+  if (!filtroZona) {
+    filtroZona = (pisoActivo === 2 ? 'segundo' : 'todas');
+  }
+
   const mesasFiltradas = estado.mesas.filter(m => {
-    const mesaPiso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+    const mesaPiso = m.piso ? Number(m.piso) : (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
     if (mesaPiso !== pisoActivo) return false;
-    if (filtroZona === 'todas' || filtroZona === 'segundo') return true;
-    return m.zona && m.zona.includes(filtroZona);
+    if (filtroZona === 'todas' || filtroZona === 'segundo' || filtroZona === 'segundopiso') return true;
+    return m.zona && (m.zona.includes(filtroZona) || filtroZona.includes(m.zona));
   });
 
   mesasFiltradas.forEach(m => {
@@ -1567,7 +1570,7 @@ function renderSalón(filtroZona = 'todas') {
         <div class="mesa-tooltip ${isNearTop ? 'tooltip-bottom' : ''}">
           <div class="mesa-tooltip-header">${escapeHtml(headerText)}</div>
           <ul class="mesa-tooltip-list">
-            ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo'))}</li>`).join('')}
+            ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')}
           </ul>
         </div>
       `;
@@ -2696,6 +2699,7 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', () => {
     alert('No hay consumos en esta mesa para cobrar.');
     return;
   }
+  estado.cobroSplitPersonaIndex = null;
 
   const totalTxt = document.getElementById('comTotal').textContent;
   document.getElementById('cobroMesaTitulo').textContent = estado.mesaActiva.numero;
@@ -2744,31 +2748,27 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
   const cambio = Math.max(0, recibido - totalNum);
 
-  const esCobroPersonaSplit = (typeof splitState !== 'undefined' && splitState.personaCobrandoIndex !== null && splitState.personaCobrandoIndex !== undefined && splitState.personas && splitState.personas[splitState.personaCobrandoIndex]);
+  const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
+  const mesaNumero = estado.mesaActiva ? estado.mesaActiva.numero : 'Mesa';
 
-  let esParcial = false;
-  let saldoRestante = 0;
-  let personaNombre = '';
+  const esCobroSplitPersona = (estado.cobroSplitPersonaIndex != null && splitState && splitState.personas && splitState.personas[estado.cobroSplitPersonaIndex]);
+  let esLiquidacionFinal = true;
 
-  if (esCobroPersonaSplit) {
-    const pCobrada = splitState.personas[splitState.personaCobrandoIndex];
-    pCobrada.pagada = true;
-    personaNombre = pCobrada.nombre;
+  if (esCobroSplitPersona) {
+    const personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
+    personaCobrada.guardada = true;
+    personaCobrada.pagada = true;
 
-    // Calcular personas pendientes y saldo restante de la mesa
-    const personasPendientes = splitState.personas.filter(p => !p.pagada && p.items && p.items.length > 0);
-    saldoRestante = personasPendientes.reduce((acc, p) => acc + p.total, 0);
-    esParcial = (saldoRestante > 0);
-  } else {
-    // Si es cobro general pero el monto recibido/pagado es menor que el total de la mesa
-    const totalMesaActual = estado.mesaActiva.total || (estado.mesaActiva.subtotal ? estado.mesaActiva.subtotal * 1.23 : totalNum);
-    saldoRestante = Math.max(0, totalMesaActual - totalNum);
-    esParcial = (saldoRestante > 5);
+    // Verificar si quedan personas con productos sin pagar o productos en la mesa sin asignar
+    const personasConItemsSinPagar = splitState.personas.filter(p => !p.pagada && p.items && p.items.length > 0);
+    const itemsEnMesaSinAsignar = (splitState.itemsDisponibles || []).filter(it => it.cantidad > 0);
+    esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
+    estado.cobroSplitPersonaIndex = null;
   }
 
-  if (estado.mesaActiva && estado.mesaActiva.orden_id) {
+  if (ordenId) {
     try {
-      await fetch(`/api/ordenes/${estado.mesaActiva.orden_id}/cobrar`, {
+      await fetch(`/api/ordenes/${ordenId}/cobrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2777,47 +2777,36 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           propina: Math.round(totalNum * 0.10),
           cambio,
           mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
-          esParcial
+          liquidar_total: esLiquidacionFinal
         })
       });
     } catch (e) {}
   }
 
-  if (esParcial) {
-    const msg = personaNombre 
-      ? `💳 ¡Pago de ${personaNombre} (${formatCRCSinDecimales(totalNum)}) registrado!\n\nLa mesa permanece ABIERTA con un saldo pendiente de ${formatCRCSinDecimales(saldoRestante)}.`
-      : `💳 ¡Pago parcial de ${formatCRCSinDecimales(totalNum)} registrado!\n\nLa mesa permanece ABIERTA con un saldo pendiente de ${formatCRCSinDecimales(saldoRestante)}.`;
-    
-    alert(msg);
-
-    estado.mesaActiva.estado = 'ocupada';
-    estado.mesaActiva.total = saldoRestante;
-    estado.mesaActiva.subtotal = Math.round(saldoRestante / 1.23);
-
-    document.getElementById('modalCobro').classList.remove('active');
-
-    if (esCobroPersonaSplit) {
-      renderSplitColaPersonas();
-      document.getElementById('modalSplitBill').classList.add('active');
-    } else {
-      document.getElementById('modalComandero').classList.remove('active');
+  if (esLiquidacionFinal) {
+    alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
+    if (estado.mesaActiva) {
+      estado.mesaActiva.estado = 'libre';
+      estado.mesaActiva.items = [];
+      estado.mesaActiva.orden_id = null;
+      estado.mesaActiva.orden_activa_id = null;
+      estado.mesaActiva.orden_total = 0;
+      estado.mesaActiva.pidio_cuenta_qr = 0;
+      estado.mesaActiva.cuenta_pedida = false;
     }
-  } else {
-    alert(`✅ ¡Cuenta de ${estado.mesaActiva.numero} liquidada en su totalidad!\n\n• Tiquete impreso.\n• Mesa liberada.`);
-    estado.mesaActiva.estado = 'libre';
-    estado.mesaActiva.items = [];
-    estado.mesaActiva.orden_id = null;
-    estado.mesaActiva.orden_activa_id = null;
-    estado.mesaActiva.orden_total = 0;
-    estado.mesaActiva.pidio_cuenta_qr = 0;
-    estado.mesaActiva.cuenta_pedida = false;
     document.getElementById('modalCobro').classList.remove('active');
-    document.getElementById('modalSplitBill').classList.remove('active');
     document.getElementById('modalComandero').classList.remove('active');
+    document.getElementById('modalSplitBill').classList.remove('active');
+  } else {
+    alert(`✅ ¡Pago registrado con éxito!\n\n• Tiquete impreso.\n• Mesa permanece abierta con saldo pendiente.`);
+    document.getElementById('modalCobro').classList.remove('active');
+    if (document.getElementById('modalSplitBill').classList.contains('active')) {
+      renderSplitPersonaActiva();
+      renderSplitColaPersonas();
+    }
   }
 
-  if (typeof splitState !== 'undefined') splitState.personaCobrandoIndex = null;
-  cargarMesasDesdeBackend();
+  await cargarMesasDesdeBackend();
   cargarCajaDesdeBackend();
 });
 
@@ -3628,31 +3617,24 @@ function renderSplitColaPersonas() {
     recalcularPersona(p);
     const card = document.createElement('div');
     const esActiva = (idx === splitState.personaActivaIndex);
-    const esPagada = Boolean(p.pagada);
-    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''} ${esPagada ? 'paid-card' : ''}`;
+    card.className = `split-queue-card ${esActiva ? 'active-editing' : ''}`;
 
     const totalItems = (p.items || []).reduce((acc, it) => acc + it.cantidad, 0);
     const summaryTxt = totalItems > 0 
       ? p.items.map(it => `${it.cantidad}x ${it.nombre}`).join(', ')
       : 'Sin consumos asignados';
 
-    const actionsHtml = esPagada
-      ? `<div style="text-align:center; padding: 5px; color:#34d399; font-weight:800; font-size:0.8rem; background:rgba(16,185,129,0.15); border-radius:6px; border:1px solid rgba(16,185,129,0.35);">✅ Cuenta Pagada</div>`
-      : `
-        <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
-        <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
-      `;
-
     card.innerHTML = `
       <div class="card-head">
-        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''} ${esPagada ? '<small style="color:#34d399;">(Pagada)</small>' : ''}</span>
-        <span class="card-total" style="${esPagada ? 'text-decoration:line-through; opacity:0.6;' : ''}">${formatCRCSinDecimales(p.total)}</span>
+        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''}</span>
+        <span class="card-total">${formatCRCSinDecimales(p.total)}</span>
       </div>
       <div class="card-items-summary" title="${escapeHtml(summaryTxt)}">
         ${escapeHtml(summaryTxt)}
       </div>
       <div class="card-actions">
-        ${actionsHtml}
+        <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
+        <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
       </div>
     `;
 
@@ -3662,10 +3644,6 @@ function renderSplitColaPersonas() {
 
 window.seleccionarPersonaSplitParaEditar = function(index) {
   if (index >= 0 && index < splitState.personas.length) {
-    if (splitState.personas[index].pagada) {
-      alert(`La cuenta de ${splitState.personas[index].nombre} ya fue pagada y no puede modificarse.`);
-      return;
-    }
     splitState.personaActivaIndex = index;
     renderSplitPersonaActiva();
     renderSplitColaPersonas();
@@ -3678,16 +3656,10 @@ window.cobrarPersonaSplit = function(personaIndex) {
     alert('Esta persona no tiene productos asignados para cobrar.');
     return;
   }
-  if (p.pagada) {
-    alert(`La cuenta de ${p.nombre} ya fue pagada.`);
-    return;
-  }
-
-  splitState.personaCobrandoIndex = personaIndex;
+  estado.cobroSplitPersonaIndex = personaIndex;
   document.getElementById('modalSplitBill').classList.remove('active');
 
-  const mesaNombre = estado.mesaActiva.nombre || `Mesa ${estado.mesaActiva.numero}`;
-  document.getElementById('cobroMesaTitulo').textContent = `${mesaNombre} - ${p.nombre}`;
+  document.getElementById('cobroMesaTitulo').textContent = `${estado.mesaActiva.numero} - ${p.nombre}`;
   document.getElementById('cobroTotalDisplay').textContent = formatCRCSinDecimales(p.total);
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0';
