@@ -1,4 +1,44 @@
 
+// ============================================================================
+// MODAL DE CONFIRMACIÓN PERSONALIZADO — reemplaza confirm() nativo del browser
+// ============================================================================
+window.confirmarAccion = function(opciones) {
+  return new Promise((resolve) => {
+    const modal     = document.getElementById('modalConfirmacionAccion');
+    const elIcono   = document.getElementById('modalConfirmIcono');
+    const elTitulo  = document.getElementById('modalConfirmTitulo');
+    const elSubtit  = document.getElementById('modalConfirmSubtitulo');
+    const elMensaje = document.getElementById('modalConfirmMensaje');
+    const elBtnSi   = document.getElementById('modalConfirmBtnSi');
+    const elBtnNo   = document.getElementById('modalConfirmBtnNo');
+
+    if (!modal) { resolve(false); return; }
+
+    // Configurar contenido
+    if (elIcono)   elIcono.textContent   = opciones.icono   || '⚠️';
+    if (elTitulo)  elTitulo.textContent  = opciones.titulo  || '¿Confirmar acción?';
+    if (elSubtit)  elSubtit.textContent  = opciones.subtitulo || 'Esta acción no se puede deshacer';
+    if (elMensaje) elMensaje.textContent = opciones.mensaje || '';
+
+    // Color del botón confirmar según peligro
+    if (elBtnSi) {
+      const esPeligroso = opciones.tipo === 'peligro' || opciones.tipo === 'danger';
+      elBtnSi.style.background = esPeligroso
+        ? 'linear-gradient(135deg,#ef4444,#dc2626)'
+        : 'linear-gradient(135deg,#6366f1,#4f46e5)';
+      elBtnSi.textContent = opciones.txtSi || 'Confirmar';
+    }
+    if (elBtnNo) elBtnNo.textContent = opciones.txtNo || 'Cancelar';
+
+    // Callbacks
+    window._confirmarAceptar = () => { modal.style.display = 'none'; resolve(true);  };
+    window._confirmarRechazar = () => { modal.style.display = 'none'; resolve(false); };
+
+    // Mostrar modal
+    modal.style.display = 'flex';
+  });
+};
+
 let mesaParaRenombrar = null;
 
 window.abrirModalRenombrarMesa = function(mesaId, nombreActual) {
@@ -261,9 +301,16 @@ window.buscarActualizacionesManual = async function() {
 };
 
 window.aplicarActualizacionSistema = async function() {
-  if (!confirm('¿Deseas descargar e instalar la actualización ahora?\n\nLa base de datos (ventas, mesas, facturas) se mantendrá 100% segura e intacta.')) {
-    return;
-  }
+  const confirmado = await confirmarAccion({
+    icono: '🔄',
+    titulo: '¿Instalar actualización?',
+    subtitulo: 'La base de datos se mantendrá intacta',
+    mensaje: '¿Deseas descargar e instalar la actualización ahora?\n\nLa base de datos (ventas, mesas, facturas) se mantendrá 100% segura e intacta.',
+    tipo: 'info',
+    txtSi: '✅ Instalar ahora',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
 
   const btn = document.getElementById('btnAplicarUpdate');
   if (btn) {
@@ -349,22 +396,29 @@ window.guardarNuevoNombreMesa = async function() {
 };
 
 window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
-  if (!confirm(`¿Estás seguro de que deseas eliminar "${mesaNumero}" del salón?`)) {
-    return;
-  }
+  const confirmado = await confirmarAccion({
+    icono: '🗑️',
+    titulo: '¿Eliminar del salón?',
+    subtitulo: 'Esta acción no se puede deshacer',
+    mensaje: `¿Estás seguro de que deseas eliminar "${mesaNumero}" del salón? Se perderá su posición y configuración.`,
+    tipo: 'peligro',
+    txtSi: '🗑️ Sí, eliminar',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
 
   try {
     const res = await fetch('/api/mesas/' + mesaId, { method: 'DELETE' });
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ ' + (data.error || 'No se pudo eliminar la mesa'));
+      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo eliminar la mesa'), 'error');
       return;
     }
-    alert(`🗑️ "${mesaNumero}" eliminada correctamente del salón.`);
+    mostrarNotificacionCentro(`🗑️ "${mesaNumero}" eliminada correctamente del salón.`, 'success');
     await cargarMesasDesdeBackend();
     renderEditorPlano();
   } catch (e) {
-    alert('Error al eliminar la mesa');
+    mostrarNotificacionCentro('❌ Error al eliminar la mesa', 'error');
   }
 };
 
@@ -1106,7 +1160,16 @@ async function cargarUsuariosDev() {
 }
 
 window.eliminarUsuarioDev = async function(id) {
-  if (!confirm('¿Seguro que deseas eliminar este usuario?')) return;
+  const confirmado = await confirmarAccion({
+    icono: '👤',
+    titulo: '¿Eliminar usuario?',
+    subtitulo: 'Esta acción no se puede deshacer',
+    mensaje: '¿Seguro que deseas eliminar este usuario del sistema?',
+    tipo: 'peligro',
+    txtSi: '🗑️ Sí, eliminar',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
   try {
     await fetch('/api/dev/usuarios/' + id, { method: 'DELETE' });
     cargarUsuariosDev();
@@ -1189,7 +1252,16 @@ document.getElementById('btnGuardarEmpleado').addEventListener('click', async ()
 });
 
 window.eliminarEmpleadoAdmin = async function(id) {
-  if (!confirm('¿Eliminar a este colaborador del equipo?')) return;
+  const confirmado = await confirmarAccion({
+    icono: '👥',
+    titulo: '¿Eliminar colaborador?',
+    subtitulo: 'Esta acción no se puede deshacer',
+    mensaje: '¿Estás seguro de que deseas eliminar a este colaborador del equipo?',
+    tipo: 'peligro',
+    txtSi: '🗑️ Sí, eliminar',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
   try {
     await fetch('/api/admin/empleados/' + id, { method: 'DELETE' });
     cargarEmpleadosAdmin();
@@ -4447,7 +4519,16 @@ document.getElementById('btnGuardarPlano').addEventListener('click', async () =>
 });
 
 document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', async () => {
-  if (!confirm('¿Deseas reorganizar automáticamente todas las mesas y sillas en una cuadrícula limpia y espaciada sin solapes?')) return;
+  const confirmado = await confirmarAccion({
+    icono: '✨',
+    titulo: '¿Reorganizar el salón?',
+    subtitulo: 'Se reorganizarán todas las mesas y sillas',
+    mensaje: '¿Deseas reorganizar automáticamente todas las mesas y sillas en una cuadrícula limpia y espaciada sin solapes?',
+    tipo: 'info',
+    txtSi: '✨ Sí, reorganizar',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
   try {
     const res = await fetch('/api/mesas/posiciones/reorganizar-cuadricula', { method: 'POST' });
     const data = await res.json();
@@ -4457,7 +4538,7 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
       renderEditorPlano();
     }
   } catch (e) {
-    alert('Error al reorganizar cuadrícula: ' + e.message);
+    mostrarNotificacionCentro('❌ Error al reorganizar: ' + e.message, 'error');
   }
 });
 
@@ -5599,297 +5680,14 @@ window.probarImpresoraBackend = async function(destino) {
   }
 };
 
-// Escuchar eventos en vivo de Socket.IO para impresiones y piso de salón
+// Escuchar eventos en vivo de Socket.IO para impresiones
 try {
   if (typeof socket !== 'undefined' && socket) {
     socket.on('ticket_impreso', (reg) => {
       cargarHistorialImpresoras();
     });
-    socket.on('salon_piso_fondo_cambiado', (data) => {
-      if (data && data.pisoFondo) {
-        aplicarClasePisoSalon(data.pisoFondo);
-      }
-    });
   }
 } catch (_) {}
-
-// ============================================================================
-// GESTOR DE PISOS Y FONDOS REALISTAS DEL SALÓN (PERSONALIZACIÓN ADMIN)
-// ============================================================================
-const CATALOGO_PISOS_SALON = [
-  // MADERAS Y DECKS
-  {
-    id: 'piso-madera-oscura',
-    nombre: 'Madera Roble Rústica',
-    categoria: 'madera',
-    badge: '🪵',
-    tag: 'Madera',
-    tagCls: 'piso-tag-madera',
-    desc: 'Tablones de roble oscuro con vetas cálidas. Ideal para gastrobares, asadores y pubs.'
-  },
-  {
-    id: 'piso-madera-clara',
-    nombre: 'Madera Roble Nórdica',
-    categoria: 'madera',
-    badge: '🌲',
-    tag: 'Madera',
-    tagCls: 'piso-tag-madera',
-    desc: 'Madera clara natural y luminosa. Estilo bistró escandinavo y cafeterías gourmet.'
-  },
-  {
-    id: 'piso-deck-terraza',
-    nombre: 'Deck de Madera Exterior',
-    categoria: 'madera',
-    badge: '🌿',
-    tag: 'Deck',
-    tagCls: 'piso-tag-madera',
-    desc: 'Listones de madera tropical para terrazas al aire libre, cervecerías y lounges.'
-  },
-  {
-    id: 'piso-ladrillo-rustico',
-    nombre: 'Ladrillo Rústico / Cava',
-    categoria: 'madera',
-    badge: '🧱',
-    tag: 'Rústico',
-    tagCls: 'piso-tag-madera',
-    desc: 'Ladrillos de terracota en espiga. Ambiente acogedor de cava de vinos o taberna.'
-  },
-
-  // MÁRMOLES Y BALDOSAS
-  {
-    id: 'piso-marmol-negro',
-    nombre: 'Mármol Negro Imperial',
-    categoria: 'marmol',
-    badge: '🏛️',
-    tag: 'Mármol',
-    tagCls: 'piso-tag-marmol',
-    desc: 'Piedra pulida negra con vetas doradas. Máxima elegancia para alta cocina y steakhouse.'
-  },
-  {
-    id: 'piso-marmol-blanco',
-    nombre: 'Mármol Blanco Carrara',
-    categoria: 'marmol',
-    badge: '⚪',
-    tag: 'Mármol',
-    tagCls: 'piso-tag-marmol',
-    desc: 'Mármol blanco luminoso con sutiles vetas grises. Moderno, limpio y exclusivo.'
-  },
-  {
-    id: 'piso-baldosas-vintage',
-    nombre: 'Baldosa Hidráulica / Mosaico',
-    categoria: 'marmol',
-    badge: '💠',
-    tag: 'Mosaico',
-    tagCls: 'piso-tag-marmol',
-    desc: 'Patrón ornamental clásico de bistró europeo, pizzería tradicional o trattoria.'
-  },
-  {
-    id: 'piso-ajedrez-diner',
-    nombre: 'Ajedrez Retro Diner',
-    categoria: 'marmol',
-    badge: '⬛',
-    tag: 'Ajedrez',
-    tagCls: 'piso-tag-marmol',
-    desc: 'Baldosas alternadas blancas y negras estilo retro diner americano o pub clásico.'
-  },
-  {
-    id: 'piso-cemento-pulido',
-    nombre: 'Cemento Pulido Industrial',
-    categoria: 'marmol',
-    badge: '🏢',
-    tag: 'Industrial',
-    tagCls: 'piso-tag-marmol',
-    desc: 'Microcemento alisado gris loft. Vanguardista para bares y locales contemporáneos.'
-  },
-
-  // COLORES SÓLIDOS
-  {
-    id: 'piso-solido-obsidian',
-    nombre: 'Obsidiana Profunda (Default)',
-    categoria: 'solidos',
-    badge: '🌑',
-    tag: 'Sólido',
-    tagCls: 'piso-tag-solido',
-    desc: 'Negro espacial neutro de máximo contraste para visualización nocturna en POS.'
-  },
-  {
-    id: 'piso-solido-navy',
-    nombre: 'Azul Medianoche / Navy',
-    categoria: 'solidos',
-    badge: '🌌',
-    tag: 'Sólido',
-    tagCls: 'piso-tag-solido',
-    desc: 'Azul oscuro ejecutivo y relajante. Excelente contraste para mesas y barras.'
-  },
-  {
-    id: 'piso-solido-burgundy',
-    nombre: 'Vino Borgoña / Velvet',
-    categoria: 'solidos',
-    badge: '🍷',
-    tag: 'Sólido',
-    tagCls: 'piso-tag-solido',
-    desc: 'Tono vino tinto profundo. Cálido, sofisticado e íntimo para restaurantes nocturnos.'
-  },
-  {
-    id: 'piso-solido-forest',
-    nombre: 'Verde Esmeralda / Forest',
-    categoria: 'solidos',
-    badge: '🌲',
-    tag: 'Sólido',
-    tagCls: 'piso-tag-solido',
-    desc: 'Verde bosque oscuro y fresco. Ideal para bares botánicos y locales temáticos.'
-  },
-  {
-    id: 'piso-solido-mocha',
-    nombre: 'Café Moca Tostado',
-    categoria: 'solidos',
-    badge: '☕',
-    tag: 'Sólido',
-    tagCls: 'piso-tag-solido',
-    desc: 'Café oscuro acogedor. Ideal para cafeterías de especialidad, creperías y panaderías.'
-  },
-  {
-    id: 'piso-solido-charcoal',
-    nombre: 'Gris Carbón Minimalista',
-    categoria: 'solidos',
-    badge: '🌫️',
-    tag: 'Sólido',
-    tagCls: 'piso-tag-solido',
-    desc: 'Gris mate elegante sin distracciones. Enfoque 100% en el estado de las mesas.'
-  }
-];
-
-let pisoSalonSeleccionadoTemporal = 'piso-madera-oscura';
-
-function aplicarClasePisoSalon(pisoId) {
-  if (!pisoId) return;
-  estado.pisoSalonActual = pisoId;
-  const salonEl = document.getElementById('salonContainer');
-  const editorEl = document.getElementById('editorBoard');
-
-  const todosPisos = CATALOGO_PISOS_SALON.map(p => p.id);
-  [salonEl, editorEl].forEach(el => {
-    if (el) {
-      todosPisos.forEach(cls => el.classList.remove(cls));
-      el.classList.add(pisoId);
-    }
-  });
-}
-
-async function cargarPisoSalonDesdeBackend() {
-  try {
-    const res = await fetch('/api/salon/piso-fondo');
-    const data = await res.json();
-    const pisoFondo = data.pisoFondo || 'piso-madera-oscura';
-    aplicarClasePisoSalon(pisoFondo);
-    pisoSalonSeleccionadoTemporal = pisoFondo;
-  } catch (e) {
-    aplicarClasePisoSalon('piso-madera-oscura');
-  }
-}
-
-window.abrirModalSelectorPiso = function() {
-  const modal = document.getElementById('modalSelectorPiso');
-  if (modal) {
-    modal.classList.add('active');
-    pisoSalonSeleccionadoTemporal = estado.pisoSalonActual || 'piso-madera-oscura';
-    filtrarCatalogoPisos('todos');
-  }
-};
-
-window.cerrarModalSelectorPiso = function() {
-  const modal = document.getElementById('modalSelectorPiso');
-  if (modal) {
-    modal.classList.remove('active');
-    // Restaurar piso oficial si el usuario canceló sin guardar
-    if (estado.pisoSalonActual) {
-      aplicarClasePisoSalon(estado.pisoSalonActual);
-    }
-  }
-};
-
-window.filtrarCatalogoPisos = function(categoria) {
-  document.querySelectorAll('#modalSelectorPiso .btn-tool').forEach(b => b.classList.remove('active'));
-  if (categoria === 'todos') document.getElementById('tabPisosTodos')?.classList.add('active');
-  if (categoria === 'madera') document.getElementById('tabPisosMadera')?.classList.add('active');
-  if (categoria === 'marmol') document.getElementById('tabPisosMarmol')?.classList.add('active');
-  if (categoria === 'solidos') document.getElementById('tabPisosSolidos')?.classList.add('active');
-
-  const filtrados = categoria === 'todos' 
-    ? CATALOGO_PISOS_SALON 
-    : CATALOGO_PISOS_SALON.filter(p => p.categoria === categoria);
-
-  renderPisosSelectionGrid(filtrados);
-};
-
-function renderPisosSelectionGrid(pisos) {
-  const grid = document.getElementById('pisosSelectionGrid');
-  if (!grid) return;
-
-  grid.innerHTML = pisos.map(p => {
-    const isSelected = p.id === pisoSalonSeleccionadoTemporal;
-    return `
-      <div class="piso-card-item ${isSelected ? 'selected' : ''}" onclick="seleccionarPisoPrevio('${p.id}')">
-        <div class="piso-preview-thumb ${p.id}">
-          <span class="piso-preview-badge">${p.badge}</span>
-        </div>
-        <div class="piso-card-info">
-          <h4 class="piso-card-title">${escapeHtml(p.nombre)}</h4>
-          <p class="piso-card-desc">${escapeHtml(p.desc)}</p>
-          <span class="piso-card-tag ${p.tagCls}">${escapeHtml(p.tag)}</span>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  actualizarTextoPisoSeleccionado();
-}
-
-window.seleccionarPisoPrevio = function(pisoId) {
-  pisoSalonSeleccionadoTemporal = pisoId;
-  // Previsualización en vivo mientras decide
-  aplicarClasePisoSalon(pisoId);
-
-  // Actualizar tarjetas seleccionadas en el modal
-  document.querySelectorAll('.piso-card-item').forEach(el => el.classList.remove('selected'));
-  const cards = document.querySelectorAll('.piso-card-item');
-  cards.forEach(card => {
-    if (card.querySelector(`.${pisoId}`)) {
-      card.classList.add('selected');
-    }
-  });
-
-  actualizarTextoPisoSeleccionado();
-};
-
-function actualizarTextoPisoSeleccionado() {
-  const txt = document.getElementById('txtPisoSeleccionadoInfo');
-  const found = CATALOGO_PISOS_SALON.find(p => p.id === pisoSalonSeleccionadoTemporal);
-  if (txt && found) {
-    txt.innerHTML = `Piso seleccionado: <strong>${found.badge} ${found.nombre}</strong> (${found.tag})`;
-  }
-}
-
-window.guardarPisoSalonSeleccionado = async function() {
-  try {
-    const res = await fetch('/api/salon/piso-fondo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pisoFondo: pisoSalonSeleccionadoTemporal })
-    });
-    const data = await res.json();
-    estado.pisoSalonActual = pisoSalonSeleccionadoTemporal;
-    aplicarClasePisoSalon(pisoSalonSeleccionadoTemporal);
-    mostrarNotificacionCentro(`🎨 ¡Piso del salón guardado exitosamente!`, 'success');
-    const modal = document.getElementById('modalSelectorPiso');
-    if (modal) modal.classList.remove('active');
-  } catch (e) {
-    alert('Error al guardar el piso: ' + e.message);
-  }
-};
-
-// Cargar piso de salón automáticamente al iniciar
-cargarPisoSalonDesdeBackend();
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -5897,4 +5695,180 @@ if (typeof module !== 'undefined' && module.exports) {
     formatearTooltipEspera
   };
 }
+
+// ============================================================================
+// SISTEMA DE PISO DEL SALÓN — Catálogo, selector visual y persistencia
+// ============================================================================
+
+const CATALOGO_PISOS_SALON = [
+  // Maderas
+  { id: 'piso-madera-oscura',  nombre: 'Madera Oscura',   icono: '🪵', categoria: 'madera',   tag: 'Popular' },
+  { id: 'piso-madera-clara',   nombre: 'Madera Clara',    icono: '🪵', categoria: 'madera',   tag: '' },
+  { id: 'piso-madera-roble',   nombre: 'Madera Roble',    icono: '🌳', categoria: 'madera',   tag: '' },
+  // Mármoles
+  { id: 'piso-marmol-blanco',  nombre: 'Mármol Blanco',   icono: '🪨', categoria: 'marmol',   tag: 'Elegante' },
+  { id: 'piso-marmol-negro',   nombre: 'Mármol Negro',    icono: '🪨', categoria: 'marmol',   tag: 'Lujoso' },
+  { id: 'piso-marmol-gris',    nombre: 'Mármol Gris',     icono: '🪨', categoria: 'marmol',   tag: '' },
+  // Baldosas
+  { id: 'piso-baldosa-vintage',nombre: 'Baldosa Vintage',  icono: '🔲', categoria: 'baldosa',  tag: 'Clásico' },
+  { id: 'piso-ajedrez',        nombre: 'Ajedrez B&N',      icono: '♟️', categoria: 'baldosa',  tag: '' },
+  { id: 'piso-baldosa-azul',   nombre: 'Baldosa Azul',     icono: '🔵', categoria: 'baldosa',  tag: '' },
+  // Especiales
+  { id: 'piso-cemento',        nombre: 'Cemento Pulido',   icono: '🏗️', categoria: 'especial', tag: '' },
+  { id: 'piso-deck-terraza',   nombre: 'Deck Terraza',     icono: '🏖️', categoria: 'especial', tag: '' },
+  { id: 'piso-ladrillo',       nombre: 'Ladrillo Rústico', icono: '🧱', categoria: 'especial', tag: '' },
+  // Colores sólidos
+  { id: 'piso-verde-musgo',    nombre: 'Verde Musgo',      icono: '🟢', categoria: 'solido',   tag: '' },
+  { id: 'piso-azul-marino',    nombre: 'Azul Marino',      icono: '🔵', categoria: 'solido',   tag: '' },
+  { id: 'piso-gris-oscuro',    nombre: 'Gris Oscuro',      icono: '⚫', categoria: 'solido',   tag: '' },
+  { id: 'piso-negro-mate',     nombre: 'Negro Mate',       icono: '⬛', categoria: 'solido',   tag: '' },
+  { id: 'piso-burdeos',        nombre: 'Burdeos',          icono: '🟥', categoria: 'solido',   tag: '' },
+  { id: 'piso-arena',          nombre: 'Arena',            icono: '🟡', categoria: 'solido',   tag: '' },
+];
+
+// Piso actualmente seleccionado para previsualización
+let _pisoSeleccionadoPrevio = null;
+
+// Aplica clase CSS al salón y editor
+window.aplicarClasePisoSalon = function(pisoId) {
+  const salon  = document.getElementById('salonContainer');
+  const editor = document.getElementById('editorBoard');
+  const targets = [salon, editor].filter(Boolean);
+
+  targets.forEach(el => {
+    // Quitar todas las clases de piso anteriores
+    const clasesARemover = [...el.classList].filter(c => c.startsWith('piso-'));
+    clasesARemover.forEach(c => el.classList.remove(c));
+    if (pisoId && pisoId !== 'ninguno') el.classList.add(pisoId);
+  });
+};
+
+// Carga el piso desde el backend al iniciar
+window.cargarPisoSalonDesdeBackend = async function() {
+  try {
+    const res = await fetch('/api/salon/piso-fondo');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.pisoId) {
+      window.aplicarClasePisoSalon(data.pisoId);
+      _pisoSeleccionadoPrevio = data.pisoId;
+    }
+  } catch (_) {}
+};
+
+// Abre el modal selector de pisos
+window.abrirModalSelectorPiso = function() {
+  const modal = document.getElementById('modalSelectorPiso');
+  if (!modal) return;
+  _pisoSeleccionadoPrevio = null; // reset previsualización
+  const inputFiltro = document.getElementById('inputFiltroPiso');
+  const selectCat   = document.getElementById('selectCategoriaPiso');
+  if (inputFiltro) inputFiltro.value = '';
+  if (selectCat)   selectCat.value   = '';
+  renderPisosSelectionGrid(CATALOGO_PISOS_SALON);
+  modal.style.display = 'flex';
+};
+
+// Cierra el modal selector
+window.cerrarModalSelectorPiso = function() {
+  const modal = document.getElementById('modalSelectorPiso');
+  if (modal) modal.style.display = 'none';
+};
+
+// Filtra el catálogo
+window.filtrarCatalogoPisos = function(textoBusqueda) {
+  const cat = document.getElementById('selectCategoriaPiso')?.value || '';
+  const txt = (textoBusqueda || '').toLowerCase().trim();
+
+  const filtrado = CATALOGO_PISOS_SALON.filter(p => {
+    const coincideTexto = !txt || p.nombre.toLowerCase().includes(txt) || p.id.includes(txt);
+    const coincideCat   = !cat || p.categoria === cat;
+    return coincideTexto && coincideCat;
+  });
+
+  renderPisosSelectionGrid(filtrado);
+};
+
+// Renderiza el grid de tarjetas de piso
+window.renderPisosSelectionGrid = function(pisos) {
+  const grid = document.getElementById('pisosSelectionGrid');
+  if (!grid) return;
+
+  // Obtener el piso actual del salón
+  const salon = document.getElementById('salonContainer');
+  const pisoActual = salon ? [...salon.classList].find(c => c.startsWith('piso-')) : null;
+
+  if (!pisos || pisos.length === 0) {
+    grid.innerHTML = '<p style="color:#64748b; text-align:center; padding:30px; grid-column:1/-1;">No se encontraron pisos con ese filtro.</p>';
+    return;
+  }
+
+  grid.innerHTML = pisos.map(p => {
+    const esActivo = (_pisoSeleccionadoPrevio === p.id) || (!_pisoSeleccionadoPrevio && pisoActual === p.id);
+    return `
+      <div class="piso-card-item ${esActivo ? 'activo' : ''}" onclick="seleccionarPisoPrevio('${p.id}')">
+        <div class="piso-preview-thumb ${p.id}">
+          <span class="piso-preview-badge">${p.icono}</span>
+        </div>
+        <div class="piso-card-nombre">${p.nombre}</div>
+        ${p.tag ? `<div class="piso-card-categoria">${p.tag}</div>` : `<div class="piso-card-categoria">${p.categoria}</div>`}
+      </div>
+    `;
+  }).join('');
+};
+
+// Previsualiza un piso al clickear (sin guardarlo aún)
+window.seleccionarPisoPrevio = function(pisoId) {
+  _pisoSeleccionadoPrevio = pisoId;
+  window.aplicarClasePisoSalon(pisoId);
+
+  const txt = document.getElementById('txtPisoSeleccionado');
+  const piso = CATALOGO_PISOS_SALON.find(p => p.id === pisoId);
+  if (txt && piso) txt.textContent = `${piso.icono} ${piso.nombre} — seleccionado`;
+
+  // Actualizar estado activo en el grid
+  document.querySelectorAll('#pisosSelectionGrid .piso-card-item').forEach(card => {
+    card.classList.remove('activo');
+  });
+  const cardSeleccionada = [...document.querySelectorAll('#pisosSelectionGrid .piso-card-item')]
+    .find(c => c.querySelector('.piso-preview-thumb.' + pisoId));
+  if (cardSeleccionada) cardSeleccionada.classList.add('activo');
+};
+
+// Guarda el piso en el backend y cierra el modal
+window.guardarPisoSalonSeleccionado = async function() {
+  if (!_pisoSeleccionadoPrevio) {
+    mostrarNotificacionCentro('⚠️ Selecciona un piso antes de aplicar', 'warning');
+    return;
+  }
+  try {
+    const res = await fetch('/api/salon/piso-fondo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pisoId: _pisoSeleccionadoPrevio })
+    });
+    if (!res.ok) throw new Error('Error al guardar');
+    const piso = CATALOGO_PISOS_SALON.find(p => p.id === _pisoSeleccionadoPrevio);
+    mostrarNotificacionCentro(`✅ Piso "${piso ? piso.nombre : ''}" aplicado al salón`, 'success');
+    cerrarModalSelectorPiso();
+  } catch (e) {
+    mostrarNotificacionCentro('❌ Error al guardar el piso: ' + e.message, 'error');
+  }
+};
+
+// Inicializar piso al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+  cargarPisoSalonDesdeBackend();
+});
+
+// Socket: actualizar piso en tiempo real si otro dispositivo lo cambia
+try {
+  if (typeof socket !== 'undefined' && socket) {
+    socket.on('salon_piso_fondo_cambiado', (data) => {
+      if (data && data.pisoId) {
+        window.aplicarClasePisoSalon(data.pisoId);
+      }
+    });
+  }
+} catch (_) {}
 

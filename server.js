@@ -41,7 +41,6 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_latest_commit', '')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_commit_msg', '')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_commit_date', '')");
-  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('salon_piso_fondo', 'piso-madera-oscura')");
 
   db.all("SELECT clave, valor FROM ConfigNegocio WHERE clave LIKE 'hh_%'", [], (err, rows) => {
     if (!err && rows) {
@@ -788,29 +787,6 @@ app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
 
     io.emit('mesas_reorganizadas', { posiciones: nuevasPos });
     res.json({ ok: true, message: 'Salón reorganizado perfectamente en cuadrícula sin solapes', posiciones: nuevasPos });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ============================================================================
-// FONDO Y TEXTURA DE PISO DEL SALÓN (PERSONALIZACIÓN ADMIN)
-// ============================================================================
-app.get('/api/salon/piso-fondo', async (req, res) => {
-  try {
-    const row = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'salon_piso_fondo'");
-    res.json({ pisoFondo: row && row.valor ? row.valor : 'piso-madera-oscura' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post('/api/salon/piso-fondo', async (req, res) => {
-  try {
-    const { pisoFondo = 'piso-madera-oscura' } = req.body;
-    await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('salon_piso_fondo', ?)", [pisoFondo]);
-    io.emit('salon_piso_fondo_cambiado', { pisoFondo });
-    res.json({ ok: true, message: 'Piso del salón actualizado con éxito', pisoFondo });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3061,6 +3037,30 @@ tcpPrinterServer.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
     console.log('🖨️ Puerto TCP 9100 ya en uso (Servicio existente activo)');
   }
+});
+
+// ============================================================================
+// PISO DEL SALÓN — Leer y guardar el fondo visual del salón
+// ============================================================================
+app.get('/api/salon/piso-fondo', (req, res) => {
+  db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'salon_piso_fondo'", (err, row) => {
+    if (err || !row) return res.json({ pisoId: null });
+    res.json({ pisoId: row.valor || null });
+  });
+});
+
+app.post('/api/salon/piso-fondo', (req, res) => {
+  const { pisoId } = req.body;
+  if (!pisoId) return res.status(400).json({ error: 'Se requiere pisoId' });
+  db.run(
+    "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('salon_piso_fondo', ?)",
+    [pisoId],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Error al guardar piso' });
+      io.emit('salon_piso_fondo_cambiado', { pisoId });
+      res.json({ ok: true, pisoId });
+    }
+  );
 });
 
 // ============================================================================
