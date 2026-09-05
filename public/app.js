@@ -648,11 +648,15 @@ window.abrirModalEditarProducto = async function(prodId) {
 
   if (selCat) {
     const cats = estado.categorias || [];
+    const prodCatId = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
     let opts = cats.map(c => 
-      `<option value="${c.id}" data-destino="${c.destino || 'cocina'}" ${c.id === prod.categoria_id ? 'selected' : ''}>${c.icono || '🍽️'} ${c.nombre}</option>`
+      `<option value="${c.id}" data-destino="${c.destino || 'cocina'}" ${Number(c.id) === prodCatId ? 'selected' : ''}>${c.icono || '🍽️'} ${c.nombre}</option>`
     ).join('');
     opts += `<option value="__nueva__" style="color:#38bdf8; font-weight:700;">➕ Crear nueva categoría...</option>`;
     selCat.innerHTML = opts;
+    if (prodCatId) {
+      selCat.value = String(prodCatId);
+    }
 
     selCat.onchange = function() {
       if (selCat.value === '__nueva__') {
@@ -1021,7 +1025,7 @@ window.filtrarListaProdsParaEditar = function() {
 
   const filtrados = prods.filter(p => {
     if (!query) return true;
-    const cat = (estado.categorias || []).find(c => c.id === p.categoria_id);
+    const cat = (estado.categorias || []).find(c => Number(c.id) === Number(p.categoria_id !== undefined ? p.categoria_id : p.catId));
     const catName = cat ? cat.nombre.toLowerCase() : '';
     return (p.nombre && p.nombre.toLowerCase().includes(query)) || catName.includes(query);
   });
@@ -1034,7 +1038,7 @@ window.filtrarListaProdsParaEditar = function() {
   }
 
   container.innerHTML = filtrados.map(p => {
-    const cat = (estado.categorias || []).find(c => c.id === p.categoria_id);
+    const cat = (estado.categorias || []).find(c => Number(c.id) === Number(p.categoria_id !== undefined ? p.categoria_id : p.catId));
     const catLabel = cat ? `${cat.icono || '🏷️'} ${cat.nombre}` : 'Sin categoría';
     const statusBadges = [];
     if (p.agotado) statusBadges.push('<span style="background:rgba(239,68,68,0.2); color:#f87171; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Agotado</span>');
@@ -3403,15 +3407,19 @@ async function cargarMenuDesdeBackend() {
     estado.categorias = data.categorias || [];
     estado.productos = (data.productos || []).map(p => ({
       id: p.id,
-      catId: p.categoria_id,
+      catId: Number(p.categoria_id),
+      categoria_id: Number(p.categoria_id),
+      codigo: p.codigo,
       cod: p.codigo,
       nombre: p.nombre,
       precio: p.precio,
       destino: p.destino,
       curso: p.curso || 2,
       happyHour: Boolean(p.happy_hour),
+      happy_hour: p.happy_hour ? 1 : 0,
       agotado: Boolean(p.agotado),
-      imagen_url: p.imagen_url
+      imagen_url: p.imagen_url,
+      activo: p.activo !== undefined ? p.activo : 1
     }));
 
     if (window.PosOfflineDB && estado.productos.length > 0) {

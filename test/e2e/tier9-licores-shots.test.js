@@ -433,4 +433,35 @@ describe('Tier 9: Control de Licores, Botellas y Medidas de Shots Configurables 
     const existeEnMenu = productosActivos.some(p => p.id === prodId);
     assert.equal(existeEnMenu, false, 'No debe aparecer en productos activos del menú');
   });
+
+  it('T9.12: PUT /api/productos/:id actualiza categoria_id de comida principal a cervezas y GET /api/menu lo refleja fielmente', async () => {
+    // 1. Crear producto con categoria_id: 1 (Comida Principal)
+    const pRes = await req('/api/productos', 'POST', {
+      nombre: 'Cerveza Test Edicion Categoria',
+      precio: 1500,
+      categoria_id: 1,
+      destino: 'cocina'
+    });
+    assert.equal(pRes.status, 201);
+    const prodId = pRes.body.producto.id;
+    assert.equal(pRes.body.producto.categoria_id, 1);
+
+    // 2. Editar categoría a 4 (Cervezas)
+    const putRes = await req(`/api/productos/${prodId}`, 'PUT', {
+      nombre: 'Cerveza Test Edicion Categoria',
+      precio: 1500,
+      categoria_id: 4,
+      destino: 'barra'
+    });
+    assert.equal(putRes.status, 200);
+    assert.equal(putRes.body.producto.categoria_id, 4);
+
+    // 3. Consultar /api/menu y verificar que categoria_id es 4
+    const menuRes = await req('/api/menu');
+    assert.equal(menuRes.status, 200);
+    const prodEnMenu = menuRes.body.productos.find(p => p.id === prodId);
+    assert.ok(prodEnMenu);
+    assert.equal(prodEnMenu.categoria_id, 4);
+  });
 });
+
