@@ -1536,6 +1536,23 @@ try {
         }
       }
     });
+    socket.on('negocio_eliminado', (d) => {
+      if (document.getElementById('developerPortalView')?.classList.contains('active')) {
+        if (typeof cargarNegociosDev === 'function') cargarNegociosDev();
+        if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
+      }
+      if (typeof mostrarNotificacionCentro === 'function' && (estado.usuarioActual?.rol || '').toLowerCase() === 'developer') {
+        mostrarNotificacionCentro(`🗑️ Comercio eliminado: ${d?.nombre || 'Local'}`, 'info');
+      }
+    });
+    socket.on('negocio_creado', () => {
+      if (typeof cargarNegociosDev === 'function') cargarNegociosDev();
+      if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
+    });
+    socket.on('negocio_actualizado', () => {
+      if (typeof cargarNegociosDev === 'function') cargarNegociosDev();
+      if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
+    });
     socket.on('inventario_actualizado', () => {
       if (document.getElementById('view-inventario')?.classList.contains('active')) {
         cargarInventarioAdmin();
@@ -2580,6 +2597,10 @@ async function cargarNegociosDev() {
         } catch (_) {}
       }
 
+      const esDev = (estado.usuarioActual?.rol || '').toLowerCase() === 'developer';
+      const puedeEliminar = esDev && Number(n.id) !== 1;
+      const nombreEscapado = (n.nombre || '').replace(/'/g, "\\'");
+
       return `
         <div class="negocio-card">
           <div class="negocio-top">
@@ -2605,6 +2626,11 @@ async function cargarNegociosDev() {
             <button class="btn-edit-negocio" style="flex: 1;" onclick="editarNegocioDev(${n.id})">
               ✏️ Editar Datos
             </button>
+            ${puedeEliminar ? `
+            <button class="btn-delete-negocio" style="flex: 1 1 100%; background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7f1d1d'" onclick="eliminarNegocioDev(${n.id}, '${nombreEscapado}')">
+              🗑️ Eliminar Comercio
+            </button>
+            ` : ''}
           </div>
         </div>
       `;
@@ -2994,6 +3020,38 @@ window.editarNegocioDev = async function(negocioId) {
   document.getElementById('devNegocioTelefono').value = n.telefono || '';
   document.getElementById('negocioModalTitulo').textContent = '✏️ Editar Comercio & Logo';
   document.getElementById('modalDevNegocio').classList.add('active');
+};
+
+window.eliminarNegocioDev = async function(negocioId, nombre) {
+  const rol = (estado.usuarioActual?.rol || '').toLowerCase();
+  if (rol !== 'developer') {
+    alert('Acceso denegado: La eliminación de comercios es una función exclusiva para el usuario Desarrollador (Developer).');
+    return;
+  }
+  const idNum = Number(negocioId);
+  if (idNum === 1) {
+    alert('No es posible eliminar el comercio principal por defecto del sistema (ID 1).');
+    return;
+  }
+  const confirmado = confirm(`¿Estás seguro de que deseas eliminar permanentemente el comercio "${nombre}" (ID: ${idNum})?\n\nEsta acción es irreversible y eliminará el comercio junto con sus mesas, productos y datos asociados.`);
+  if (!confirmado) return;
+
+  try {
+    const res = await fetch(`/api/dev/negocios/${idNum}`, {
+      method: 'DELETE',
+      headers: {
+        'x-user-rol': estado.usuarioActual?.rol || 'developer'
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al eliminar el comercio');
+
+    alert(`🗑️ ${data.message || 'Comercio eliminado exitosamente.'}`);
+    cargarNegociosDev();
+    if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
+  } catch (e) {
+    alert('Error al eliminar comercio: ' + e.message);
+  }
 };
 
 document.getElementById('btnCloseDevNegocio')?.addEventListener('click', () => document.getElementById('modalDevNegocio')?.classList.remove('active'));

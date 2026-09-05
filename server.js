@@ -365,6 +365,43 @@ app.put('/api/dev/negocios/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/dev/negocios/:id', async (req, res) => {
+  try {
+    const rol = (req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol) || '').toLowerCase();
+    if (rol !== 'developer') {
+      return res.status(403).json({ error: 'Acceso denegado: Acción exclusiva para rol Developer.' });
+    }
+
+    const negocioId = Number(req.params.id);
+    if (isNaN(negocioId)) {
+      return res.status(400).json({ error: 'ID de comercio inválido.' });
+    }
+
+    if (negocioId === 1) {
+      return res.status(400).json({ error: 'No es posible eliminar el comercio principal por defecto del sistema (ID 1).' });
+    }
+
+    const target = await dbGet('SELECT * FROM Negocios WHERE id = ?', [negocioId]);
+    if (!target) {
+      return res.status(404).json({ error: 'Comercio no encontrado.' });
+    }
+
+    // Limpieza de datos dependientes asociados a este negocio
+    await dbRun('DELETE FROM Usuarios WHERE negocio_id = ? AND rol != ?', [negocioId, 'developer']);
+    await dbRun('DELETE FROM Mesas WHERE negocio_id = ?', [negocioId]);
+    await dbRun('DELETE FROM Zonas WHERE negocio_id = ?', [negocioId]);
+    await dbRun('DELETE FROM Categorias WHERE negocio_id = ?', [negocioId]);
+    await dbRun('DELETE FROM Productos WHERE negocio_id = ?', [negocioId]);
+    await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [negocioId]);
+    await dbRun('DELETE FROM Negocios WHERE id = ?', [negocioId]);
+
+    io.emit('negocio_eliminado', { id: negocioId, nombre: target.nombre });
+    res.json({ ok: true, message: `Comercio "${target.nombre}" (ID: ${negocioId}) eliminado exitosamente.` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================================
 // 2.1 CATÁLOGO DE MÓDULOS SAAS 2026 Y CENTRO DE LICENCIAS
 // ============================================================================

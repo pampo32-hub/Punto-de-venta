@@ -97,4 +97,69 @@ describe('Tier 7: Modular SaaS Architecture & Licensing Hub', () => {
     assert.ok(!res.body.modulosActivos.includes('split_bill'), 'split_bill must not be in active modules');
     assert.ok(res.body.modulosActivos.includes('pos_core'));
   });
+
+  it('T7.6: DELETE /api/dev/negocios/:id rejects non-developer roles with 403 Forbidden', async () => {
+    // Attempt with admin role
+    const resAdmin = await server.request('/api/dev/negocios/2', {
+      method: 'DELETE',
+      headers: { 'x-user-rol': 'admin' }
+    });
+    assert.equal(resAdmin.status, 403);
+    assert.ok(resAdmin.data.error.includes('Developer'));
+
+    // Attempt with salonero role
+    const resMesero = await server.request('/api/dev/negocios/2', {
+      method: 'DELETE',
+      headers: { 'x-user-rol': 'salonero' }
+    });
+    assert.equal(resMesero.status, 403);
+
+    // Attempt without rol header
+    const resAnon = await server.request('/api/dev/negocios/2', {
+      method: 'DELETE'
+    });
+    assert.equal(resAnon.status, 403);
+  });
+
+  it('T7.7: DELETE /api/dev/negocios/1 rejects deletion of primary business (ID 1) with 400', async () => {
+    const res = await server.request('/api/dev/negocios/1', {
+      method: 'DELETE',
+      headers: { 'x-user-rol': 'developer' }
+    });
+    assert.equal(res.status, 400);
+    assert.ok(res.data.error.includes('principal por defecto'));
+  });
+
+  it('T7.8: DELETE /api/dev/negocios/:id allows Developer to delete secondary business', async () => {
+    // 1. Create a test business
+    const createRes = await server.request('/api/dev/negocios', {
+      method: 'POST',
+      headers: { 'x-user-rol': 'developer' },
+      body: {
+        nombre: 'Sucursal Test Eliminar',
+        slogan: 'Para borrado seguro',
+        moneda: 'CRC'
+      }
+    });
+    assert.equal(createRes.status, 200);
+    const newId = createRes.data.id;
+    assert.ok(newId > 1);
+
+    // 2. Delete business as Developer
+    const delRes = await server.request(`/api/dev/negocios/${newId}`, {
+      method: 'DELETE',
+      headers: { 'x-user-rol': 'developer' }
+    });
+    assert.equal(delRes.status, 200);
+    assert.equal(delRes.data.ok, true);
+    assert.ok(delRes.data.message.includes('eliminado exitosamente'));
+
+    // 3. Trying to delete again returns 404
+    const repeatRes = await server.request(`/api/dev/negocios/${newId}`, {
+      method: 'DELETE',
+      headers: { 'x-user-rol': 'developer' }
+    });
+    assert.equal(repeatRes.status, 404);
+  });
 });
+
