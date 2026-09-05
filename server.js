@@ -2995,7 +2995,8 @@ async function procesarCobroOrden(ordenId, {
     for (const it of itemsNuevos) {
       const cant = Number(it.cantidad) || 1;
       const subtotal = (Number(it.precio) || 0) * cant;
-      const estadoComanda = liquidar_total ? 'pagado' : 'recibido';
+      const esParaCocinaOBarra = it.destino === 'cocina' || it.destino === 'barra' || (!it.destino && it.curso && it.curso <= 3);
+      const estadoComanda = (debeEnviarCocina && esParaCocinaOBarra) ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
       await dbRun(
         `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3059,6 +3060,7 @@ async function procesarCobroOrden(ordenId, {
         pagada: true,
         items: itemsCocina
       });
+      io.emit('kds_actualizado');
     }
 
     if (debeEnviarCocina && itemsBarra.length > 0) {
@@ -3084,6 +3086,55 @@ async function procesarCobroOrden(ordenId, {
         ticketInfo: tInfoBarra,
         io
       });
+    }
+  } else if (debeEnviarCocina) {
+    // Si no habían items nuevos pero debeEnviarCocina es true, buscar platillos en DetalleOrden para despachar
+    const detallesCocina = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND (destino = 'cocina' OR destino IS NULL)", [ordenId]);
+    if (detallesCocina && detallesCocina.length > 0) {
+      const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
+      const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : 'Mesa Directa';
+
+      const tInfoCocina = printerService.generarTicketComanda({
+        ordenId,
+        comandaNumero: 1,
+        mesaNumero: mesaNumeroTxt,
+        mesero,
+        items: detallesCocina.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre_producto || it.nombre,
+          notas: it.notas || '',
+          curso: it.curso || 2,
+          origen_mesa_numero: it.origen_mesa_numero || null
+        })),
+        destino: 'cocina',
+        pagada: true,
+        fechaHora: ahora
+      });
+      await printerService.procesarImpresion({
+        destinoImpresora: 'cocina',
+        ticketInfo: tInfoCocina,
+        io
+      });
+
+      io.emit('nueva_comanda', {
+        mesaId: orden.mesa_id,
+        ordenId,
+        mesaNumero: mesaNumeroTxt,
+        mesero,
+        horaPedido: ahora,
+        pagada: true,
+        comandas: detallesCocina
+      });
+      io.emit('comanda_nueva', {
+        ordenId,
+        mesaId: orden.mesa_id,
+        mesaNumero: mesaNumeroTxt,
+        mesero,
+        horaPedido: ahora,
+        pagada: true,
+        items: detallesCocina
+      });
+      io.emit('kds_actualizado');
     }
   }
 
