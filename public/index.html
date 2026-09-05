@@ -244,6 +244,9 @@
               <button class="btn-pri" style="background:linear-gradient(135deg,#10b981,#059669); border:none; padding:10px 18px; border-radius:10px; font-weight:800; color:#fff; cursor:pointer;" onclick="guardarPersonalizacionPaginaTotal()">
                 💾 Guardar Todos los Cambios
               </button>
+              <button class="btn-sec" style="padding:10px 14px; border-radius:10px; font-size:0.85rem; color:#fbbf24; border-color:#f59e0b; background:rgba(245,158,11,0.12);" onclick="abrirModalElementosOcultosLive()">
+                👁️ Elementos Ocultos
+              </button>
               <button class="btn-sec" style="padding:10px 14px; border-radius:10px; font-size:0.85rem;" onclick="restablecerPersonalizacionPagina()">
                 🔄 Restablecer Original
               </button>
@@ -758,6 +761,10 @@
         <button class="btn-top-modo-edicion" id="btnToggleModoEdicionTop" onclick="toggleModoEdicionGlobal()" title="Activar o desactivar modo de edición 100% editable">
           <span class="btn-icon">🎨</span>
           <span class="btn-text">Modo Edición</span>
+        </button>
+        <button class="btn-top-modo-edicion" id="btnToggleOcultosTop" onclick="abrirModalElementosOcultosLive()" style="background:rgba(245,158,11,0.18); border-color:rgba(245,158,11,0.5); color:#fbbf24;" title="Ver y volver a mostrar botones o elementos que fueron ocultados">
+          <span class="btn-icon">👁️</span>
+          <span class="btn-text" id="lblTextoOcultosTop">Ocultos (0)</span>
         </button>
         <button class="btn-top-guardar-edicion" id="btnGuardarCambiosTop" onclick="guardarPersonalizacionPaginaTotal()" style="display:none;" title="Guardar cambios permanentemente para este local">
           <span class="btn-icon">💾</span>
@@ -3697,6 +3704,9 @@
         <input type="checkbox" id="chkContentEditableLive" onchange="toggleContentEditableLive(this.checked)" />
         <span>✏️ Doble Clic para Escribir</span>
       </label>
+      <button class="btn-live-hidden" id="btnToggleOcultosLive" onclick="abrirModalElementosOcultosLive()" title="Ver y volver a mostrar elementos ocultos" style="background:rgba(234,179,8,0.18); color:#facc15; border:1px solid rgba(234,179,8,0.4); padding:6px 12px; border-radius:8px; font-weight:700; cursor:pointer; font-size:0.8rem; display:inline-flex; align-items:center; gap:6px;">
+        👁️ Ocultos <span id="badgeOcultosLive" style="background:#eab308; color:#000; padding:1px 6px; border-radius:10px; font-size:0.7rem; font-weight:900;">0</span>
+      </button>
       <button class="btn-live-save" onclick="guardarPersonalizacionPaginaTotal()">
         💾 Guardar Cambios
       </button>
@@ -3778,6 +3788,38 @@
         <div style="display:flex; gap:8px;">
           <button class="btn-sec" onclick="cerrarModalInspectorLive()" style="padding:8px 14px; font-size:0.85rem;">Listo</button>
           <button class="btn-pri" onclick="guardarPersonalizacionPaginaTotal()" style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:8px 18px; border-radius:8px; font-weight:700;">💾 Guardar Todo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: GESTOR DE ELEMENTOS Y BOTONES OCULTOS (DEV)          -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="modalElementosOcultosLive" style="display:none; z-index: 100060;">
+    <div class="dialog-box" style="max-width:680px; width:95vw; border-radius:18px; background:#0f172a; border:1px solid #f59e0b; box-shadow:0 20px 60px rgba(0,0,0,0.85); padding:0; overflow:hidden;">
+      <div class="dialog-header" style="background:linear-gradient(135deg,#451a03,#0f172a); border-bottom:1px solid #334155; padding:16px 20px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">👁️</span>
+          <div>
+            <h3 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:800;">Elementos y Botones Ocultados</h3>
+            <span style="color:#fbbf24; font-size:0.78rem;">Restaura la visibilidad de los componentes que ocultaste en este local</span>
+          </div>
+        </div>
+        <button onclick="cerrarModalElementosOcultosLive()" style="background:transparent; border:none; color:#94a3b8; font-size:1.3rem; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="padding:18px 20px; max-height:60vh; overflow-y:auto;" id="contenedorListaElementosOcultos">
+        <!-- Renderizado dinámico de elementos ocultos -->
+      </div>
+
+      <div class="dialog-footer" style="padding:14px 20px; display:flex; justify-content:space-between; align-items:center; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" id="btnRestaurarTodosOcultos" onclick="desocultarTodosLosElementosLive()" style="background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#fbbf24; padding:8px 14px; border-radius:8px; font-size:0.85rem; font-weight:700; cursor:pointer;">
+          ✨ Mostrar Todos
+        </button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-sec" onclick="cerrarModalElementosOcultosLive()" style="padding:8px 14px; font-size:0.85rem; cursor:pointer;">Cerrar</button>
+          <button class="btn-pri" onclick="guardarPersonalizacionPaginaTotal()" style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:8px 18px; border-radius:8px; font-weight:700; cursor:pointer;">💾 Guardar Todo</button>
         </div>
       </div>
     </div>

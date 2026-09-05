@@ -11246,6 +11246,9 @@ window.cargarPersonalizacionPagina = async function(negocioId) {
       aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
       poblarFormulariosPersonalizador(estado.personalizacionPagina);
       marcarCambiosPendientes(false);
+      if (typeof window.actualizarContadorElementosOcultos === 'function') {
+        window.actualizarContadorElementosOcultos();
+      }
     }
   } catch (e) {
     console.warn('No se pudo cargar personalización guardada:', e);
@@ -11262,6 +11265,9 @@ window.inyectarEstilosPersonalizadosHead = function(elementStyles) {
   }
   if (!elementStyles || Object.keys(elementStyles).length === 0) {
     styleEl.innerHTML = '';
+    if (typeof window.actualizarContadorElementosOcultos === 'function') {
+      window.actualizarContadorElementosOcultos();
+    }
     return;
   }
   let rules = [];
@@ -11283,6 +11289,9 @@ window.inyectarEstilosPersonalizadosHead = function(elementStyles) {
     }
   }
   styleEl.innerHTML = rules.join('\n');
+  if (typeof window.actualizarContadorElementosOcultos === 'function') {
+    window.actualizarContadorElementosOcultos();
+  }
 };
 
 // Aplica todos los textos, variables CSS y estilos guardados en el DOM
@@ -11922,6 +11931,210 @@ window.eliminarElementoSeleccionadoLive = function() {
   aplicarCambioElementoActual('display', 'none');
   cerrarModalInspectorLive();
   mostrarNotificacionCentro('🗑️ Elemento ocultado en la página', 'info');
+};
+
+// ============================================================================
+// GESTOR DE ELEMENTOS OCULTOS (DEV MODE)
+// ============================================================================
+
+// Obtiene la lista de elementos actualmente marcados como ocultos (display: none)
+window.obtenerListaElementosOcultos = function() {
+  const st = estado.personalizacionPagina?.elementStyles || {};
+  const hiddenList = [];
+  for (const [selector, style] of Object.entries(st)) {
+    if (style && style.display === 'none') {
+      let nombreLegible = selector;
+      let previewText = '';
+
+      try {
+        const el = document.querySelector(selector);
+        if (el) {
+          previewText = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').substring(0, 45);
+          if (el.id) {
+            nombreLegible = '#' + el.id;
+          } else if (el.tagName) {
+            nombreLegible = el.tagName.toLowerCase();
+            const cls = [...el.classList].filter(c => !c.startsWith('dev-') && c !== 'active' && c !== 'activo').slice(0, 2).join('.');
+            if (cls) nombreLegible += '.' + cls;
+          }
+        }
+      } catch (_) {}
+
+      if (!previewText && style.text) {
+        previewText = style.text.replace(/<[^>]*>/g, '').trim().substring(0, 45);
+      }
+
+      hiddenList.push({
+        selector,
+        nombreLegible,
+        previewText: previewText || nombreLegible || '(Elemento sin texto)',
+        style
+      });
+    }
+  }
+  return hiddenList;
+};
+
+// Actualiza los contadores visibles de elementos ocultos en las barras de edición
+window.actualizarContadorElementosOcultos = function() {
+  const lista = window.obtenerListaElementosOcultos ? window.obtenerListaElementosOcultos() : [];
+  const cantidad = lista.length;
+
+  const lblTop = document.getElementById('lblTextoOcultosTop');
+  if (lblTop) {
+    lblTop.textContent = `Ocultos (${cantidad})`;
+  }
+
+  const badgeLive = document.getElementById('badgeOcultosLive');
+  if (badgeLive) {
+    badgeLive.textContent = cantidad;
+  }
+
+  const btnTop = document.getElementById('btnToggleOcultosTop');
+  if (btnTop) {
+    if (cantidad > 0) {
+      btnTop.style.borderColor = 'rgba(245, 158, 11, 0.8)';
+      btnTop.style.background = 'rgba(245, 158, 11, 0.28)';
+      btnTop.style.color = '#fef08a';
+    } else {
+      btnTop.style.borderColor = 'rgba(245, 158, 11, 0.5)';
+      btnTop.style.background = 'rgba(245, 158, 11, 0.18)';
+      btnTop.style.color = '#fbbf24';
+    }
+  }
+};
+
+// Abre el modal para ver y restaurar elementos ocultos
+window.abrirModalElementosOcultosLive = function() {
+  const modal = document.getElementById('modalElementosOcultosLive');
+  const contenedor = document.getElementById('contenedorListaElementosOcultos');
+  if (!modal || !contenedor) return;
+
+  const ocultos = window.obtenerListaElementosOcultos ? window.obtenerListaElementosOcultos() : [];
+  const btnRestaurarTodos = document.getElementById('btnRestaurarTodosOcultos');
+
+  if (ocultos.length === 0) {
+    contenedor.innerHTML = `
+      <div style="text-align:center; padding:35px 20px; color:#94a3b8;">
+        <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
+        <h4 style="color:#f8fafc; margin:0 0 6px 0; font-size:1.15rem; font-weight:800;">No hay elementos ocultos</h4>
+        <p style="margin:0; font-size:0.88rem; color:#64748b;">Todos los botones, componentes y secciones están actualmente visibles en este local.</p>
+      </div>
+    `;
+    if (btnRestaurarTodos) btnRestaurarTodos.style.display = 'none';
+  } else {
+    if (btnRestaurarTodos) btnRestaurarTodos.style.display = 'inline-block';
+
+    let html = `
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="font-size:0.84rem; color:#94a3b8; margin-bottom:4px;">
+          Se encontraron <strong style="color:#fbbf24;">${ocultos.length}</strong> elemento(s) ocultado(s) en esta sucursal:
+        </div>
+    `;
+
+    ocultos.forEach((item) => {
+      const selEncoded = encodeURIComponent(item.selector);
+      html += `
+        <div style="background:#1e293b; border:1px solid #334155; border-radius:12px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:14px; box-shadow:0 4px 12px rgba(0,0,0,0.2);">
+          <div style="display:flex; align-items:center; gap:12px; min-width:0; flex:1;">
+            <div style="width:38px; height:38px; border-radius:10px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); display:flex; align-items:center; justify-content:center; color:#f87171; font-size:1.15rem; flex-shrink:0;">
+              🚫
+            </div>
+            <div style="min-width:0; flex:1;">
+              <div style="font-weight:700; color:#f8fafc; font-size:0.92rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
+                ${item.previewText || item.nombreLegible}
+              </div>
+              <div style="font-family:monospace; font-size:0.75rem; color:#fbbf24; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${item.selector}">
+                ${item.selector}
+              </div>
+            </div>
+          </div>
+          <button class="btn-pri" onclick="desocultarElementoLive(decodeURIComponent('${selEncoded}'))" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; padding:8px 14px; border-radius:8px; font-weight:700; font-size:0.82rem; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
+            👁️ Mostrar
+          </button>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    contenedor.innerHTML = html;
+  }
+
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+  actualizarContadorElementosOcultos();
+};
+
+// Cierra el modal de elementos ocultos
+window.cerrarModalElementosOcultosLive = function() {
+  const modal = document.getElementById('modalElementosOcultosLive');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+};
+
+// Restaura la visibilidad de un elemento oculto específico
+window.desocultarElementoLive = function(selector) {
+  if (!selector || !estado.personalizacionPagina?.elementStyles) return;
+
+  if (estado.personalizacionPagina.elementStyles[selector]) {
+    delete estado.personalizacionPagina.elementStyles[selector].display;
+    if (Object.keys(estado.personalizacionPagina.elementStyles[selector]).length === 0) {
+      delete estado.personalizacionPagina.elementStyles[selector];
+    }
+  }
+
+  // Quitar estilo inline en el DOM
+  try {
+    document.querySelectorAll(selector).forEach(el => {
+      el.style.display = '';
+      el.style.removeProperty('display');
+    });
+  } catch (_) {}
+
+  // Re-inyectar estilos en head
+  if (typeof window.inyectarEstilosPersonalizadosHead === 'function') {
+    window.inyectarEstilosPersonalizadosHead(estado.personalizacionPagina.elementStyles);
+  }
+
+  actualizarContadorElementosOcultos();
+  marcarCambiosPendientes(true);
+  abrirModalElementosOcultosLive();
+  mostrarNotificacionCentro(`👁️ Elemento restablecido: ${selector}`, 'success');
+};
+
+// Restaura la visibilidad de TODOS los elementos ocultos
+window.desocultarTodosLosElementosLive = function() {
+  if (!estado.personalizacionPagina?.elementStyles) return;
+
+  const ocultos = window.obtenerListaElementosOcultos ? window.obtenerListaElementosOcultos() : [];
+  if (ocultos.length === 0) return;
+
+  ocultos.forEach(item => {
+    const sel = item.selector;
+    if (estado.personalizacionPagina.elementStyles[sel]) {
+      delete estado.personalizacionPagina.elementStyles[sel].display;
+      if (Object.keys(estado.personalizacionPagina.elementStyles[sel]).length === 0) {
+        delete estado.personalizacionPagina.elementStyles[sel];
+      }
+    }
+    try {
+      document.querySelectorAll(sel).forEach(el => {
+        el.style.display = '';
+        el.style.removeProperty('display');
+      });
+    } catch (_) {}
+  });
+
+  if (typeof window.inyectarEstilosPersonalizadosHead === 'function') {
+    window.inyectarEstilosPersonalizadosHead(estado.personalizacionPagina.elementStyles);
+  }
+
+  actualizarContadorElementosOcultos();
+  marcarCambiosPendientes(true);
+  abrirModalElementosOcultosLive();
+  mostrarNotificacionCentro('✨ ¡Todos los elementos han vuelto a ser mostrados!', 'success');
 };
 
 // Helper: genera un selector CSS único y estable para cualquier elemento
