@@ -177,10 +177,10 @@ async function startTestServer() {
   async function resetDb() {
     const db = getDb();
     try {
-      await dbRun(db, 'DELETE FROM Pagos');
-      await dbRun(db, 'DELETE FROM DetalleOrden');
-      await dbRun(db, 'DELETE FROM Ordenes');
-      await dbRun(db, 'DELETE FROM Anulaciones');
+      await dbRun(db, 'DELETE FROM Pagos').catch(() => {});
+      await dbRun(db, 'DELETE FROM DetalleOrden').catch(() => {});
+      await dbRun(db, 'DELETE FROM Ordenes').catch(() => {});
+      await dbRun(db, 'DELETE FROM Anulaciones').catch(() => {});
       await dbRun(db, 'DELETE FROM IdempotencyLog').catch(() => {});
       await dbRun(db, "UPDATE Mesas SET estado = 'libre', mesero = NULL");
       // Check if unida_a_mesa_id exists and reset
