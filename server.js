@@ -2927,6 +2927,8 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 // ============================================================================
 // 9. COBRO, CAJA & CONTROL DE PROPINAS (TIP POOL)
 // ============================================================================
+const cobrosEnProceso = new Map();
+
 // Función reutilizable para procesar cobros de órdenes (usado por HTTP y Sync Batch)
 async function procesarCobroOrden(ordenId, {
   mesaId = null,
@@ -2942,37 +2944,45 @@ async function procesarCobroOrden(ordenId, {
   persona_nombre = 'Cliente',
   happyHourActivo = false,
   enviar_cocina = false,
-  enviarCocina = false
+  enviarCocina = false,
+  idempotencyKey = null
 } = {}) {
-  const metodoFinal = metodo || metodoPago || 'Efectivo';
-  const debeEnviarCocina = Boolean(enviar_cocina || enviarCocina);
-  const ahora = new Date().toISOString();
-  let orden = null;
-  const idNum = parseInt(ordenId);
-  if (!isNaN(idNum) && idNum > 0) {
-    orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [idNum]);
+  const mutexKey = idempotencyKey || (mesaId ? `mesa_${mesaId}` : (ordenId && ordenId !== 'directo' ? `orden_${ordenId}` : null));
+  if (mutexKey && cobrosEnProceso.has(mutexKey)) {
+    console.warn(`[Cobro] Concurrencia evitada para ${mutexKey}`);
+    return await cobrosEnProceso.get(mutexKey);
   }
 
-  // Si no se encontró por ID pero se envió mesaId, buscar orden activa en la mesa
-  if (!orden && mesaId) {
-    orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado != 'pagada' AND estado != 'cancelada' ORDER BY id DESC LIMIT 1", [mesaId]);
-  }
+  const ejecutarProcesoCobro = async () => {
+    const metodoFinal = metodo || metodoPago || 'Efectivo';
+    const debeEnviarCocina = Boolean(enviar_cocina || enviarCocina);
+    const ahora = new Date().toISOString();
+    let orden = null;
+    const idNum = parseInt(ordenId);
+    if (!isNaN(idNum) && idNum > 0) {
+      orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [idNum]);
+    }
 
-  // Si aún no hay orden y tenemos mesaId con items (cobro directo sin guardar comanda previamente)
-  if (!orden && mesaId) {
-    const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    if (!mesaRow) throw new Error('Mesa no encontrada');
-    const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
-    const r = await dbRun(
-      `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
-       VALUES (?, ?, ?, ?, ?, 'abierta')`,
-      [numOrden, mesaId, 'Cliente', mesero, ahora]
-    );
-    orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
-  }
+    // Si no se encontró por ID pero se envió mesaId, buscar orden activa en la mesa
+    if (!orden && mesaId) {
+      orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado != 'pagada' AND estado != 'cancelada' ORDER BY id DESC LIMIT 1", [mesaId]);
+    }
 
-  if (!orden) throw new Error('Orden no encontrada');
-  ordenId = orden.id;
+    // Si aún no hay orden y tenemos mesaId con items (cobro directo sin guardar comanda previamente)
+    if (!orden && mesaId) {
+      const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+      if (!mesaRow) throw new Error('Mesa no encontrada');
+      const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+      const r = await dbRun(
+        `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
+         VALUES (?, ?, ?, ?, ?, 'abierta')`,
+        [numOrden, mesaId, 'Cliente', mesero, ahora]
+      );
+      orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
+    }
+
+    if (!orden) throw new Error('Orden no encontrada');
+    ordenId = orden.id;
 
   // Manejar items nuevos de la comanda no enviados previamente (para que queden en DetalleOrden y se descuenten de Kárdex)
   let itemsNuevos = [];
@@ -3293,6 +3303,21 @@ async function procesarCobroOrden(ordenId, {
       saldo_restante: nuevoTotal,
       ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
     };
+  }
+};
+
+  const cobroPromise = ejecutarProcesoCobro();
+  if (mutexKey) {
+    cobrosEnProceso.set(mutexKey, cobroPromise);
+  }
+  try {
+    return await cobroPromise;
+  } finally {
+    if (mutexKey) {
+      setTimeout(() => {
+        cobrosEnProceso.delete(mutexKey);
+      }, 3000);
+    }
   }
 }
 

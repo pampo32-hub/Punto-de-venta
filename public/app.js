@@ -5969,100 +5969,109 @@ function calcularVueltoCobro() {
 }
 
 document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
-  const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
-  const metodoActivo = document.querySelector('.pay-method-tab.active');
-  const metodo = metodoActivo ? metodoActivo.dataset.method : 'Efectivo';
-  const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
-  const cambio = Math.max(0, recibido - totalNum);
+  const btnFinalizar = document.getElementById('btnFinalizarCobro');
+  if (!btnFinalizar || btnFinalizar.disabled) return;
+  btnFinalizar.disabled = true;
+  const textoOriginal = btnFinalizar.innerHTML;
+  btnFinalizar.innerHTML = '⏳ Procesando Cobro...';
 
-  const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
-  const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
+  try {
+    const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
+    const metodoActivo = document.querySelector('.pay-method-tab.active');
+    const metodo = metodoActivo ? metodoActivo.dataset.method : 'Efectivo';
+    const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
+    const cambio = Math.max(0, recibido - totalNum);
 
-  const esCobroSplitPersona = (estado.cobroSplitPersonaIndex != null && splitState && splitState.personas && splitState.personas[estado.cobroSplitPersonaIndex]);
-  let personaCobrada = null;
-  let esLiquidacionFinal = true;
+    const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
+    const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
 
-  if (esCobroSplitPersona) {
-    personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
-    personaCobrada.guardada = true;
-    personaCobrada.pagada = true;
+    const esCobroSplitPersona = (estado.cobroSplitPersonaIndex != null && splitState && splitState.personas && splitState.personas[estado.cobroSplitPersonaIndex]);
+    let personaCobrada = null;
+    let esLiquidacionFinal = true;
 
-    // Verificar si quedan personas con productos sin pagar o productos en la mesa sin asignar
-    const personasConItemsSinPagar = splitState.personas.filter(p => !p.pagada && p.items && p.items.length > 0);
-    const itemsEnMesaSinAsignar = (splitState.itemsDisponibles || []).filter(it => it.cantidad > 0);
-    esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
-  }
+    if (esCobroSplitPersona) {
+      personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
+      personaCobrada.guardada = true;
+      personaCobrada.pagada = true;
 
-  const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
-  const itemsMesa = (estado.mesaActiva && estado.mesaActiva.items) ? estado.mesaActiva.items : [];
+      // Verificar si quedan personas con productos sin pagar o productos en la mesa sin asignar
+      const personasConItemsSinPagar = splitState.personas.filter(p => !p.pagada && p.items && p.items.length > 0);
+      const itemsEnMesaSinAsignar = (splitState.itemsDisponibles || []).filter(it => it.cantidad > 0);
+      esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
+    }
 
-  const payloadCobro = {
-    ordenId,
-    mesaId,
-    items: itemsMesa,
-    metodo,
-    monto: totalNum,
-    propina: Math.round(totalNum * 0.10),
-    cambio,
-    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
-    liquidar_total: esLiquidacionFinal,
-    items_pagados: personaCobrada ? personaCobrada.items : [],
-    happyHourActivo: Boolean(estado.happyHourActivo),
-    enviar_cocina: Boolean(estado.enviarCocinaEnCobro),
-    enviarCocina: Boolean(estado.enviarCocinaEnCobro)
-  };
+    const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
+    const itemsMesa = (estado.mesaActiva && estado.mesaActiva.items) ? estado.mesaActiva.items : [];
+    const idempotencyKey = 'pay_' + (mesaId || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
 
-  const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
+    const payloadCobro = {
+      ordenId,
+      mesaId,
+      items: itemsMesa,
+      metodo,
+      monto: totalNum,
+      propina: Math.round(totalNum * 0.10),
+      cambio,
+      mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
+      liquidar_total: esLiquidacionFinal,
+      items_pagados: personaCobrada ? personaCobrada.items : [],
+      happyHourActivo: Boolean(estado.happyHourActivo),
+      enviar_cocina: Boolean(estado.enviarCocinaEnCobro),
+      enviarCocina: Boolean(estado.enviarCocinaEnCobro),
+      idempotencyKey
+    };
 
-  if (window.PosOfflineSync) {
-    await window.PosOfflineSync.ejecutarConRespaldo({
-      tipo: 'COBRAR_ORDEN',
-      endpoint: endpointCobro,
-      metodo: 'POST',
-      payload: payloadCobro,
-      descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
-    });
-  } else {
-    try {
-      await fetch(endpointCobro, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadCobro)
+    const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
+
+    if (window.PosOfflineSync) {
+      await window.PosOfflineSync.ejecutarConRespaldo({
+        tipo: 'COBRAR_ORDEN',
+        endpoint: endpointCobro,
+        metodo: 'POST',
+        payload: payloadCobro,
+        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
       });
-    } catch (e) {
-      console.error('Error al registrar cobro:', e);
-    }
-  }
-
-  if (esLiquidacionFinal) {
-    alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Registro en Kárdex guardado exitosamente.\n• Mesa liberada.`);
-    if (estado.mesaActiva) {
-      if (window.PosOfflineDB) {
-        window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
+    } else {
+      try {
+        await fetch(endpointCobro, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadCobro)
+        });
+      } catch (e) {
+        console.error('Error al registrar cobro:', e);
       }
-      estado.mesaActiva.estado = 'libre';
-      estado.mesaActiva.items = [];
-      estado.mesaActiva.orden_id = null;
-      estado.mesaActiva.orden_activa_id = null;
-      estado.mesaActiva.orden_total = 0;
-      estado.mesaActiva.pidio_cuenta_qr = 0;
-      estado.mesaActiva.cuenta_pedida = false;
     }
-    estado.cobroSplitPersonaIndex = null;
-    document.getElementById('modalCobro').classList.remove('active');
-    document.getElementById('modalComandero').classList.remove('active');
-    document.getElementById('modalSplitBill').classList.remove('active');
 
-    if (typeof cargarMesasDesdeBackend === 'function') {
-      cargarMesasDesdeBackend();
-    }
-    if (typeof cargarCajaDesdeBackend === 'function') {
-      cargarCajaDesdeBackend();
-    }
-    if (typeof cargarKDSDesdeBackend === 'function') {
-      cargarKDSDesdeBackend();
-    }
-  } else {
+    if (esLiquidacionFinal) {
+      alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Registro en Kárdex guardado exitosamente.\n• Mesa liberada.`);
+      if (estado.mesaActiva) {
+        if (window.PosOfflineDB) {
+          window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
+        }
+        estado.mesaActiva.estado = 'libre';
+        estado.mesaActiva.items = [];
+        estado.mesaActiva.orden_id = null;
+        estado.mesaActiva.orden_activa_id = null;
+        estado.mesaActiva.orden_total = 0;
+        estado.mesaActiva.pidio_cuenta_qr = 0;
+        estado.mesaActiva.cuenta_pedida = false;
+      }
+      estado.cobroSplitPersonaIndex = null;
+      document.getElementById('modalCobro').classList.remove('active');
+      document.getElementById('modalComandero').classList.remove('active');
+      document.getElementById('modalSplitBill').classList.remove('active');
+
+      if (typeof cargarMesasDesdeBackend === 'function') {
+        cargarMesasDesdeBackend();
+      }
+      if (typeof cargarCajaDesdeBackend === 'function') {
+        cargarCajaDesdeBackend();
+      }
+      if (typeof cargarKDSDesdeBackend === 'function') {
+        cargarKDSDesdeBackend();
+      }
+    } else {
     // Cobro parcial:
     // 1. Descontar los productos pagados de estado.mesaActiva.items
     if (personaCobrada && personaCobrada.items && estado.mesaActiva && estado.mesaActiva.items) {
@@ -6124,6 +6133,12 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
 
   await cargarMesasDesdeBackend();
   cargarCajaDesdeBackend();
+  } finally {
+    if (btnFinalizar) {
+      btnFinalizar.disabled = false;
+      btnFinalizar.innerHTML = textoOriginal;
+    }
+  }
 });
 
 // Facturación Express
