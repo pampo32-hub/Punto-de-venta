@@ -855,18 +855,20 @@
             <h3>💰 Turno Actual de Operación</h3>
             <div class="caja-stat-rows">
               <div class="stat-row"><span>Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
-              <div class="stat-row"><span>Fondo Inicial de Caja:</span><strong>₡ 50,000.00</strong></div>
+              <div class="stat-row"><span>Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000.00</strong></div>
               <div class="stat-row"><span>Ventas en Efectivo:</span><strong id="cajaVentasEfectivo">₡ 0.00</strong></div>
+              <div class="stat-row"><span>Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0.00</strong></div>
+              <div class="stat-row"><span>Salidas / Gastos Menores (-):</span><strong id="cajaSalidasTotal" style="color:#f87171;">-₡ 0.00</strong></div>
               <div class="stat-row"><span>Ventas con Tarjeta (Datáfono):</span><strong id="cajaVentasTarjeta">₡ 0.00</strong></div>
               <div class="stat-row"><span>Ventas con SINPE Móvil:</span><strong id="cajaVentasSinpe">₡ 0.00</strong></div>
               <div class="stat-row total"><span>Total Esperado en Efectivo:</span><strong id="cajaTotalEfectivo">₡ 50,000.00</strong></div>
             </div>
             
             <div class="caja-actions-grid">
-              <button class="btn-caja-op" id="btnEntradaEfectivo">📥 Entrada de Efectivo</button>
-              <button class="btn-caja-op" id="btnSalidaEfectivo">📤 Salida / Gasto Menor</button>
-              <button class="btn-caja-op corte-x" id="btnCorteX">📑 Corte X (Parcial)</button>
-              <button class="btn-caja-op corte-z" id="btnCorteZ">🔒 Cierre Z (Final)</button>
+              <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
+              <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
+              <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()">📑 Corte X (Parcial)</button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()">🔒 Cierre Z (Final)</button>
             </div>
           </div>
 
@@ -1152,6 +1154,7 @@
                 </select>
               </div>
               <div class="receta-actions-top" style="display:flex; gap:8px;">
+                <button class="btn-tool" onclick="abrirCrearProductoDesdeReceta()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 700; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer;" title="Crear nuevo platillo o bebida para asignarle receta de inmediato">➕ Nuevo Platillo / Bebida</button>
                 <button class="btn-tool" onclick="limpiarBuscadorRecetas()" title="Limpiar búsqueda y mostrar lista completa">🧹 Limpiar</button>
                 <button class="btn-tool" onclick="recargarFichaTecnicaActual()" title="Recargar ficha técnica actual">🔄 Refrescar</button>
               </div>
@@ -3137,6 +3140,160 @@
     </div>
   </div>
 
+  <!-- MODAL ENTRADA / SALIDA DE EFECTIVO (MOVIMIENTOS DE CAJA) -->
+  <div class="modal-backdrop" id="modalMovimientoCaja" style="z-index: 100015;">
+    <div class="modal-dialog" style="max-width: 480px; width: 92vw;">
+      <div class="dialog-header" style="background: #0f172a; border-bottom: 1px solid #1e293b;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;" id="iconModalMovimientoCaja">📥</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem; color:#f8fafc;" id="titleModalMovimientoCaja">Entrada de Efectivo</h3>
+            <small style="color:var(--text-muted);" id="subModalMovimientoCaja">Registrar ingreso de dinero a la gaveta</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalMovimientoCaja()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+        <input type="hidden" id="txtMovimientoCajaTipo" value="entrada" />
+        
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Monto en Efectivo (₡ CRC): <span style="color:#ef4444;">*</span>
+          </label>
+          <div style="position:relative;">
+            <input type="number" id="txtMovimientoCajaMonto" min="1" step="any" placeholder="Ej: 15000" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
+            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700;">CRC</span>
+          </div>
+        </div>
+
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Concepto / Motivo: <span style="color:#ef4444;">*</span>
+          </label>
+          <input type="text" id="txtMovimientoCajaConcepto" placeholder="Ej: Cambio de billetes, Compra de hielo urgente..." class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
+        </div>
+
+        <div id="badgeInfoMovimientoCaja" style="padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: #bae6fd;">
+          💡 Este movimiento afectará inmediatamente el arqueo y el total esperado en gaveta.
+        </div>
+      </div>
+      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalMovimientoCaja()">Cancelar</button>
+        <button class="btn-pri" id="btnGuardarMovimientoCaja" onclick="guardarMovimientoCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; padding:10px 20px; border-radius:8px; border:none;">
+          💾 Registrar Movimiento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CIERRE Z (ARQUEO FINAL Y CIERRE DE TURNO) -->
+  <div class="modal-backdrop" id="modalCierreZ" style="z-index: 100018;">
+    <div class="modal-dialog" style="max-width: 520px; width: 94vw; max-height: 94vh; overflow-y: auto;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e1b4b, #0f172a); border-bottom: 1px solid #334155;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">🔒</span>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#fff;">Cierre Z Definitivo & Arqueo</h3>
+            <small style="color:#94a3b8;">Liquidación del turno y cuadre de efectivo en gaveta</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalCierreZ()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+        <!-- Resumen de Caja Antes de Arqueo -->
+        <div style="background:#111827; border:1px solid #1f2937; border-radius:10px; padding:14px; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
+            <span>Fondo Inicial:</span>
+            <strong id="czFondoInicial" style="color:#fff;">₡ 0.00</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
+            <span>Ventas en Efectivo:</span>
+            <strong id="czVentasEfectivo" style="color:#34d399;">+₡ 0.00</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
+            <span>Entradas Menores (+):</span>
+            <strong id="czTotalEntradas" style="color:#38bdf8;">+₡ 0.00</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
+            <span>Salidas / Gastos (-):</span>
+            <strong id="czTotalSalidas" style="color:#f87171;">-₡ 0.00</strong>
+          </div>
+          <div style="height:1px; background:#374151; margin:8px 0;"></div>
+          <div style="display:flex; justify-content:space-between; font-size:1rem; font-weight:800; color:#fbbf24;">
+            <span>Total Esperado en Efectivo:</span>
+            <strong id="czTotalEsperado">₡ 0.00</strong>
+          </div>
+        </div>
+
+        <!-- Input de Conteo Físico Real -->
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.92rem; color:#f8fafc;">
+            💵 Efectivo Real Contado en Gaveta (₡ CRC): <span style="color:#ef4444;">*</span>
+          </label>
+          <input type="number" id="txtCierreZEfectivoReal" min="0" step="any" placeholder="Ingresa el monto total contado..." oninput="calcularDiferenciaCierreZ()" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.15rem; font-weight:800; border:2px solid #38bdf8; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
+        </div>
+
+        <!-- Indicador de Diferencia / Cuadre en Vivo -->
+        <div id="boxDiferenciaCierreZ" style="padding:12px 16px; border-radius:8px; margin-bottom:14px; font-size:0.9rem; font-weight:700; background:rgba(30,41,59,0.5); border:1px solid #334155; color:#94a3b8;">
+          ⚖️ Ingresa el monto contado para calcular la diferencia de arqueo.
+        </div>
+
+        <div class="field-row" style="margin-bottom: 10px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem; color:#94a3b8;">
+            Notas / Observaciones de Cierre (Opcional):
+          </label>
+          <textarea id="txtCierreZNotas" rows="2" placeholder="Observaciones de caja, justificación de diferencias, etc." class="select-styled" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px; resize:vertical;"></textarea>
+        </div>
+      </div>
+      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:space-between; align-items:center; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalCierreZ()">Cancelar</button>
+        <button class="btn-pri" id="btnEjecutarCierreZ" onclick="ejecutarCierreZ()" style="background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none;">
+          🔒 Confirmar y Cerrar Turno
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL APERTURA DE NUEVO TURNO DE CAJA -->
+  <div class="modal-backdrop" id="modalAperturaCaja" style="z-index: 100025;">
+    <div class="modal-dialog" style="max-width: 460px; width: 92vw;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #064e3b, #0f172a); border-bottom: 1px solid #047857;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">🔓</span>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#fff;">Apertura de Nuevo Turno</h3>
+            <small style="color:#a7f3d0;">Abrir gaveta e ingresar fondo inicial de caja</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalAperturaCaja()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Cajero Responsable: <span style="color:#ef4444;">*</span>
+          </label>
+          <input type="text" id="txtAperturaCajero" placeholder="Nombre del cajero..." class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
+        </div>
+
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Fondo Inicial de Caja (₡ CRC): <span style="color:#ef4444;">*</span>
+          </label>
+          <div style="position:relative;">
+            <input type="number" id="txtAperturaMontoInicial" min="0" step="any" value="50000" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#34d399; border-radius:8px; outline:none;" />
+            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700;">CRC</span>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalAperturaCaja()">Cancelar</button>
+        <button class="btn-pri" onclick="ejecutarAperturaCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none;">
+          🔓 Abrir Turno de Caja
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: VISOR DE TIQUETE TÉRMICO DE 80MM (CONTINUO) -->
   <div class="modal-backdrop" id="modalVisorTicket" style="z-index: 100020;">
     <div class="modal-dialog visor-ticket-dialog" style="max-width: 420px; background: transparent; box-shadow: none; border: none; padding: 0;">
@@ -3409,7 +3566,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.9.2"></script>
+  <script src="app.js?v=2.9.3"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

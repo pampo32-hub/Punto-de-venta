@@ -4922,6 +4922,8 @@ body.is-admin .admin-only-tab {
     max-height: 96vh;
     border-radius: 12px;
   }
+}
+
 .card-impresoras:hover {
   border-color: #38bdf8 !important;
   box-shadow: 0 8px 24px rgba(56, 189, 248, 0.2) !important;

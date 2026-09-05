@@ -492,7 +492,13 @@ window.abrirModalEditarProducto = async function(prodId) {
   }, 100);
 };
 
+window.abrirCrearProductoDesdeReceta = function() {
+  window._creandoProductoDesdeReceta = true;
+  window.abrirModalNuevoProducto();
+};
+
 window.cerrarModalNuevoProducto = function() {
+  window._creandoProductoDesdeReceta = false;
   const modal = document.getElementById('modalAgregarProducto');
   if (modal) modal.classList.remove('active');
 };
@@ -641,13 +647,32 @@ window.guardarNuevoProducto = async function() {
       return;
     }
 
+    const fueDesdeReceta = window._creandoProductoDesdeReceta;
     window.cerrarModalNuevoProducto();
     mostrarNotificacionCentro(`✅ Producto "${nombre}" guardado y sincronizado con éxito`, 'success');
 
     // Recargar catálogo y menú
     await cargarMenuDesdeBackend();
     if (typeof cargarInventarioAdmin === 'function') {
-      cargarInventarioAdmin();
+      try { await cargarInventarioAdmin(); } catch(e) {}
+    }
+
+    if (fueDesdeReceta) {
+      if (typeof inicializarPanelRecetas === 'function') {
+        try { await inicializarPanelRecetas(); } catch(e) {}
+      }
+      const nuevoId = data.producto?.id || data.id || (isEditing ? prodId : null);
+      if (nuevoId) {
+        const selectProd = document.getElementById('selectProductoEscandallo');
+        if (selectProd) {
+          selectProd.value = nuevoId;
+          if (typeof cargarFichaTecnica === 'function') {
+            cargarFichaTecnica(nuevoId);
+          }
+        }
+      }
+      mostrarNotificacionCentro(`🍽️ Producto listo para formular su receta`, 'info');
+      return;
     }
   } catch (e) {
     alert('❌ Error al guardar producto: ' + e.message);
@@ -5048,11 +5073,56 @@ async function cargarCajaDesdeBackend() {
         if (v.metodo === 'SINPE') sinpe = v.total;
       });
 
-      document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
-      document.getElementById('cajaVentasTarjeta').textContent = formatCRC(tarj);
-      document.getElementById('cajaVentasSinpe').textContent = formatCRC(sinpe);
-      document.getElementById('cajaTotalEfectivo').textContent = formatCRC((data.caja.monto_inicial || 50000) + efect);
-      document.getElementById('cajeroTurnoNombre').textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
+      let entradas = 0, salidas = 0;
+      (data.movimientos || []).forEach(m => {
+        if (m.tipo === 'entrada') entradas += m.monto;
+        if (m.tipo === 'salida') salidas += m.monto;
+      });
+
+      const fondo = data.caja.monto_inicial || 0;
+      const totalEsperado = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
+
+      const elFondo = document.getElementById('cajaFondoInicial');
+      if (elFondo) elFondo.textContent = formatCRC(fondo);
+
+      const elVentasEf = document.getElementById('cajaVentasEfectivo');
+      if (elVentasEf) elVentasEf.textContent = formatCRC(efect);
+
+      const elEntradas = document.getElementById('cajaEntradasTotal');
+      if (elEntradas) elEntradas.textContent = `+${formatCRC(entradas)}`;
+
+      const elSalidas = document.getElementById('cajaSalidasTotal');
+      if (elSalidas) elSalidas.textContent = `-${formatCRC(salidas)}`;
+
+      const elTarj = document.getElementById('cajaVentasTarjeta');
+      if (elTarj) elTarj.textContent = formatCRC(tarj);
+
+      const elSinpe = document.getElementById('cajaVentasSinpe');
+      if (elSinpe) elSinpe.textContent = formatCRC(sinpe);
+
+      const elTotEf = document.getElementById('cajaTotalEfectivo');
+      if (elTotEf) elTotEf.textContent = formatCRC(totalEsperado);
+
+      const elCajero = document.getElementById('cajeroTurnoNombre');
+      if (elCajero) elCajero.textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
+
+      window._cajaActivaData = {
+        caja: data.caja,
+        fondo,
+        ventasEfectivo: efect,
+        ventasTarjeta: tarj,
+        ventasSinpe: sinpe,
+        totalEntradas: entradas,
+        totalSalidas: salidas,
+        totalEsperado,
+        movimientos: data.movimientos || []
+      };
+    } else {
+      const elFondo = document.getElementById('cajaFondoInicial');
+      if (elFondo) elFondo.textContent = 'CERRADA';
+      const elTotEf = document.getElementById('cajaTotalEfectivo');
+      if (elTotEf) elTotEf.textContent = '₡ 0.00';
+      window._cajaActivaData = null;
     }
 
     if (data.tipPool && data.tipPool.length) {
@@ -5065,7 +5135,369 @@ async function cargarCajaDesdeBackend() {
       ];
     }
     renderTipPoolTable();
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Error cargando caja:', e);
+  }
+}
+
+// -------------------------------------------------------------
+// OPERACIONES DE CAJA (ENTRADAS, SALIDAS, CORTE X, CIERRE Z)
+// -------------------------------------------------------------
+window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
+  const modal = document.getElementById('modalMovimientoCaja');
+  if (!modal) return;
+  const txtTipo = document.getElementById('txtMovimientoCajaTipo');
+  const txtMonto = document.getElementById('txtMovimientoCajaMonto');
+  const txtConcepto = document.getElementById('txtMovimientoCajaConcepto');
+  const iconHeader = document.getElementById('iconModalMovimientoCaja');
+  const titleHeader = document.getElementById('titleModalMovimientoCaja');
+  const subHeader = document.getElementById('subModalMovimientoCaja');
+  const btnGuardar = document.getElementById('btnGuardarMovimientoCaja');
+
+  if (txtTipo) txtTipo.value = tipo;
+  if (txtMonto) txtMonto.value = '';
+  if (txtConcepto) txtConcepto.value = '';
+
+  if (tipo === 'entrada') {
+    if (iconHeader) iconHeader.textContent = '📥';
+    if (titleHeader) titleHeader.textContent = 'Entrada de Efectivo';
+    if (subHeader) subHeader.textContent = 'Registrar ingreso de dinero a la gaveta de caja';
+    if (btnGuardar) {
+      btnGuardar.textContent = '📥 Registrar Entrada';
+      btnGuardar.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    }
+  } else {
+    if (iconHeader) iconHeader.textContent = '📤';
+    if (titleHeader) titleHeader.textContent = 'Salida / Gasto Menor';
+    if (subHeader) subHeader.textContent = 'Registrar salida o desembolso menor de caja';
+    if (btnGuardar) {
+      btnGuardar.textContent = '📤 Registrar Salida';
+      btnGuardar.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+    }
+  }
+
+  modal.classList.add('active');
+  setTimeout(() => {
+    if (txtMonto) txtMonto.focus();
+  }, 100);
+};
+
+window.cerrarModalMovimientoCaja = function() {
+  const modal = document.getElementById('modalMovimientoCaja');
+  if (modal) modal.classList.remove('active');
+};
+
+window.guardarMovimientoCaja = async function() {
+  const txtTipo = document.getElementById('txtMovimientoCajaTipo');
+  const txtMonto = document.getElementById('txtMovimientoCajaMonto');
+  const txtConcepto = document.getElementById('txtMovimientoCajaConcepto');
+
+  const tipo = txtTipo ? txtTipo.value : 'entrada';
+  const monto = parseFloat(txtMonto ? txtMonto.value : 0);
+  const concepto = (txtConcepto ? txtConcepto.value : '').trim();
+
+  if (isNaN(monto) || monto <= 0) {
+    alert('Por favor ingresa un monto válido mayor a 0');
+    if (txtMonto) txtMonto.focus();
+    return;
+  }
+  if (!concepto) {
+    alert('Por favor ingresa el motivo o concepto del movimiento');
+    if (txtConcepto) txtConcepto.focus();
+    return;
+  }
+
+  const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
+
+  try {
+    const res = await fetch('/api/caja/movimiento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, monto, concepto, usuarioNombre })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo registrar el movimiento'));
+      return;
+    }
+
+    cerrarModalMovimientoCaja();
+    mostrarNotificacionCentro(`✅ ${tipo === 'entrada' ? 'Entrada' : 'Salida'} de ${formatCRC(monto)} registrada con éxito`, 'success');
+    await cargarCajaDesdeBackend();
+  } catch (e) {
+    alert('❌ Error de conexión: ' + e.message);
+  }
+};
+
+window.generarCorteX = async function() {
+  try {
+    mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
+    const res = await fetch('/api/caja/corte-x');
+    const data = await res.json();
+    if (!res.ok) {
+      alert('⚠️ ' + (data.error || 'No se pudo obtener el corte de caja'));
+      return;
+    }
+
+    const ticketData = {
+      tipo: 'corte_x',
+      titulo: 'CORTE X (PARCIAL)',
+      negocio: {
+        nombre: 'GastroBar Fuego & Brasas',
+        slogan: 'Sistema de Punto de Venta & Bar',
+        tel: '2222-0000 / 8888-9999'
+      },
+      caja_id: data.caja_id,
+      cajero: data.cajero || 'Cajero de Turno',
+      fecha_apertura: data.fecha_apertura,
+      fecha_corte: data.fecha_corte,
+      fondo_inicial: data.fondo_inicial,
+      ventas: data.ventas,
+      total_entradas: data.total_entradas,
+      total_salidas: data.total_salidas,
+      efectivo_esperado: data.efectivo_esperado,
+      movimientos_detalle: data.movimientos_detalle || [],
+      tip_pool: data.tip_pool || [],
+      total_propinas: data.total_propinas || 0
+    };
+
+    window.mostrarVisorTicketTermico(ticketData);
+  } catch (e) {
+    alert('❌ Error al generar Corte X: ' + e.message);
+  }
+};
+
+window.abrirModalCierreZ = async function() {
+  try {
+    const res = await fetch('/api/caja/corte-x');
+    const data = await res.json();
+    if (!res.ok) {
+      alert('⚠️ ' + (data.error || 'No se pudo consultar el estado actual de la caja'));
+      return;
+    }
+
+    window._datosCierreZ = data;
+
+    const elFondo = document.getElementById('czFondoInicial');
+    if (elFondo) elFondo.textContent = formatCRC(data.fondo_inicial);
+    const elVentas = document.getElementById('czVentasEfectivo');
+    if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo || 0)}`;
+    const elEnt = document.getElementById('czTotalEntradas');
+    if (elEnt) elEnt.textContent = `+${formatCRC(data.total_entradas || 0)}`;
+    const elSal = document.getElementById('czTotalSalidas');
+    if (elSal) elSal.textContent = `-${formatCRC(data.total_salidas || 0)}`;
+    const elEsp = document.getElementById('czTotalEsperado');
+    if (elEsp) elEsp.textContent = formatCRC(data.efectivo_esperado || 0);
+
+    const txtReal = document.getElementById('txtCierreZEfectivoReal');
+    if (txtReal) txtReal.value = '';
+    const txtNotas = document.getElementById('txtCierreZNotas');
+    if (txtNotas) txtNotas.value = '';
+
+    window.calcularDiferenciaCierreZ();
+
+    const modal = document.getElementById('modalCierreZ');
+    if (modal) modal.classList.add('active');
+    setTimeout(() => {
+      if (txtReal) txtReal.focus();
+    }, 100);
+  } catch (e) {
+    alert('❌ Error abriendo cierre Z: ' + e.message);
+  }
+};
+
+window.cerrarModalCierreZ = function() {
+  const modal = document.getElementById('modalCierreZ');
+  if (modal) modal.classList.remove('active');
+};
+
+window.calcularDiferenciaCierreZ = function() {
+  const box = document.getElementById('boxDiferenciaCierreZ');
+  const txtReal = document.getElementById('txtCierreZEfectivoReal');
+  if (!box) return;
+
+  const esperado = window._datosCierreZ?.efectivo_esperado || 0;
+  const realVal = txtReal ? txtReal.value : '';
+
+  if (realVal === '') {
+    box.style.background = 'rgba(30,41,59,0.5)';
+    box.style.borderColor = '#334155';
+    box.style.color = '#94a3b8';
+    box.innerHTML = `⚖️ Esperado en gaveta: <strong>${formatCRC(esperado)}</strong>. Digita el monto contado.`;
+    return;
+  }
+
+  const real = parseFloat(realVal);
+  if (isNaN(real)) {
+    box.innerHTML = '⚠️ Ingrese un valor numérico válido.';
+    return;
+  }
+
+  const diff = Math.round((real - esperado) * 100) / 100;
+  if (diff === 0) {
+    box.style.background = 'rgba(16, 185, 129, 0.15)';
+    box.style.borderColor = '#10b981';
+    box.style.color = '#34d399';
+    box.innerHTML = `✅ <strong>Caja Cuadrada Perfecta</strong> (Diferencia: ₡0)`;
+  } else if (diff > 0) {
+    box.style.background = 'rgba(56, 189, 248, 0.15)';
+    box.style.borderColor = '#0284c7';
+    box.style.color = '#38bdf8';
+    box.innerHTML = `🟢 <strong>Sobrante en Caja:</strong> +${formatCRC(diff)}`;
+  } else {
+    box.style.background = 'rgba(239, 68, 68, 0.15)';
+    box.style.borderColor = '#dc2626';
+    box.style.color = '#f87171';
+    box.innerHTML = `🔴 <strong>Faltante en Caja:</strong> -${formatCRC(Math.abs(diff))}`;
+  }
+};
+
+window.ejecutarCierreZ = async function() {
+  const txtReal = document.getElementById('txtCierreZEfectivoReal');
+  const txtNotas = document.getElementById('txtCierreZNotas');
+
+  const realVal = txtReal ? txtReal.value : '';
+  if (realVal === '') {
+    alert('Por favor ingresa el monto de efectivo real contado en la gaveta.');
+    if (txtReal) txtReal.focus();
+    return;
+  }
+
+  const efectivo_real_contado = parseFloat(realVal);
+  if (isNaN(efectivo_real_contado) || efectivo_real_contado < 0) {
+    alert('Por favor ingresa un monto válido.');
+    return;
+  }
+
+  const notas = txtNotas ? txtNotas.value.trim() : '';
+  const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
+
+  if (!confirm('⚠️ ¿Estás seguro de realizar el CIERRE Z DEFINITIVO del turno? Esta acción cerrará la caja en el sistema e imprimirá el reporte oficial final.')) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/caja/cierre-z', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ efectivo_real_contado, notas, usuarioNombre })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo ejecutar el cierre Z'));
+      return;
+    }
+
+    cerrarModalCierreZ();
+    mostrarNotificacionCentro('🔒 Cierre Z final ejecutado con éxito', 'success');
+
+    // Mostrar ticket térmico de Cierre Z
+    const ticketData = {
+      tipo: 'cierre_z',
+      titulo: 'CIERRE Z (FINAL DEFINITIVO)',
+      negocio: {
+        nombre: 'GastroBar Fuego & Brasas',
+        slogan: 'Sistema de Punto de Venta & Bar',
+        tel: '2222-0000 / 8888-9999'
+      },
+      caja_id: data.caja_id,
+      cajero: data.cajero || 'Cajero de Turno',
+      fecha_apertura: data.fecha_apertura,
+      fecha_cierre: data.fecha_cierre,
+      fondo_inicial: data.fondo_inicial,
+      ventas: data.ventas,
+      total_entradas: data.total_entradas,
+      total_salidas: data.total_salidas,
+      efectivo_esperado: data.efectivo_esperado,
+      efectivo_real_contado: data.efectivo_real_contado,
+      diferencia: data.diferencia,
+      estado_cuadre: data.estado_cuadre,
+      movimientos_detalle: data.movimientos_detalle || [],
+      tip_pool: data.tip_pool || [],
+      total_propinas: data.total_propinas || 0,
+      notas: data.notas
+    };
+
+    window.mostrarVisorTicketTermico(ticketData);
+    await cargarCajaDesdeBackend();
+
+    setTimeout(() => {
+      if (confirm('🔒 Turno cerrado exitosamente. ¿Deseas realizar la apertura del siguiente turno de caja ahora?')) {
+        window.abrirModalAperturaCaja();
+      }
+    }, 1200);
+
+  } catch (e) {
+    alert('❌ Error ejecutando Cierre Z: ' + e.message);
+  }
+};
+
+window.abrirModalAperturaCaja = function() {
+  const modal = document.getElementById('modalAperturaCaja');
+  if (!modal) return;
+  const txtCajero = document.getElementById('txtAperturaCajero');
+  const txtMonto = document.getElementById('txtAperturaMontoInicial');
+
+  if (txtCajero) {
+    txtCajero.value = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Juan Jival';
+  }
+  if (txtMonto) {
+    txtMonto.value = '50000';
+  }
+  modal.classList.add('active');
+  setTimeout(() => {
+    if (txtMonto) txtMonto.focus();
+  }, 100);
+};
+
+window.cerrarModalAperturaCaja = function() {
+  const modal = document.getElementById('modalAperturaCaja');
+  if (modal) modal.classList.remove('active');
+};
+
+window.ejecutarAperturaCaja = async function() {
+  const txtCajero = document.getElementById('txtAperturaCajero');
+  const txtMonto = document.getElementById('txtAperturaMontoInicial');
+
+  const cajero = (txtCajero ? txtCajero.value : '').trim() || 'Cajero de Turno';
+  const monto_inicial = parseFloat(txtMonto ? txtMonto.value : 0);
+
+  if (isNaN(monto_inicial) || monto_inicial < 0) {
+    alert('Por favor ingresa un fondo inicial válido.');
+    if (txtMonto) txtMonto.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/caja/abrir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cajero, monto_inicial })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo abrir la caja'));
+      return;
+    }
+
+    cerrarModalAperturaCaja();
+    mostrarNotificacionCentro(`🔓 Turno de caja abierto con éxito (Fondo: ${formatCRC(monto_inicial)})`, 'success');
+    await cargarCajaDesdeBackend();
+  } catch (e) {
+    alert('❌ Error abriendo caja: ' + e.message);
+  }
+};
+
+// Listeners para botones de caja
+document.getElementById('btnEntradaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('entrada'));
+document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('salida'));
+document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());
+document.getElementById('btnCorteZ')?.addEventListener('click', () => window.abrirModalCierreZ());
+
+if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
+  socket.on('caja_actualizada', () => {
+    cargarCajaDesdeBackend();
+  });
 }
 
 function renderTipPoolTable() {
@@ -8945,6 +9377,210 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         <div>Estado: Mesa permanece ABIERTA</div>
         <div>con consumos pendientes.</div>
         <div style="margin-top:4px;">¡Gracias por su visita!</div>
+      </div>
+    `;
+  } else if (ticketData.tipo === 'corte_x') {
+    if (txtTitulo) txtTitulo.textContent = `📑 Corte X (Parcial) - Turno #${ticketData.caja_id || 1}`;
+    if (txtSub) txtSub.textContent = `Auditoría Informativa • ${ticketData.cajero} • ESC/POS 80mm`;
+
+    const v = ticketData.ventas || {};
+    const fApertura = ticketData.fecha_apertura ? new Date(ticketData.fecha_apertura).toLocaleString('es-CR') : '-';
+    const fCorte = ticketData.fecha_corte ? new Date(ticketData.fecha_corte).toLocaleString('es-CR') : new Date().toLocaleString('es-CR');
+
+    html = `
+      <div class="receipt-header">
+        <div class="receipt-logo">📑</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-sub">REPORTE AUDITORÍA PARCIAL (CORTE X)</div>
+        <div class="receipt-type-badge" style="background:#0284c7; color:#fff;">TURNO #${ticketData.caja_id || 1} - EN CURSO</div>
+        <div class="receipt-sub">Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div class="receipt-sub">Apertura: ${fApertura}</div>
+        <div class="receipt-sub">Corte: ${fCorte}</div>
+      </div>
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💰 DESGLOSE DE VENTAS</div>
+      <div class="receipt-totals-box" style="margin-bottom:8px;">
+        <div class="receipt-calc-line">
+          <span>Ventas Efectivo:</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>Ventas Tarjeta:</span>
+          <strong>${formatCRC(v.tarjeta || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>Ventas SINPE Móvil:</span>
+          <strong>${formatCRC(v.sinpe || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado">
+          <span>TOTAL VENTAS:</span>
+          <span>${formatCRC(v.total || 0)}</span>
+        </div>
+      </div>
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💵 ARQUEO DE EFECTIVO EN GAVETA</div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
+          <span>(+) Fondo Inicial:</span>
+          <strong>${formatCRC(ticketData.fondo_inicial || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>(+) Ventas Efectivo:</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line" style="color:#059669;">
+          <span>(+) Entradas de Efectivo:</span>
+          <strong>+${formatCRC(ticketData.total_entradas || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line" style="color:#dc2626;">
+          <span>(-) Salidas / Gastos Menores:</span>
+          <strong>-${formatCRC(ticketData.total_salidas || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado" style="background:#e0f2fe; color:#0369a1;">
+          <span>EFECTIVO ESPERADO:</span>
+          <span>${formatCRC(ticketData.efectivo_esperado || 0)}</span>
+        </div>
+      </div>
+
+      ${ticketData.movimientos_detalle && ticketData.movimientos_detalle.length ? `
+        <div class="receipt-divider"></div>
+        <div style="font-size:11px; font-weight:900; margin-bottom:4px;">DETALLE MOVIMIENTOS MENORES:</div>
+        <table class="receipt-items-table" style="font-size:10px;">
+          <tbody>
+            ${ticketData.movimientos_detalle.map(m => `
+              <tr>
+                <td><strong>${m.tipo === 'entrada' ? '📥 Ent' : '📤 Sal'}</strong></td>
+                <td>${escapeHtml(m.concepto)}</td>
+                <td style="text-align:right;"><strong>${formatCRC(m.monto)}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+
+      ${ticketData.tip_pool && ticketData.tip_pool.length ? `
+        <div class="receipt-divider"></div>
+        <div style="font-size:11px; font-weight:900; margin-bottom:4px;">FONDO PROPINAS (TIP POOL 10%):</div>
+        <table class="receipt-items-table" style="font-size:10px;">
+          <tbody>
+            ${ticketData.tip_pool.map(t => `
+              <tr>
+                <td>${escapeHtml(t.nombre)}</td>
+                <td style="text-align:right;"><strong>${formatCRC(t.propina || 0)}</strong></td>
+              </tr>
+            `).join('')}
+            <tr style="font-weight:900; border-top:1px dashed #cbd5e1;">
+              <td>TOTAL PROPINAS:</td>
+              <td style="text-align:right; color:#059669;">${formatCRC(ticketData.total_propinas || 0)}</td>
+            </tr>
+          </tbody>
+        </table>
+      ` : ''}
+
+      <div class="receipt-footer">
+        <div>*** ESTADO: TURNO PERMANECE ABIERTO ***</div>
+        <div>Corte informativo sin impacto en cierre contable</div>
+      </div>
+    `;
+  } else if (ticketData.tipo === 'cierre_z') {
+    if (txtTitulo) txtTitulo.textContent = `🔒 Cierre Z (Final) - Turno #${ticketData.caja_id || 1}`;
+    if (txtSub) txtSub.textContent = `Liquidación Oficial de Turno • ${ticketData.cajero} • ESC/POS 80mm`;
+
+    const v = ticketData.ventas || {};
+    const fApertura = ticketData.fecha_apertura ? new Date(ticketData.fecha_apertura).toLocaleString('es-CR') : '-';
+    const fCierre = ticketData.fecha_cierre ? new Date(ticketData.fecha_cierre).toLocaleString('es-CR') : new Date().toLocaleString('es-CR');
+    const diff = ticketData.diferencia || 0;
+    const cuadreColor = diff === 0 ? '#10b981' : (diff > 0 ? '#0284c7' : '#dc2626');
+
+    html = `
+      <div class="receipt-header">
+        <div class="receipt-logo">🔒</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-sub">COMPROBANTE CIERRE Z DEFINITIVO</div>
+        <div class="receipt-type-badge" style="background:#1e1b4b; color:#fff;">TURNO #${ticketData.caja_id || 1} - CERRADO</div>
+        <div class="receipt-sub">Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div class="receipt-sub">Apertura: ${fApertura}</div>
+        <div class="receipt-sub">Cierre: ${fCierre}</div>
+      </div>
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💰 VENTAS TOTALES DEL TURNO</div>
+      <div class="receipt-totals-box" style="margin-bottom:8px;">
+        <div class="receipt-calc-line">
+          <span>Ventas Efectivo:</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>Ventas Tarjeta:</span>
+          <strong>${formatCRC(v.tarjeta || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>Ventas SINPE Móvil:</span>
+          <strong>${formatCRC(v.sinpe || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado">
+          <span>TOTAL FACTURADO:</span>
+          <span>${formatCRC(v.total || 0)}</span>
+        </div>
+      </div>
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💵 ARQUEO FÍSICO Y CUADRE DE CAJA</div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
+          <span>(+) Fondo Inicial:</span>
+          <strong>${formatCRC(ticketData.fondo_inicial || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>(+) Ventas Efectivo:</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line" style="color:#059669;">
+          <span>(+) Entradas Menores:</span>
+          <strong>+${formatCRC(ticketData.total_entradas || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line" style="color:#dc2626;">
+          <span>(-) Salidas Menores:</span>
+          <strong>-${formatCRC(ticketData.total_salidas || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line" style="border-top:1px solid #cbd5e1; font-weight:700;">
+          <span>EFECTIVO ESPERADO:</span>
+          <span>${formatCRC(ticketData.efectivo_esperado || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="font-weight:900; font-size:13px;">
+          <span>EFECTIVO CONTADO:</span>
+          <span>${formatCRC(ticketData.efectivo_real_contado || 0)}</span>
+        </div>
+        <div class="receipt-calc-line total-destacado" style="background:#f1f5f9; color:${cuadreColor};">
+          <span>DIFERENCIA (${ticketData.estado_cuadre || 'Cuadre'}):</span>
+          <span>${diff >= 0 ? '+' : ''}${formatCRC(diff)}</span>
+        </div>
+      </div>
+
+      ${ticketData.notas ? `
+        <div class="receipt-divider"></div>
+        <div style="font-size:10.5px; color:#334155; font-style:italic;">
+          <strong>Notas:</strong> ${escapeHtml(ticketData.notas)}
+        </div>
+      ` : ''}
+
+      <div class="receipt-divider"></div>
+      <div style="margin: 20px 0 10px; display:flex; justify-content:space-between; font-size:10px;">
+        <div style="text-align:center; width:45%;">
+          <div style="border-bottom:1px solid #000; height:30px;"></div>
+          <div style="margin-top:4px;">Firma Cajero</div>
+        </div>
+        <div style="text-align:center; width:45%;">
+          <div style="border-bottom:1px solid #000; height:30px;"></div>
+          <div style="margin-top:4px;">Firma Administrador</div>
+        </div>
+      </div>
+
+      <div class="receipt-footer">
+        <div>*** TURNO OFICIALMENTE CERRADO ***</div>
+        <div>Registro contable y fiscal guardado</div>
       </div>
     `;
   } else {

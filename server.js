@@ -3170,6 +3170,251 @@ app.get('/api/caja/actual', async (req, res) => {
   }
 });
 
+// Registrar entrada o salida menor de efectivo
+app.post('/api/caja/movimiento', async (req, res) => {
+  try {
+    const { tipo, monto, concepto, usuarioNombre = 'Cajero' } = req.body;
+    const montoNum = parseFloat(monto);
+    if (!tipo || !['entrada', 'salida'].includes(tipo) || isNaN(montoNum) || montoNum <= 0) {
+      return res.status(400).json({ error: 'Tipo ("entrada" o "salida") y monto válido mayor a 0 son requeridos' });
+    }
+
+    let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    if (!caja) {
+      const r = await dbRun(`
+        INSERT INTO Cajas (cajero, fecha_apertura, monto_inicial, estado)
+        VALUES (?, datetime('now', 'localtime'), 50000, 'abierta')
+      `, [usuarioNombre]);
+      caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [r.lastID]);
+    }
+
+    const conceptoLimpio = (concepto || (tipo === 'entrada' ? 'Entrada de efectivo' : 'Gasto menor')).trim();
+    const ahora = new Date().toISOString();
+
+    await dbRun(`
+      INSERT INTO MovimientosCaja (caja_id, tipo, monto, concepto, fecha_hora)
+      VALUES (?, ?, ?, ?, ?)
+    `, [caja.id, tipo, montoNum, conceptoLimpio, ahora]);
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: tipo === 'entrada' ? 'entrada_efectivo' : 'salida_gasto_menor',
+      tipoEvento: 'operativo',
+      modulo: 'caja',
+      detalle: `${tipo === 'entrada' ? 'Ingreso' : 'Egreso'} de efectivo por ₡${montoNum.toLocaleString('es-CR')}: ${conceptoLimpio}`
+    });
+
+    io.emit('caja_actualizada');
+    res.json({ ok: true, message: `Movimiento de ${tipo} registrado correctamente`, caja_id: caja.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Generar reporte de Corte X (Parcial / Informativo sin cerrar)
+app.get('/api/caja/corte-x', async (req, res) => {
+  try {
+    const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
+
+    const ventas = await dbAll(`
+      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      FROM Pagos p
+      WHERE p.caja_id = ?
+      GROUP BY p.metodo
+    `, [caja.id]);
+
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0;
+    ventas.forEach(v => {
+      if (v.metodo === 'Efectivo') ventasEfectivo = v.total;
+      if (v.metodo === 'Tarjeta') ventasTarjeta = v.total;
+      if (v.metodo === 'SINPE') ventasSinpe = v.total;
+    });
+    const totalVentas = ventasEfectivo + ventasTarjeta + ventasSinpe;
+
+    const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
+    let totalEntradas = 0, totalSalidas = 0;
+    movimientos.forEach(m => {
+      if (m.tipo === 'entrada') totalEntradas += m.monto;
+      if (m.tipo === 'salida') totalSalidas += m.monto;
+    });
+
+    const fondoInicial = caja.monto_inicial || 0;
+    const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
+
+    const tipPool = await dbAll(`
+      SELECT 
+        COALESCE(p.mesero, 'Mesero General') as nombre,
+        COUNT(DISTINCT p.orden_id) as mesas,
+        SUM(p.monto) as ventas,
+        SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
+      FROM Pagos p
+      WHERE p.caja_id = ?
+      GROUP BY p.mesero
+    `, [caja.id]);
+
+    const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
+
+    const ordenesCobros = await dbGet(`
+      SELECT COUNT(DISTINCT orden_id) as total_ordenes FROM Pagos WHERE caja_id = ?
+    `, [caja.id]);
+
+    res.json({
+      tipo: 'Corte X (Parcial)',
+      caja_id: caja.id,
+      cajero: caja.cajero,
+      fecha_apertura: caja.fecha_apertura,
+      fecha_corte: new Date().toISOString(),
+      fondo_inicial: fondoInicial,
+      ventas: {
+        efectivo: ventasEfectivo,
+        tarjeta: ventasTarjeta,
+        sinpe: ventasSinpe,
+        total: totalVentas,
+        ordenes: ordenesCobros?.total_ordenes || 0
+      },
+      movimientos_detalle: movimientos,
+      total_entradas: totalEntradas,
+      total_salidas: totalSalidas,
+      efectivo_esperado: efectivoEsperado,
+      tip_pool: tipPool,
+      total_propinas: totalPropinas
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Cierre Z definitivo del turno con arqueo físico de caja
+app.post('/api/caja/cierre-z', async (req, res) => {
+  try {
+    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero' } = req.body;
+    const efectivoReal = parseFloat(efectivo_real_contado);
+    if (isNaN(efectivoReal) || efectivoReal < 0) {
+      return res.status(400).json({ error: 'Por favor ingresa un monto válido de efectivo contado en gaveta' });
+    }
+
+    const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
+
+    const ventas = await dbAll(`
+      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      FROM Pagos p
+      WHERE p.caja_id = ?
+      GROUP BY p.metodo
+    `, [caja.id]);
+
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0;
+    ventas.forEach(v => {
+      if (v.metodo === 'Efectivo') ventasEfectivo = v.total;
+      if (v.metodo === 'Tarjeta') ventasTarjeta = v.total;
+      if (v.metodo === 'SINPE') ventasSinpe = v.total;
+    });
+    const totalVentas = ventasEfectivo + ventasTarjeta + ventasSinpe;
+
+    const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
+    let totalEntradas = 0, totalSalidas = 0;
+    movimientos.forEach(m => {
+      if (m.tipo === 'entrada') totalEntradas += m.monto;
+      if (m.tipo === 'salida') totalSalidas += m.monto;
+    });
+
+    const fondoInicial = caja.monto_inicial || 0;
+    const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
+    const diferencia = Math.round((efectivoReal - efectivoEsperado) * 100) / 100;
+    const estadoCuadre = diferencia === 0 ? 'Cuadrada' : (diferencia > 0 ? 'Sobrante' : 'Faltante');
+
+    const tipPool = await dbAll(`
+      SELECT 
+        COALESCE(p.mesero, 'Mesero General') as nombre,
+        COUNT(DISTINCT p.orden_id) as mesas,
+        SUM(p.monto) as ventas,
+        SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
+      FROM Pagos p
+      WHERE p.caja_id = ?
+      GROUP BY p.mesero
+    `, [caja.id]);
+    const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
+
+    const ahora = new Date().toISOString();
+
+    await dbRun(`
+      UPDATE Cajas SET
+        fecha_cierre = ?,
+        monto_final_efectivo = ?,
+        total_ventas_efectivo = ?,
+        total_ventas_tarjeta = ?,
+        total_ventas_sinpe = ?,
+        estado = 'cerrada'
+      WHERE id = ?
+    `, [ahora, efectivoReal, ventasEfectivo, ventasTarjeta, ventasSinpe, caja.id]);
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: 'cierre_z',
+      tipoEvento: 'financiero',
+      modulo: 'caja',
+      detalle: `Cierre Z Turno #${caja.id}. Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp: ₡${efectivoEsperado.toLocaleString('es-CR')} | Contado: ₡${efectivoReal.toLocaleString('es-CR')} (${estadoCuadre}: ₡${Math.abs(diferencia).toLocaleString('es-CR')})`
+    });
+
+    io.emit('caja_actualizada');
+
+    res.json({
+      ok: true,
+      tipo: 'Cierre Z (Final)',
+      caja_id: caja.id,
+      cajero: caja.cajero,
+      fecha_apertura: caja.fecha_apertura,
+      fecha_cierre: ahora,
+      fondo_inicial: fondoInicial,
+      ventas: {
+        efectivo: ventasEfectivo,
+        tarjeta: ventasTarjeta,
+        sinpe: ventasSinpe,
+        total: totalVentas
+      },
+      movimientos_detalle: movimientos,
+      total_entradas: totalEntradas,
+      total_salidas: totalSalidas,
+      efectivo_esperado: efectivoEsperado,
+      efectivo_real_contado: efectivoReal,
+      diferencia: diferencia,
+      estado_cuadre: estadoCuadre,
+      tip_pool: tipPool,
+      total_propinas: totalPropinas,
+      notas
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Apertura de nuevo turno de caja
+app.post('/api/caja/abrir', async (req, res) => {
+  try {
+    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id = 1 } = req.body;
+    const montoNum = parseFloat(monto_inicial);
+    if (isNaN(montoNum) || montoNum < 0) {
+      return res.status(400).json({ error: 'Monto inicial de apertura inválido' });
+    }
+
+    const activa = await dbGet("SELECT id FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    if (activa) {
+      return res.json({ ok: true, message: 'Ya existe una caja abierta', caja_id: activa.id });
+    }
+
+    const r = await dbRun(`
+      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
+      VALUES (?, ?, datetime('now', 'localtime'), ?, 'abierta')
+    `, [negocio_id, cajero, montoNum]);
+
+    io.emit('caja_actualizada');
+    res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================================
 // 10. FACTURACIÓN ELECTRÓNICA EXPRESS
 // ============================================================================
