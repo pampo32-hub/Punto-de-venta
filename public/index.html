@@ -1212,16 +1212,25 @@
               <h4 style="margin:0 0 12px; color:#38bdf8; font-size:0.95rem; display:flex; align-items:center; gap:8px;">
                 <span>➕</span> Agregar Ingrediente / Licor a este Platillo o Cóctel
               </h4>
-              <div style="display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:12px; align-items:flex-end;">
+              <div style="display:grid; grid-template-columns: 2.2fr 1fr 1fr auto; gap:12px; align-items:flex-end;">
                 <div>
-                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Insumo de Bodega:</label>
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="font-size:0.75rem; color:#9ca3af; font-weight:700;">Insumo de Bodega:</label>
+                    <span id="badgeConteoInsumosReceta" style="font-size:0.72rem; color:#38bdf8; font-weight:600;"></span>
+                  </div>
+                  <!-- Barra de Búsqueda Inteligente de Insumos -->
+                  <div style="position:relative; margin-bottom:6px;">
+                    <input type="text" id="txtBuscarInsumoReceta" placeholder="🔍 Buscar insumo inteligente... (ej: corona, tequila, salsa, carne)" oninput="filtrarInsumosRecetaInteligente()" onkeydown="onKeydownBuscadorInsumoReceta(event)" style="width:100%; padding:7px 28px 7px 30px; font-size:0.83rem; background:#0f172a; border:1px solid #3b82f6; color:#fff; border-radius:6px; outline:none; box-sizing:border-box;" />
+                    <span style="position:absolute; left:9px; top:50%; transform:translateY(-50%); font-size:0.85rem; pointer-events:none;">🔍</span>
+                    <button type="button" onclick="limpiarBuscadorInsumosReceta()" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; color:#9ca3af; cursor:pointer; font-size:0.85rem; padding:2px 6px;" title="Limpiar búsqueda">✕</button>
+                  </div>
                   <select id="selectNuevoIngredienteInsumo" class="select-styled" onchange="alCambiarInsumoReceta()" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;">
                     <!-- Opciones de insumos -->
                   </select>
                 </div>
                 <div>
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                    <label style="font-size:0.75rem; color:#9ca3af;">Cantidad en Receta:</label>
+                    <label style="font-size:0.75rem; color:#9ca3af; font-weight:700;">Cantidad en Receta:</label>
                     <select id="selNuevoIngredienteUnidadTipo" style="background:#0f172a; color:#38bdf8; border:1px solid #374151; font-size:0.72rem; border-radius:4px; padding:2px 6px;" onchange="actualizarPlaceholderCantidadReceta()">
                       <option value="estandar">Unidad estándar (botella / kg / unidad)</option>
                       <option value="oz">🥃 En Onzas (oz)</option>
@@ -1229,15 +1238,15 @@
                       <option value="fraccion">🍾 Fracción Botella (1/4, 1/2...)</option>
                     </select>
                   </div>
-                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" placeholder="Ej: 1 shot o 0.04" oninput="onInputCantidadManualReceta()" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
+                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" value="1" placeholder="Ej: 1 shot o 0.04" oninput="onInputCantidadManualReceta()" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
                 </div>
                 <div>
-                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Merma (%) [Opcional]:</label>
+                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px; font-weight:700;">Merma (%) [Opcional]:</label>
                   <input type="number" id="txtNuevoIngredienteMerma" min="0" max="100" step="any" value="0" oninput="recalcularCostoPreviewReceta()" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;" />
                 </div>
                 <div>
-                  <button type="button" class="btn-pri" onclick="guardarIngredienteReceta()" style="padding:9px 18px; border-radius:8px; font-weight:700; white-space:nowrap;">
-                    💾 Vincular Ingrediente
+                  <button type="button" class="btn-pri" id="btnVincularIngrediente" onclick="guardarIngredienteReceta()" style="padding:9px 18px; border-radius:8px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:6px;">
+                    <span>💾</span> Vincular Ingrediente
                   </button>
                 </div>
               </div>

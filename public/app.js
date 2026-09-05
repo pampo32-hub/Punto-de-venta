@@ -7992,13 +7992,9 @@ async function inicializarPanelRecetas() {
     }
   }
 
-  // Llenar selector de insumos disponibles en bodega
+  // Llenar selector de insumos disponibles en bodega con soporte de búsqueda inteligente
   if (selectInsumo && estado.inventario && estado.inventario.length) {
-    selectInsumo.innerHTML = estado.inventario.map(i => `
-      <option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.unidad_medida)} - Costo: ${formatCRC(i.costo_unitario)})</option>
-    `).join('');
-    selectInsumo.onchange = window.alCambiarInsumoReceta;
-    window.alCambiarInsumoReceta();
+    window.renderOpcionesInsumosReceta(estado.inventario);
   }
 
   // Cargar lista resumida de productos con ficha
@@ -8104,9 +8100,105 @@ window.recargarFichaTecnicaActual = function() {
   if (pid) window.cargarFichaTecnica(pid);
 };
 
+window.renderOpcionesInsumosReceta = function(lista, idSeleccionado = null) {
+  const selInsumo = document.getElementById('selectNuevoIngredienteInsumo');
+  const badgeConteo = document.getElementById('badgeConteoInsumosReceta');
+  if (!selInsumo) return;
+
+  if (!lista || lista.length === 0) {
+    selInsumo.innerHTML = '<option value="">⚠️ No se encontraron insumos</option>';
+    if (badgeConteo) badgeConteo.textContent = '(0 encontrados)';
+    window.recalcularCostoPreviewReceta();
+    return;
+  }
+
+  selInsumo.innerHTML = lista.map(i => {
+    const licorTag = i.es_licor ? '🍾 ' : '';
+    const stockTxt = i.stock_actual !== undefined ? ` [Stock: ${i.stock_actual}]` : '';
+    return `<option value="${i.id}">${licorTag}${escapeHtml(i.nombre)} (${escapeHtml(i.unidad_medida)} - Costo: ${formatCRC(i.costo_unitario)}${stockTxt})</option>`;
+  }).join('');
+
+  if (badgeConteo) {
+    badgeConteo.textContent = `(${lista.length} disponibles)`;
+  }
+
+  if (idSeleccionado && lista.some(i => String(i.id) === String(idSeleccionado))) {
+    selInsumo.value = idSeleccionado;
+  } else {
+    selInsumo.value = lista[0].id;
+  }
+
+  window.alCambiarInsumoReceta();
+};
+
+window.filtrarInsumosRecetaInteligente = function() {
+  const inp = document.getElementById('txtBuscarInsumoReceta');
+  const q = (inp?.value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const todos = estado.inventario || [];
+
+  if (!q) {
+    window.renderOpcionesInsumosReceta(todos);
+    return;
+  }
+
+  // Búsqueda inteligente por múltiples palabras clave
+  const palabras = q.split(/\s+/).filter(Boolean);
+  const filtrados = todos.filter(i => {
+    const textoCompleto = `${i.nombre || ''} ${i.categoria || ''} ${i.unidad_medida || ''}`
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    return palabras.every(p => textoCompleto.includes(p));
+  });
+
+  window.renderOpcionesInsumosReceta(filtrados);
+};
+
+window.limpiarBuscadorInsumosReceta = function() {
+  const inp = document.getElementById('txtBuscarInsumoReceta');
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+  }
+  window.filtrarInsumosRecetaInteligente();
+};
+
+window.onKeydownBuscadorInsumoReceta = function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const txtCant = document.getElementById('txtNuevoIngredienteCant');
+    if (txtCant) {
+      txtCant.focus();
+      txtCant.select();
+    }
+  }
+};
+
+window.mostrarToastReceta = function(mensaje, tipo = 'success') {
+  let container = document.getElementById('toastContainerRecetas');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainerRecetas';
+    container.style.cssText = 'position:fixed; top:24px; right:24px; z-index:999999; display:flex; flex-direction:column; gap:10px; pointer-events:none;';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  const borderColor = tipo === 'warning' ? '#f59e0b' : (tipo === 'error' ? '#ef4444' : '#10b981');
+  const bgColor = tipo === 'warning' ? '#78350f' : (tipo === 'error' ? '#7f1d1d' : '#064e3b');
+  toast.style.cssText = `background:${bgColor}; color:#fff; border:1px solid ${borderColor}; border-radius:10px; padding:12px 18px; font-size:0.9rem; font-weight:700; box-shadow:0 8px 20px rgba(0,0,0,0.6); pointer-events:auto; display:flex; align-items:center; gap:10px; transition:all 0.3s ease;`;
+  toast.innerHTML = mensaje;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-12px)';
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
+};
+
 window.alCambiarInsumoReceta = function() {
   const selInsumo = document.getElementById('selectNuevoIngredienteInsumo');
   const selTipo = document.getElementById('selNuevoIngredienteUnidadTipo');
+  const txtCant = document.getElementById('txtNuevoIngredienteCant');
   if (!selInsumo || !selTipo) return;
 
   const insId = parseInt(selInsumo.value);
@@ -8117,6 +8209,16 @@ window.alCambiarInsumoReceta = function() {
     if (selTipo.value === 'estandar') {
       selTipo.value = 'oz';
     }
+  } else {
+    // Si no es licor y estaba en oz o shots, volver a estandar
+    if (selTipo.value === 'oz' || selTipo.value === 'shots') {
+      selTipo.value = 'estandar';
+    }
+  }
+
+  // Pre-llenar cantidad con 1 por defecto si está vacía
+  if (txtCant && (!txtCant.value || parseFloat(txtCant.value) <= 0)) {
+    txtCant.value = '1';
   }
 
   window.actualizarPlaceholderCantidadReceta();
@@ -8264,61 +8366,145 @@ window.recalcularCostoPreviewReceta = function() {
 };
 
 window.guardarIngredienteReceta = async function() {
+  const btnGuardar = document.getElementById('btnVincularIngrediente');
   const productoId = document.getElementById('selectProductoEscandallo')?.value;
   const insumoId = document.getElementById('selectNuevoIngredienteInsumo')?.value;
-  let cantidad = parseFloat(document.getElementById('txtNuevoIngredienteCant')?.value);
+  const txtCant = document.getElementById('txtNuevoIngredienteCant');
+  let cantidad = parseFloat(txtCant?.value);
   const merma = parseFloat(document.getElementById('txtNuevoIngredienteMerma')?.value) || 0;
   const unidadTipo = document.getElementById('selNuevoIngredienteUnidadTipo')?.value || 'estandar';
 
-  if (!productoId || !insumoId) {
-    alert('Selecciona un platillo y un insumo.');
+  // 1. Validar producto seleccionado
+  if (!productoId) {
+    if (typeof window.mostrarToastReceta === 'function') {
+      window.mostrarToastReceta('⚠️ Selecciona primero un platillo o bebida en la parte superior.', 'warning');
+    } else {
+      alert('⚠️ Selecciona un platillo o bebida.');
+    }
+    const selProd = document.getElementById('selectProductoEscandallo');
+    if (selProd) selProd.focus();
     return;
   }
-  if (!cantidad || cantidad <= 0) {
-    alert('Ingresa una cantidad válida mayor a 0.');
+
+  // 2. Validar insumo seleccionado
+  if (!insumoId) {
+    if (typeof window.mostrarToastReceta === 'function') {
+      window.mostrarToastReceta('⚠️ Selecciona un insumo de bodega para vincular a la receta.', 'warning');
+    } else {
+      alert('⚠️ Selecciona un insumo de bodega.');
+    }
+    const inpBusq = document.getElementById('txtBuscarInsumoReceta');
+    if (inpBusq) inpBusq.focus();
+    return;
+  }
+
+  // 3. Validar cantidad mayor a 0 con retroalimentación visual amigable
+  if (isNaN(cantidad) || cantidad <= 0) {
+    if (txtCant) {
+      txtCant.style.borderColor = '#ef4444';
+      txtCant.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.5)';
+      txtCant.focus();
+      setTimeout(() => {
+        txtCant.style.borderColor = '#374151';
+        txtCant.style.boxShadow = 'none';
+      }, 2500);
+    }
+    if (typeof window.mostrarToastReceta === 'function') {
+      window.mostrarToastReceta('⚠️ Por favor ingresa una cantidad válida mayor a 0.', 'warning');
+    } else {
+      alert('⚠️ Ingresa una cantidad válida mayor a 0.');
+    }
     return;
   }
 
   const insumo = (estado.inventario || []).find(i => i.id === parseInt(insumoId));
+  let cantidadDeducir = cantidad;
+
   if (insumo && insumo.es_licor) {
     const capMl = insumo.capacidad_ml || 750;
     if (unidadTipo === 'oz') {
       // 1 oz = 30ml -> Fracción = (cantidad * 30) / capMl
-      cantidad = parseFloat(((cantidad * 30) / capMl).toFixed(4));
+      cantidadDeducir = parseFloat(((cantidad * 30) / capMl).toFixed(4));
     } else if (unidadTipo === 'shots') {
       const rend = insumo.rendimiento_shots > 0 ? insumo.rendimiento_shots : (capMl / (insumo.medida_shot_ml || 30));
-      cantidad = parseFloat((cantidad / rend).toFixed(4));
+      cantidadDeducir = parseFloat((cantidad / rend).toFixed(4));
     } else if (unidadTipo === 'fraccion' || unidadTipo === 'estandar') {
-      cantidad = parseFloat(cantidad.toFixed(4));
+      cantidadDeducir = parseFloat(cantidad.toFixed(4));
     }
   } else {
-    cantidad = parseFloat(cantidad.toFixed(4));
+    cantidadDeducir = parseFloat(cantidad.toFixed(4));
+  }
+
+  if (btnGuardar) {
+    btnGuardar.disabled = true;
+    btnGuardar.innerHTML = '<span>⏳</span> Guardando...';
   }
 
   try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const rol = (estado.usuarioActual && estado.usuarioActual.rol) ? estado.usuarioActual.rol : 'admin';
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-rol': rol
+    };
+    if (window._pinSupervisorActivo) {
+      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+    }
+
     const res = await fetch(`/api/admin/recetas/${productoId}/ingredientes`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
-      body: JSON.stringify({ insumo_id: insumoId, cantidad, merma_porcentaje: merma })
+      headers,
+      body: JSON.stringify({
+        insumo_id: insumoId,
+        cantidad: cantidadDeducir,
+        merma_porcentaje: merma,
+        usuarioNombre: estado.usuarioActual?.nombre || 'Administrador'
+      })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    if (!res.ok) throw new Error(data.error || 'Error al vincular ingrediente');
 
-    mostrarNotificacionCentro('✅ Ingrediente vinculado al escandallo.', 'success');
-    const txtC = document.getElementById('txtNuevoIngredienteCant');
+    // Notificación no intrusiva de éxito
+    window.mostrarToastReceta(`✅ <strong>${insumo ? insumo.nombre : 'Ingrediente'}</strong> añadido al escandallo.`, 'success');
+
+    // Mantener listo el formulario para seguir añadiendo más ingredientes sin fricción
+    if (txtCant) txtCant.value = '1';
     const txtM = document.getElementById('txtNuevoIngredienteMerma');
-    const lblPreview = document.getElementById('lblPreviewRecetaCalculo');
-    if (txtC) txtC.value = '';
     if (txtM) txtM.value = '0';
-    if (lblPreview) lblPreview.style.display = 'none';
+
+    // Limpiar buscador inteligente de insumo y enfocarlo para el siguiente ingrediente
+    const txtBusq = document.getElementById('txtBuscarInsumoReceta');
+    if (txtBusq) {
+      txtBusq.value = '';
+      window.filtrarInsumosRecetaInteligente();
+      txtBusq.focus();
+    }
 
     // Resetear chips al modo manual
     window.activarModoManualReceta(document.getElementById('chipMedidaManual'));
 
-    window.cargarFichaTecnica(productoId);
+    // Recargar la tabla de la receta
+    await window.cargarFichaTecnica(productoId);
+
+    // Resaltar suavemente la fila del ingrediente recién guardado
+    const tbody = document.getElementById('tbodyIngredientesReceta');
+    if (tbody && tbody.lastElementChild) {
+      tbody.lastElementChild.style.transition = 'background 0.4s ease';
+      tbody.lastElementChild.style.background = 'rgba(56, 189, 248, 0.25)';
+      setTimeout(() => {
+        if (tbody.lastElementChild) tbody.lastElementChild.style.background = '';
+      }, 1500);
+    }
   } catch (e) {
-    alert('❌ ' + e.message);
+    if (typeof window.mostrarToastReceta === 'function') {
+      window.mostrarToastReceta('❌ ' + e.message, 'error');
+    } else {
+      alert('❌ ' + e.message);
+    }
+  } finally {
+    if (btnGuardar) {
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span>💾</span> Vincular Ingrediente';
+    }
   }
 };
 
