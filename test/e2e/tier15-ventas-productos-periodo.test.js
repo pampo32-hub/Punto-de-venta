@@ -170,4 +170,47 @@ describe('Tier 15: Reporte de Ventas por Producto, Período y Consumo en Kárdex
       assert.equal(p.categoria_id, 4);
     });
   });
+
+  it('T15.6: Retorna ultimas_ventas ordenadas cronológicamente de la más reciente a la más antigua con ítems y pagos', async () => {
+    // 1. Cobrar primera orden en Mesa 7
+    const r1 = await req('/api/ordenes/directo/cobrar', 'POST', {
+      mesaId: 7,
+      mesero: 'carlos',
+      metodo: 'Efectivo',
+      metodoPago: 'Efectivo',
+      items: [{ id: 1, nombre: 'Imperial Regular', precio: 1800, cantidad: 1, destino: 'barra' }]
+    });
+    assert.equal(r1.status, 200);
+
+    // 2. Cobrar segunda orden en Mesa 8
+    const r2 = await req('/api/ordenes/directo/cobrar', 'POST', {
+      mesaId: 8,
+      mesero: 'maria',
+      metodo: 'Tarjeta',
+      metodoPago: 'Tarjeta',
+      items: [{ id: 2, nombre: 'Pilsen', precio: 1800, cantidad: 2, destino: 'barra' }]
+    });
+    assert.equal(r2.status, 200);
+
+    // 3. Consultar reporte de ventas
+    const hoy = new Date().toISOString().substring(0, 10);
+    const rRep = await req(`/api/admin/reportes/ventas-productos?desde=${hoy}&hasta=${hoy}`);
+    assert.equal(rRep.status, 200);
+    assert.ok(Array.isArray(rRep.body.ultimas_ventas));
+    assert.ok(rRep.body.ultimas_ventas.length >= 2);
+
+    // La venta más reciente (Mesa 8 / Pilsen / Tarjeta) debe ser la primera
+    const primerVenta = rRep.body.ultimas_ventas[0];
+    const segundaVenta = rRep.body.ultimas_ventas[1];
+
+    assert.equal(primerVenta.mesa_id, 8);
+    assert.equal(primerVenta.mesero, 'maria');
+    assert.equal(primerVenta.metodo_pago, 'Tarjeta');
+    assert.ok(primerVenta.items.length > 0);
+    assert.equal(primerVenta.items[0].nombre, 'Pilsen');
+
+    assert.equal(segundaVenta.mesa_id, 7);
+    assert.equal(segundaVenta.mesero, 'carlos');
+    assert.equal(segundaVenta.metodo_pago, 'Efectivo');
+  });
 });

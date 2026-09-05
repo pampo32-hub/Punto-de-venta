@@ -9836,9 +9836,14 @@ window.consultarVentasProductosServidor = async function(productoId = null) {
     if (catId && catId !== 'todas') url += `&categoria_id=${encodeURIComponent(catId)}`;
     if (productoId) url += `&producto_id=${encodeURIComponent(productoId)}`;
 
-    const tbody = document.getElementById('tbodyVentasProductos');
-    if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#38bdf8;">⏳ Consultando base de datos de ventas e insumos...</td></tr>';
+    const tbodyProd = document.getElementById('tbodyVentasProductos');
+    if (tbodyProd) {
+      tbodyProd.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#38bdf8;">⏳ Consultando base de datos de ventas e insumos...</td></tr>';
+    }
+
+    const tbodyUltimas = document.getElementById('tbodyUltimasVentas');
+    if (tbodyUltimas) {
+      tbodyUltimas.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:25px; color:#38bdf8;">⏳ Cargando cronología de últimas ventas...</td></tr>';
     }
 
     const res = await fetch(url, { headers: { 'x-user-rol': rol } });
@@ -9851,14 +9856,152 @@ window.consultarVentasProductosServidor = async function(productoId = null) {
     window.reporteVentasActual = data;
 
     actualizarKpisVentas(data.resumen);
+    renderizarTablaUltimasVentas(data.ultimas_ventas || []);
     renderizarTablaVentasProductos(data.productos || []);
 
   } catch (err) {
     console.error('Error al consultar ventas:', err);
-    const tbody = document.getElementById('tbodyVentasProductos');
-    if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#ef4444;">❌ ${escapeHtml(err.message)}</td></tr>`;
+    const tbodyProd = document.getElementById('tbodyVentasProductos');
+    if (tbodyProd) {
+      tbodyProd.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#ef4444;">❌ ${escapeHtml(err.message)}</td></tr>`;
     }
+    const tbodyUltimas = document.getElementById('tbodyUltimasVentas');
+    if (tbodyUltimas) {
+      tbodyUltimas.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:25px; color:#ef4444;">❌ ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+};
+
+window.renderizarTablaUltimasVentas = function(ultimasVentas = []) {
+  const tbody = document.getElementById('tbodyUltimasVentas');
+  const lblContador = document.getElementById('lblContadorUltimasVentas');
+  if (!tbody) return;
+
+  if (lblContador) {
+    lblContador.textContent = `${ultimasVentas.length} venta${ultimasVentas.length === 1 ? '' : 's'} registrada${ultimasVentas.length === 1 ? '' : 's'}`;
+  }
+
+  tbody.innerHTML = '';
+
+  if (!ultimasVentas || !ultimasVentas.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#94a3b8; font-weight:600;">No hay ventas registradas en el período seleccionado.</td></tr>';
+    return;
+  }
+
+  ultimasVentas.forEach((v, index) => {
+    const tr = document.createElement('tr');
+    tr.style.transition = 'background-color 0.2s';
+    tr.onmouseenter = () => { tr.style.backgroundColor = 'rgba(56, 189, 248, 0.06)'; };
+    tr.onmouseleave = () => { tr.style.backgroundColor = ''; };
+
+    // Formatear Fecha / Hora
+    let horaStr = '-';
+    let fechaStr = '';
+    if (v.fecha_hora) {
+      try {
+        const d = new Date(v.fecha_hora);
+        horaStr = d.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: true });
+        fechaStr = d.toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      } catch (_) {
+        horaStr = v.fecha_hora;
+      }
+    }
+
+    // Mesa / Ubicación
+    const mesaTexto = v.tipo === 'barra' ? '🍸 Barra' : v.tipo === 'para_llevar' ? '🛍️ Llevar' : (v.mesa_numero ? `🪑 Mesa ${v.mesa_numero}` : `🪑 Mesa #${v.mesa_id || 1}`);
+
+    // Badges de Método de Pago
+    let badgeMetodo = '';
+    const mLower = (v.metodo_pago || 'Efectivo').toLowerCase();
+    if (mLower.includes('tarjeta')) {
+      badgeMetodo = `<span style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">💳 ${escapeHtml(v.metodo_pago)}</span>`;
+    } else if (mLower.includes('sinpe')) {
+      badgeMetodo = `<span style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">📱 ${escapeHtml(v.metodo_pago)}</span>`;
+    } else {
+      badgeMetodo = `<span style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3); padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">💵 ${escapeHtml(v.metodo_pago)}</span>`;
+    }
+
+    // Resumen de platillos / consumo
+    const itemsHtml = (v.items || []).map(it => `
+      <span style="display:inline-flex; align-items:center; gap:3px; background:rgba(30,41,59,0.9); color:#e2e8f0; border:1px solid rgba(148,163,184,0.25); border-radius:4px; padding:2px 7px; font-size:0.75rem; margin:2px;">
+        <strong style="color:#38bdf8;">${it.cantidad}x</strong> ${escapeHtml(it.nombre)}
+      </span>
+    `).join(' ') || '<span style="color:#64748b; font-size:0.8rem;">(Sin ítems registrados)</span>';
+
+    tr.innerHTML = `
+      <td style="white-space:nowrap;">
+        <div style="font-weight:700; color:#fff; font-size:0.9rem;">${horaStr}</div>
+        <small style="color:#64748b; font-size:0.75rem;">${fechaStr}</small>
+      </td>
+      <td style="white-space:nowrap;">
+        <span style="background:#0f172a; color:#38bdf8; border:1px solid #1e293b; padding:2px 6px; border-radius:4px; font-family:monospace; font-weight:700; font-size:0.8rem;">
+          #${escapeHtml(v.numero_orden || ('ORD-' + v.id))}
+        </span>
+      </td>
+      <td>
+        <span style="font-weight:600; color:#cbd5e1; font-size:0.85rem;">${escapeHtml(mesaTexto)}</span>
+      </td>
+      <td>
+        <span style="color:#94a3b8; font-size:0.85rem;">👤 ${escapeHtml(v.mesero || 'General')}</span>
+      </td>
+      <td>
+        <div style="display:flex; flex-wrap:wrap; gap:4px; max-width:450px;">
+          ${itemsHtml}
+        </div>
+      </td>
+      <td style="text-align:center; white-space:nowrap;">
+        ${badgeMetodo}
+      </td>
+      <td style="text-align:right; white-space:nowrap;">
+        <strong style="color:#10b981; font-size:0.95rem;">${typeof formatCRC === 'function' ? formatCRC(v.total || 0) : `₡${(v.total || 0).toLocaleString()}`}</strong>
+      </td>
+      <td style="text-align:center; white-space:nowrap;">
+        <button class="btn-tool" style="background:#0284c7; border-color:#38bdf8; color:#fff; padding:4px 10px; font-size:0.75rem; font-weight:700; border-radius:6px; cursor:pointer;" onclick="abrirVisorTicketDesdeVenta(${v.id})" title="Ver comprobante de pago oficial">
+          🧾 Ver Tiquete
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+};
+
+window.abrirVisorTicketDesdeVenta = function(ventaId) {
+  if (!window.reporteVentasActual || !window.reporteVentasActual.ultimas_ventas) return;
+  const venta = window.reporteVentasActual.ultimas_ventas.find(v => v.id === Number(ventaId));
+  if (!venta) return;
+
+  const ticketData = {
+    tipo: 'factura',
+    numeroOrden: venta.numero_orden || `ORD-${venta.id}`,
+    ordenId: venta.id,
+    mesa: venta.mesa_numero ? `Mesa ${venta.mesa_numero}` : (venta.tipo === 'para_llevar' ? 'Para Llevar' : (venta.tipo === 'barra' ? 'Barra' : 'Mesa General')),
+    mesero: venta.mesero || 'General',
+    cliente: venta.cliente || 'Cliente General',
+    fechaHora: venta.fecha_hora ? new Date(venta.fecha_hora).toLocaleString('es-CR') : new Date().toLocaleString('es-CR'),
+    items: (venta.items || []).map(it => ({
+      cantidad: it.cantidad,
+      nombre: it.nombre,
+      precioUnitario: it.precio_unitario,
+      totalLinea: it.subtotal || (it.cantidad * it.precio_unitario),
+      notas: it.notas || ''
+    })),
+    subtotal: venta.subtotal,
+    descuentoHH: venta.descuento_happy_hour || 0,
+    servicio: venta.servicio_10 || 0,
+    iva: venta.iva_13 || 0,
+    total: venta.total,
+    metodoPago: venta.metodo_pago || 'Efectivo',
+    recibido: venta.recibido || venta.total,
+    cambio: venta.cambio || 0,
+    negocio: estado.negocioActual || {
+      nombre: 'GastroBar Fuego & Brasas',
+      slogan: 'Restaurante, Bar & Lounge',
+      tel: '2222-0000 / 8888-9999'
+    }
+  };
+
+  if (typeof window.mostrarVisorTicketTermico === 'function') {
+    window.mostrarVisorTicketTermico(ticketData, false);
   }
 };
 

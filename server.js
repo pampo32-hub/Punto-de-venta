@@ -4524,24 +4524,16 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     const ahora = new Date();
     if (!desde) {
-      const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0, 0);
+      const inicioMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1, 0, 0, 0, 0));
       desde = inicioMes.toISOString();
     } else if (desde.length === 10) {
-      const parts = desde.split('-');
-      const y = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10) - 1;
-      const d = parseInt(parts[2], 10);
-      desde = new Date(y, m, d, 0, 0, 0, 0).toISOString();
+      desde = `${desde}T00:00:00.000Z`;
     }
 
     if (!hasta) {
       hasta = ahora.toISOString();
     } else if (hasta.length === 10) {
-      const parts = hasta.split('-');
-      const y = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10) - 1;
-      const d = parseInt(parts[2], 10);
-      hasta = new Date(y, m, d, 23, 59, 59, 999).toISOString();
+      hasta = `${hasta}T23:59:59.999Z`;
     }
 
     let sqlVentas = `
@@ -4704,6 +4696,100 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const gananciaTotal = totalIngresosBrutos - totalCostoInsumos;
     const margenGlobalPct = totalIngresosBrutos > 0 ? Math.round((gananciaTotal / totalIngresosBrutos) * 1000) / 10 : 0;
 
+    // Consultar las últimas órdenes pagadas en el período cronológicamente (más recientes primero)
+    let sqlUltimasOrdenes = `
+      SELECT 
+        o.id,
+        o.numero_orden,
+        o.mesa_id,
+        m.numero AS mesa_numero,
+        o.tipo,
+        o.cliente,
+        o.mesero,
+        COALESCE(o.fecha_cierre, o.fecha_apertura) AS fecha_hora,
+        o.fecha_apertura,
+        o.fecha_cierre,
+        o.subtotal,
+        o.descuento_happy_hour,
+        o.servicio_10,
+        o.iva_13,
+        o.total,
+        o.notas
+      FROM Ordenes o
+      LEFT JOIN Mesas m ON o.mesa_id = m.id
+      WHERE o.estado = 'pagada'
+        AND (COALESCE(o.fecha_cierre, o.fecha_apertura) >= ?)
+        AND (COALESCE(o.fecha_cierre, o.fecha_apertura) <= ?)
+        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+    `;
+    const paramsUltimas = [desde, hasta, nid, nid];
+    if (producto_id) {
+      sqlUltimasOrdenes += ' AND EXISTS (SELECT 1 FROM DetalleOrden d2 WHERE d2.orden_id = o.id AND d2.producto_id = ? AND d2.estado_comanda != \'anulado\')';
+      paramsUltimas.push(Number(producto_id));
+    }
+    sqlUltimasOrdenes += ' ORDER BY COALESCE(o.fecha_cierre, o.fecha_apertura) DESC, o.id DESC LIMIT 150';
+
+    const ultimasOrdenesRows = await dbAll(sqlUltimasOrdenes, paramsUltimas);
+    const ultimasVentas = [];
+
+    for (const ord of ultimasOrdenesRows) {
+      const items = await dbAll(`
+        SELECT 
+          d.id,
+          d.producto_id,
+          COALESCE(p.nombre, d.nombre_producto) AS nombre,
+          d.cantidad,
+          d.precio_unitario,
+          d.subtotal,
+          d.notas,
+          d.curso,
+          d.destino
+        FROM DetalleOrden d
+        LEFT JOIN Productos p ON d.producto_id = p.id
+        WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'
+      `, [ord.id]);
+
+      const pagos = await dbAll(`
+        SELECT metodo, monto, propina, cambio, fecha_hora
+        FROM Pagos
+        WHERE orden_id = ?
+      `, [ord.id]);
+
+      const metodosSet = new Set(pagos.map(p => p.metodo).filter(Boolean));
+      const metodoPago = metodosSet.size > 0 ? Array.from(metodosSet).join(', ') : 'Efectivo';
+      const totalRecibido = pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+      const totalCambio = pagos.reduce((acc, p) => acc + (Number(p.cambio) || 0), 0);
+
+      ultimasVentas.push({
+        id: ord.id,
+        numero_orden: ord.numero_orden,
+        mesa_id: ord.mesa_id,
+        mesa_numero: ord.mesa_numero,
+        tipo: ord.tipo || 'mesa',
+        cliente: ord.cliente || 'Cliente General',
+        mesero: ord.mesero || 'General',
+        fecha_hora: ord.fecha_hora,
+        subtotal: Number(ord.subtotal) || 0,
+        descuento_happy_hour: Number(ord.descuento_happy_hour) || 0,
+        servicio_10: Number(ord.servicio_10) || 0,
+        iva_13: Number(ord.iva_13) || 0,
+        total: Number(ord.total) || 0,
+        notas: ord.notas || '',
+        metodo_pago: metodoPago,
+        recibido: totalRecibido,
+        cambio: totalCambio,
+        items: items.map(it => ({
+          id: it.id,
+          producto_id: it.producto_id,
+          nombre: it.nombre,
+          cantidad: Number(it.cantidad) || 1,
+          precio_unitario: Number(it.precio_unitario) || 0,
+          subtotal: Number(it.subtotal) || 0,
+          notas: it.notas || ''
+        }))
+      });
+    }
+
     res.json({
       periodo: { desde, hasta },
       resumen: {
@@ -4715,6 +4801,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         margen_bruto_promedio_pct: margenGlobalPct
       },
       productos: productosDetallados,
+      ultimas_ventas: ultimasVentas,
       insumos_consumidos: Array.from(insumosGlobalesMap.values()).sort((a, b) => b.costo_total - a.costo_total)
     });
   } catch (e) {
