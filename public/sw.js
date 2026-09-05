@@ -1,8 +1,5 @@
 const CACHE_NAME = 'pos-static-v25';
 
-
-
-
 const CORE_ASSETS = [
   '/',
   '/index.html',

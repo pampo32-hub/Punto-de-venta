@@ -5913,6 +5913,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   const cambio = Math.max(0, recibido - totalNum);
 
 
+
   const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
   const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
 
