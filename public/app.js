@@ -3072,6 +3072,91 @@ window.eliminarUsuarioDev = async function(id) {
   } catch (e) {}
 };
 
+window.abrirModalUsuarioDev = async function() {
+  const modal = document.getElementById('modalUsuarioDev');
+  const selNegocio = document.getElementById('devUserNegocioSelect');
+  if (!modal) return;
+
+  // Limpiar campos
+  if (document.getElementById('devUserUsuario')) document.getElementById('devUserUsuario').value = '';
+  if (document.getElementById('devUserPassword')) document.getElementById('devUserPassword').value = '';
+  if (document.getElementById('devUserNombre')) document.getElementById('devUserNombre').value = '';
+  if (document.getElementById('devUserRol')) document.getElementById('devUserRol').value = 'salonero';
+  if (document.getElementById('devUserGenero')) document.getElementById('devUserGenero').value = 'F';
+  if (document.getElementById('devUserPin')) document.getElementById('devUserPin').value = '1234';
+
+  // Cargar comercios disponibles
+  if (selNegocio) {
+    selNegocio.innerHTML = '<option value="1">Cargando comercios...</option>';
+    try {
+      const res = await fetch('/api/dev/negocios');
+      const negocios = await res.json();
+      if (Array.isArray(negocios) && negocios.length > 0) {
+        selNegocio.innerHTML = negocios.map(n => `<option value="${n.id}">${n.nombre} (ID: ${n.id})</option>`).join('');
+      } else {
+        selNegocio.innerHTML = '<option value="1">Comercio Principal (ID: 1)</option>';
+      }
+    } catch (_) {
+      selNegocio.innerHTML = '<option value="1">Comercio Principal (ID: 1)</option>';
+    }
+  }
+
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+};
+
+window.cerrarModalUsuarioDev = function() {
+  const modal = document.getElementById('modalUsuarioDev');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+};
+
+window.guardarUsuarioDev = async function() {
+  const negocio_id = parseInt(document.getElementById('devUserNegocioSelect')?.value) || 1;
+  const usuario = (document.getElementById('devUserUsuario')?.value || '').trim();
+  const password = (document.getElementById('devUserPassword')?.value || '').trim();
+  const nombre_completo = (document.getElementById('devUserNombre')?.value || '').trim();
+  const rol = document.getElementById('devUserRol')?.value || 'salonero';
+  const genero = document.getElementById('devUserGenero')?.value || 'M';
+  const pin = (document.getElementById('devUserPin')?.value || '1234').trim();
+
+  if (!usuario || !password || !nombre_completo) {
+    return mostrarNotificacionCentro('❌ Completa el usuario, contraseña y nombre completo', 'error');
+  }
+
+  try {
+    const res = await fetch('/api/dev/usuarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        negocio_id,
+        usuario,
+        password,
+        nombre_completo,
+        rol,
+        genero,
+        pin,
+        permisos: {}
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al registrar usuario');
+    }
+
+    cerrarModalUsuarioDev();
+    mostrarNotificacionCentro(`✅ Usuario "${usuario}" creado exitosamente`, 'success');
+    if (typeof cargarUsuariosDev === 'function') {
+      cargarUsuariosDev();
+    }
+  } catch (e) {
+    mostrarNotificacionCentro('❌ ' + e.message, 'error');
+  }
+};
+
 // ============================================================================
 // 3. ADMINISTRACIÓN DE PERSONAL PARA ADMIN (AISLAMIENTO: NUNCA VE A DEVELOPER)
 // ============================================================================
@@ -8476,7 +8561,7 @@ document.getElementById('selectAjusteInsumo')?.addEventListener('change', actual
 window.guardarAjusteInventario = async function() {
   const insumoId = document.getElementById('selectAjusteInsumo')?.value;
   const cantidad = parseFloat(document.getElementById('txtAjusteCantidad')?.value);
-  const motivo = document.getElementById('txtAjusteMotivo')?.value.trim();
+  const motivo = (document.getElementById('txtAjusteMotivo')?.value || '').trim();
 
   if (!cantidad || cantidad <= 0) {
     alert('Ingresa una cantidad válida mayor a 0');
@@ -8617,7 +8702,7 @@ window.cerrarModalNuevoInsumo = function() {
 };
 
 window.guardarNuevoInsumo = async function() {
-  const nombre = document.getElementById('txtNuevoInsumoNombre')?.value.trim();
+  const nombre = (document.getElementById('txtNuevoInsumoNombre')?.value || '').trim();
   const selCat = document.getElementById('selectNuevoInsumoCat');
   const txtManual = document.getElementById('txtNuevoInsumoCatManual');
   let categoria = 'General';
@@ -8793,8 +8878,8 @@ window.actualizarCalculoShotsEditar = function() {
 
 window.guardarEdicionInsumo = async function() {
   const id = document.getElementById('txtEditarInsumoId')?.value;
-  const nombre = document.getElementById('txtEditarInsumoNombre')?.value.trim();
-  const categoria = document.getElementById('txtEditarInsumoCat')?.value.trim() || 'General';
+  const nombre = (document.getElementById('txtEditarInsumoNombre')?.value || '').trim();
+  const categoria = (document.getElementById('txtEditarInsumoCat')?.value || '').trim() || 'General';
   const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
   const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
   const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
