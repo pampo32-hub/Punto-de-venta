@@ -855,6 +855,7 @@
             <h3>💰 Turno Actual de Operación</h3>
             <div class="caja-stat-rows">
               <div class="stat-row"><span>Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
+              <div class="stat-row"><span>Fondo Inicial de Caja:</span><strong>₡ 50,000.00</strong></div>
               <div class="stat-row"><span>Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000.00</strong></div>
               <div class="stat-row"><span>Ventas en Efectivo:</span><strong id="cajaVentasEfectivo">₡ 0.00</strong></div>
               <div class="stat-row"><span>Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0.00</strong></div>
@@ -865,6 +866,10 @@
             </div>
             
             <div class="caja-actions-grid">
+              <button class="btn-caja-op" id="btnEntradaEfectivo">📥 Entrada de Efectivo</button>
+              <button class="btn-caja-op" id="btnSalidaEfectivo">📤 Salida / Gasto Menor</button>
+              <button class="btn-caja-op corte-x" id="btnCorteX">📑 Corte X (Parcial)</button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ">🔒 Cierre Z (Final)</button>
               <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
               <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()">📑 Corte X (Parcial)</button>
@@ -3566,7 +3571,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.9.3"></script>
+  <script src="app.js?v=2.9.4"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

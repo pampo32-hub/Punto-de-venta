@@ -654,6 +654,7 @@ window.guardarNuevoProducto = async function() {
     // Recargar catálogo y menú
     await cargarMenuDesdeBackend();
     if (typeof cargarInventarioAdmin === 'function') {
+      cargarInventarioAdmin();
       try { await cargarInventarioAdmin(); } catch(e) {}
     }
 
@@ -1177,6 +1178,7 @@ const estado = {
     { cat: 'Café Espresso', url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80' }
   ]
 };
+window.estado = estado;
 
 // WebSockets
 let socket = null;
@@ -4358,6 +4360,7 @@ document.querySelectorAll('.zone-tab').forEach(tab => {
   });
 });
 
+window.abrirComanderoMesa = abrirComanderoMesa;
 async function abrirComanderoMesa(mesaId) {
   const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId)) || { id: Number(mesaId), numero: mesaId, items: [] };
   if (!mesa) return;
@@ -5073,6 +5076,11 @@ async function cargarCajaDesdeBackend() {
         if (v.metodo === 'SINPE') sinpe = v.total;
       });
 
+      document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
+      document.getElementById('cajaVentasTarjeta').textContent = formatCRC(tarj);
+      document.getElementById('cajaVentasSinpe').textContent = formatCRC(sinpe);
+      document.getElementById('cajaTotalEfectivo').textContent = formatCRC((data.caja.monto_inicial || 50000) + efect);
+      document.getElementById('cajeroTurnoNombre').textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
       let entradas = 0, salidas = 0;
       (data.movimientos || []).forEach(m => {
         if (m.tipo === 'entrada') entradas += m.monto;
@@ -5634,41 +5642,47 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     esLiquidacionFinal = (personasConItemsSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0);
   }
 
+  const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
+  const itemsMesa = (estado.mesaActiva && estado.mesaActiva.items) ? estado.mesaActiva.items : [];
+
   const payloadCobro = {
     ordenId,
+    mesaId,
+    items: itemsMesa,
     metodo,
     monto: totalNum,
     propina: Math.round(totalNum * 0.10),
     cambio,
-    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
     liquidar_total: esLiquidacionFinal,
-    items_pagados: personaCobrada ? personaCobrada.items : []
+    items_pagados: personaCobrada ? personaCobrada.items : [],
+    happyHourActivo: Boolean(estado.happyHourActivo)
   };
 
-  if (ordenId) {
-    if (window.PosOfflineSync) {
-      await window.PosOfflineSync.ejecutarConRespaldo({
-        tipo: 'COBRAR_ORDEN',
-        endpoint: `/api/ordenes/${ordenId}/cobrar`,
-        metodo: 'POST',
-        payload: payloadCobro,
-        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
+  const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
+
+  if (window.PosOfflineSync) {
+    await window.PosOfflineSync.ejecutarConRespaldo({
+      tipo: 'COBRAR_ORDEN',
+      endpoint: endpointCobro,
+      metodo: 'POST',
+      payload: payloadCobro,
+      descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
+    });
+  } else {
+    try {
+      await fetch(endpointCobro, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadCobro)
       });
-    } else {
-      try {
-        await fetch(`/api/ordenes/${ordenId}/cobrar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payloadCobro)
-        });
-      } catch (e) {
-        console.error('Error al registrar cobro:', e);
-      }
+    } catch (e) {
+      console.error('Error al registrar cobro:', e);
     }
   }
 
   if (esLiquidacionFinal) {
-    alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Tiquete impreso.\n• Mesa liberada.`);
+    alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Registro en Kárdex guardado exitosamente.\n• Mesa liberada.`);
     if (estado.mesaActiva) {
       if (window.PosOfflineDB) {
         window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
@@ -5685,6 +5699,16 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     document.getElementById('modalCobro').classList.remove('active');
     document.getElementById('modalComandero').classList.remove('active');
     document.getElementById('modalSplitBill').classList.remove('active');
+
+    if (typeof cargarMesasDesdeBackend === 'function') {
+      cargarMesasDesdeBackend();
+    }
+    if (typeof cargarCajaDesdeBackend === 'function') {
+      cargarCajaDesdeBackend();
+    }
+    if (typeof cargarKDSDesdeBackend === 'function') {
+      cargarKDSDesdeBackend();
+    }
   } else {
     // Cobro parcial:
     // 1. Descontar los productos pagados de estado.mesaActiva.items

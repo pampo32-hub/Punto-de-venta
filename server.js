@@ -2927,10 +2927,98 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 // 9. COBRO, CAJA & CONTROL DE PROPINAS (TIP POOL)
 // ============================================================================
 // Función reutilizable para procesar cobros de órdenes (usado por HTTP y Sync Batch)
-async function procesarCobroOrden(ordenId, { metodo = 'Efectivo', monto, propina = 0, cambio = 0, mesero = 'Juan Jival', liquidar_total = true, items_pagados = [], persona_nombre = 'Cliente' } = {}) {
+async function procesarCobroOrden(ordenId, {
+  mesaId = null,
+  items = [],
+  metodo = 'Efectivo',
+  monto,
+  propina = 0,
+  cambio = 0,
+  mesero = 'Juan Jival',
+  liquidar_total = true,
+  items_pagados = [],
+  persona_nombre = 'Cliente',
+  happyHourActivo = false
+} = {}) {
   const ahora = new Date().toISOString();
-  const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+  let orden = null;
+  const idNum = parseInt(ordenId);
+  if (!isNaN(idNum) && idNum > 0) {
+    orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [idNum]);
+  }
+
+  // Si no se encontró por ID pero se envió mesaId, buscar orden activa en la mesa
+  if (!orden && mesaId) {
+    orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado != 'pagada' AND estado != 'cancelada' ORDER BY id DESC LIMIT 1", [mesaId]);
+  }
+
+  // Si aún no hay orden y tenemos mesaId con items (cobro directo sin guardar comanda previamente)
+  if (!orden && mesaId) {
+    const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesaRow) throw new Error('Mesa no encontrada');
+    const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+    const r = await dbRun(
+      `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
+       VALUES (?, ?, ?, ?, ?, 'abierta')`,
+      [numOrden, mesaId, 'Cliente', mesero, ahora]
+    );
+    orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
+  }
+
   if (!orden) throw new Error('Orden no encontrada');
+  ordenId = orden.id;
+
+  // Manejar items nuevos de la comanda no enviados previamente (para que queden en DetalleOrden y se descuenten de Kárdex)
+  let itemsNuevos = [];
+  if (Array.isArray(items) && items.length > 0) {
+    const itemsNoEnviados = items.filter(it => !it.enviado);
+    if (itemsNoEnviados.length > 0) {
+      itemsNuevos = itemsNoEnviados;
+    } else {
+      const rowDetalles = await dbGet("SELECT COUNT(*) as total FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+      if (!rowDetalles || rowDetalles.total === 0) {
+        itemsNuevos = items;
+      }
+    }
+  }
+
+  if (itemsNuevos.length > 0) {
+    const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
+    const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
+
+    for (const it of itemsNuevos) {
+      const cant = Number(it.cantidad) || 1;
+      const subtotal = (Number(it.precio) || 0) * cant;
+      const estadoComanda = liquidar_total ? 'pagado' : 'recibido';
+      await dbRun(
+        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenId, it.id || it.producto_id, it.nombre || it.nombre_producto, it.precio || 0, cant, subtotal, it.notas || '', it.curso || 2, it.destino || 'cocina', estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0]
+      );
+    }
+
+    // Descontar inventario en tiempo real y registrar movimientos en Kárdex
+    await descontarInventarioPorItems(itemsNuevos);
+
+    // Recalcular totales de orden
+    await recalcularTotalesOrden(ordenId);
+    orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+
+    // Si hay platillos de cocina, notificar a KDS marcados como pagados
+    const tieneCocina = itemsNuevos.some(it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'));
+    if (tieneCocina) {
+      const mesaObj = await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]);
+      io.emit('comanda_nueva', {
+        ordenId,
+        mesaId: orden.mesa_id,
+        mesaNumero: mesaObj ? mesaObj.numero : 'Mesa',
+        mesero,
+        horaPedido: ahora,
+        pagada: true,
+        items: itemsNuevos.filter(it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+      });
+    }
+  }
 
   const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
   const cajaId = caja ? caja.id : null;
@@ -3084,9 +3172,9 @@ async function procesarCobroOrden(ordenId, { metodo = 'Efectivo', monto, propina
   }
 }
 
-app.post('/api/ordenes/:id/cobrar', async (req, res) => {
+app.post(['/api/ordenes/:id/cobrar', '/api/ordenes/directo/cobrar'], async (req, res) => {
   try {
-    const ordenId = req.params.id;
+    const ordenId = req.params.id || req.body.ordenId || 'directo';
     const resultado = await procesarCobroOrden(ordenId, req.body);
     res.json(resultado);
   } catch (e) {

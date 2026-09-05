@@ -32,6 +32,7 @@ describe('Tier 6: Offline-First Resilience, Batch Sync & Idempotency', () => {
   });
 
   it('T6.2: POST /api/comandas/enviar respects idempotencyKey on retry', async () => {
+    await req('/api/happy-hour', 'POST', { activo: true, horaInicio: '00:00', horaFin: '23:59' });
     const idKey = 'test-uuid-comanda-1001';
 
     // First attempt
