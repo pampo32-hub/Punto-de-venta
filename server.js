@@ -3208,6 +3208,9 @@ async function procesarCobroOrden(ordenId, {
       io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
     }
 
+    io.emit('inventario_actualizado');
+    io.emit('venta_registrada', { ordenId, total: orden.total });
+
     return {
       ok: true,
       success: true,
@@ -3295,6 +3298,9 @@ async function procesarCobroOrden(ordenId, {
     if (orden.mesa_id) {
       io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
     }
+
+    io.emit('inventario_actualizado');
+    io.emit('venta_registrada', { ordenId, parcial: true });
 
     return {
       message: 'Cobro parcial registrado con éxito',
@@ -4514,19 +4520,28 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
 app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res) => {
   try {
     let { desde, hasta, producto_id, categoria_id, negocio_id } = req.query;
+    const nid = negocio_id ? Number(negocio_id) : (req.query.negocioId ? Number(req.query.negocioId) : 1);
 
     const ahora = new Date();
     if (!desde) {
-      const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0);
+      const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0, 0);
       desde = inicioMes.toISOString();
     } else if (desde.length === 10) {
-      desde = `${desde}T00:00:00.000Z`;
+      const parts = desde.split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      desde = new Date(y, m, d, 0, 0, 0, 0).toISOString();
     }
 
     if (!hasta) {
       hasta = ahora.toISOString();
     } else if (hasta.length === 10) {
-      hasta = `${hasta}T23:59:59.999Z`;
+      const parts = hasta.split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      hasta = new Date(y, m, d, 23, 59, 59, 999).toISOString();
     }
 
     let sqlVentas = `
@@ -4550,8 +4565,9 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         AND d.estado_comanda != 'anulado'
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
+        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
     `;
-    const paramsVentas = [desde, hasta];
+    const paramsVentas = [desde, hasta, nid, nid];
 
     if (producto_id) {
       sqlVentas += ' AND d.producto_id = ?';
@@ -4659,9 +4675,10 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
+            AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
           ORDER BY fecha_hora DESC
           LIMIT 100
-        `, [Number(producto_id), desde, hasta]);
+        `, [Number(producto_id), desde, hasta, nid, nid]);
       }
 
       productosDetallados.push({

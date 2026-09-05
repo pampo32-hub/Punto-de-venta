@@ -1543,9 +1543,23 @@ try {
           if (typeof window.recargarFichaTecnicaActual === 'function') window.recargarFichaTecnicaActual();
         } else if (window.subTabInventarioActiva === 'compras') {
           if (typeof window.cargarSugerenciaCompras === 'function') window.cargarSugerenciaCompras();
+        } else if (window.subTabInventarioActiva === 'ventas') {
+          if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
+        } else if (window.subTabInventarioActiva === 'kardex') {
+          if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
         }
       }
       if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
+    });
+    socket.on('venta_registrada', () => {
+      if (document.getElementById('view-inventario')?.classList.contains('active')) {
+        cargarInventarioAdmin();
+        if (window.subTabInventarioActiva === 'ventas') {
+          if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
+        } else if (window.subTabInventarioActiva === 'kardex') {
+          if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
+        }
+      }
     });
     socket.on('inventario_alerta_stock', (d) => {
       if (typeof mostrarNotificacionCentro === 'function') {
@@ -9816,8 +9830,9 @@ window.consultarVentasProductosServidor = async function(productoId = null) {
     const catId = selCat ? selCat.value : 'todas';
 
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+    const nid = estado.negocioActual?.id || 1;
 
-    let url = `/api/admin/reportes/ventas-productos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`;
+    let url = `/api/admin/reportes/ventas-productos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}&negocio_id=${encodeURIComponent(nid)}`;
     if (catId && catId !== 'todas') url += `&categoria_id=${encodeURIComponent(catId)}`;
     if (productoId) url += `&producto_id=${encodeURIComponent(productoId)}`;
 
