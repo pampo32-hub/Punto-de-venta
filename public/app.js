@@ -155,6 +155,180 @@ window.setShotMl = function(ml) {
   }
 };
 
+// ========================================================
+// CONTROL INTELIGENTE DE AUTO-CONVERSIÓN Y SIMILITUD (>=95%)
+// ========================================================
+let insumoSimilarDetectado = null;
+let alertaInsumoDescartada = false;
+
+function normalizarTextoComparacion(str) {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Quitar tildes
+    .replace(/[^a-z0-9\s]/g, '')      // Quitar caracteres especiales
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function calcularSimilitudNombres(strA, strB) {
+  const a = normalizarTextoComparacion(strA);
+  const b = normalizarTextoComparacion(strB);
+  if (!a || !b) return 0;
+  if (a === b) return 1.0;
+
+  // Comparación de palabras ordenadas (ej: "cerveza corona" vs "corona cerveza")
+  const palabrasA = a.split(' ').filter(Boolean).sort().join(' ');
+  const palabrasB = b.split(' ').filter(Boolean).sort().join(' ');
+  if (palabrasA === palabrasB) return 1.0;
+
+  // Coeficiente Dice (bigramas)
+  const getBigrams = (s) => {
+    const bigrams = new Map();
+    for (let i = 0; i < s.length - 1; i++) {
+      const bg = s.substring(i, i + 2);
+      bigrams.set(bg, (bigrams.get(bg) || 0) + 1);
+    }
+    return bigrams;
+  };
+
+  let dice = 0;
+  if (a.length > 1 && b.length > 1) {
+    const bgA = getBigrams(a);
+    const bgB = getBigrams(b);
+    let matches = 0;
+    let totalA = 0;
+    for (const [bg, count] of bgA.entries()) {
+      totalA += count;
+      if (bgB.has(bg)) {
+        matches += Math.min(count, bgB.get(bg));
+      }
+    }
+    let totalB = 0;
+    for (const count of bgB.values()) {
+      totalB += count;
+    }
+    dice = (2 * matches) / (totalA + totalB);
+  }
+
+  // Distancia Levenshtein
+  const lenA = a.length;
+  const lenB = b.length;
+  const matrix = [];
+  for (let i = 0; i <= lenB; i++) matrix[i] = [i];
+  for (let j = 0; j <= lenA; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= lenB; i++) {
+    for (let j = 1; j <= lenA; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  const levDist = matrix[lenB][lenA];
+  const levSim = 1 - (levDist / Math.max(lenA, lenB));
+
+  return Math.max(dice, levSim);
+}
+
+window.toggleAutoInsumoProducto = function(checked) {
+  const boxCampos = document.getElementById('boxAutoInsumoCampos');
+  if (boxCampos) {
+    boxCampos.style.display = checked ? 'block' : 'none';
+  }
+  if (checked) {
+    window.verificarSimilitudInsumoEnProducto();
+  } else {
+    const banner = document.getElementById('bannerInsumoSimilar');
+    if (banner) banner.style.display = 'none';
+  }
+};
+
+window.verificarSimilitudInsumoEnProducto = function() {
+  const chk = document.getElementById('chkConvertirEnInsumo');
+  const txtNombre = document.getElementById('txtNuevoProdNombre');
+  const banner = document.getElementById('bannerInsumoSimilar');
+  const msgEl = document.getElementById('txtAlertaInsumoSimilarMsg');
+
+  if (!chk || !chk.checked || !txtNombre || !banner) {
+    if (banner) banner.style.display = 'none';
+    return;
+  }
+
+  const nombreIngresado = txtNombre.value.trim();
+  if (nombreIngresado.length < 3) {
+    banner.style.display = 'none';
+    insumoSimilarDetectado = null;
+    return;
+  }
+
+  if (alertaInsumoDescartada) {
+    return;
+  }
+
+  const inventario = estado.inventario || [];
+  let mejorMatch = null;
+  let maxSimilitud = 0;
+
+  for (const insumo of inventario) {
+    const sim = calcularSimilitudNombres(nombreIngresado, insumo.nombre);
+    if (sim >= 0.95 && sim > maxSimilitud) {
+      maxSimilitud = sim;
+      mejorMatch = insumo;
+    }
+  }
+
+  if (mejorMatch && maxSimilitud >= 0.95) {
+    insumoSimilarDetectado = mejorMatch;
+    const porcentaje = Math.round(maxSimilitud * 100);
+    if (msgEl) {
+      msgEl.innerHTML = `⚠️ Ya existe un insumo con un nombre similar o idéntico en bodega: <strong>"${escapeHtml(mejorMatch.nombre)}"</strong> (${porcentaje}% coincidencia, Stock actual: ${mejorMatch.stock_actual} ${escapeHtml(mejorMatch.unidad_medida)}).`;
+    }
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+    insumoSimilarDetectado = null;
+  }
+};
+
+window.usarInsumoSimilarDetectado = function() {
+  if (!insumoSimilarDetectado) return;
+
+  const chk = document.getElementById('chkConvertirEnInsumo');
+  if (chk) chk.checked = false;
+  window.toggleAutoInsumoProducto(false);
+
+  // Vincular este producto directamente al insumo existente como unidad
+  const selTipo = document.getElementById('selectKardexTipo');
+  if (selTipo) {
+    selTipo.value = 'unidad';
+    window.cambiarTipoKardexProducto();
+  }
+
+  const selUni = document.getElementById('selectKardexInsumoUnidad');
+  if (selUni) {
+    selUni.value = String(insumoSimilarDetectado.id);
+    window.sincronizarParametrosInsumoDesdeSelect(true);
+  }
+
+  const banner = document.getElementById('bannerInsumoSimilar');
+  if (banner) banner.style.display = 'none';
+
+  mostrarNotificacionCentro(`✅ Vinculado al insumo existente "${insumoSimilarDetectado.nombre}"`, 'success');
+};
+
+window.descartarAlertaInsumoSimilar = function() {
+  alertaInsumoDescartada = true;
+  const banner = document.getElementById('bannerInsumoSimilar');
+  if (banner) banner.style.display = 'none';
+};
+
 window.cambiarTipoKardexProducto = function() {
   const tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   const boxShot = document.getElementById('boxKardexShotConfig');
@@ -339,6 +513,30 @@ window.abrirModalNuevoProducto = async function() {
   if (chkAgotado) chkAgotado.checked = false;
   if (btnEliminar) btnEliminar.style.display = 'none';
 
+  // Control inteligente: Convertir en Insumo y Detección de Similitud
+  const boxOpcionAuto = document.getElementById('boxOpcionAutoInsumo');
+  if (boxOpcionAuto) boxOpcionAuto.style.display = 'block';
+  const chkAuto = document.getElementById('chkConvertirEnInsumo');
+  if (chkAuto) chkAuto.checked = false;
+  const boxAutoCampos = document.getElementById('boxAutoInsumoCampos');
+  if (boxAutoCampos) boxAutoCampos.style.display = 'none';
+  const bannerSim = document.getElementById('bannerInsumoSimilar');
+  if (bannerSim) bannerSim.style.display = 'none';
+  const txtAutoStock = document.getElementById('txtAutoInsumoStock');
+  if (txtAutoStock) txtAutoStock.value = '0';
+  const txtAutoCosto = document.getElementById('txtAutoInsumoCosto');
+  if (txtAutoCosto) txtAutoCosto.value = '0';
+  insumoSimilarDetectado = null;
+  alertaInsumoDescartada = false;
+
+  if (txtNombre && !txtNombre._hasSimilitudListener) {
+    txtNombre._hasSimilitudListener = true;
+    txtNombre.addEventListener('input', () => {
+      alertaInsumoDescartada = false;
+      window.verificarSimilitudInsumoEnProducto();
+    });
+  }
+
   if (boxParams) boxParams.style.display = 'none';
   if (txtStock) txtStock.value = '';
   if (txtCosto) txtCosto.value = '';
@@ -347,7 +545,10 @@ window.abrirModalNuevoProducto = async function() {
   // Asegurar que inventario esté cargado para los selectores de Kárdex
   if (!estado.inventario || !estado.inventario.length) {
     try {
-      const resInv = await fetch('/api/admin/inventario');
+      const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+      const resInv = await fetch('/api/admin/inventario', {
+        headers: { 'x-user-rol': userRol }
+      });
       if (resInv.ok) estado.inventario = await resInv.json();
     } catch(e) {}
   }
@@ -428,10 +629,19 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (chkAgotado) chkAgotado.checked = Boolean(prod.agotado);
   if (btnEliminar) btnEliminar.style.display = 'inline-flex';
 
+  // Al editar un producto ya existente, ocultar opción de auto-crear insumo
+  const boxOpcionAuto = document.getElementById('boxOpcionAutoInsumo');
+  if (boxOpcionAuto) boxOpcionAuto.style.display = 'none';
+  const bannerSim = document.getElementById('bannerInsumoSimilar');
+  if (bannerSim) bannerSim.style.display = 'none';
+
   // Asegurar inventario en estado
   if (!estado.inventario || !estado.inventario.length) {
     try {
-      const resInv = await fetch('/api/admin/inventario');
+      const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+      const resInv = await fetch('/api/admin/inventario', {
+        headers: { 'x-user-rol': userRol }
+      });
       if (resInv.ok) estado.inventario = await resInv.json();
     } catch(e) {}
   }
@@ -579,35 +789,86 @@ window.guardarNuevoProducto = async function() {
   const happy_hour = chkHH && chkHH.checked ? 1 : 0;
   const agotado = chkAgotado && chkAgotado.checked ? 1 : 0;
 
+  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+
   // Datos Kárdex
-  const kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
+  let kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   let insumo_id = null;
   let ml_shot = 30;
   let cantidad_descuento = 1;
 
-  if (kardex_tipo === 'shot') {
-    insumo_id = document.getElementById('selectKardexBotella')?.value;
-    ml_shot = parseFloat(document.getElementById('txtKardexShotMl')?.value) || 30;
-    if (!insumo_id) {
-      alert('Por favor selecciona la botella del Kárdex de la cual se descontarán los shots.');
-      return;
-    }
-  } else if (kardex_tipo === 'unidad') {
-    insumo_id = document.getElementById('selectKardexInsumoUnidad')?.value;
-    cantidad_descuento = 1;
-    if (!insumo_id) {
-      alert('Por favor selecciona el insumo del Kárdex que se descontará por unidad.');
-      return;
-    }
-  }
+  const chkAuto = document.getElementById('chkConvertirEnInsumo');
+  const crearComoInsumo = chkAuto && chkAuto.checked && !isEditing;
 
   const txtStock = document.getElementById('txtKardexInsumoStock');
   const txtCosto = document.getElementById('txtKardexInsumoCosto');
   const txtMin = document.getElementById('txtKardexInsumoMin');
 
-  const insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
-  const insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
-  const insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
+  let insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
+  let insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
+  let insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
+
+  if (crearComoInsumo) {
+    const unidadAuto = document.getElementById('selectAutoInsumoUnidad')?.value || 'unidades';
+    const stockAuto = parseFloat(document.getElementById('txtAutoInsumoStock')?.value) || 0;
+    const costoAuto = parseFloat(document.getElementById('txtAutoInsumoCosto')?.value) || 0;
+
+    let catNombre = 'General';
+    if (categoria_id) {
+      const catObj = (estado.categorias || []).find(c => String(c.id) === String(categoria_id));
+      if (catObj && catObj.nombre) catNombre = catObj.nombre;
+    }
+
+    try {
+      const resInsumo = await fetch('/api/admin/inventario', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-rol': userRol
+        },
+        body: JSON.stringify({
+          nombre,
+          categoria: catNombre,
+          unidad_medida: unidadAuto,
+          stock_actual: stockAuto,
+          stock_minimo: 3,
+          costo_unitario: costoAuto,
+          es_licor: 0
+        })
+      });
+      const dataInsumo = await resInsumo.json();
+      if (!resInsumo.ok) {
+        alert('❌ Error al registrar nuevo insumo en Kárdex: ' + (dataInsumo.error || 'No se pudo crear'));
+        return;
+      }
+      const nuevoInsumoId = dataInsumo.insumoId || dataInsumo.id;
+      kardex_tipo = 'unidad';
+      insumo_id = nuevoInsumoId;
+      cantidad_descuento = 1;
+      insumo_stock_actual = stockAuto;
+      insumo_costo_unitario = costoAuto;
+      insumo_stock_minimo = 3;
+    } catch (errInsumo) {
+      alert('❌ Error al conectar con el servidor para crear insumo: ' + errInsumo.message);
+      return;
+    }
+  } else {
+    if (kardex_tipo === 'shot') {
+      insumo_id = document.getElementById('selectKardexBotella')?.value;
+      ml_shot = parseFloat(document.getElementById('txtKardexShotMl')?.value) || 30;
+      if (!insumo_id) {
+        alert('Por favor selecciona la botella del Kárdex de la cual se descontarán los shots.');
+        return;
+      }
+    } else if (kardex_tipo === 'unidad') {
+      insumo_id = document.getElementById('selectKardexInsumoUnidad')?.value;
+      cantidad_descuento = 1;
+      if (!insumo_id) {
+        alert('Por favor selecciona el insumo del Kárdex que se descontará por unidad.');
+        return;
+      }
+    }
+  }
 
   const payload = {
     nombre,
@@ -630,7 +891,6 @@ window.guardarNuevoProducto = async function() {
   try {
     const url = isEditing ? `/api/productos/${prodId}` : '/api/productos';
     const method = isEditing ? 'PUT' : 'POST';
-    const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
     const res = await fetch(url, {
       method,
@@ -7946,7 +8206,7 @@ function filtrarTablaInventario() {
 // Modales de Inventario
 let tipoAjusteActivo = 'entrada';
 
-window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
+window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
@@ -7963,11 +8223,27 @@ window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
     }
   }
 
-  // Asegurar que selectAjusteInsumo tenga opciones
+  // Asegurar inventario cargado en estado
+  if (!estado.inventario || !estado.inventario.length) {
+    try {
+      const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+      const resInv = await fetch('/api/admin/inventario', {
+        headers: { 'x-user-rol': userRol }
+      });
+      if (resInv.ok) estado.inventario = await resInv.json();
+    } catch(e) {}
+  }
+
+  // Limpiar buscador y asegurar que selectAjusteInsumo tenga opciones
+  const txtSearch = document.getElementById('txtBuscarInsumoAjuste');
+  if (txtSearch) txtSearch.value = '';
+  const btnClear = document.getElementById('btnClearSearchAjuste');
+  if (btnClear) btnClear.style.display = 'none';
+
   const ajusteSelect = document.getElementById('selectAjusteInsumo');
-  if (ajusteSelect && (!ajusteSelect.options || ajusteSelect.options.length === 0) && estado.inventario && estado.inventario.length > 0) {
+  if (ajusteSelect && estado.inventario && estado.inventario.length > 0) {
     ajusteSelect.innerHTML = estado.inventario.map(i => `
-      <option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>
+      <option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}" data-stock="${i.stock_actual}" data-cat="${escapeHtml(i.categoria || '')}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>
     `).join('');
   }
 
@@ -7985,6 +8261,43 @@ window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
 
   const modal = document.getElementById('modalAjusteInventario');
   if (modal) modal.classList.add('active');
+};
+
+window.filtrarInsumosAjusteModal = function() {
+  const input = document.getElementById('txtBuscarInsumoAjuste');
+  const btnClear = document.getElementById('btnClearSearchAjuste');
+  const sel = document.getElementById('selectAjusteInsumo');
+  if (!sel) return;
+
+  const q = (input?.value || '').toLowerCase().trim();
+  if (btnClear) btnClear.style.display = q ? 'block' : 'none';
+
+  const items = estado.inventario || [];
+  const filtrados = items.filter(i => {
+    if (!q) return true;
+    const palabras = q.split(/\s+/);
+    const texto = `${i.nombre || ''} ${i.categoria || ''} ${i.unidad_medida || ''}`.toLowerCase();
+    return palabras.every(p => texto.includes(p));
+  });
+
+  if (filtrados.length > 0) {
+    sel.innerHTML = filtrados.map(i => `
+      <option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}" data-stock="${i.stock_actual}" data-cat="${escapeHtml(i.categoria || '')}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>
+    `).join('');
+  } else {
+    sel.innerHTML = '<option value="">⚠️ No se encontraron insumos coincidentes</option>';
+  }
+
+  actualizarEtiquetaUnidadAjuste();
+};
+
+window.limpiarBuscadorInsumoAjuste = function() {
+  const input = document.getElementById('txtBuscarInsumoAjuste');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  window.filtrarInsumosAjusteModal();
 };
 
 window.cerrarModalAjusteInventario = function() {
@@ -8032,6 +8345,17 @@ function actualizarEtiquetaUnidadAjuste() {
   const u = opt ? opt.dataset.unidad || 'unidades' : 'unidades';
   const span = document.getElementById('spanAjusteUnidad');
   if (span) span.textContent = u;
+
+  const stockInfo = document.getElementById('lblInsumoAjusteStockInfo');
+  if (stockInfo) {
+    const stock = opt ? opt.dataset.stock : null;
+    const cat = opt ? opt.dataset.cat : null;
+    if (stock !== null && stock !== undefined && opt.value) {
+      stockInfo.textContent = `Stock actual: ${stock} ${u}${cat ? ` (${cat})` : ''}`;
+    } else {
+      stockInfo.textContent = '';
+    }
+  }
 }
 
 document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
@@ -8130,7 +8454,8 @@ window.abrirModalNuevoInsumo = function() {
   }
 
   const n = document.getElementById('txtNuevoInsumoNombre');
-  const c = document.getElementById('txtNuevoInsumoCat');
+  const selCat = document.getElementById('selectNuevoInsumoCat');
+  const txtCatManual = document.getElementById('txtNuevoInsumoCatManual');
   const s = document.getElementById('txtNuevoInsumoStock');
   const m = document.getElementById('txtNuevoInsumoMin');
   const cs = document.getElementById('txtNuevoInsumoCosto');
@@ -8138,7 +8463,19 @@ window.abrirModalNuevoInsumo = function() {
   const selCap = document.getElementById('selNuevoInsumoCapacidad');
   const selShot = document.getElementById('selNuevoInsumoMedidaShot');
   if (n) n.value = '';
-  if (c) c.value = 'General';
+
+  // Sincronizar con las categorías oficiales del menú
+  if (selCat) {
+    const cats = estado.categorias || [];
+    selCat.innerHTML = cats.map(cat => `
+      <option value="${escapeHtml(cat.nombre)}">${cat.icono || '🍽️'} ${escapeHtml(cat.nombre)}</option>
+    `).join('') + '<option value="__nueva__" style="color:#38bdf8; font-weight:700;">➕ + Nueva Categoría...</option>';
+    if (txtCatManual) {
+      txtCatManual.style.display = 'none';
+      txtCatManual.value = '';
+    }
+  }
+
   if (s) s.value = '10';
   if (m) m.value = '3';
   if (cs) cs.value = '1000';
@@ -8150,13 +8487,34 @@ window.abrirModalNuevoInsumo = function() {
   if (modal) modal.classList.add('active');
 };
 
+window.verificarCategoriaInsumoManual = function(val) {
+  const txtManual = document.getElementById('txtNuevoInsumoCatManual');
+  if (!txtManual) return;
+  if (val === '__nueva__') {
+    txtManual.style.display = 'block';
+    txtManual.focus();
+  } else {
+    txtManual.style.display = 'none';
+    txtManual.value = '';
+  }
+};
+
 window.cerrarModalNuevoInsumo = function() {
   document.getElementById('modalNuevoInsumo')?.classList.remove('active');
 };
 
 window.guardarNuevoInsumo = async function() {
   const nombre = document.getElementById('txtNuevoInsumoNombre')?.value.trim();
-  const categoria = document.getElementById('txtNuevoInsumoCat')?.value.trim() || 'General';
+  const selCat = document.getElementById('selectNuevoInsumoCat');
+  const txtManual = document.getElementById('txtNuevoInsumoCatManual');
+  let categoria = 'General';
+  if (selCat && selCat.value === '__nueva__') {
+    categoria = (txtManual?.value || '').trim() || 'General';
+  } else if (selCat && selCat.value) {
+    categoria = selCat.value;
+  } else {
+    categoria = document.getElementById('txtNuevoInsumoCat')?.value?.trim() || 'General';
+  }
   const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
   const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
   const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 3;

@@ -2931,6 +2931,7 @@ async function procesarCobroOrden(ordenId, {
   mesaId = null,
   items = [],
   metodo = 'Efectivo',
+  metodoPago,
   monto,
   propina = 0,
   cambio = 0,
@@ -2940,6 +2941,7 @@ async function procesarCobroOrden(ordenId, {
   persona_nombre = 'Cliente',
   happyHourActivo = false
 } = {}) {
+  const metodoFinal = metodo || metodoPago || 'Efectivo';
   const ahora = new Date().toISOString();
   let orden = null;
   const idNum = parseInt(ordenId);
@@ -3022,10 +3024,11 @@ async function procesarCobroOrden(ordenId, {
 
   const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
   const cajaId = caja ? caja.id : null;
+  const montoFinal = (monto !== undefined && monto !== null) ? Number(monto) : (Number(orden.total) || 0);
 
   await dbRun(
     'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [ordenId, cajaId, mesero, metodo, monto, propina, cambio, ahora]
+    [ordenId, cajaId, mesero, metodoFinal, montoFinal, propina, cambio, ahora]
   );
 
   // Obtener información del negocio y mesa para el tiquete impreso
@@ -3079,6 +3082,8 @@ async function procesarCobroOrden(ordenId, {
     }
 
     return {
+      ok: true,
+      success: true,
       message: 'Cobro completado y mesa liberada',
       ordenId,
       es_parcial: false,

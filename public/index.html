@@ -2199,6 +2199,58 @@
             </select>
           </div>
 
+          <!-- Opción Inteligente: Convertir automáticamente en Insumo en Kárdex -->
+          <div id="boxOpcionAutoInsumo" style="margin-bottom:12px; background:rgba(30,41,59,0.55); border:1px solid #334155; border-radius:8px; padding:10px 12px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; font-size:0.84rem; color:#f8fafc; margin:0;">
+              <input type="checkbox" id="chkConvertirEnInsumo" onchange="toggleAutoInsumoProducto(this.checked)" style="width:16px; height:16px; cursor:pointer;" />
+              <span>✨ Convertir automáticamente en Insumo en Kárdex (si no existe aún)</span>
+            </label>
+
+            <!-- Banner Inteligente de Advertencia si existe insumo similar o igual (>=95%) -->
+            <div id="bannerInsumoSimilar" style="display:none; margin-top:10px; background:rgba(245,158,11,0.12); border:1px solid #f59e0b; border-radius:8px; padding:10px 12px; color:#fbbf24; font-size:0.83rem;">
+              <div style="display:flex; align-items:flex-start; gap:8px;">
+                <span style="font-size:1.2rem; line-height:1;">⚠️</span>
+                <div style="flex:1;">
+                  <div id="txtAlertaInsumoSimilarMsg" style="font-weight:600; line-height:1.4;">
+                    Ya existe un insumo con un nombre similar o igual en bodega.
+                  </div>
+                  <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                    <button type="button" id="btnUsarInsumoExistente" onclick="usarInsumoSimilarDetectado()" style="background:#f59e0b; color:#0f172a; border:none; padding:6px 12px; border-radius:6px; font-weight:800; font-size:0.8rem; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                      👁️ Usar insumo existente
+                    </button>
+                    <button type="button" id="btnContinuarCreandoInsumo" onclick="descartarAlertaInsumoSimilar()" style="background:transparent; border:1px solid #f59e0b; color:#fcd34d; padding:6px 12px; border-radius:6px; font-size:0.8rem; cursor:pointer;">
+                      ➡️ Continuar creando (es diferente)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Campos rápidos compactos para el nuevo insumo en bodega -->
+            <div id="boxAutoInsumoCampos" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed #475569;">
+              <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                <div>
+                  <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Unidad de Medida:</label>
+                  <select id="selectAutoInsumoUnidad" style="width:100%; padding:6px 8px; font-size:0.84rem; border:1px solid #475569; background:#111827; color:#fff; border-radius:6px;">
+                    <option value="unidades">Unidades</option>
+                    <option value="botellas">Botellas</option>
+                    <option value="kg">Kilogramos (kg)</option>
+                    <option value="litros">Litros</option>
+                    <option value="porciones">Porciones</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Stock Inicial:</label>
+                  <input type="number" id="txtAutoInsumoStock" min="0" step="any" value="0" placeholder="Ej: 24" style="width:100%; padding:6px 8px; font-size:0.84rem; border:1px solid #475569; background:#111827; color:#fff; border-radius:6px;" />
+                </div>
+                <div>
+                  <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Costo Unitario:</label>
+                  <input type="number" id="txtAutoInsumoCosto" min="0" step="any" value="0" placeholder="Ej: 1000" style="width:100%; padding:6px 8px; font-size:0.84rem; border:1px solid #475569; background:#111827; color:#fff; border-radius:6px;" />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Contenedor Config Shot -->
           <div id="boxKardexShotConfig" style="display:none; background:rgba(30,41,59,0.7); border:1px solid #0284c7; border-radius:8px; padding:12px; margin-top:8px;">
             <div style="margin-bottom:10px;">
@@ -2869,8 +2921,16 @@
       </div>
       <div class="dialog-body">
         <div class="field-row">
-          <label>Insumo a Modificar:</label>
-          <select id="selectAjusteInsumo" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="margin:0;">Insumo a Modificar:</label>
+            <span id="lblInsumoAjusteStockInfo" style="font-size:0.78rem; color:#38bdf8; font-weight:600;"></span>
+          </div>
+          <!-- Buscador inteligente de insumos en tiempo real -->
+          <div style="position:relative; margin-bottom:8px;">
+            <input type="text" id="txtBuscarInsumoAjuste" placeholder="🔍 Escribe para buscar insumo o categoría (ej: corona, carne, ron...)" oninput="filtrarInsumosAjusteModal()" style="width:100%; padding:8px 30px 8px 10px; border-radius:8px; background:#1e293b; border:1px solid #38bdf8; color:#fff; font-size:0.85rem;" />
+            <button type="button" id="btnClearSearchAjuste" onclick="limpiarBuscadorInsumoAjuste()" style="display:none; position:absolute; right:8px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; font-size:0.95rem; cursor:pointer;" title="Limpiar búsqueda">✕</button>
+          </div>
+          <select id="selectAjusteInsumo" onchange="actualizarEtiquetaUnidadAjuste()" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff; font-size:0.9rem;">
             <!-- Opciones cargadas dinámicamente -->
           </select>
         </div>
@@ -2920,7 +2980,10 @@
         <div class="field-row" style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <div>
             <label>Categoría:</label>
-            <input type="text" id="txtNuevoInsumoCat" placeholder="Ej: Lácteos & Cocina" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+            <select id="selectNuevoInsumoCat" onchange="verificarCategoriaInsumoManual(this.value)" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+              <!-- Cargado dinámicamente sincronizado con categorías del menú -->
+            </select>
+            <input type="text" id="txtNuevoInsumoCatManual" placeholder="Escribe nueva categoría..." style="display:none; width:100%; margin-top:6px; padding:8px 10px; border-radius:6px; background:#1e293b; border:1px solid #38bdf8; color:#fff; font-size:0.85rem;" />
           </div>
           <div>
             <label>Unidad de Medida:</label>
