@@ -9,6 +9,9 @@ const DB_PATH = path.join(__dirname, '../../pos.test.db');
 
 // Create isolated test db copy from main db
 try {
+  if (fs.existsSync(DB_PATH)) {
+    fs.unlinkSync(DB_PATH);
+  }
   if (fs.existsSync(DB_MAIN_PATH)) {
     fs.copyFileSync(DB_MAIN_PATH, DB_PATH);
   }

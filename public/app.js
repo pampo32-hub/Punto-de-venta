@@ -39,7 +39,7 @@ window.confirmarAccion = function(opciones) {
   });
 };
 
-let mesaParaRenombrar = null;
+window.mesaParaRenombrar = null;
 
 window.abrirModalRenombrarMesa = function(mesaId, nombreActual) {
   mesaParaRenombrar = { id: mesaId, nombre: nombreActual };
@@ -63,7 +63,7 @@ window.cerrarModalRenombrarMesa = function() {
   if (modal) modal.classList.remove('active');
 };
 
-let mesaParaCapacidad = null;
+window.mesaParaCapacidad = null;
 
 window.abrirModalCapacidadMesa = function(mesaId, capActual) {
   const m = estado.mesas.find(item => item.id === mesaId);
@@ -158,8 +158,8 @@ window.setShotMl = function(ml) {
 // ========================================================
 // CONTROL INTELIGENTE DE AUTO-CONVERSIÓN Y SIMILITUD (>=95%)
 // ========================================================
-let insumoSimilarDetectado = null;
-let alertaInsumoDescartada = false;
+window.insumoSimilarDetectado = null;
+window.alertaInsumoDescartada = false;
 
 function normalizarTextoComparacion(str) {
   return (str || '')
@@ -1419,7 +1419,7 @@ window.switchComanderoMobileTab = function(tab) {
 // PUNTO DE VENTA - SISTEMA CON AUTENTICACIÓN, PORTAL DEV Y BOTONES CON FOTOS
 // ============================================================================
 
-const estado = {
+var estado = {
   usuarioActual: null, // Usuario autenticado
   negocioActual: null, // Negocio / Restaurante activo
   mesaActiva: null,
@@ -1457,7 +1457,7 @@ const estado = {
 window.estado = estado;
 
 // WebSockets
-let socket = null;
+var socket = window.socket || null;
 try {
   if (typeof io !== 'undefined') {
     socket = io();
@@ -1540,7 +1540,10 @@ try {
     });
     socket.on('inventario_alerta_stock', (d) => {
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(`⚠️ ¡Alerta de Inventario! ${d.insumo} alcanzó stock crítico (${d.stock_actual} ${d.unidad}).`, 'warning');
+        const nombreInsumo = d.insumo || d.nombre || d.nombre_insumo || 'Insumo';
+        const unidad = d.unidad || 'uds';
+        const cant = typeof d.stock_actual === 'number' ? Math.round(d.stock_actual * 100) / 100 : (d.stock_actual || 0);
+        mostrarNotificacionCentro(`⚠️ ¡Alerta de Inventario! El insumo "${nombreInsumo}" alcanzó stock crítico (${cant} ${unidad} restantes).`, 'warning');
       }
     });
     socket.on('receta_actualizada', () => {
@@ -1609,14 +1612,15 @@ if (typeof window !== 'undefined') {
   window.formatearTooltipEspera = formatearTooltipEspera;
 }
 
-// Formateo de moneda (Colones costarricenses enteros sin decimales)
+// Formateo de moneda (Colones costarricenses enteros con separación de miles por punto: ₡ 50.000)
 function formatCRC(num) {
-  return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const val = Math.round(Number(num) || 0);
+  return '₡ ' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 // Formateo de montos en mesas sin decimales según requerimiento
 function formatCRCSinDecimales(num) {
-  return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return formatCRC(num);
 }
 
 // Control y Alternancia de Pisos (1er Piso y Segundo Piso)
@@ -2582,10 +2586,9 @@ async function cargarNegociosDev() {
 
 // ============================================================================
 // CENTRO DE LICENCIAS Y MÓDULOS SAAS 2026 (DEVELOPER)
-// ============================================================================
-let _catalogoModulosCache = [];
-let _modulosSeleccionadosSet = new Set();
-let _negocioModulosActivoId = null;
+var _catalogoModulosCache = window._catalogoModulosCache || [];
+var _modulosSeleccionadosSet = window._modulosSeleccionadosSet || new Set();
+var _negocioModulosActivoId = window._negocioModulosActivoId || null;
 
 window.abrirModalModulosNegocio = async function(negocioId) {
   _negocioModulosActivoId = negocioId;
@@ -2643,7 +2646,7 @@ window.renderizarListaModulos = function() {
           </div>
           <p class="modulo-desc">${m.descripcion}</p>
           <div class="modulo-price-row">
-            <span class="modulo-price-tag">₡${(m.precioCRC).toLocaleString()} / mes ($${m.precioUSD})</span>
+            <span class="modulo-price-tag">${formatCRC(m.precioCRC)} / mes ($${m.precioUSD})</span>
             <label class="switch-toggle-label" title="${isBase ? 'Módulo Base Obligatorio' : (isActivo ? 'Desactivar módulo' : 'Activar módulo')}">
               <input type="checkbox" id="chkModulo_${m.id}" ${isActivo ? 'checked' : ''} ${isBase ? 'disabled' : ''} onchange="toggleModuloItem('${m.id}')">
               <span class="switch-slider"></span>
@@ -2738,7 +2741,7 @@ window.actualizarResumenModulosUI = function() {
 
   const txtPrecio = document.getElementById('resumenPrecioMensual');
   if (txtPrecio) {
-    txtPrecio.textContent = `Total sugerido: ₡${totalCRC.toLocaleString()} / mes ($${totalUSD} USD)`;
+    txtPrecio.textContent = `Total sugerido: ${formatCRC(totalCRC)} / mes ($${totalUSD} USD)`;
   }
 };
 
@@ -3427,7 +3430,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
           <div class="prod-card-content">
             <span class="prod-card-name" style="font-size: 1.05rem; color: #fbbf24;">Solo Casado</span>
             <small style="color: #94a3b8; font-size: 0.72rem; display: block; margin-top: 2px;">Elige proteína / acompañamiento</small>
-            <span class="prod-card-price" style="color: #34d399; margin-top: 6px;">₡4,500</span>
+            <span class="prod-card-price" style="color: #34d399; margin-top: 6px;">₡ 4.500</span>
           </div>
         </div>
       `;
@@ -3445,7 +3448,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
           <div class="prod-card-content">
             <span class="prod-card-name" style="font-size: 1.05rem; color: #7dd3fc;">Arroces Especiales</span>
             <small style="color: #94a3b8; font-size: 0.72rem; display: block; margin-top: 2px;">Elige pollo, camarones, mariscos...</small>
-            <span class="prod-card-price" style="color: #34d399; margin-top: 6px;">Desde ₡5,000</span>
+            <span class="prod-card-price" style="color: #34d399; margin-top: 6px;">Desde ₡ 5.000</span>
           </div>
         </div>
       `;
@@ -4055,7 +4058,7 @@ function renderSalón(filtroZona = null) {
 // ────────────────────────────────────────────────────────────────────────────
 // DRAG & DROP DE MESAS — MOTOR TÁCTIL Y RATÓN UNIFICADO
 // ────────────────────────────────────────────────────────────────────────────
-const dragState = {
+var dragState = {
   active: false,
   sourceMesa: null,
   sourceCard: null,
@@ -5180,7 +5183,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
   }
 });
 
-const btnLanzarFuertesEl = document.getElementById('btnLanzarPlatosFuertes');
+var btnLanzarFuertesEl = document.getElementById('btnLanzarPlatosFuertes');
 if (btnLanzarFuertesEl) btnLanzarFuertesEl.addEventListener('click', async () => {
   if (!estado.mesaActiva) return;
   try {
@@ -6200,7 +6203,7 @@ function cargarSelectoresMoverUnir() {
 
 
 // Anulaciones
-let anulaIndex = null;
+var anulaIndex = null;
 function initAnulaciones() {
   document.getElementById('btnCloseAnulaModal').addEventListener('click', () => document.getElementById('modalAnulacion').classList.remove('active'));
   document.getElementById('btnCancelarAnula').addEventListener('click', () => document.getElementById('modalAnulacion').classList.remove('active'));
@@ -6271,7 +6274,7 @@ window.solicitarAnulacionItem = function(idx) {
 // SPLIT BILLS INTERACTIVO: DRAG & DROP, ASIGNACIÓN UNITARIA Y COLA DE PERSONAS
 // ============================================================================
 
-let splitState = {
+var splitState = {
   numPersonas: 2,
   personaActivaIndex: 0,
   itemsDisponibles: [],
@@ -6736,7 +6739,7 @@ function renderSplitPersonaActiva() {
   }
 }
 
-let splitQuickAddState = {
+var splitQuickAddState = {
   itemIndex: null,
   nombre: '',
   precio: 0,
@@ -8225,7 +8228,7 @@ function filtrarTablaInventario() {
 }
 
 // Modales de Inventario
-let tipoAjusteActivo = 'entrada';
+var tipoAjusteActivo = 'entrada';
 
 window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null) {
   const u = estado.usuarioActual;
@@ -9819,11 +9822,11 @@ window.onInputBuscarVentaProd = function() {
           ${s.imagen_url ? `<img src="${escapeHtml(s.imagen_url)}" style="width:32px; height:32px; object-fit:cover; border-radius:4px;">` : `<div style="width:32px; height:32px; background:#1e293b; border-radius:4px; display:flex; align-items:center; justify-content:center;">${s.icono}</div>`}
           <div style="flex:1;">
             <strong style="color:#fff; font-size:0.9rem; display:block;">${escapeHtml(s.nombre)}</strong>
-            <small style="color:#64748b;">${escapeHtml(s.categoria)} • ₡${s.precio.toLocaleString()}</small>
+            <small style="color:#64748b;">${escapeHtml(s.categoria)} • ${formatCRC(s.precio)}</small>
           </div>
           <div style="text-align:right;">
             <strong style="color:#38bdf8; font-size:0.85rem;">${s.vendidas} vendidos</strong>
-            <small style="display:block; color:#10b981;">₡${s.ingresos.toLocaleString()}</small>
+            <small style="display:block; color:#10b981;">${formatCRC(s.ingresos)}</small>
           </div>
         </div>
       `).join('');
@@ -9902,7 +9905,7 @@ window.abrirModalDetalleInsumos = async function(productoId) {
   }
 
   document.getElementById('lblTituloDetalleInsumos').innerHTML = `📦 ${escapeHtml(prod.producto_nombre)}`;
-  document.getElementById('lblSubtituloDetalleInsumos').textContent = `Categoría: ${prod.categoria_nombre} • Precio: ₡${prod.precio_actual.toLocaleString()}`;
+  document.getElementById('lblSubtituloDetalleInsumos').textContent = `Categoría: ${prod.categoria_nombre} • Precio: ${formatCRC(prod.precio_actual)}`;
 
   const boxKpis = document.getElementById('boxKpisProductoSeleccionado');
   if (boxKpis) {
@@ -9913,11 +9916,11 @@ window.abrirModalDetalleInsumos = async function(productoId) {
       </div>
       <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #10b981;">
         <span style="font-size:0.75rem; color:#94a3b8; display:block;">Ingresos:</span>
-        <strong style="color:#10b981; font-size:1.15rem;">₡${prod.total_ingresos.toLocaleString()}</strong>
+        <strong style="color:#10b981; font-size:1.15rem;">${formatCRC(prod.total_ingresos)}</strong>
       </div>
       <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #f59e0b;">
         <span style="font-size:0.75rem; color:#94a3b8; display:block;">Costo Insumos:</span>
-        <strong style="color:#f59e0b; font-size:1.15rem;">₡${prod.costo_insumos_total.toLocaleString()}</strong>
+        <strong style="color:#f59e0b; font-size:1.15rem;">${formatCRC(prod.costo_insumos_total)}</strong>
       </div>
       <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #c084fc;">
         <span style="font-size:0.75rem; color:#94a3b8; display:block;">Margen Bruto:</span>
@@ -9939,8 +9942,8 @@ window.abrirModalDetalleInsumos = async function(productoId) {
           <td><strong>${escapeHtml(item.nombre)}</strong></td>
           <td style="text-align:right;">${item.cantidad_por_unidad} <small style="color:#94a3b8;">${escapeHtml(item.unidad_medida)}</small></td>
           <td style="text-align:right; font-weight:800; color:#38bdf8;">${item.cantidad_total_consumida} <small>${escapeHtml(item.unidad_medida)}</small></td>
-          <td style="text-align:right; color:#cbd5e1;">₡${item.costo_unitario.toLocaleString()}</td>
-          <td style="text-align:right; font-weight:700; color:#f59e0b;">₡${item.costo_total.toLocaleString()}</td>
+          <td style="text-align:right; color:#cbd5e1;">${formatCRC(item.costo_unitario)}</td>
+          <td style="text-align:right; font-weight:700; color:#f59e0b;">${formatCRC(item.costo_total)}</td>
           <td style="text-align:center;">
             <span style="color:${item.stock_actual <= 0 ? '#ef4444' : '#34d399'}; font-weight:700;">
               ${item.stock_actual} ${escapeHtml(item.unidad_medida)}
@@ -9965,7 +9968,7 @@ window.abrirModalDetalleInsumos = async function(productoId) {
           <td>${escapeHtml(h.mesa_numero ? 'Mesa ' + h.mesa_numero : 'Barra')}</td>
           <td>${escapeHtml(h.mesero || '-')}</td>
           <td style="text-align:center; font-weight:700;">${h.cantidad}</td>
-          <td style="text-align:right; color:#10b981; font-weight:600;">₡${h.subtotal.toLocaleString()}</td>
+          <td style="text-align:right; color:#10b981; font-weight:600;">${formatCRC(h.subtotal)}</td>
         </tr>
       `).join('');
     } else {
@@ -10082,7 +10085,7 @@ window.imprimirReporteVentasProductos = function() {
     return;
   }
 
-  const formatMoney = (m) => '₡' + Number(m || 0).toLocaleString();
+  const formatMoney = (m) => formatCRC(m);
 
   const html = `
     <!DOCTYPE html>
@@ -10952,7 +10955,7 @@ if (typeof module !== 'undefined' && module.exports) {
 // SISTEMA DE PISO DEL SALÓN — Catálogo, selector visual y persistencia
 // ============================================================================
 
-const CATALOGO_PISOS_SALON = [
+var CATALOGO_PISOS_SALON = window.CATALOGO_PISOS_SALON || [
   // Por defecto
   { id: 'piso-default',        nombre: 'Fondo Original (Oscuro)', icono: '⬛', categoria: 'solido', tag: 'Estándar' },
   // Maderas
@@ -10981,7 +10984,7 @@ const CATALOGO_PISOS_SALON = [
 ];
 
 // Piso actualmente seleccionado para previsualización
-let _pisoSeleccionadoPrevio = null;
+var _pisoSeleccionadoPrevio = null;
 
 // Aplica clase CSS al salón y editor con máxima prioridad
 window.aplicarClasePisoSalon = function(pisoId) {
@@ -11501,11 +11504,11 @@ window.cambiarSubTabEditorPagina = function(subtab) {
 // MODO EDICIÓN VISUAL GLOBAL (CLICK-TO-EDIT & CONTENTEDITABLE MULTI-PANTALLA)
 // ============================================================================
 
-let _elementoSeleccionadoLive = null;
-let _modoInspeccionActivo = false;
-let _modoContentEditableActivo = false;
-let _modoEdicionGlobalActivo = false;
-let _hayCambiosPendientes = false;
+var _elementoSeleccionadoLive = null;
+var _modoInspeccionActivo = false;
+var _modoContentEditableActivo = false;
+var _modoEdicionGlobalActivo = false;
+var _hayCambiosPendientes = false;
 
 // Marca y gestiona visualmente el estado de cambios pendientes
 window.marcarCambiosPendientes = function(hayCambios) {
@@ -11923,4 +11926,232 @@ try {
     });
   }
 } catch (_) {}
+
+// ============================================================================
+// 15. HISTORIAL DETALLADO DE CUENTAS COBRADAS HOY (DASHBOARD EJECUTIVO)
+// ============================================================================
+
+window._cuentasCobradasCache = [];
+
+window.abrirModalCuentasCobradasHoy = async function() {
+  const modal = document.getElementById('modalHistorialCuentasCobradas');
+  const tbody = document.getElementById('tbodyCuentasCobradasHoy');
+  if (modal) modal.style.display = 'flex';
+
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align:center; padding:32px; color:#94a3b8;">
+          <div style="font-size:1.5rem; margin-bottom:8px;">⏳</div>
+          Cargando comandas y cuentas cobradas de hoy...
+        </td>
+      </tr>
+    `;
+  }
+
+  // Reset search box
+  const txtSearch = document.getElementById('txtBuscarCuentaCobrada');
+  if (txtSearch) txtSearch.value = '';
+
+  const uAct = estado.usuarioActual || estado.usuario;
+  const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
+  const negocioId = estado.negocioActual?.id || 1;
+
+  try {
+    const res = await fetch(`/api/admin/ventas/historial-hoy?negocio_id=${negocioId}`, {
+      headers: {
+        'x-user-rol': userRol,
+        'x-negocio-id': String(negocioId)
+      }
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Error del servidor (${res.status})`);
+    }
+
+    const data = await res.json();
+    window._cuentasCobradasCache = Array.isArray(data.ordenes) ? data.ordenes : [];
+
+    // Actualizar KPI chips en modal
+    const totalCobradoEl = document.getElementById('modalKpiTotalCobrado');
+    const totalCuentasEl = document.getElementById('modalKpiTotalCuentas');
+    const efectivoEl = document.getElementById('modalKpiEfectivo');
+    const tarjetaEl = document.getElementById('modalKpiTarjeta');
+    const sinpeEl = document.getElementById('modalKpiSinpe');
+    const propinaEl = document.getElementById('modalKpiPropina');
+
+    if (totalCobradoEl) totalCobradoEl.textContent = formatCRC(data.totalVentas || 0);
+    if (totalCuentasEl) totalCuentasEl.textContent = String(data.totalCuentas || 0);
+    if (efectivoEl) efectivoEl.textContent = formatCRC(data.pagosPorMetodo?.efectivo || 0);
+    if (tarjetaEl) tarjetaEl.textContent = formatCRC(data.pagosPorMetodo?.tarjeta || 0);
+    if (sinpeEl) sinpeEl.textContent = formatCRC(data.pagosPorMetodo?.sinpe || 0);
+    if (propinaEl) propinaEl.textContent = formatCRC(data.totalPropinas || 0);
+
+    const badgeFecha = document.getElementById('lblBadgeFechaCuentas');
+    if (badgeFecha) {
+      const hoy = new Date();
+      badgeFecha.textContent = hoy.toLocaleDateString('es-CR', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+
+    window.renderizarTablaCuentasCobradas(window._cuentasCobradasCache);
+  } catch (err) {
+    console.error('Error al cargar historial de cuentas cobradas hoy:', err);
+    if (tbody) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" style="text-align:center; padding:32px; color:#ef4444;">
+            <div style="font-size:1.5rem; margin-bottom:8px;">⚠️</div>
+            Error al consultar cuentas cobradas: ${err.message}
+          </td>
+        </tr>
+      `;
+    }
+  }
+};
+
+window.recargarCuentasCobradasHoy = function() {
+  window.abrirModalCuentasCobradasHoy();
+};
+
+window.cerrarModalCuentasCobradas = function() {
+  const modal = document.getElementById('modalHistorialCuentasCobradas');
+  if (modal) modal.style.display = 'none';
+};
+
+window.filtrarCuentasCobradas = function(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) {
+    window.renderizarTablaCuentasCobradas(window._cuentasCobradasCache);
+    return;
+  }
+
+  const filtradas = window._cuentasCobradasCache.filter(o => {
+    const numOrden = String(o.numero_orden || o.id || '').toLowerCase();
+    const mesa = String(o.mesa_numero || '').toLowerCase();
+    const mesero = String(o.mesero || '').toLowerCase();
+    const metodos = String(o.metodos_pago || '').toLowerCase();
+    const platillos = (o.items || []).map(it => (it.nombre_producto || '').toLowerCase()).join(' ');
+
+    return numOrden.includes(q) ||
+           mesa.includes(q) ||
+           mesero.includes(q) ||
+           metodos.includes(q) ||
+           platillos.includes(q);
+  });
+
+  window.renderizarTablaCuentasCobradas(filtradas, true);
+};
+
+window.renderizarTablaCuentasCobradas = function(ordenes, esFiltro = false) {
+  const tbody = document.getElementById('tbodyCuentasCobradasHoy');
+  const infoEl = document.getElementById('lblCuentasFiltradasInfo');
+  if (!tbody) return;
+
+  const total = Array.isArray(ordenes) ? ordenes.length : 0;
+  if (infoEl) {
+    infoEl.textContent = `Mostrando ${total} cuenta${total === 1 ? '' : 's'}${esFiltro ? ' (filtradas)' : ''}`;
+  }
+
+  if (total === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align:center; padding:36px; color:#94a3b8;">
+          <div style="font-size:1.6rem; margin-bottom:8px;">🔍</div>
+          No se encontraron cuentas cobradas registradas para hoy ${esFiltro ? 'con los términos de búsqueda ingresados' : ''}.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  let html = '';
+  ordenes.forEach((ord) => {
+    const hora = ord.fecha_cobro ? new Date(ord.fecha_cobro).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' }) : '—';
+    const subtotal = Number(ord.subtotal) || 0;
+    const ivaServ = (Number(ord.iva_13) || 0) + (Number(ord.servicio_10) || 0);
+    const totalCobrado = Number(ord.total) || 0;
+    const items = Array.isArray(ord.items) ? ord.items : [];
+    const cantItems = items.reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0);
+    const metodos = ord.metodos_pago || 'Efectivo';
+
+    // Badge método de pago
+    let badgeMetodo = `<span style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:2px 8px; border-radius:6px; font-size:0.75rem; text-transform:capitalize;">${metodos}</span>`;
+    if (/efectivo/i.test(metodos)) {
+      badgeMetodo = `<span style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid rgba(234,179,8,0.3); padding:2px 8px; border-radius:6px; font-size:0.75rem;">💵 ${metodos}</span>`;
+    } else if (/tarjeta/i.test(metodos)) {
+      badgeMetodo = `<span style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3); padding:2px 8px; border-radius:6px; font-size:0.75rem;">💳 ${metodos}</span>`;
+    } else if (/sinpe/i.test(metodos)) {
+      badgeMetodo = `<span style="background:rgba(45,212,191,0.15); color:#2dd4bf; border:1px solid rgba(45,212,191,0.3); padding:2px 8px; border-radius:6px; font-size:0.75rem;">📱 ${metodos}</span>`;
+    }
+
+    html += `
+      <tr style="border-bottom:1px solid #1e293b; transition:background 0.15s;" onmouseover="this.style.background='rgba(51,65,85,0.3)'" onmouseout="this.style.background='transparent'">
+        <td style="padding:10px 12px; font-weight:700; color:#38bdf8;">
+          #${ord.numero_orden || ord.id}
+        </td>
+        <td style="padding:10px 12px; color:#f8fafc;">
+          <span style="background:#1e293b; padding:2px 8px; border-radius:6px; font-size:0.8rem; border:1px solid #334155;">🪑 ${ord.mesa_numero || 'Mesa'}</span>
+          <small style="display:block; color:#64748b; font-size:0.75rem; margin-top:2px;">${ord.zona_nombre || 'Salón'}</small>
+        </td>
+        <td style="padding:10px 12px; color:#cbd5e1;">
+          👤 ${ord.mesero || 'Caja / General'}
+        </td>
+        <td style="padding:10px 12px; text-align:center; color:#94a3b8; font-size:0.82rem;">
+          🕒 ${hora}
+        </td>
+        <td style="padding:10px 12px; text-align:center;">
+          ${badgeMetodo}
+        </td>
+        <td style="padding:10px 12px; text-align:right; color:#cbd5e1; font-weight:500;">
+          ${formatCRC(subtotal)}
+        </td>
+        <td style="padding:10px 12px; text-align:right; color:#94a3b8; font-size:0.82rem;">
+          +${formatCRC(ivaServ)}
+        </td>
+        <td style="padding:10px 12px; text-align:right; font-weight:700; color:#4ade80; font-size:0.95rem;">
+          ${formatCRC(totalCobrado)}
+        </td>
+        <td style="padding:10px 12px; text-align:center;">
+          <button onclick="window.toggleDetalleComandaCobrada(${ord.id})" style="background:#1e293b; border:1px solid #3b82f6; color:#60a5fa; border-radius:6px; padding:4px 10px; font-size:0.75rem; cursor:pointer; font-weight:600; transition:all 0.15s;" title="Ver desglose de platillos">
+            🍽️ ${cantItems} items ▾
+          </button>
+        </td>
+      </tr>
+      <tr id="detalle-comanda-cobrada-${ord.id}" style="display:none; background:#0b1120;">
+        <td colspan="9" style="padding:12px 18px; border-bottom:1px solid #1e293b;">
+          <div style="background:#1e293b; border-radius:10px; padding:12px; border:1px solid #334155;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
+              <strong style="color:#38bdf8; font-size:0.85rem;">📋 Desglose de Platillos y Bebidas (Comanda #${ord.numero_orden || ord.id}):</strong>
+              <span style="font-size:0.75rem; color:#94a3b8;">${items.length} líneas de pedido</span>
+            </div>
+            ${items.length === 0 ? '<p style="color:#94a3b8; font-size:0.8rem; margin:4px 0;">No hay registro individual de líneas para esta orden.</p>' : `
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:8px;">
+                ${items.map(it => `
+                  <div style="display:flex; justify-content:space-between; align-items:center; background:#0f172a; padding:6px 10px; border-radius:6px; border:1px solid rgba(255,255,200,0.05); font-size:0.8rem;">
+                    <div>
+                      <span style="color:#facc15; font-weight:700;">${it.cantidad}x</span>
+                      <span style="color:#f8fafc; margin-left:6px;">${it.nombre_producto || 'Producto'}</span>
+                      ${it.notas ? `<small style="display:block; color:#94a3b8; font-size:0.72rem;">Nota: ${it.notas}</small>` : ''}
+                    </div>
+                    <strong style="color:#4ade80;">${formatCRC(it.subtotal || (it.cantidad * it.precio_unitario) || 0)}</strong>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+};
+
+window.toggleDetalleComandaCobrada = function(ordenId) {
+  const row = document.getElementById(`detalle-comanda-cobrada-${ordenId}`);
+  if (!row) return;
+  const isHidden = row.style.display === 'none' || !row.style.display;
+  row.style.display = isHidden ? 'table-row' : 'none';
+};
 

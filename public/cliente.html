@@ -460,6 +460,7 @@
         <button class="btn-choice cuenta" onclick="mostrarSeccion('cuenta')">
           <span>🧾 Ver Mi Cuenta / Consumos</span>
           <strong id="choiceTotalPreview">₡ 0.00</strong>
+          <strong id="choiceTotalPreview">₡ 0</strong>
         </button>
         <button class="btn-choice menu" onclick="mostrarSeccion('menu')">
           <span>📖 Ver Menú Digital con Fotos</span>
@@ -487,9 +488,13 @@
           <div class="calc-row"><span>Subtotal Consumos:</span><span id="cuentaSubtotal">₡ 0.00</span></div>
           <div class="calc-row"><span>Servicio Salón (10%):</span><span id="cuentaServicio">₡ 0.00</span></div>
           <div class="calc-row"><span>I.V.A (13%):</span><span id="cuentaIva">₡ 0.00</span></div>
+          <div class="calc-row"><span>Subtotal Consumos:</span><span id="cuentaSubtotal">₡ 0</span></div>
+          <div class="calc-row"><span>Servicio Salón (10%):</span><span id="cuentaServicio">₡ 0</span></div>
+          <div class="calc-row"><span>I.V.A (13%):</span><span id="cuentaIva">₡ 0</span></div>
           <div class="calc-row total-destacado">
             <span>TOTAL A PAGAR:</span>
             <span id="cuentaTotalPagar">₡ 0.00</span>
+            <span id="cuentaTotalPagar">₡ 0</span>
           </div>
         </div>
       </div>
@@ -514,10 +519,16 @@
         <button id="btnVolverACuentaTop" class="btn-ver-menu-link" style="width:auto; margin:0; display:none;" onclick="mostrarSeccion('cuenta')">
           🧾 Ver Mi Cuenta
         </button>
+      <div class="menu-header-bar">
+        <h3>📖 Menú Digital</h3>
+        <div class="menu-cat-filter" id="menuCatFilter"></div>
       </div>
 
       <div class="menu-categories-chips" id="clientCategoryChips"></div>
       <div class="menu-products-grid" id="clientProductsGrid"></div>
+      <div class="menu-grid" id="menuGrid">
+        <!-- Platillos del menú -->
+      </div>
     </div>
 
   </main>
@@ -527,6 +538,7 @@
     <div>
       <small style="color:#94a3b8; display:block;">Total de tu cuenta:</small>
       <strong style="color:#38bdf8; font-size:1rem;" id="stickyTotalVal">₡ 0.00</strong>
+      <strong style="color:#38bdf8; font-size:1rem;" id="stickyTotalVal">₡ 0</strong>
     </div>
     <button class="sticky-cuenta-btn" onclick="mostrarSeccion('cuenta')">
       🧾 Ver Mi Cuenta
@@ -539,6 +551,8 @@
   <script>
     function formatCRC(num) {
       return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      const val = Math.round(Number(num) || 0);
+      return '₡ ' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     }
 
     function obtenerMesaId() {

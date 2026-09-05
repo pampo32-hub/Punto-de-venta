@@ -515,17 +515,20 @@
               <div style="font-size:2rem; background:rgba(34,197,94,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">💰</div>
               <div>
                 <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Ventas Hoy</span>
-                <strong id="devKpiVentasHoy" style="display:block; font-size:1.35rem; color:#4ade80; margin:2px 0;">₡ 0.00</strong>
+                <strong id="devKpiVentasHoy" style="display:block; font-size:1.35rem; color:#4ade80; margin:2px 0;">₡ 0</strong>
+                <strong id="devKpiVentasHoy" style="display:block; font-size:1.35rem; color:#4ade80; margin:2px 0;">₡ 0</strong>
                 <small id="devKpiComparativaAyer" style="font-size:0.75rem; color:#9ca3af;">vs ayer: 0%</small>
               </div>
             </div>
 
             <div class="kpi-card" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center;">
+            <div class="kpi-card" onclick="abrirModalCuentasCobradasHoy()" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center; cursor:pointer; transition:transform 0.15s, border-color 0.15s;" title="Clic para ver historial de cuentas cobradas">
               <div style="font-size:2rem; background:rgba(59,130,246,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">🧾</div>
               <div>
                 <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Cuentas Cobradas</span>
                 <strong id="devKpiCuentasCobradas" style="display:block; font-size:1.35rem; color:#60a5fa; margin:2px 0;">0</strong>
                 <small style="font-size:0.75rem; color:#9ca3af;">Comandas finalizadas hoy</small>
+                <small style="font-size:0.75rem; color:#38bdf8; text-decoration:underline;">Ver detalle de hoy ↗</small>
               </div>
             </div>
 
@@ -533,7 +536,8 @@
               <div style="font-size:2rem; background:rgba(234,179,8,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">🎯</div>
               <div>
                 <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Ticket Promedio</span>
-                <strong id="devKpiTicketPromedio" style="display:block; font-size:1.35rem; color:#facc15; margin:2px 0;">₡ 0.00</strong>
+                <strong id="devKpiTicketPromedio" style="display:block; font-size:1.35rem; color:#facc15; margin:2px 0;">₡ 0</strong>
+                <strong id="devKpiTicketPromedio" style="display:block; font-size:1.35rem; color:#facc15; margin:2px 0;">₡ 0</strong>
                 <small style="font-size:0.75rem; color:#9ca3af;">Gasto medio por cuenta</small>
               </div>
             </div>
@@ -1002,17 +1006,20 @@
               <div class="kpi-icon">💰</div>
               <div class="kpi-info">
                 <span class="kpi-label">Ventas Totales Hoy</span>
-                <strong class="kpi-val" id="kpiVentasHoy">₡ 0.00</strong>
+                <strong class="kpi-val" id="kpiVentasHoy">₡ 0</strong>
+                <strong class="kpi-val" id="kpiVentasHoy">₡ 0</strong>
                 <small class="kpi-sub" id="kpiComparativaAyer">vs ayer: 0%</small>
               </div>
             </div>
 
             <div class="kpi-card kpi-tickets">
+            <div class="kpi-card kpi-tickets" onclick="abrirModalCuentasCobradasHoy()" style="cursor:pointer; transition:transform 0.15s, box-shadow 0.15s;" title="Clic para ver desglose de comandas cobradas hoy">
               <div class="kpi-icon">🧾</div>
               <div class="kpi-info">
                 <span class="kpi-label">Cuentas Cobradas</span>
                 <strong class="kpi-val" id="kpiCuentasCobradas">0</strong>
                 <small class="kpi-sub">Mesas atendidas hoy</small>
+                <small class="kpi-sub" style="color:#38bdf8; font-weight:600;">Ver detalle de hoy ↗</small>
               </div>
             </div>
 
@@ -1020,7 +1027,8 @@
               <div class="kpi-icon">🎯</div>
               <div class="kpi-info">
                 <span class="kpi-label">Ticket Promedio</span>
-                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0.00</strong>
+                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0</strong>
+                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0</strong>
                 <small class="kpi-sub">Gasto promedio por mesa</small>
               </div>
             </div>
@@ -1660,7 +1668,7 @@
 
         <div class="ticket-bottom">
           <div class="ticket-calc-box">
-            <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0.00</span></div>
+            <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0</span></div>
             <div class="calc-line" id="comHappyHourRow" style="display:none; color:#f59e0b; align-items:center; justify-content:space-between;">
               <div style="display:flex; align-items:center; gap:6px;">
                 <span>Descuento Happy Hour:</span>
@@ -1668,11 +1676,11 @@
                   🛡️ Estricto
                 </button>
               </div>
-              <span id="comHappyHourDesc">-₡ 0.00</span>
+              <span id="comHappyHourDesc">-₡ 0</span>
             </div>
-            <div class="calc-line"><span>Servicio Salón (10%):</span><span id="comServicio">₡ 0.00</span></div>
-            <div class="calc-line"><span>I.V.A (13%):</span><span id="comIva">₡ 0.00</span></div>
-            <div class="calc-line total"><span>TOTAL GENERAL:</span><span id="comTotal">₡ 0.00</span></div>
+            <div class="calc-line"><span>Servicio Salón (10%):</span><span id="comServicio">₡ 0</span></div>
+            <div class="calc-line"><span>I.V.A (13%):</span><span id="comIva">₡ 0</span></div>
+            <div class="calc-line total"><span>TOTAL GENERAL:</span><span id="comTotal">₡ 0</span></div>
           </div>
 
           <div class="ticket-action-buttons">
@@ -3041,7 +3049,7 @@
             <label>Efectivo Recibido del Cliente:</label>
             <div class="cash-input-wrapper">
               <span class="currency-prefix">₡</span>
-              <input type="text" id="txtEfectivoRecibido" placeholder="0.00" />
+              <input type="text" id="txtEfectivoRecibido" placeholder="0" />
             </div>
           </div>
           <div class="quick-cash-chips">
@@ -3053,7 +3061,7 @@
           </div>
           <div class="vuelto-box">
             <span>Cambio / Vuelto a Entregar:</span>
-            <strong id="cobroVueltoDisplay">₡ 0.00</strong>
+            <strong id="cobroVueltoDisplay">₡ 0</strong>
           </div>
         </div>
       </div>
@@ -3423,24 +3431,24 @@
         <div style="background:#111827; border:1px solid #1f2937; border-radius:10px; padding:14px; margin-bottom:16px;">
           <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
             <span>Fondo Inicial:</span>
-            <strong id="czFondoInicial" style="color:#fff;">₡ 0.00</strong>
+            <strong id="czFondoInicial" style="color:#fff;">₡ 0</strong>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
             <span>Ventas en Efectivo:</span>
-            <strong id="czVentasEfectivo" style="color:#34d399;">+₡ 0.00</strong>
+            <strong id="czVentasEfectivo" style="color:#34d399;">+₡ 0</strong>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
             <span>Entradas Menores (+):</span>
-            <strong id="czTotalEntradas" style="color:#38bdf8;">+₡ 0.00</strong>
+            <strong id="czTotalEntradas" style="color:#38bdf8;">+₡ 0</strong>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
             <span>Salidas / Gastos (-):</span>
-            <strong id="czTotalSalidas" style="color:#f87171;">-₡ 0.00</strong>
+            <strong id="czTotalSalidas" style="color:#f87171;">-₡ 0</strong>
           </div>
           <div style="height:1px; background:#374151; margin:8px 0;"></div>
           <div style="display:flex; justify-content:space-between; font-size:1rem; font-weight:800; color:#fbbf24;">
             <span>Total Esperado en Efectivo:</span>
-            <strong id="czTotalEsperado">₡ 0.00</strong>
+            <strong id="czTotalEsperado">₡ 0</strong>
           </div>
         </div>
 
@@ -3837,10 +3845,105 @@
     </div>
   </div>
 
+  <!-- MODAL: REGISTRO DE CUENTAS COBRADAS HOY (DASHBOARD EJECUTIVO) -->
+  <div class="modal-backdrop" id="modalHistorialCuentasCobradas" style="display:none; z-index: 100050;">
+    <div class="modal-card" style="max-width: 1050px; width:96%; background:#0f172a; border:1px solid #3b82f6; box-shadow:0 25px 50px -12px rgba(0,0,0,0.85); border-radius:16px; overflow:hidden; padding:22px; display:flex; flex-direction:column; max-height:88vh;">
+      
+      <!-- CABECERA -->
+      <div class="modal-header" style="border-bottom:1px solid #1e293b; padding-bottom:14px; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h3 style="margin:0; color:#f8fafc; font-size:1.3rem; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:1.4rem;">🧾</span> Registro de Cuentas Cobradas Hoy
+            <span id="lblBadgeFechaCuentas" style="font-size:0.75rem; background:rgba(59,130,246,0.2); color:#60a5fa; border:1px solid rgba(59,130,246,0.4); padding:3px 10px; border-radius:999px; font-weight:600;">Jornada Actual</span>
+          </h3>
+          <p style="margin:4px 0 0; font-size:0.85rem; color:#94a3b8;">
+            Comandas y órdenes facturadas y cerradas en la jornada de hoy. Haz clic en cualquier orden para ver sus platillos desglosados.
+          </p>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn-sec" onclick="recargarCuentasCobradasHoy()" style="padding:6px 12px; font-size:0.85rem; display:flex; align-items:center; gap:6px; background:#1e293b; color:#cbd5e1; border:1px solid #334155; border-radius:8px; cursor:pointer;" title="Recargar datos">
+            🔄 Actualizar
+          </button>
+          <button class="btn-close-modal" onclick="cerrarModalCuentasCobradas()" style="background:none; border:none; color:#94a3b8; font-size:1.5rem; cursor:pointer; line-height:1;" title="Cerrar modal">✕</button>
+        </div>
+      </div>
+
+      <!-- BUSCADOR & MINI KPIS -->
+      <div style="padding:14px 0 10px; display:flex; flex-direction:column; gap:12px; border-bottom:1px solid #1e293b;">
+        <!-- INPUT BUSCADOR -->
+        <div style="position:relative; width:100%;">
+          <input type="text" id="txtBuscarCuentaCobrada" placeholder="🔍 Buscar por N° de orden, mesa, mesero o platillo..." oninput="filtrarCuentasCobradas(this.value)" style="width:100%; padding:10px 14px; background:#1e293b; border:1px solid #334155; border-radius:10px; color:#f8fafc; font-size:0.9rem; box-sizing:border-box;">
+        </div>
+
+        <!-- KPI CHIPS RESUMEN -->
+        <div id="boxKpisCuentasCobradas" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;">
+          <div style="background:#1e293b; border:1px solid rgba(74,222,128,0.25); border-radius:10px; padding:10px 12px;">
+            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:600;">Total Cobrado</div>
+            <strong id="modalKpiTotalCobrado" style="font-size:1.15rem; color:#4ade80; display:block; margin-top:2px;">₡ 0</strong>
+          </div>
+          <div style="background:#1e293b; border:1px solid rgba(96,165,250,0.25); border-radius:10px; padding:10px 12px;">
+            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:600;">Cuentas Cerradas</div>
+            <strong id="modalKpiTotalCuentas" style="font-size:1.15rem; color:#60a5fa; display:block; margin-top:2px;">0</strong>
+          </div>
+          <div style="background:#1e293b; border:1px solid rgba(250,204,21,0.25); border-radius:10px; padding:10px 12px;">
+            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:600;">Efectivo</div>
+            <strong id="modalKpiEfectivo" style="font-size:1.15rem; color:#facc15; display:block; margin-top:2px;">₡ 0</strong>
+          </div>
+          <div style="background:#1e293b; border:1px solid rgba(192,132,252,0.25); border-radius:10px; padding:10px 12px;">
+            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:600;">Tarjeta</div>
+            <strong id="modalKpiTarjeta" style="font-size:1.15rem; color:#c084fc; display:block; margin-top:2px;">₡ 0</strong>
+          </div>
+          <div style="background:#1e293b; border:1px solid rgba(45,212,191,0.25); border-radius:10px; padding:10px 12px;">
+            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:600;">SINPE Móvil</div>
+            <strong id="modalKpiSinpe" style="font-size:1.15rem; color:#2dd4bf; display:block; margin-top:2px;">₡ 0</strong>
+          </div>
+          <div style="background:#1e293b; border:1px solid rgba(251,146,60,0.25); border-radius:10px; padding:10px 12px;">
+            <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase; font-weight:600;">Propinas</div>
+            <strong id="modalKpiPropina" style="font-size:1.15rem; color:#fb923c; display:block; margin-top:2px;">₡ 0</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABLA DE ÓRDENES Y DESGLOSE -->
+      <div class="modal-body" style="padding:14px 0 0; flex:1; overflow-y:auto;">
+        <div class="table-responsive" style="max-height:48vh; overflow-y:auto; border-radius:8px; border:1px solid #1e293b;">
+          <table class="inventory-table" style="width:100%; border-collapse:collapse; font-size:0.875rem;">
+            <thead style="position:sticky; top:0; background:#1e293b; z-index:2;">
+              <tr>
+                <th style="padding:10px 12px; text-align:left; color:#94a3b8;"># Orden</th>
+                <th style="padding:10px 12px; text-align:left; color:#94a3b8;">Mesa</th>
+                <th style="padding:10px 12px; text-align:left; color:#94a3b8;">Mesero / Cajero</th>
+                <th style="padding:10px 12px; text-align:center; color:#94a3b8;">Hora Cobro</th>
+                <th style="padding:10px 12px; text-align:center; color:#94a3b8;">Método</th>
+                <th style="padding:10px 12px; text-align:right; color:#94a3b8;">Subtotal</th>
+                <th style="padding:10px 12px; text-align:right; color:#94a3b8;">IVA / Serv.</th>
+                <th style="padding:10px 12px; text-align:right; color:#4ade80; font-weight:700;">Total Cobrado</th>
+                <th style="padding:10px 12px; text-align:center; color:#94a3b8;">Platillos</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyCuentasCobradasHoy">
+              <tr>
+                <td colspan="9" style="text-align:center; padding:30px; color:#94a3b8;">Cargando registro de cuentas cobradas...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="modal-footer" style="border-top:1px solid #1e293b; padding-top:14px; margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span id="lblCuentasFiltradasInfo" style="font-size:0.8rem; color:#94a3b8;">Mostrando 0 cuentas</span>
+        <button class="btn-sec" onclick="cerrarModalCuentasCobradas()" style="padding:8px 20px; background:#334155; color:#f8fafc; border:none; border-radius:8px; font-weight:600; cursor:pointer;">Cerrar</button>
+      </div>
+
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
   <script src="app.js?v=2.9.8"></script>
+  <script src="app.js?v=2.9.9"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

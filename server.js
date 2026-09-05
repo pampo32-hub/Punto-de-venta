@@ -3678,9 +3678,11 @@ async function descontarInventarioPorItems(items = []) {
             if (stockNuevo <= insumo.stock_minimo) {
               io.emit('inventario_alerta_stock', {
                 insumoId: insumo.id,
+                insumo: insumo.nombre,
                 nombre: insumo.nombre,
                 stock_actual: stockNuevo,
                 stock_minimo: insumo.stock_minimo,
+                unidad: insumo.unidad || 'uds',
                 estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
               });
             }
@@ -3715,9 +3717,11 @@ async function descontarInventarioPorItems(items = []) {
           if (stockNuevo <= insumo.stock_minimo) {
             io.emit('inventario_alerta_stock', {
               insumoId: insumo.id,
+              insumo: insumo.nombre,
               nombre: insumo.nombre,
               stock_actual: stockNuevo,
               stock_minimo: insumo.stock_minimo,
+              unidad: insumo.unidad || 'uds',
               estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
             });
           }
@@ -4734,6 +4738,125 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       alertasStock
     });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint detallado de cuentas/comandas cobradas hoy para el modal interactivo del Dashboard
+app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
+  try {
+    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
+    const hoyInicio = new Date();
+    hoyInicio.setHours(0, 0, 0, 0);
+    const hoyISO = hoyInicio.toISOString();
+
+    const ordenesPagadas = await dbAll(`
+      SELECT 
+        o.id,
+        o.numero_orden,
+        o.mesa_id,
+        COALESCE(m.numero, CAST(o.mesa_id AS TEXT)) AS mesa_numero,
+        COALESCE(z.nombre, 'Salón') AS zona_nombre,
+        o.mesero,
+        o.subtotal,
+        o.descuento_happy_hour,
+        o.servicio_10,
+        o.iva_13,
+        o.total,
+        o.estado,
+        COALESCE(o.fecha_cierre, o.fecha_apertura) AS fecha_orden,
+        COALESCE(MAX(p.fecha_hora), o.fecha_cierre, o.fecha_apertura) AS fecha_cobro,
+        GROUP_CONCAT(p.metodo) AS metodos_pago_raw,
+        COALESCE(SUM(p.propina), 0) AS propina_total
+      FROM Ordenes o
+      LEFT JOIN Mesas m ON o.mesa_id = m.id
+      LEFT JOIN Zonas z ON m.zona_id = z.id
+      LEFT JOIN Pagos p ON o.id = p.orden_id
+      WHERE (o.estado = 'pagada' OR p.id IS NOT NULL) 
+        AND (p.fecha_hora >= ? OR (p.fecha_hora IS NULL AND COALESCE(o.fecha_cierre, o.fecha_apertura) >= ?))
+        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+      GROUP BY o.id
+      ORDER BY fecha_cobro DESC, o.id DESC
+    `, [hoyISO, hoyISO, negocioId, negocioId]);
+
+    // Consultar detalles de items para cada orden
+    const ordenesConItems = await Promise.all(ordenesPagadas.map(async (ord) => {
+      const items = await dbAll(`
+        SELECT 
+          d.id,
+          d.producto_id,
+          d.nombre_producto,
+          d.precio_unitario,
+          d.cantidad,
+          d.subtotal,
+          d.notas,
+          d.destino,
+          d.curso,
+          d.en_happy_hour
+        FROM DetalleOrden d
+        WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'
+        ORDER BY d.id ASC
+      `, [ord.id]);
+
+      const metodosUnicos = ord.metodos_pago_raw 
+        ? [...new Set(ord.metodos_pago_raw.split(',').map(s => s.trim()).filter(Boolean))].join(', ')
+        : 'Efectivo';
+
+      return {
+        ...ord,
+        metodos_pago: metodosUnicos,
+        items
+      };
+    }));
+
+    // Métricas del turno/día
+    let totalVentas = 0;
+    let totalEfectivo = 0;
+    let totalTarjeta = 0;
+    let totalSinpe = 0;
+    let totalPropinas = 0;
+
+    const pagosHoy = await dbAll(`
+      SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(p.propina) AS total_propina
+      FROM Pagos p
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+      GROUP BY p.metodo
+    `, [hoyISO, negocioId, negocioId]);
+
+    pagosHoy.forEach(pg => {
+      const mto = Number(pg.total_monto) || 0;
+      const prop = Number(pg.total_propina) || 0;
+      totalVentas += mto;
+      totalPropinas += prop;
+      const met = (pg.metodo || '').toLowerCase();
+      if (met.includes('efectivo')) totalEfectivo += mto;
+      else if (met.includes('tarjeta') || met.includes('datafono')) totalTarjeta += mto;
+      else if (met.includes('sinpe')) totalSinpe += mto;
+    });
+
+    res.json({
+      ok: true,
+      totalVentas,
+      totalCuentas: ordenesConItems.length,
+      totalPropinas,
+      pagosPorMetodo: {
+        efectivo: totalEfectivo,
+        tarjeta: totalTarjeta,
+        sinpe: totalSinpe
+      },
+      resumen: {
+        totalCuentas: ordenesConItems.length,
+        totalVentas,
+        totalEfectivo,
+        totalTarjeta,
+        totalSinpe,
+        totalPropinas
+      },
+      ordenes: ordenesConItems
+    });
+  } catch (e) {
+    console.error('Error en /api/admin/ventas/historial-hoy:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
