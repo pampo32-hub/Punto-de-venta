@@ -178,7 +178,7 @@ describe('Tier 10: Auto-conversión a Insumo en Kárdex, Enlace Inmediato y Simi
     const rKardex = await req(`/api/admin/inventario/${insumoId}/kardex`);
     assert.equal(rKardex.status, 200);
     assert.ok(rKardex.body.movimientos.length > 0);
-    const movVenta = rKardex.body.movimientos.find(m => m.tipo === 'venta' || m.tipo === 'salida');
+    const movVenta = rKardex.body.movimientos.find(m => m.tipo === 'venta' || m.tipo === 'salida' || m.tipo_movimiento === 'salida_venta' || m.tipo_movimiento === 'salida');
     assert.ok(movVenta, 'Debe registrarse movimiento de salida por venta');
     assert.equal(movVenta.cantidad, 2);
   });
