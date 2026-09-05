@@ -1834,10 +1834,11 @@ window.ejecutarLogin = async function() {
   const usuario = uEl ? uEl.value.trim() : '';
   const password = pEl ? pEl.value.trim() : '';
 
-  if (!usuario || !password) {
-    alert('Ingresa tu usuario y contraseña.');
+  if (!usuario && !password) {
+    alert('Ingresa tu usuario y contraseña, o tu PIN de acceso.');
     return;
   }
+
 
   const btnSubmit = document.getElementById('btnLoginSubmit');
   if (btnSubmit) {

@@ -251,16 +251,33 @@ function formatearNombreItemConOrigen(item, mesaActualNumero) {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { usuario, password } = req.body;
-    if (!usuario || !password) {
-      return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+    const uInput = (usuario || '').trim();
+    const pInput = (password || '').trim();
+
+    if (!uInput && !pInput) {
+      return res.status(400).json({ error: 'Ingresa tu usuario y contraseña o PIN.' });
     }
 
-    const u = await dbGet('SELECT * FROM Usuarios WHERE usuario = ? AND password = ? AND activo = 1', [usuario.trim(), password.trim()]);
+    // 1. Búsqueda por usuario (insensible a mayúsculas) y password o PIN
+    let u = await dbGet(`
+      SELECT * FROM Usuarios 
+      WHERE (LOWER(usuario) = LOWER(?) OR pin = ?) 
+        AND (password = ? OR pin = ?) 
+        AND activo = 1
+    `, [uInput, uInput, pInput, pInput]);
+
+    // 2. Si sólo enviaron PIN en un campo o como usuario directo
+    if (!u && (uInput || pInput)) {
+      const pinCandidate = pInput || uInput;
+      u = await dbGet('SELECT * FROM Usuarios WHERE pin = ? AND activo = 1', [pinCandidate]);
+    }
+
     if (!u) {
-      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario y contraseña.' });
+      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
     }
 
     const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
+
 
     // Adaptación dinámica de género para el rol
     let rolEtiqueta = u.rol.toUpperCase();

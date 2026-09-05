@@ -1,4 +1,5 @@
-const CACHE_NAME = 'pos-static-v23';
+const CACHE_NAME = 'pos-static-v24';
+
 
 
 const CORE_ASSETS = [

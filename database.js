@@ -335,13 +335,11 @@ function initDb() {
         insumosIniciales.forEach(ins => {
           const esLic = ins.categoria.includes('Licores') || ins.unidad === 'botellas' && (ins.nombre.includes('Ron') || ins.nombre.includes('Tequila') || ins.nombre.includes('Gin'));
           db.run(
-            `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en)
-             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [ins.nombre, ins.categoria, ins.unidad, ins.stock, ins.min, ins.costo, ins.prodId, ahora]
             `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
              VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [ins.nombre, ins.categoria, ins.unidad, ins.stock, ins.min, ins.costo, ins.prodId, ahora, esLic ? 1 : 0, esLic ? 750 : null, esLic ? 30 : null, esLic ? 25 : null]
           );
+
         });
         console.log('🌱 Inventario inicial sembrado con existencias y costos.');
 
