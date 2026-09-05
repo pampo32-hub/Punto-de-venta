@@ -1609,9 +1609,9 @@ if (typeof window !== 'undefined') {
   window.formatearTooltipEspera = formatearTooltipEspera;
 }
 
-// Formateo de moneda
+// Formateo de moneda (Colones costarricenses enteros sin decimales)
 function formatCRC(num) {
-  return '₡ ' + (Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 // Formateo de montos en mesas sin decimales según requerimiento

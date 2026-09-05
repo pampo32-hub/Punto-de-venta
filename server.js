@@ -19,6 +19,7 @@ const SUPERVISOR_PIN = process.env.SUPERVISOR_PIN || '1234';
 // ============================================================================
 // ESTADO EN MEMORIA: HAPPY HOUR
 // ============================================================================
+let happyHourModificadoManualmente = false;
 let happyHourEstado = {
   activo: false,
   horaInicio: '16:00', // HH:MM (24h)
@@ -43,7 +44,7 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_commit_date', '')");
 
   db.all("SELECT clave, valor FROM ConfigNegocio WHERE clave LIKE 'hh_%'", [], (err, rows) => {
-    if (!err && rows) {
+    if (!err && rows && !happyHourModificadoManualmente) {
       rows.forEach(r => {
         if (r.clave === 'hh_activo') happyHourEstado.activo = r.valor === 'true';
         if (r.clave === 'hh_hora_inicio') happyHourEstado.horaInicio = r.valor;
@@ -2251,6 +2252,7 @@ app.get('/api/happy-hour', (req, res) => {
 
 // POST: Activar / Desactivar (y opcionalmente cambiar horario)
 app.post('/api/happy-hour', async (req, res) => {
+  happyHourModificadoManualmente = true;
   const { activo, horaInicio, horaFin } = req.body || {};
 
   if (horaInicio !== undefined) happyHourEstado.horaInicio = horaInicio;
