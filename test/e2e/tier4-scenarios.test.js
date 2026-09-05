@@ -157,22 +157,21 @@ describe('Tier 4: Real-World Workload Scenarios', () => {
     // 6 beers total: 4 with 2x1 (3600 discount), 2 at regular price (0 discount)
     // Gross: 6 * 1800 = 10800
     // Total discount = 3600
-    // Net = 7200
-    // Service 10% = 720
-    // IVA 13% = 936
-    // Grand Total = 7200 + 720 + 936 = 8856
+    // Total a pagar = 7200
+    // Subtotal (base) = Math.round(7200 / 1.23) = 5854
+    // Servicio 10% = Math.round(5854 * 0.10) = 585
+    // IVA 13% = 7200 - 5854 - 585 = 761
+    // Total = 7200
     const totalDescuentos = totalsRound1.descuentoHH + totalsRound2.descuentoHH;
     const subtotalBruto = 1800 * 6;
-    const subNetoFinal = subtotalBruto - totalDescuentos;
-    const servicioFinal = Math.round(subNetoFinal * 0.10);
-    const ivaFinal = Math.round(subNetoFinal * 0.13);
-    const totalFinal = subNetoFinal + servicioFinal + ivaFinal;
+    const totalFinal = subtotalBruto - totalDescuentos;
+    const subtotalBase = Math.round(totalFinal / 1.23);
+    const servicioFinal = Math.round(subtotalBase * 0.10);
+    const ivaFinal = totalFinal - subtotalBase - servicioFinal;
 
     assert.strictEqual(totalDescuentos, 3600);
-    assert.strictEqual(subNetoFinal, 7200);
-    assert.strictEqual(servicioFinal, 720);
-    assert.strictEqual(ivaFinal, 936);
-    assert.strictEqual(totalFinal, 8856);
+    assert.strictEqual(totalFinal, 7200);
+    assert.strictEqual(subtotalBase + servicioFinal + ivaFinal, totalFinal);
   });
 
   // ==========================================================================
@@ -369,7 +368,8 @@ describe('Tier 4: Real-World Workload Scenarios', () => {
     assert.strictEqual(allItems.length, 4);
 
     // Total = 4800 + 4200 + 4200 + 12500 = 25700
-    const orden = await server.dbGet('SELECT subtotal FROM Ordenes WHERE id = ?', [ordenId]);
-    assert.strictEqual(orden.subtotal, 25700);
+    const orden = await server.dbGet('SELECT total, subtotal FROM Ordenes WHERE id = ?', [ordenId]);
+    assert.strictEqual(orden.total, 25700);
+    assert.strictEqual(orden.subtotal, Math.round(25700 / 1.23));
   });
 });

@@ -167,14 +167,14 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
 
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal:', `₡${Math.round(subtotal).toLocaleString('es-CR')}`) + '\n';
+  raw += formatearLinea2Col('Subtotal (Base Imponible):', `₡${Math.round(subtotal).toLocaleString('es-CR')}`) + '\n';
   if (descuentoHH > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-₡${Math.round(descuentoHH).toLocaleString('es-CR')}`) + '\n' + ESCPOS.BOLD_OFF;
   }
   raw += formatearLinea2Col('10% Servicio (Ley):', `₡${Math.round(servicio).toLocaleString('es-CR')}`) + '\n';
   raw += formatearLinea2Col('13% I.V.A.:', `₡${Math.round(iva).toLocaleString('es-CR')}`) + '\n';
   raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL:', `₡${Math.round(total).toLocaleString('es-CR')}`) + '\n' + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL A PAGAR:', `₡${Math.round(total).toLocaleString('es-CR')}`) + '\n' + ESCPOS.NORMAL;
   raw += '='.repeat(48) + '\n';
 
   raw += ESCPOS.ALIGN_LEFT;

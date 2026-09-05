@@ -289,10 +289,10 @@
       }
 
       if (items.length > 0 && !orden) {
-        const subtotal = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-        const servicio = Math.round(subtotal * 0.1);
-        const iva = Math.round(subtotal * 0.13);
-        const total = subtotal + servicio + iva;
+        const total = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const subtotal = Math.round(total / 1.23);
+        const servicio = Math.round(subtotal * 0.10);
+        const iva = total - subtotal - servicio;
 
         orden = {
           id: 'offline_' + numMesaId,
@@ -306,13 +306,14 @@
           offline: true
         };
       } else if (orden && items.length > 0) {
-        const subtotal = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-        const servicio = Math.round(subtotal * 0.1);
-        const iva = Math.round(subtotal * 0.13);
+        const total = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const subtotal = Math.round(total / 1.23);
+        const servicio = Math.round(subtotal * 0.10);
+        const iva = total - subtotal - servicio;
         orden.subtotal = subtotal;
         orden.servicio_10 = servicio;
         orden.iva_13 = iva;
-        orden.total = subtotal + servicio + iva;
+        orden.total = total;
       }
 
       return { orden, items, tienePendientes: comandaAcciones.length > 0 };

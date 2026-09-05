@@ -1618,6 +1618,12 @@ function formatCRC(num) {
   return '₡ ' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+// Inverso de formatCRC: '₡ 1.800' → 1800 (el punto es separador de miles, NO decimal)
+function parseCRC(text) {
+  return parseInt(String(text).replace(/[₡\s\.]/g, ''), 10) || 0;
+}
+
+
 // Formateo de montos en mesas sin decimales según requerimiento
 function formatCRCSinDecimales(num) {
   return formatCRC(num);
@@ -4687,9 +4693,10 @@ async function abrirComanderoMesa(mesaId) {
   try {
     if (data && (data.orden || (data.items && data.items.length > 0))) {
       if (!data.orden) {
-        const sub = data.items.reduce((acc, it) => acc + (Number(it.precio_unitario != null ? it.precio_unitario : it.precio) * (Number(it.cantidad) || 1)), 0);
+        const tot = data.items.reduce((acc, it) => acc + (Number(it.precio_unitario != null ? it.precio_unitario : it.precio) * (Number(it.cantidad) || 1)), 0);
+        const sub = Math.round(tot / 1.23);
         const serv = Math.round(sub * 0.10);
-        const iva = Math.round(sub * 0.13);
+        const iva = tot - sub - serv;
         data.orden = {
           id: 'offline_' + mesa.id,
           numero_orden: 'OFFLINE-' + (mesa.numero || mesa.id),
@@ -4697,7 +4704,7 @@ async function abrirComanderoMesa(mesaId) {
           subtotal: sub,
           servicio_10: serv,
           iva_13: iva,
-          total: sub + serv + iva,
+          total: tot,
           estado: 'esperando',
           offline: true
         };
@@ -4985,12 +4992,13 @@ function recalcularTotalesTicket() {
     }
   }
 
-  const subNeto = Math.max(0, sub - descuentoHH);
-  const servicio = Math.round(subNeto * 0.10);
-  const iva = Math.round(subNeto * 0.13);
-  const total = subNeto + servicio + iva;
+  const totalBruto = sub;
+  const total = Math.max(0, totalBruto - descuentoHH);
+  const subtotalBase = Math.round(total / 1.23);
+  const servicio = Math.round(subtotalBase * 0.10);
+  const iva = total - subtotalBase - servicio;
 
-  document.getElementById('comSubtotal').textContent = formatCRC(sub);
+  document.getElementById('comSubtotal').textContent = formatCRC(subtotalBase);
 
   const hhRow = document.getElementById('comHappyHourRow');
   const btnToggleHH = document.getElementById('btnToggleModoHHComandero');
@@ -5109,10 +5117,10 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
       }
     });
 
-    const sub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+    const tot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+    const sub = Math.round(tot / 1.23);
     const serv = Math.round(sub * 0.10);
-    const iva = Math.round(sub * 0.13);
-    const tot = sub + serv + iva;
+    const iva = tot - sub - serv;
 
     estado.mesaActiva.estado = tieneNuevosCocina ? 'esperando' : 'abierta';
     estado.mesaActiva.orden_total = tot;
@@ -5883,6 +5891,7 @@ document.querySelectorAll('.cash-chip[data-amt]').forEach(chip => {
 
 document.getElementById('btnPagoExacto').addEventListener('click', () => {
   const totalNum = parseFloat(document.getElementById('cobroTotalDisplay').textContent.replace(/[^0-9.]/g, '')) || 0;
+  const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   document.getElementById('txtEfectivoRecibido').value = totalNum;
   calcularVueltoCobro();
 });
@@ -5891,6 +5900,7 @@ document.getElementById('txtEfectivoRecibido').addEventListener('input', calcula
 
 function calcularVueltoCobro() {
   const total = parseFloat(document.getElementById('cobroTotalDisplay').textContent.replace(/[^0-9.]/g, '')) || 0;
+  const total = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || 0;
   const vuelto = Math.max(0, recibido - total);
   document.getElementById('cobroVueltoDisplay').textContent = formatCRC(vuelto);
@@ -5898,6 +5908,7 @@ function calcularVueltoCobro() {
 
 document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
   const totalNum = parseFloat(document.getElementById('cobroTotalDisplay').textContent.replace(/[^0-9.]/g, '')) || 0;
+  const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   const metodoActivo = document.querySelector('.pay-method-tab.active');
   const metodo = metodoActivo ? metodoActivo.dataset.method : 'Efectivo';
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
@@ -6011,9 +6022,10 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         }
       });
       if (window.PosOfflineDB) {
-        const remSub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const remTot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const remSub = Math.round(remTot / 1.23);
         const remServ = Math.round(remSub * 0.10);
-        const remIva = Math.round(remSub * 0.13);
+        const remIva = remTot - remSub - remServ;
         window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, {
           id: estado.mesaActiva.orden_id,
           numero_orden: estado.mesaActiva.numero,
@@ -6021,7 +6033,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           subtotal: remSub,
           servicio_10: remServ,
           iva_13: remIva,
-          total: remSub + remServ + remIva,
+          total: remTot,
           estado: 'esperando'
         }, estado.mesaActiva.items).catch(() => {});
       }
@@ -6643,9 +6655,9 @@ function devolverItemAMesa(assignedItemIndex) {
 
 function recalcularPersona(p) {
   if (!p) return;
-  const sub = p.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-  const imp = sub * 0.23; // 10% servicio + 13% IVA
-  const tot = Math.round(sub * 1.23);
+  const tot = p.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  const sub = Math.round(tot / 1.23);
+  const imp = tot - sub;
   p.subtotal = sub;
   p.impuestos = imp;
   p.total = tot;
@@ -6937,8 +6949,7 @@ window.cobrarPersonaSplit = function(personaIndex) {
 
 function calcularSplitIgual() {
   if (!estado.mesaActiva || !estado.mesaActiva.items) return;
-  const sub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-  const total = (sub * 1.23);
+  const total = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
   const numP = splitState.numPersonas || estado.splitPersonas || 2;
   const porPersona = Math.round(total / numP);
   const el = document.getElementById('splitMontoPorPersona');

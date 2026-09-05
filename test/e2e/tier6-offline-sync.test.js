@@ -60,10 +60,10 @@ describe('Tier 6: Offline-First Resilience, Batch Sync & Idempotency', () => {
     assert.ok(res2.body.message.includes('idempotente'));
 
     // Verify order was NOT duplicated.
-    // 2 Imperials with 2x1 promo = 1 charged (1800) + 10% serv (180) + 13% iva (234) = 2214
+    // 2 Imperials with 2x1 promo = 1 charged (1800 final price con impuestos incluidos)
     const mesas = (await req('/api/mesas')).body.mesas;
     const mesa2 = mesas.find(m => m.id === 2);
-    assert.equal(mesa2.orden_total, 2214);
+    assert.equal(mesa2.orden_total, 1800);
   });
 
   it('T6.3: POST /api/sync/batch processes pending queued offline actions and filters duplicates', async () => {

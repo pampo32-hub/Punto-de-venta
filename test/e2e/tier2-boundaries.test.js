@@ -246,11 +246,10 @@ describe('Tier 2: Boundary & Corner Cases (R1 - R4)', () => {
       // Total HH discount = 3600 + 1800 + 2500 + 12600 = 20500
       assert.strictEqual(res.descuentoHH, 20500);
 
-      const expectedSubNeto = res.subtotal - res.descuentoHH;
-      assert.strictEqual(res.subNeto, expectedSubNeto);
-      assert.strictEqual(res.servicio, Math.round(expectedSubNeto * 0.10));
-      assert.strictEqual(res.iva, Math.round(expectedSubNeto * 0.13));
-      assert.strictEqual(res.total, expectedSubNeto + res.servicio + res.iva);
+      const totalBruto = items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+      const expectedTotal = totalBruto - 20500;
+      assert.strictEqual(res.total, expectedTotal);
+      assert.strictEqual(res.subtotal + res.servicio + res.iva, res.total);
     });
 
     it('T2.14: Happy Hour quantity 0 produces 0 discount without error', () => {

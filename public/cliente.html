@@ -734,10 +734,11 @@
         `;
       }).join('');
 
-      const sub = datosMesa.orden ? (datosMesa.orden.subtotal || 0) : 0;
-      const serv = datosMesa.orden ? (datosMesa.orden.servicio || datosMesa.orden.servicio_10 || Math.round(sub * 0.10)) : 0;
-      const iva = datosMesa.orden ? (datosMesa.orden.iva || datosMesa.orden.iva_13 || Math.round(sub * 0.13)) : 0;
-      const total = datosMesa.orden ? (datosMesa.orden.total || (sub + serv + iva)) : 0;
+      const tot = datosMesa.orden ? (datosMesa.orden.total || (datosMesa.items || []).reduce((acc, it) => acc + (Number(it.precio_unitario || it.precio || 0) * (Number(it.cantidad) || 1)), 0)) : 0;
+      const sub = datosMesa.orden && datosMesa.orden.subtotal ? datosMesa.orden.subtotal : Math.round(tot / 1.23);
+      const serv = datosMesa.orden && (datosMesa.orden.servicio || datosMesa.orden.servicio_10) ? (datosMesa.orden.servicio || datosMesa.orden.servicio_10) : Math.round(sub * 0.10);
+      const iva = datosMesa.orden && (datosMesa.orden.iva || datosMesa.orden.iva_13) ? (datosMesa.orden.iva || datosMesa.orden.iva_13) : (tot - sub - serv);
+      const total = tot;
 
       document.getElementById('cuentaSubtotal').textContent = formatCRC(sub);
       document.getElementById('cuentaServicio').textContent = formatCRC(serv);

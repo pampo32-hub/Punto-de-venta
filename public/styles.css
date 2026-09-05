@@ -1557,7 +1557,9 @@ body {
   box-shadow: 0 20px 40px rgba(0,0,0,0.7);
   display: flex;
   flex-direction: column;
+  max-height: 94vh;
 }
+
 
 .modif-dialog { width: 480px; max-width: 92vw; }
 .anula-dialog { width: 420px; max-width: 92vw; }
@@ -3970,6 +3972,219 @@ textarea:focus, select:focus, input:focus {
 
   .dev-nav-btn {
     width: auto;
+  }
+
+  /* ── COMANDERO EN TABLETS / LAPTOPS PEQUEÑAS (≤1024px) ── */
+  .comandero-window {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .comandero-catalog {
+    flex: 58%;
+  }
+
+  .comandero-ticket {
+    flex: 42%;
+    min-width: 240px;
+    max-width: 380px;
+  }
+
+  .catalog-topbar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .products-one-tap-grid {
+    padding: 6px;
+    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+
+  .prod-card-thumb, .prod-card-no-thumb {
+    height: 60px;
+  }
+
+  .ticket-topbar {
+    padding: 8px 12px;
+  }
+
+  .ticket-body {
+    padding: 6px 10px;
+  }
+
+  .ticket-item-row {
+    padding: 5px 8px;
+    margin-bottom: 5px;
+  }
+
+  .ticket-bottom {
+    padding: 8px 12px;
+  }
+
+  .ticket-calc-box .calc-line {
+    font-size: 0.76rem;
+    margin-bottom: 2px;
+  }
+
+  .ticket-calc-box .calc-line.total {
+    font-size: 1rem;
+    padding-top: 4px;
+    margin-top: 4px;
+  }
+
+  .ticket-action-buttons {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .btn-btn-cmd {
+    padding: 7px 4px;
+    font-size: 0.74rem;
+    white-space: nowrap;
+    text-align: center;
+  }
+}
+
+/* ============================================================================
+   3-A. LAPTOPS 10 PULGADAS / TABLETS LANDSCAPE (769px – 900px)
+        Activa el comandero en modo pestañas para evitar cortes en pantallas
+        de baja resolución o con zoom del sistema.
+   ============================================================================ */
+@media screen and (max-width: 900px) {
+  /* Pantalla completa sin bordes redondeados */
+  .comandero-window {
+    width: 100vw !important;
+    height: 100vh !important;
+    border-radius: 0 !important;
+    position: fixed !important;
+    inset: 0 !important;
+    flex-direction: column !important;
+  }
+
+  /* Activar pestañas Menú / Comanda */
+  .comandero-mobile-tabs {
+    display: flex !important;
+  }
+
+  /* Catálogo ocupa toda la pantalla */
+  .comandero-catalog {
+    flex: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-right: none !important;
+    display: flex;
+  }
+
+  .comandero-catalog.mobile-hidden {
+    display: none !important;
+  }
+
+  /* Ticket ocupa toda la pantalla cuando está activo */
+  .comandero-ticket {
+    flex: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    display: none;
+  }
+
+  .comandero-ticket.mobile-active {
+    display: flex !important;
+  }
+
+  /* Botones en columna única para pantalla ancha */
+  .ticket-action-buttons {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .btn-btn-cmd {
+    padding: 12px !important;
+    font-size: 0.9rem !important;
+    white-space: normal !important;
+  }
+
+  .products-one-tap-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    padding: 10px;
+    gap: 10px;
+  }
+}
+
+/* ============================================================================
+   3-B. PANTALLAS CORTAS — Laptops con barra de tareas y chrome del browser
+        Aplica cuando el viewport height es reducido (≤700px) en landscape.
+   ============================================================================ */
+@media screen and (max-height: 700px) and (min-width: 769px) {
+  /* Usar todo el viewport disponible */
+  .comandero-window {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  /* Compactar barra superior del catálogo */
+  .catalog-topbar {
+    padding: 4px 10px;
+    gap: 4px;
+  }
+
+  /* Compactar topbar del ticket */
+  .ticket-topbar {
+    padding: 5px 12px;
+  }
+
+  /* Compactar body del ticket */
+  .ticket-body {
+    padding: 4px 10px;
+  }
+
+  .ticket-item-row {
+    padding: 4px 8px;
+    margin-bottom: 3px;
+  }
+
+  /* Compactar pie del ticket */
+  .ticket-bottom {
+    padding: 6px 12px;
+  }
+
+  .ticket-calc-box .calc-line {
+    font-size: 0.72rem;
+    margin-bottom: 1px;
+  }
+
+  .ticket-calc-box .calc-line.total {
+    font-size: 0.92rem;
+    padding-top: 3px;
+    margin-top: 3px;
+  }
+
+  /* Botones en 3 columnas, más compactos */
+  .ticket-action-buttons {
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 4px;
+    margin-top: 5px;
+  }
+
+  .btn-btn-cmd {
+    padding: 6px 3px;
+    font-size: 0.70rem;
+    white-space: nowrap;
+  }
+
+  /* Imágenes de producto más pequeñas */
+  .prod-card-thumb, .prod-card-no-thumb {
+    height: 50px;
+  }
+
+  /* Tarjeta más compacta */
+  .prod-card-one-tap {
+    min-height: 90px;
   }
 }
 

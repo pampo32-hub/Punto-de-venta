@@ -1432,14 +1432,10 @@ app.post('/api/mesas/unir', async (req, res) => {
     await dbRun("UPDATE Ordenes SET estado = 'fusionada', total = 0 WHERE id = ?", [orden2.id]);
 
     const allMergedItems = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [orden1.id]);
-    const subtotal = allMergedItems.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-    const servicio = Math.round(subtotal * 0.10);
-    const iva = Math.round(subtotal * 0.13);
-    const total = subtotal + servicio + iva;
-
+    const resultadoTotales = await recalcularTotalesOrden(orden1.id);
+    const total = resultadoTotales.total;
     const nuevoEstadoUnido = allMergedItems.length > 0 ? evaluarEstadoMesaKDS(allMergedItems) : 'abierta';
-
-    await dbRun("UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?", [subtotal, servicio, iva, total, nuevoEstadoUnido, orden1.id]);
+    await dbRun("UPDATE Ordenes SET estado = ? WHERE id = ?", [nuevoEstadoUnido, orden1.id]);
 
     // La Mesa A (secundaria) queda completamente libre y disponible en el salón
     await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?", [mesaSecundariaId]);
@@ -1643,17 +1639,19 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
       const tieneNuevos = remainingIds.some(id => !itemsBIds.includes(id));
 
       if (tieneNuevos) {
-        subB = itemsRestantesB.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-        servB = Math.round(subB * 0.10);
-        ivaB = Math.round(subB * 0.13);
-        totB = subB + servB + ivaB;
+        const resB = await recalcularTotalesOrden(snapB.orden_id);
+        subB = resB.subtotal;
+        servB = resB.servicio;
+        ivaB = resB.iva;
+        totB = resB.total;
         estB = evaluarEstadoMesaKDS(itemsRestantesB);
+        await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estB, snapB.orden_id]);
+      } else {
+        await dbRun(
+          'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
+          [subB, servB, ivaB, totB, estB, snapB.orden_id]
+        );
       }
-
-      await dbRun(
-        'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
-        [subB, servB, ivaB, totB, estB, snapB.orden_id]
-      );
 
       // Restaurar Mesa B
       await dbRun(
@@ -1791,16 +1789,10 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
           "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
           [ordenSec.id]
         );
-        const subSec = itemsSec.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-        const servSec = Math.round(subSec * 0.10);
-        const ivaSec = Math.round(subSec * 0.13);
-        totSec = subSec + servSec + ivaSec;
+        const resSec = await recalcularTotalesOrden(ordenSec.id);
+        totSec = resSec.total;
         estadoSec = evaluarEstadoMesaKDS(itemsSec);
-
-        await dbRun(
-          'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
-          [subSec, servSec, ivaSec, totSec, estadoSec, ordenSec.id]
-        );
+        await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoSec, ordenSec.id]);
       }
 
       await dbRun(
@@ -1822,16 +1814,10 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
       );
 
       if (itemsRestantes.length > 0) {
-        const subPrinc = itemsRestantes.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-        const servPrinc = Math.round(subPrinc * 0.10);
-        const ivaPrinc = Math.round(subPrinc * 0.13);
-        totPrinc = subPrinc + servPrinc + ivaPrinc;
+        const resPrinc = await recalcularTotalesOrden(ordenPrincipal.id);
+        totPrinc = resPrinc.total;
         estadoPrinc = evaluarEstadoMesaKDS(itemsRestantes);
-
-        await dbRun(
-          'UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?',
-          [subPrinc, servPrinc, ivaPrinc, totPrinc, estadoPrinc, ordenPrincipal.id]
-        );
+        await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoPrinc, ordenPrincipal.id]);
       } else {
         await dbRun("UPDATE Ordenes SET estado = 'cerrada', total = 0 WHERE id = ?", [ordenPrincipal.id]);
         estadoPrinc = 'libre';
@@ -2286,7 +2272,7 @@ async function recalcularTotalesOrden(ordenId) {
     [ordenId]
   );
 
-  const subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+  const totalBruto = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
 
   // Agrupar items elegibles para Happy Hour por producto_id o nombre
   const grupos = {};
@@ -2328,10 +2314,11 @@ async function recalcularTotalesOrden(ordenId) {
     }
   }
 
-  const subNeto = Math.max(0, subtotal - descuentoHH);
-  const servicio = Math.round(subNeto * 0.10);
-  const iva = Math.round(subNeto * 0.13);
-  const total = subNeto + servicio + iva;
+  // Precios con Impuestos Incluidos (Monto final que paga el cliente)
+  const total = Math.max(0, totalBruto - descuentoHH);
+  const subtotal = Math.round(total / 1.23);
+  const servicio = Math.round(subtotal * 0.10);
+  const iva = total - subtotal - servicio;
 
   await dbRun(
     "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
@@ -2723,11 +2710,11 @@ app.post('/api/comandas/anular-item', async (req, res) => {
       pinAutorizado: 1
     });
 
-    const totalItems = await dbGet("SELECT SUM(subtotal) as sub FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [item.orden_id]);
-    const subtotal = Number(totalItems.sub) || 0;
-    const servicio = Math.round(subtotal * 0.10);
-    const iva = Math.round(subtotal * 0.13);
-    const total = subtotal + servicio + iva;
+    const resAnula = await recalcularTotalesOrden(item.orden_id);
+    const subtotal = resAnula.subtotal;
+    const servicio = resAnula.servicio;
+    const iva = resAnula.iva;
+    const total = resAnula.total;
 
     // Recalcular estado de la orden y mesa
     const remainingItems = await dbAll(
@@ -2736,7 +2723,7 @@ app.post('/api/comandas/anular-item', async (req, res) => {
     );
     const nuevoEstado = evaluarEstadoMesaKDS(remainingItems);
 
-    await dbRun("UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ?, estado = ? WHERE id = ?", [subtotal, servicio, iva, total, nuevoEstado, item.orden_id]);
+    await dbRun("UPDATE Ordenes SET estado = ? WHERE id = ?", [nuevoEstado, item.orden_id]);
 
     const orden = await dbGet("SELECT * FROM Ordenes WHERE id = ?", [item.orden_id]);
     if (orden && orden.mesa_id) {
@@ -3130,10 +3117,11 @@ async function procesarCobroOrden(ordenId, {
       "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'",
       [ordenId]
     );
-    const nuevoSubtotal = itemsActivos.reduce((acc, it) => acc + (it.precio_unitario * it.cantidad), 0);
+    const totalActivoBruto = itemsActivos.reduce((acc, it) => acc + (it.precio_unitario * it.cantidad), 0);
+    const nuevoTotal = totalActivoBruto;
+    const nuevoSubtotal = Math.round(nuevoTotal / 1.23);
     const servicio10 = Math.round(nuevoSubtotal * 0.10);
-    const iva13 = Math.round(nuevoSubtotal * 0.13);
-    const nuevoTotal = nuevoSubtotal + servicio10 + iva13;
+    const iva13 = nuevoTotal - nuevoSubtotal - servicio10;
 
     await dbRun(
       "UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
@@ -3141,8 +3129,9 @@ async function procesarCobroOrden(ordenId, {
     );
 
     // Generar ticket térmico de pago parcial
-    const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((it.precio || 0) * (it.cantidad || 1)), 0);
-    const impParcial = subParcial * 0.23;
+    const totalParcial = (items_pagados || []).reduce((acc, it) => acc + ((it.precio || 0) * (it.cantidad || 1)), 0);
+    const subParcial = Math.round(totalParcial / 1.23);
+    const impParcial = totalParcial - subParcial;
 
     const tInfoParcial = printerService.generarTicketPagoParcial({
       negocio,

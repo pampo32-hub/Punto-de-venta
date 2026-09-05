@@ -323,12 +323,12 @@ function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora 
  * For every 2 units of a participating product (happy_hour = 1), 1 is free.
  */
 function calcularTotalesHappyHour(items = [], happyHourActivo = false) {
-  let subtotal = 0;
+  let totalBruto = 0;
   let descuentoHH = 0;
 
   for (const it of items) {
     const lineTotal = it.precio * it.cantidad;
-    subtotal += lineTotal;
+    totalBruto += lineTotal;
 
     if (happyHourActivo && (it.happy_hour === 1 || it.happyHour === true)) {
       const pares = Math.floor(it.cantidad / 2);
@@ -336,10 +336,11 @@ function calcularTotalesHappyHour(items = [], happyHourActivo = false) {
     }
   }
 
-  const subNeto = subtotal - descuentoHH;
-  const servicio = Math.round(subNeto * 0.10);
-  const iva = Math.round(subNeto * 0.13);
-  const total = subNeto + servicio + iva;
+  const total = Math.max(0, totalBruto - descuentoHH);
+  const subtotal = Math.round(total / 1.23);
+  const servicio = Math.round(subtotal * 0.10);
+  const iva = total - subtotal - servicio;
+  const subNeto = total;
 
   return {
     subtotal,

@@ -284,12 +284,15 @@ describe('Tier 1: Feature Coverage (R1 - R4)', () => {
       const res = calcularTotalesHappyHour(items, true);
       // 2 Imperials -> 1 free (1800 discount)
       // 4 Mojitos -> 2 free (7600 discount)
-      assert.strictEqual(res.descuentoHH, 1800 + 7600);
-      assert.strictEqual(res.subtotal, 1800 * 2 + 3800 * 4); // 3600 + 15200 = 18800
-      assert.strictEqual(res.subNeto, 18800 - 9400); // 9400
-      assert.strictEqual(res.servicio, Math.round(9400 * 0.10)); // 940
-      assert.strictEqual(res.iva, Math.round(9400 * 0.13)); // 1222
-      assert.strictEqual(res.total, 9400 + 940 + 1222);
+      assert.strictEqual(res.descuentoHH, 1800 + 7600); // 9400
+      assert.strictEqual(res.total, 9400);
+      const expectedSub = Math.round(9400 / 1.23);
+      const expectedServ = Math.round(expectedSub * 0.10);
+      const expectedIva = 9400 - expectedSub - expectedServ;
+      assert.strictEqual(res.subtotal, expectedSub);
+      assert.strictEqual(res.servicio, expectedServ);
+      assert.strictEqual(res.iva, expectedIva);
+      assert.strictEqual(res.subtotal + res.servicio + res.iva, res.total);
     });
 
     it('T1.15: Happy Hour gives 0 discount on food items even when HH is active', () => {
@@ -300,7 +303,8 @@ describe('Tier 1: Feature Coverage (R1 - R4)', () => {
 
       const res = calcularTotalesHappyHour(items, true);
       assert.strictEqual(res.descuentoHH, 0, 'Food items should never receive HH discount');
-      assert.strictEqual(res.subNeto, res.subtotal);
+      assert.strictEqual(res.total, 4500 * 4 + 12500 * 2);
+      assert.strictEqual(res.subtotal, Math.round((4500 * 4 + 12500 * 2) / 1.23));
     });
 
     it('T1.16: Happy Hour inactive ignores 2x1 even on promo products', () => {

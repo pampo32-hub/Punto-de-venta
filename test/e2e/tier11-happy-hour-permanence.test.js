@@ -95,7 +95,8 @@ describe('Tier 11: Happy Hour Permanence & Strict vs Flexible Mode 2026', () => 
 
     // 5. El descuento Happy Hour debe seguir siendo exactamente 2000 (1 cerveza gratis de las 2 de HH, las 2 nuevas a precio normal)
     const ordenDb = await server.dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
-    assert.equal(ordenDb.subtotal, 8000); // 4 cervezas a 2000
+    assert.equal(ordenDb.total, 6000); // 4 cervezas a 2000 menos 2000 de HH = 6000 final
+    assert.equal(ordenDb.subtotal, Math.round(6000 / 1.23));
     assert.equal(ordenDb.descuento_happy_hour, 2000);
   });
 
