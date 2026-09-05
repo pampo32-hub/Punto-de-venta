@@ -254,8 +254,8 @@ app.post('/api/auth/login', async (req, res) => {
     const uInput = (usuario || '').trim();
     const pInput = (password || '').trim();
 
-    if (!uInput && !pInput) {
-      return res.status(400).json({ error: 'Ingresa tu usuario y contraseña o PIN.' });
+    if (!uInput || !pInput) {
+      return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
     }
 
     // 1. Búsqueda por usuario (insensible a mayúsculas) y password o PIN
@@ -266,15 +266,10 @@ app.post('/api/auth/login', async (req, res) => {
         AND activo = 1
     `, [uInput, uInput, pInput, pInput]);
 
-    // 2. Si sólo enviaron PIN en un campo o como usuario directo
-    if (!u && (uInput || pInput)) {
-      const pinCandidate = pInput || uInput;
-      u = await dbGet('SELECT * FROM Usuarios WHERE pin = ? AND activo = 1', [pinCandidate]);
+    if (!u) {
+      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario y contraseña.' });
     }
 
-    if (!u) {
-      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
-    }
 
     const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
 
@@ -3012,18 +3007,80 @@ async function procesarCobroOrden(ordenId, {
     await recalcularTotalesOrden(ordenId);
     orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
 
-    // Si hay platillos de cocina, notificar a KDS marcados como pagados
-    const tieneCocina = itemsNuevos.some(it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'));
-    if (tieneCocina) {
-      const mesaObj = await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]);
-      io.emit('comanda_nueva', {
+    // Si hay platillos de cocina o barra en este cobro directo, despachar a cocina/barra
+    const itemsCocina = itemsNuevos.filter(it => it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3));
+    const itemsBarra = itemsNuevos.filter(it => it.destino === 'barra');
+    const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
+    const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : 'Mesa Directa';
+
+
+    if (itemsCocina.length > 0) {
+      // 1. Imprimir comanda de cocina térmica (marcada como PAGADA / DIRECTO)
+      const tInfoCocina = printerService.generarTicketComanda({
         ordenId,
+        comandaNumero,
+        mesaNumero: mesaNumeroTxt,
+        mesero,
+        items: itemsCocina.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre || it.nombre_producto,
+          notas: it.notas || '',
+          curso: it.curso || 2,
+          origen_mesa_numero: it.origen_mesa_numero || null
+        })),
+        destino: 'cocina',
+        pagada: true,
+        fechaHora: ahora
+      });
+      await printerService.procesarImpresion({
+        destinoImpresora: 'cocina',
+        ticketInfo: tInfoCocina,
+        io
+      });
+
+      // 2. Notificar a KDS en vivo
+      io.emit('nueva_comanda', {
         mesaId: orden.mesa_id,
-        mesaNumero: mesaObj ? mesaObj.numero : 'Mesa',
+        ordenId,
+        mesaNumero: mesaNumeroTxt,
         mesero,
         horaPedido: ahora,
         pagada: true,
-        items: itemsNuevos.filter(it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+        comandas: itemsCocina
+      });
+      io.emit('comanda_nueva', {
+        ordenId,
+        mesaId: orden.mesa_id,
+        mesaNumero: mesaNumeroTxt,
+        mesero,
+        horaPedido: ahora,
+        pagada: true,
+        items: itemsCocina
+      });
+    }
+
+    if (itemsBarra.length > 0) {
+      // Imprimir comanda de barra térmica (marcada como PAGADA / DIRECTO)
+      const tInfoBarra = printerService.generarTicketComanda({
+        ordenId,
+        comandaNumero,
+        mesaNumero: mesaNumeroTxt,
+        mesero,
+        items: itemsBarra.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre || it.nombre_producto,
+          notas: it.notas || '',
+          curso: it.curso || 2,
+          origen_mesa_numero: it.origen_mesa_numero || null
+        })),
+        destino: 'barra',
+        pagada: true,
+        fechaHora: ahora
+      });
+      await printerService.procesarImpresion({
+        destinoImpresora: 'barra',
+        ticketInfo: tInfoBarra,
+        io
       });
     }
   }

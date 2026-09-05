@@ -68,9 +68,12 @@ function formatearLinea3Col(cant, desc, total, anchoTotal = 48) {
 /**
  * Generador de comandos ESC/POS y Formato Visual de Comanda para Cocina / Barra
  */
-function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, items, destino = 'cocina', fechaHora = new Date().toISOString() }) {
+function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, items, destino = 'cocina', pagada = false, fechaHora = new Date().toISOString() }) {
   const fechaStr = new Date(fechaHora).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
-  const destinoTitulo = destino.toUpperCase() === 'BARRA' ? '🍸 COMANDA BARRA' : '🍳 COMANDA COCINA';
+  let destinoTitulo = destino.toUpperCase() === 'BARRA' ? '🍸 COMANDA BARRA' : '🍳 COMANDA COCINA';
+  if (pagada) {
+    destinoTitulo += ' (PAGADA / DIRECTO)';
+  }
   
   // 1. ESC/POS Buffer (para enviar al puerto 9100 / socket)
   let raw = '';
@@ -79,6 +82,9 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   raw += ESCPOS.ALIGN_CENTER;
   raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + `*** ${destinoTitulo} ***\n` + ESCPOS.NORMAL;
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `MESA: ${mesaNumero}\n` + ESCPOS.NORMAL;
+  if (pagada) {
+    raw += ESCPOS.BOLD_ON + `[ ESTADO: COBRADA / DIRECTO ]\n` + ESCPOS.BOLD_OFF;
+  }
   raw += ESCPOS.ALIGN_LEFT;
   raw += `Orden: #${ordenId || 1} | Comanda: #${comandaNumero || 1}\n`;
   raw += `Salonero: ${mesero || 'General'}\n`;
@@ -114,6 +120,7 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
     ordenId,
     comandaNumero,
     mesero,
+    pagada: Boolean(pagada),
     fechaHora: fechaStr,
     items: items.map(it => ({
       cantidad: it.cantidad,
