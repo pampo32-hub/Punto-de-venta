@@ -516,18 +516,15 @@
               <div>
                 <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Ventas Hoy</span>
                 <strong id="devKpiVentasHoy" style="display:block; font-size:1.35rem; color:#4ade80; margin:2px 0;">₡ 0</strong>
-                <strong id="devKpiVentasHoy" style="display:block; font-size:1.35rem; color:#4ade80; margin:2px 0;">₡ 0</strong>
                 <small id="devKpiComparativaAyer" style="font-size:0.75rem; color:#9ca3af;">vs ayer: 0%</small>
               </div>
             </div>
 
-            <div class="kpi-card" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center;">
             <div class="kpi-card" onclick="abrirModalCuentasCobradasHoy()" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center; cursor:pointer; transition:transform 0.15s, border-color 0.15s;" title="Clic para ver historial de cuentas cobradas">
               <div style="font-size:2rem; background:rgba(59,130,246,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">🧾</div>
               <div>
                 <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Cuentas Cobradas</span>
                 <strong id="devKpiCuentasCobradas" style="display:block; font-size:1.35rem; color:#60a5fa; margin:2px 0;">0</strong>
-                <small style="font-size:0.75rem; color:#9ca3af;">Comandas finalizadas hoy</small>
                 <small style="font-size:0.75rem; color:#38bdf8; text-decoration:underline;">Ver detalle de hoy ↗</small>
               </div>
             </div>
@@ -536,7 +533,6 @@
               <div style="font-size:2rem; background:rgba(234,179,8,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">🎯</div>
               <div>
                 <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Ticket Promedio</span>
-                <strong id="devKpiTicketPromedio" style="display:block; font-size:1.35rem; color:#facc15; margin:2px 0;">₡ 0</strong>
                 <strong id="devKpiTicketPromedio" style="display:block; font-size:1.35rem; color:#facc15; margin:2px 0;">₡ 0</strong>
                 <small style="font-size:0.75rem; color:#9ca3af;">Gasto medio por cuenta</small>
               </div>
@@ -1007,19 +1003,16 @@
               <div class="kpi-info">
                 <span class="kpi-label">Ventas Totales Hoy</span>
                 <strong class="kpi-val" id="kpiVentasHoy">₡ 0</strong>
-                <strong class="kpi-val" id="kpiVentasHoy">₡ 0</strong>
                 <small class="kpi-sub" id="kpiComparativaAyer">vs ayer: 0%</small>
               </div>
             </div>
 
-            <div class="kpi-card kpi-tickets">
             <div class="kpi-card kpi-tickets" onclick="abrirModalCuentasCobradasHoy()" style="cursor:pointer; transition:transform 0.15s, box-shadow 0.15s;" title="Clic para ver desglose de comandas cobradas hoy">
               <div class="kpi-icon">🧾</div>
               <div class="kpi-info">
                 <span class="kpi-label">Cuentas Cobradas</span>
                 <strong class="kpi-val" id="kpiCuentasCobradas">0</strong>
                 <small class="kpi-sub">Mesas atendidas hoy</small>
-                <small class="kpi-sub" style="color:#38bdf8; font-weight:600;">Ver detalle de hoy ↗</small>
               </div>
             </div>
 
@@ -1027,7 +1020,6 @@
               <div class="kpi-icon">🎯</div>
               <div class="kpi-info">
                 <span class="kpi-label">Ticket Promedio</span>
-                <strong class="kpi-val" id="kpiTicketPromedio">₡ 0</strong>
                 <strong class="kpi-val" id="kpiTicketPromedio">₡ 0</strong>
                 <small class="kpi-sub">Gasto promedio por mesa</small>
               </div>
