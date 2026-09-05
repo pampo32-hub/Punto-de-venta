@@ -3699,7 +3699,7 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
     const ingredientes = await dbAll(`
       SELECT r.id as receta_id, r.producto_id, r.insumo_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje,
              i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, 
-             i.costo_unitario, i.stock_actual, i.stock_minimo
+             i.costo_unitario, i.stock_actual, i.stock_minimo, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
       WHERE r.producto_id = ?
@@ -3719,9 +3719,44 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
         porcionesDisponibles = porcionesIngrediente;
       }
 
+      let medidaAmigable = `${ing.cantidad} ${ing.unidad_medida || 'unidades'}`;
+      let mlCalculados = null;
+      if (ing.es_licor) {
+        const capMl = ing.capacidad_ml || 750;
+        const mlUsados = Math.round(Number(ing.cantidad) * capMl * 10) / 10;
+        mlCalculados = mlUsados;
+        const oz = Math.round((mlUsados / 30) * 100) / 100;
+        
+        if (Math.abs(oz - 0.25) <= 0.03) {
+          medidaAmigable = '1/4 oz (7.5 ml)';
+        } else if (Math.abs(oz - 0.5) <= 0.03) {
+          medidaAmigable = '1/2 oz (15 ml)';
+        } else if (Math.abs(oz - 0.75) <= 0.03) {
+          medidaAmigable = '3/4 oz (22.5 ml)';
+        } else if (Math.abs(oz - 1) <= 0.03) {
+          medidaAmigable = '1 oz (30 ml / 1 shot)';
+        } else if (Math.abs(oz - 1.5) <= 0.03) {
+          medidaAmigable = '1.5 oz (45 ml)';
+        } else if (Math.abs(oz - 2) <= 0.03) {
+          medidaAmigable = '2 oz (60 ml / Doble)';
+        } else if (Math.abs(Number(ing.cantidad) - 0.25) <= 0.01) {
+          medidaAmigable = `1/4 Botella (${Math.round(capMl * 0.25)} ml)`;
+        } else if (Math.abs(Number(ing.cantidad) - 0.5) <= 0.01) {
+          medidaAmigable = `1/2 Botella (${Math.round(capMl * 0.5)} ml)`;
+        } else if (Math.abs(Number(ing.cantidad) - 1) <= 0.01) {
+          medidaAmigable = `1 Botella completa (${capMl} ml)`;
+        } else if (oz > 0 && oz <= 10) {
+          medidaAmigable = `${oz} oz (~${Math.round(mlUsados)} ml)`;
+        } else {
+          medidaAmigable = `${ing.cantidad} bot. (~${Math.round(mlUsados)} ml)`;
+        }
+      }
+
       return {
         ...ing,
         cantidad_bruta: ing.cantidad,
+        medida_amigable: medidaAmigable,
+        ml_estimados: mlCalculados,
         costo_subtotal: subtotalCosto,
         subtotal_costo: subtotalCosto,
         porciones_posibles: porcionesIngrediente,

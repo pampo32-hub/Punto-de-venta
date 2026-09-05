@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-static-v13';
+const CACHE_NAME = 'pos-static-v14';
 const CORE_ASSETS = [
   '/',
   '/index.html',

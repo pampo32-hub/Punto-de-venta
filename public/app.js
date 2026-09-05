@@ -7984,13 +7984,21 @@ async function inicializarPanelRecetas() {
   const selectInsumo = document.getElementById('selectNuevoIngredienteInsumo');
   if (!selectProd) return;
 
+  if (!estado.inventario || !estado.inventario.length) {
+    try {
+      await cargarInventarioAdmin();
+    } catch(e) {
+      console.warn('Error cargando inventario para recetas:', e);
+    }
+  }
+
   // Llenar selector de insumos disponibles en bodega
   if (selectInsumo && estado.inventario && estado.inventario.length) {
     selectInsumo.innerHTML = estado.inventario.map(i => `
       <option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.unidad_medida)} - Costo: ${formatCRC(i.costo_unitario)})</option>
     `).join('');
-    selectInsumo.onchange = window.actualizarPlaceholderCantidadReceta;
-    window.actualizarPlaceholderCantidadReceta();
+    selectInsumo.onchange = window.alCambiarInsumoReceta;
+    window.alCambiarInsumoReceta();
   }
 
   // Cargar lista resumida de productos con ficha
@@ -8070,10 +8078,11 @@ window.cargarFichaTecnica = async function(productoId) {
 
     data.ingredientes.forEach(ing => {
       const tr = document.createElement('tr');
+      const cantidadMostrar = ing.medida_amigable ? escapeHtml(ing.medida_amigable) : ing.cantidad_bruta;
       tr.innerHTML = `
         <td><strong>${escapeHtml(ing.insumo_nombre)}</strong></td>
         <td><span style="color:#9ca3af;">${escapeHtml(ing.categoria || 'General')}</span></td>
-        <td><strong>${ing.cantidad_bruta}</strong></td>
+        <td><strong style="color:#38bdf8;">${cantidadMostrar}</strong></td>
         <td><small style="color:#9ca3af;">${escapeHtml(ing.unidad_medida)}</small></td>
         <td>${formatCRC(ing.costo_unitario || 0)}</td>
         <td>${ing.merma_porcentaje ? ing.merma_porcentaje + '%' : '0%'}</td>
@@ -8095,6 +8104,25 @@ window.recargarFichaTecnicaActual = function() {
   if (pid) window.cargarFichaTecnica(pid);
 };
 
+window.alCambiarInsumoReceta = function() {
+  const selInsumo = document.getElementById('selectNuevoIngredienteInsumo');
+  const selTipo = document.getElementById('selNuevoIngredienteUnidadTipo');
+  if (!selInsumo || !selTipo) return;
+
+  const insId = parseInt(selInsumo.value);
+  const ins = (estado.inventario || []).find(i => i.id === insId);
+
+  // Si es licor, cambiamos por defecto a Onzas (oz)
+  if (ins && ins.es_licor) {
+    if (selTipo.value === 'estandar') {
+      selTipo.value = 'oz';
+    }
+  }
+
+  window.actualizarPlaceholderCantidadReceta();
+  window.recalcularCostoPreviewReceta();
+};
+
 window.actualizarPlaceholderCantidadReceta = function() {
   const selInsumo = document.getElementById('selectNuevoIngredienteInsumo');
   const selTipo = document.getElementById('selNuevoIngredienteUnidadTipo');
@@ -8103,20 +8131,135 @@ window.actualizarPlaceholderCantidadReceta = function() {
 
   const insId = parseInt(selInsumo.value);
   const ins = (estado.inventario || []).find(i => i.id === insId);
+  const tipo = selTipo.value;
 
-  // Auto switch unit selector if liquor is selected
-  if (ins && ins.es_licor && selTipo.value === 'estandar') {
-    selTipo.value = 'shots';
-  }
-
-  if (selTipo.value === 'shots') {
+  if (tipo === 'oz') {
+    txtCant.placeholder = 'Ej: 1, 1.5, 2 o 0.25 oz';
+  } else if (tipo === 'shots') {
     if (ins && ins.es_licor && ins.rendimiento_shots > 0) {
       txtCant.placeholder = `Ej: 1 shot (~${ins.medida_shot_ml || 30}ml = ${(1 / ins.rendimiento_shots).toFixed(4)} bot.)`;
     } else {
       txtCant.placeholder = 'Ej: 1 shot / trago';
     }
+  } else if (tipo === 'fraccion') {
+    txtCant.placeholder = 'Ej: 0.25 (cuarta), 0.5 (media) o 1';
   } else {
     txtCant.placeholder = ins ? `Ej: 0.5 (${ins.unidad_medida})` : 'Ej: 1';
+  }
+};
+
+window.seleccionarMedidaRapidaReceta = function(tipo, valor, btnElement) {
+  const selTipo = document.getElementById('selNuevoIngredienteUnidadTipo');
+  const txtCant = document.getElementById('txtNuevoIngredienteCant');
+  const boxChips = document.getElementById('boxMedidasRapidasReceta');
+
+  if (selTipo) selTipo.value = tipo;
+  if (txtCant) {
+    txtCant.value = valor;
+    txtCant.focus();
+  }
+
+  if (boxChips) {
+    const chips = boxChips.querySelectorAll('.chip-medida');
+    chips.forEach(c => c.classList.remove('active'));
+    if (btnElement) btnElement.classList.add('active');
+  }
+
+  window.actualizarPlaceholderCantidadReceta();
+  window.recalcularCostoPreviewReceta();
+};
+
+window.activarModoManualReceta = function(btnElement) {
+  const boxChips = document.getElementById('boxMedidasRapidasReceta');
+  if (boxChips) {
+    const chips = boxChips.querySelectorAll('.chip-medida');
+    chips.forEach(c => c.classList.remove('active'));
+    if (btnElement) btnElement.classList.add('active');
+  }
+  const txtCant = document.getElementById('txtNuevoIngredienteCant');
+  if (txtCant) {
+    txtCant.focus();
+    txtCant.select();
+  }
+  window.recalcularCostoPreviewReceta();
+};
+
+window.onInputCantidadManualReceta = function() {
+  const boxChips = document.getElementById('boxMedidasRapidasReceta');
+  const chipManual = document.getElementById('chipMedidaManual');
+  if (boxChips && chipManual) {
+    const chips = boxChips.querySelectorAll('.chip-medida');
+    chips.forEach(c => c.classList.remove('active'));
+    chipManual.classList.add('active');
+  }
+  window.recalcularCostoPreviewReceta();
+};
+
+window.recalcularCostoPreviewReceta = function() {
+  const selInsumo = document.getElementById('selectNuevoIngredienteInsumo');
+  const selTipo = document.getElementById('selNuevoIngredienteUnidadTipo');
+  const txtCant = document.getElementById('txtNuevoIngredienteCant');
+  const txtMerma = document.getElementById('txtNuevoIngredienteMerma');
+  const lblPreview = document.getElementById('lblPreviewRecetaCalculo');
+
+  if (!selInsumo || !selTipo || !txtCant || !lblPreview) return;
+
+  const insId = parseInt(selInsumo.value);
+  const ins = (estado.inventario || []).find(i => i.id === insId);
+  const cantidad = parseFloat(txtCant.value);
+  const merma = parseFloat(txtMerma ? txtMerma.value : 0) || 0;
+  const tipo = selTipo.value;
+
+  if (!ins || isNaN(cantidad) || cantidad <= 0) {
+    lblPreview.style.display = 'none';
+    lblPreview.innerHTML = '';
+    return;
+  }
+
+  lblPreview.style.display = 'block';
+
+  let fraccionBotella = cantidad;
+  let mlDeducidos = null;
+  const costoUnit = parseFloat(ins.costo_unitario || 0);
+  const mermaFactor = 1 + (merma / 100);
+
+  if (ins.es_licor) {
+    const capMl = ins.capacidad_ml || 750;
+    if (tipo === 'oz') {
+      mlDeducidos = Math.round(cantidad * 30 * 10) / 10;
+      fraccionBotella = (cantidad * 30) / capMl;
+    } else if (tipo === 'shots') {
+      const shotMl = ins.medida_shot_ml || 30;
+      mlDeducidos = Math.round(cantidad * shotMl * 10) / 10;
+      const rend = ins.rendimiento_shots > 0 ? ins.rendimiento_shots : (capMl / shotMl);
+      fraccionBotella = cantidad / rend;
+    } else if (tipo === 'fraccion') {
+      fraccionBotella = cantidad;
+      mlDeducidos = Math.round(cantidad * capMl * 10) / 10;
+    } else {
+      fraccionBotella = cantidad;
+      mlDeducidos = Math.round(cantidad * capMl * 10) / 10;
+    }
+
+    const subtotalCosto = Math.round(fraccionBotella * costoUnit * mermaFactor * 100) / 100;
+    const porcionesStock = fraccionBotella > 0 ? Math.floor(parseFloat(ins.stock_actual || 0) / fraccionBotella) : 0;
+    const porcBotella = Math.round(fraccionBotella * 1000) / 10;
+
+    lblPreview.innerHTML = `
+      🥃 <strong>Descuento calculado:</strong> ${mlDeducidos} ml (${porcBotella}% de botella) &nbsp;|&nbsp;
+      💰 <strong>Costo estimado:</strong> <span style="color:#4ade80; font-weight:700;">${formatCRC(subtotalCosto)}</span> &nbsp;|&nbsp;
+      📊 <strong>Rendimiento:</strong> rinde aprox. <strong>${porcionesStock} porciones</strong> con stock actual (${ins.stock_actual} bot.)
+    `;
+  } else {
+    fraccionBotella = cantidad;
+    const subtotalCosto = Math.round(fraccionBotella * costoUnit * mermaFactor * 100) / 100;
+    const porcionesStock = fraccionBotella > 0 ? Math.floor(parseFloat(ins.stock_actual || 0) / fraccionBotella) : 0;
+
+    lblPreview.innerHTML = `
+      📦 <strong>Descuento calculado:</strong> ${cantidad} ${ins.unidad_medida || 'unidades'} &nbsp;|&nbsp;
+      💰 <strong>Costo estimado:</strong> <span style="color:#4ade80; font-weight:700;">${formatCRC(subtotalCosto)}</span> &nbsp;|&nbsp;
+      📊 <strong>Rendimiento:</strong> rinde aprox. <strong>${porcionesStock} porciones</strong> con stock actual (${ins.stock_actual})
+    `;
   }
 };
 
@@ -8137,11 +8280,19 @@ window.guardarIngredienteReceta = async function() {
   }
 
   const insumo = (estado.inventario || []).find(i => i.id === parseInt(insumoId));
-  if (unidadTipo === 'shots') {
-    if (insumo && insumo.es_licor && insumo.rendimiento_shots > 0) {
-      // Fracción proporcional de la botella
-      cantidad = parseFloat((cantidad / insumo.rendimiento_shots).toFixed(4));
+  if (insumo && insumo.es_licor) {
+    const capMl = insumo.capacidad_ml || 750;
+    if (unidadTipo === 'oz') {
+      // 1 oz = 30ml -> Fracción = (cantidad * 30) / capMl
+      cantidad = parseFloat(((cantidad * 30) / capMl).toFixed(4));
+    } else if (unidadTipo === 'shots') {
+      const rend = insumo.rendimiento_shots > 0 ? insumo.rendimiento_shots : (capMl / (insumo.medida_shot_ml || 30));
+      cantidad = parseFloat((cantidad / rend).toFixed(4));
+    } else if (unidadTipo === 'fraccion' || unidadTipo === 'estandar') {
+      cantidad = parseFloat(cantidad.toFixed(4));
     }
+  } else {
+    cantidad = parseFloat(cantidad.toFixed(4));
   }
 
   try {
@@ -8157,8 +8308,14 @@ window.guardarIngredienteReceta = async function() {
     mostrarNotificacionCentro('✅ Ingrediente vinculado al escandallo.', 'success');
     const txtC = document.getElementById('txtNuevoIngredienteCant');
     const txtM = document.getElementById('txtNuevoIngredienteMerma');
+    const lblPreview = document.getElementById('lblPreviewRecetaCalculo');
     if (txtC) txtC.value = '';
     if (txtM) txtM.value = '0';
+    if (lblPreview) lblPreview.style.display = 'none';
+
+    // Resetear chips al modo manual
+    window.activarModoManualReceta(document.getElementById('chipMedidaManual'));
+
     window.cargarFichaTecnica(productoId);
   } catch (e) {
     alert('❌ ' + e.message);
