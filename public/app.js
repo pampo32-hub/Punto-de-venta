@@ -5853,26 +5853,51 @@ document.getElementById('btnLiquidarPropinas').addEventListener('click', () => {
 });
 
 // Cobro Modal
-document.getElementById('btnAbrirCobroModal').addEventListener('click', () => {
+document.getElementById('btnAbrirCobroModal').addEventListener('click', async () => {
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
     alert('No hay consumos en esta mesa para cobrar.');
     return;
   }
   estado.cobroSplitPersonaIndex = null;
 
+  // Verificar si hay platillos de cocina no enviados aún
+  const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
+    !it.enviado && (it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3 && it.destino !== 'barra'))
+  );
+
+  let enviarCocina = false;
+  if (tieneNuevosCocina && typeof window.confirmarAccion === 'function') {
+    enviarCocina = await window.confirmarAccion({
+      icono: '🍳',
+      titulo: '¿Deseas enviar la comanda a cocina?',
+      subtitulo: 'Hay platillos sin despachar a cocina en esta mesa',
+      mensaje: '¿Deseas que al liquidar la cuenta también se imprima la comanda y se envíe a cocina?',
+      txtSi: '🔥 Sí, enviar a cocina',
+      txtNo: '💳 No, solo cobrar'
+    });
+  }
+
+  estado.enviarCocinaEnCobro = Boolean(enviarCocina);
+
   const totalTxt = document.getElementById('comTotal').textContent;
   const lblTitulo = document.getElementById('lblTituloCobroModal');
   if (lblTitulo) lblTitulo.textContent = '💵 Cobrar y Liquidar Cuenta';
   const btnCobrar = document.getElementById('btnFinalizarCobro');
   if (btnCobrar) {
-    btnCobrar.textContent = '✅ Liquidar, Imprimir & Liberar Mesa';
-    btnCobrar.className = 'btn-pri success';
+    if (estado.enviarCocinaEnCobro) {
+      btnCobrar.textContent = '🔥 Enviar a Cocina, Liquidar & Liberar Mesa';
+      btnCobrar.className = 'btn-pri warning';
+    } else {
+      btnCobrar.textContent = '✅ Liquidar, Imprimir & Liberar Mesa';
+      btnCobrar.className = 'btn-pri success';
+    }
   }
 
   document.getElementById('cobroMesaTitulo').textContent = estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa';
   document.getElementById('cobroTotalDisplay').textContent = totalTxt;
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0.00';
+
 
   const cobroBadgeRow = document.getElementById('cobroHappyHourBadgeRow');
   const comDesc = document.getElementById('comHappyHourDesc');
@@ -5981,8 +6006,10 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
     liquidar_total: esLiquidacionFinal,
     items_pagados: personaCobrada ? personaCobrada.items : [],
-    happyHourActivo: Boolean(estado.happyHourActivo)
+    happyHourActivo: Boolean(estado.happyHourActivo),
+    enviar_cocina: Boolean(estado.enviarCocinaEnCobro)
   };
+
 
   const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
 

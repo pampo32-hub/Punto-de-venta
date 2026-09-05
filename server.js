@@ -2940,9 +2940,12 @@ async function procesarCobroOrden(ordenId, {
   liquidar_total = true,
   items_pagados = [],
   persona_nombre = 'Cliente',
-  happyHourActivo = false
+  happyHourActivo = false,
+  enviar_cocina = false,
+  enviarCocina = false
 } = {}) {
   const metodoFinal = metodo || metodoPago || 'Efectivo';
+  const debeEnviarCocina = Boolean(enviar_cocina || enviarCocina);
   const ahora = new Date().toISOString();
   let orden = null;
   const idNum = parseInt(ordenId);
@@ -3007,14 +3010,13 @@ async function procesarCobroOrden(ordenId, {
     await recalcularTotalesOrden(ordenId);
     orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
 
-    // Si hay platillos de cocina o barra en este cobro directo, despachar a cocina/barra
+    // Si el usuario confirmó enviar a cocina en este cobro directo, despachar a cocina/barra
     const itemsCocina = itemsNuevos.filter(it => it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3));
     const itemsBarra = itemsNuevos.filter(it => it.destino === 'barra');
     const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
     const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : 'Mesa Directa';
 
-
-    if (itemsCocina.length > 0) {
+    if (debeEnviarCocina && itemsCocina.length > 0) {
       // 1. Imprimir comanda de cocina térmica (marcada como PAGADA / DIRECTO)
       const tInfoCocina = printerService.generarTicketComanda({
         ordenId,
@@ -3059,7 +3061,7 @@ async function procesarCobroOrden(ordenId, {
       });
     }
 
-    if (itemsBarra.length > 0) {
+    if (debeEnviarCocina && itemsBarra.length > 0) {
       // Imprimir comanda de barra térmica (marcada como PAGADA / DIRECTO)
       const tInfoBarra = printerService.generarTicketComanda({
         ordenId,
@@ -3084,6 +3086,7 @@ async function procesarCobroOrden(ordenId, {
       });
     }
   }
+
 
   const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
   const cajaId = caja ? caja.id : null;
