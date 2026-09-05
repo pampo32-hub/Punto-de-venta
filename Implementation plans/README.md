@@ -21,6 +21,7 @@ Esta carpeta contiene la documentación técnica completa, diagramas de arquitec
 | **11** | [**11-Happy-Hour-Permanencia-Descuentos.md**](./11-Happy-Hour-Permanencia-Descuentos.md) | Facturación & Promos | Congelación de precios y persistencia de descuentos Happy Hour al cobrar mesas que excedieron el horario. | ✅ Listo |
 | **12** | [**12-Cobro-Directo-Comanda-Kardex-Liberacion.md**](./12-Cobro-Directo-Comanda-Kardex-Liberacion.md) | Cobro Express | Cobro atómico directo desde el comandero con descuento automático en Kárdex y liberación inmediata de mesa. | ✅ Listo |
 | **13** | [**13-Ventas-Productos-Periodo-Buscador-Kardex.md**](./13-Ventas-Productos-Periodo-Buscador-Kardex.md) | Ventas & Kárdex | Reporte de ventas por período, buscador predictivo, desglose de insumos de escandallo y exportación CSV/PDF. | ✅ Listo |
+| **14** | [**14-Blindaje-Integridad-Sintaxis-Login-E2E.md**](./14-Blindaje-Integridad-Sintaxis-Login-E2E.md) | Calidad & Seguridad | Verificación estática pretest con `node --check` y pruebas E2E en navegador real Headless Chrome. | ✅ Listo |
 
 ---
 
@@ -37,4 +38,4 @@ Todas las implementaciones cuentan con pruebas unitarias y E2E integradas:
 ```bash
 npm test
 ```
-**Resultado actual:** **119 pruebas ejecutadas y aprobadas al 100% en 25 suites.**
+**Resultado actual:** **122 pruebas ejecutadas y aprobadas al 100% en 26 suites.**

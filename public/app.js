@@ -545,7 +545,6 @@ window.abrirModalNuevoProducto = async function() {
   // Asegurar que inventario esté cargado para los selectores de Kárdex
   if (!estado.inventario || !estado.inventario.length) {
     try {
-      const resInv = await fetch('/api/admin/inventario');
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
       const resInv = await fetch('/api/admin/inventario', {
         headers: { 'x-user-rol': userRol }
@@ -639,7 +638,6 @@ window.abrirModalEditarProducto = async function(prodId) {
   // Asegurar inventario en estado
   if (!estado.inventario || !estado.inventario.length) {
     try {
-      const resInv = await fetch('/api/admin/inventario');
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
       const resInv = await fetch('/api/admin/inventario', {
         headers: { 'x-user-rol': userRol }
@@ -794,7 +792,6 @@ window.guardarNuevoProducto = async function() {
   const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
   // Datos Kárdex
-  const kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   let kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   let insumo_id = null;
   let ml_shot = 30;
@@ -825,9 +822,6 @@ window.guardarNuevoProducto = async function() {
   const insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
   const insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
   const insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
-  let insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
-  let insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
-  let insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
 
   if (crearComoInsumo) {
     const unidadAuto = document.getElementById('selectAutoInsumoUnidad')?.value || 'unidades';
@@ -8233,7 +8227,6 @@ function filtrarTablaInventario() {
 // Modales de Inventario
 let tipoAjusteActivo = 'entrada';
 
-window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
 window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
