@@ -10,6 +10,41 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    .btn-preset-fecha {
+      background: #0f172a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-preset-fecha:hover {
+      background: #1e293b;
+      color: #fff;
+      border-color: #38bdf8;
+    }
+    .btn-preset-fecha.active {
+      background: #0284c7;
+      color: #fff;
+      border-color: #38bdf8;
+      font-weight: 700;
+    }
+    .item-sug-venta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .item-sug-venta:hover {
+      background: #1e293b;
+    }
+  </style>
 </head>
 <body>
 
@@ -1091,6 +1126,9 @@
             🛒 Sugerencia de Compras
             <span class="inv-counter-pill" id="badgeComprasCriticas" style="display:none;">0</span>
           </button>
+          <button class="inv-subnav-btn" id="tabBtnInvVentas" onclick="cambiarSubTabInventario('ventas')" title="Reporte de ventas de productos por período, márgenes y consumo de insumos en Kárdex">
+            📊 Ventas & Rendimiento
+          </button>
         </div>
 
         <div class="inventory-container-wrapper">
@@ -1374,6 +1412,124 @@
                 </thead>
                 <tbody id="tbodySugerenciaCompras">
                   <!-- Filas de compras -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PANEL 5: VENTAS POR PRODUCTO & RENDIMIENTO KÁRDEX -->
+          <div class="inv-tab-panel" id="invPanelVentas" style="display:none;">
+            <!-- Header Banner -->
+            <div class="compras-header-banner" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">
+              <div>
+                <h3 style="margin:0 0 4px; color:#fff; font-size:1.15rem; display:flex; align-items:center; gap:8px;">
+                  📊 Análisis de Ventas de Productos & Consumo Kárdex
+                </h3>
+                <p style="margin:0; font-size:0.85rem; color:#94a3b8;">
+                  Audita unidades vendidas, ingresos reales, costos de recetas y materias primas consumidas por período.
+                </p>
+              </div>
+              <div class="compras-actions-top" style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn-tool" style="background:#065f46; border-color:#10b981; color:#fff; font-weight:600;" onclick="exportarVentasProductosCSV()" title="Descargar informe completo en Excel / CSV">
+                  📥 Exportar CSV / Excel
+                </button>
+                <button class="btn-tool" style="background:#1e3a8a; border-color:#3b82f6; color:#fff; font-weight:600;" onclick="imprimirReporteVentasProductos()" title="Imprimir reporte formal o guardar como PDF">
+                  🖨️ Imprimir / Guardar PDF
+                </button>
+              </div>
+            </div>
+
+            <!-- Filtros de Período y Presets -->
+            <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:14px 18px; margin-bottom:16px; display:flex; flex-direction:column; gap:12px;">
+              <!-- Fila 1: Presets rápidos -->
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span style="font-size:0.85rem; font-weight:700; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.5px;">📅 Período:</span>
+                <div class="ventas-preset-group" style="display:flex; gap:6px; flex-wrap:wrap;">
+                  <button type="button" class="btn-preset-fecha" data-preset="hoy" onclick="seleccionarPresetFechaVentas('hoy')">Hoy</button>
+                  <button type="button" class="btn-preset-fecha" data-preset="ayer" onclick="seleccionarPresetFechaVentas('ayer')">Ayer</button>
+                  <button type="button" class="btn-preset-fecha" data-preset="semana" onclick="seleccionarPresetFechaVentas('semana')">Esta Semana</button>
+                  <button type="button" class="btn-preset-fecha active" data-preset="mes" onclick="seleccionarPresetFechaVentas('mes')">Este Mes</button>
+                  <button type="button" class="btn-preset-fecha" data-preset="30dias" onclick="seleccionarPresetFechaVentas('30dias')">Últimos 30 días</button>
+                  <button type="button" class="btn-preset-fecha" data-preset="personalizado" onclick="seleccionarPresetFechaVentas('personalizado')">Rango Personalizado</button>
+                </div>
+              </div>
+
+              <!-- Fila 2: Inputs Desde / Hasta y Filtro de Categoría -->
+              <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <label for="txtFechaVentasDesde" style="font-size:0.82rem; color:#94a3b8;">Desde:</label>
+                  <input type="date" id="txtFechaVentasDesde" style="background:#0f172a; border:1px solid #334155; color:#fff; padding:6px 10px; border-radius:6px; font-size:0.85rem;" onchange="activarRangoPersonalizadoVentas()">
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <label for="txtFechaVentasHasta" style="font-size:0.82rem; color:#94a3b8;">Hasta:</label>
+                  <input type="date" id="txtFechaVentasHasta" style="background:#0f172a; border:1px solid #334155; color:#fff; padding:6px 10px; border-radius:6px; font-size:0.85rem;" onchange="activarRangoPersonalizadoVentas()">
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <label for="selectFiltroCatVentas" style="font-size:0.82rem; color:#94a3b8;">Categoría:</label>
+                  <select id="selectFiltroCatVentas" onchange="aplicarFiltroLocalVentas()" style="background:#0f172a; border:1px solid #334155; color:#fff; padding:6px 10px; border-radius:6px; font-size:0.85rem;">
+                    <option value="todas">🍽️ Todas las categorías</option>
+                  </select>
+                </div>
+                <button class="btn-pri" style="padding:6px 16px; font-size:0.85rem;" onclick="consultarVentasProductosServidor()">
+                  🔄 Consultar Período
+                </button>
+              </div>
+
+              <!-- Fila 3: Buscador inteligente reactivo -->
+              <div style="position:relative; width:100%; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px;">
+                <div style="position:relative;">
+                  <input type="text" id="txtBuscarVentaProd" placeholder="🔍 Buscador Inteligente: escribe el nombre de un platillo, cóctel o bebida para ver su ficha..." 
+                    oninput="onInputBuscarVentaProd()" 
+                    style="width:100%; box-sizing:border-box; background:#0f172a; border:1px solid #38bdf8; border-radius:8px; color:#fff; padding:10px 14px 10px 38px; font-size:0.9rem;" />
+                  <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:1.1rem; pointer-events:none;">🔍</span>
+                  <button id="btnLimpiarBuscarVenta" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:#94a3b8; font-size:1.1rem; cursor:pointer; display:none;" onclick="limpiarBuscadorVentaProd()">✖</button>
+                </div>
+                <!-- Dropdown de autocompletado inteligente -->
+                <div id="dropdownBuscarVentasProd" style="display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); background:#0f172a; border:1px solid #38bdf8; border-radius:8px; max-height:260px; overflow-y:auto; z-index:1000; box-shadow:0 10px 25px rgba(0,0,0,0.6);"></div>
+              </div>
+            </div>
+
+            <!-- Resumen de Métricas Financieras (KPIs) -->
+            <div class="inventory-metrics-banner" id="ventasMetricsBanner" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:16px;">
+              <div class="inv-metric-chip" style="background:#1e293b; border-left:4px solid #38bdf8; padding:12px 16px; border-radius:8px;">
+                <span style="color:#94a3b8; font-size:0.8rem; display:block;">Unidades Vendidas:</span>
+                <strong id="kpiVentasTotalUnidades" style="font-size:1.4rem; color:#fff;">0</strong>
+              </div>
+              <div class="inv-metric-chip" style="background:#1e293b; border-left:4px solid #10b981; padding:12px 16px; border-radius:8px;">
+                <span style="color:#94a3b8; font-size:0.8rem; display:block;">Ingresos Totales (₡):</span>
+                <strong id="kpiVentasTotalIngresos" style="font-size:1.4rem; color:#10b981;">₡0</strong>
+              </div>
+              <div class="inv-metric-chip" style="background:#1e293b; border-left:4px solid #f59e0b; padding:12px 16px; border-radius:8px;">
+                <span style="color:#94a3b8; font-size:0.8rem; display:block;">Costo Insumos Estimado:</span>
+                <strong id="kpiVentasTotalCosto" style="font-size:1.4rem; color:#f59e0b;">₡0</strong>
+              </div>
+              <div class="inv-metric-chip" style="background:#1e293b; border-left:4px solid #8b5cf6; padding:12px 16px; border-radius:8px;">
+                <span style="color:#94a3b8; font-size:0.8rem; display:block;">Margen de Ganancia Bruta:</span>
+                <strong id="kpiVentasMargenPct" style="font-size:1.4rem; color:#c084fc;">0%</strong>
+              </div>
+            </div>
+
+            <!-- Tabla General de Productos Vendidos -->
+            <div class="inventory-table-container">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span id="lblContadorVentasProductos" style="font-size:0.85rem; color:#94a3b8; font-weight:600;">Mostrando 0 productos</span>
+                <span style="font-size:0.8rem; color:#64748b;">💡 Haz clic en "🔍 Ver Insumos" para examinar el escandallo e insumos consumidos</span>
+              </div>
+              <table class="inventory-table" id="tablaVentasProductos">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th style="text-align:center;">Unidades</th>
+                    <th style="text-align:right;">Precio Actual</th>
+                    <th style="text-align:right;">Total Ingresos</th>
+                    <th style="text-align:right;">Costo Insumos</th>
+                    <th style="text-align:center;">Margen %</th>
+                    <th style="text-align:center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyVentasProductos">
+                  <!-- Filas dinámicas -->
                 </tbody>
               </table>
             </div>
@@ -3631,10 +3787,67 @@
     </div>
   </div>
 
+  <!-- MODAL: DETALLE DE INSUMOS KÁRDEX CONSUMIDOS POR PRODUCTO -->
+  <div class="modal-backdrop" id="modalDetalleInsumosVentas" style="display:none; z-index: 100030;">
+    <div class="modal-card" style="max-width: 780px; width:95%; background:#0f172a; border:1px solid #38bdf8; box-shadow:0 20px 40px rgba(0,0,0,0.8); border-radius:14px; overflow:hidden; padding:20px;">
+      <div class="modal-header" style="border-bottom: 1px solid #334155; padding-bottom:12px; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h3 id="lblTituloDetalleInsumos" style="margin:0; color:#fff; font-size:1.2rem; display:flex; align-items:center; gap:8px;">
+            📦 Insumos & Receta Consumida
+          </h3>
+          <p id="lblSubtituloDetalleInsumos" style="margin:4px 0 0; font-size:0.85rem; color:#94a3b8;"></p>
+        </div>
+        <button class="btn-close-modal" onclick="cerrarModalDetalleInsumos()" style="background:none; border:none; color:#94a3b8; font-size:1.4rem; cursor:pointer;">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px 0; max-height:65vh; overflow-y:auto;">
+        <div id="boxKpisProductoSeleccionado" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:16px;"></div>
+        <h4 style="margin:12px 0 8px; color:#38bdf8; font-size:0.95rem;">📜 Materias Primas / Insumos Descontados en Kárdex:</h4>
+        <div class="table-responsive">
+          <table class="inventory-table" id="tablaInsumosDesglosados" style="width:100%;">
+            <thead>
+              <tr>
+                <th>Insumo</th>
+                <th style="text-align:right;">Por Unidad</th>
+                <th style="text-align:right;">Total Consumido</th>
+                <th style="text-align:right;">Costo Unitario</th>
+                <th style="text-align:right;">Costo Acumulado</th>
+                <th style="text-align:center;">Stock Restante</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyInsumosDesglosados"></tbody>
+          </table>
+        </div>
+        <div id="boxHistorialVentasRecientes" style="margin-top:20px; display:none;">
+          <h4 style="margin:12px 0 8px; color:#cbd5e1; font-size:0.95rem;">🕒 Transacciones en el Período:</h4>
+          <div class="table-responsive" style="max-height:180px; overflow-y:auto;">
+            <table class="inventory-table" style="width:100%; font-size:0.82rem;">
+              <thead>
+                <tr>
+                  <th>Fecha/Hora</th>
+                  <th>Orden</th>
+                  <th>Mesa</th>
+                  <th>Mesero</th>
+                  <th style="text-align:center;">Cant.</th>
+                  <th style="text-align:right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyHistorialVentasProd"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid #334155; padding-top:14px; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-sec" onclick="cerrarModalDetalleInsumos()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
+  <script src="app.js?v=2.9.4"></script>
   <script src="app.js?v=2.9.5"></script>
+  <script src="app.js?v=2.9.6"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

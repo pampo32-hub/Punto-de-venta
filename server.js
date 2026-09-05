@@ -4362,6 +4362,201 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
   }
 });
 
+// --- REPORTE DE VENTAS POR PERÍODO & CONSUMO DE INSUMOS EN KÁRDEX ---
+app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res) => {
+  try {
+    let { desde, hasta, producto_id, categoria_id, negocio_id } = req.query;
+
+    const ahora = new Date();
+    if (!desde) {
+      const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0);
+      desde = inicioMes.toISOString();
+    } else if (desde.length === 10) {
+      desde = `${desde}T00:00:00.000Z`;
+    }
+
+    if (!hasta) {
+      hasta = ahora.toISOString();
+    } else if (hasta.length === 10) {
+      hasta = `${hasta}T23:59:59.999Z`;
+    }
+
+    let sqlVentas = `
+      SELECT 
+        d.producto_id,
+        COALESCE(p.nombre, d.nombre_producto) AS producto_nombre,
+        p.categoria_id,
+        c.nombre AS categoria_nombre,
+        c.icono AS categoria_icono,
+        p.imagen_url,
+        p.precio AS precio_actual,
+        SUM(d.cantidad) AS cantidad_vendida,
+        SUM(d.subtotal) AS total_ingresos,
+        COUNT(DISTINCT d.orden_id) AS total_ordenes,
+        AVG(d.precio_unitario) AS precio_promedio
+      FROM DetalleOrden d
+      JOIN Ordenes o ON d.orden_id = o.id
+      LEFT JOIN Productos p ON d.producto_id = p.id
+      LEFT JOIN Categorias c ON p.categoria_id = c.id
+      WHERE o.estado = 'pagada'
+        AND d.estado_comanda != 'anulado'
+        AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
+        AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
+    `;
+    const paramsVentas = [desde, hasta];
+
+    if (producto_id) {
+      sqlVentas += ' AND d.producto_id = ?';
+      paramsVentas.push(Number(producto_id));
+    }
+    if (categoria_id && categoria_id !== 'todas') {
+      sqlVentas += ' AND p.categoria_id = ?';
+      paramsVentas.push(Number(categoria_id));
+    }
+
+    sqlVentas += ' GROUP BY d.producto_id ORDER BY total_ingresos DESC';
+
+    const ventasRows = await dbAll(sqlVentas, paramsVentas);
+
+    const insumosGlobalesMap = new Map();
+    let totalUnidadesVendidas = 0;
+    let totalIngresosBrutos = 0;
+    let totalCostoInsumos = 0;
+
+    const productosDetallados = [];
+
+    for (const fila of ventasRows) {
+      const pId = fila.producto_id;
+      const cantVendida = Number(fila.cantidad_vendida) || 0;
+      const totalIngreso = Number(fila.total_ingresos) || 0;
+
+      totalUnidadesVendidas += cantVendida;
+      totalIngresosBrutos += totalIngreso;
+
+      const insumosProducto = [];
+      let costoInsumosProducto = 0;
+
+      // 1. Receta explícita en InventarioRecetas
+      const recetas = await dbAll(`
+        SELECT r.insumo_id, r.cantidad, r.merma_porcentaje,
+               i.nombre AS insumo_nombre, i.unidad_medida, i.costo_unitario, i.stock_actual, i.es_licor
+        FROM InventarioRecetas r
+        JOIN Inventario i ON r.insumo_id = i.id
+        WHERE r.producto_id = ?
+      `, [pId]);
+
+      if (recetas && recetas.length > 0) {
+        for (const r of recetas) {
+          const factorMerma = 1 + ((Number(r.merma_porcentaje) || 0) / 100);
+          const cantidadPorUnidad = Number(r.cantidad) || 0;
+          const cantidadTotalConsumida = Math.round(cantidadPorUnidad * factorMerma * cantVendida * 1000) / 1000;
+          const costoUnit = Number(r.costo_unitario) || 0;
+          const costoTotalInsumo = Math.round(cantidadTotalConsumida * costoUnit);
+
+          costoInsumosProducto += costoTotalInsumo;
+
+          const insumoObj = {
+            insumo_id: r.insumo_id,
+            nombre: r.insumo_nombre,
+            unidad_medida: r.unidad_medida,
+            cantidad_por_unidad: cantidadPorUnidad,
+            cantidad_total_consumida: cantidadTotalConsumida,
+            costo_unitario: costoUnit,
+            costo_total: costoTotalInsumo,
+            stock_actual: r.stock_actual
+          };
+          insumosProducto.push(insumoObj);
+
+          if (!insumosGlobalesMap.has(r.insumo_id)) {
+            insumosGlobalesMap.set(r.insumo_id, {
+              insumo_id: r.insumo_id,
+              nombre: r.insumo_nombre,
+              unidad_medida: r.unidad_medida,
+              costo_unitario: costoUnit,
+              stock_actual: r.stock_actual,
+              cantidad_total_consumida: 0,
+              costo_total: 0
+            });
+          }
+          const g = insumosGlobalesMap.get(r.insumo_id);
+          g.cantidad_total_consumida = Math.round((g.cantidad_total_consumida + cantidadTotalConsumida) * 1000) / 1000;
+          g.costo_total += costoTotalInsumo;
+        }
+      }
+
+      totalCostoInsumos += costoInsumosProducto;
+      const gananciaBruta = totalIngreso - costoInsumosProducto;
+      const margenPct = totalIngreso > 0 ? Math.round((gananciaBruta / totalIngreso) * 1000) / 10 : 0;
+
+      let historialVentas = [];
+      if (producto_id) {
+        historialVentas = await dbAll(`
+          SELECT 
+            d.id,
+            d.orden_id,
+            o.numero_orden,
+            o.mesa_id,
+            m.numero AS mesa_numero,
+            o.cliente,
+            o.mesero,
+            d.cantidad,
+            d.precio_unitario,
+            d.subtotal,
+            COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) AS fecha_hora
+          FROM DetalleOrden d
+          JOIN Ordenes o ON d.orden_id = o.id
+          LEFT JOIN Mesas m ON o.mesa_id = m.id
+          WHERE d.producto_id = ?
+            AND o.estado = 'pagada'
+            AND d.estado_comanda != 'anulado'
+            AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
+            AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
+          ORDER BY fecha_hora DESC
+          LIMIT 100
+        `, [Number(producto_id), desde, hasta]);
+      }
+
+      productosDetallados.push({
+        producto_id: fila.producto_id,
+        producto_nombre: fila.producto_nombre,
+        categoria_id: fila.categoria_id,
+        categoria_nombre: fila.categoria_nombre || 'Sin categoría',
+        categoria_icono: fila.categoria_icono || '🍽️',
+        imagen_url: fila.imagen_url,
+        precio_actual: Number(fila.precio_actual) || Number(fila.precio_promedio) || 0,
+        precio_promedio: Math.round((Number(fila.precio_promedio) || 0) * 100) / 100,
+        cantidad_vendida: cantVendida,
+        total_ingresos: totalIngreso,
+        total_ordenes: Number(fila.total_ordenes) || 1,
+        costo_insumos_total: costoInsumosProducto,
+        ganancia_bruta: gananciaBruta,
+        margen_bruto_pct: margenPct,
+        insumos_requeridos: insumosProducto,
+        historial_ventas: historialVentas
+      });
+    }
+
+    const gananciaTotal = totalIngresosBrutos - totalCostoInsumos;
+    const margenGlobalPct = totalIngresosBrutos > 0 ? Math.round((gananciaTotal / totalIngresosBrutos) * 1000) / 10 : 0;
+
+    res.json({
+      periodo: { desde, hasta },
+      resumen: {
+        total_productos_distintos: productosDetallados.length,
+        total_unidades_vendidas: totalUnidadesVendidas,
+        total_ingresos: totalIngresosBrutos,
+        total_costo_insumos: totalCostoInsumos,
+        ganancia_bruta: gananciaTotal,
+        margen_bruto_promedio_pct: margenGlobalPct
+      },
+      productos: productosDetallados,
+      insumos_consumidos: Array.from(insumosGlobalesMap.values()).sort((a, b) => b.costo_total - a.costo_total)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- AUDITORÍA ---
 app.get('/api/admin/auditoria', verificarAdmin, async (req, res) => {
   try {

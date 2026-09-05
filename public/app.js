@@ -545,6 +545,7 @@ window.abrirModalNuevoProducto = async function() {
   // Asegurar que inventario esté cargado para los selectores de Kárdex
   if (!estado.inventario || !estado.inventario.length) {
     try {
+      const resInv = await fetch('/api/admin/inventario');
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
       const resInv = await fetch('/api/admin/inventario', {
         headers: { 'x-user-rol': userRol }
@@ -638,6 +639,7 @@ window.abrirModalEditarProducto = async function(prodId) {
   // Asegurar inventario en estado
   if (!estado.inventario || !estado.inventario.length) {
     try {
+      const resInv = await fetch('/api/admin/inventario');
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
       const resInv = await fetch('/api/admin/inventario', {
         headers: { 'x-user-rol': userRol }
@@ -792,11 +794,27 @@ window.guardarNuevoProducto = async function() {
   const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
   // Datos Kárdex
+  const kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   let kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
   let insumo_id = null;
   let ml_shot = 30;
   let cantidad_descuento = 1;
 
+  if (kardex_tipo === 'shot') {
+    insumo_id = document.getElementById('selectKardexBotella')?.value;
+    ml_shot = parseFloat(document.getElementById('txtKardexShotMl')?.value) || 30;
+    if (!insumo_id) {
+      alert('Por favor selecciona la botella del Kárdex de la cual se descontarán los shots.');
+      return;
+    }
+  } else if (kardex_tipo === 'unidad') {
+    insumo_id = document.getElementById('selectKardexInsumoUnidad')?.value;
+    cantidad_descuento = 1;
+    if (!insumo_id) {
+      alert('Por favor selecciona el insumo del Kárdex que se descontará por unidad.');
+      return;
+    }
+  }
   const chkAuto = document.getElementById('chkConvertirEnInsumo');
   const crearComoInsumo = chkAuto && chkAuto.checked && !isEditing;
 
@@ -804,6 +822,9 @@ window.guardarNuevoProducto = async function() {
   const txtCosto = document.getElementById('txtKardexInsumoCosto');
   const txtMin = document.getElementById('txtKardexInsumoMin');
 
+  const insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
+  const insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
+  const insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
   let insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
   let insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
   let insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
@@ -891,6 +912,7 @@ window.guardarNuevoProducto = async function() {
   try {
     const url = isEditing ? `/api/productos/${prodId}` : '/api/productos';
     const method = isEditing ? 'PUT' : 'POST';
+    const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
     const res = await fetch(url, {
       method,
@@ -7998,6 +8020,11 @@ window.cambiarSubTabInventario = function(tab) {
     const panel = document.getElementById('invPanelCompras');
     if (panel) panel.style.display = 'block';
     cargarSugerenciaCompras();
+  } else if (tab === 'ventas') {
+    document.getElementById('tabBtnInvVentas')?.classList.add('active');
+    const panel = document.getElementById('invPanelVentas');
+    if (panel) panel.style.display = 'block';
+    inicializarModuloVentasInventario();
   }
 };
 
@@ -8206,6 +8233,7 @@ function filtrarTablaInventario() {
 // Modales de Inventario
 let tipoAjusteActivo = 'entrada';
 
+window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
 window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
@@ -9533,6 +9561,751 @@ window.imprimirListaCompras = function() {
     return;
   }
   window.print();
+};
+
+// =====================================================================
+// 2.5 MÓDULO DE ANÁLISIS DE VENTAS DE PRODUCTOS POR PERÍODO & KÁRDEX
+// =====================================================================
+window.reporteVentasActual = null;
+window.filtroVentasPreset = 'mes';
+window.productoVentasSeleccionadoId = null;
+
+window.inicializarModuloVentasInventario = function() {
+  poblarCategoriasFiltroVentas();
+  if (!document.getElementById('txtFechaVentasDesde')?.value) {
+    seleccionarPresetFechaVentas('mes');
+  } else {
+    consultarVentasProductosServidor();
+  }
+};
+
+function poblarCategoriasFiltroVentas() {
+  const sel = document.getElementById('selectFiltroCatVentas');
+  if (!sel) return;
+  const cats = estado.categorias || [];
+  let html = '<option value="todas">🍽️ Todas las categorías</option>';
+  cats.forEach(c => {
+    html += `<option value="${c.id}">${c.icono || '🍽️'} ${escapeHtml(c.nombre)}</option>`;
+  });
+  sel.innerHTML = html;
+}
+
+window.seleccionarPresetFechaVentas = function(preset) {
+  window.filtroVentasPreset = preset;
+  document.querySelectorAll('.btn-preset-fecha').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-preset') === preset);
+  });
+
+  const now = new Date();
+  let desdeDate = new Date();
+  let hastaDate = new Date();
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const formatYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  if (preset === 'hoy') {
+    desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (preset === 'ayer') {
+    desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    hastaDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  } else if (preset === 'semana') {
+    const day = now.getDay();
+    const diff = (day === 0 ? -6 : 1) - day;
+    desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+  } else if (preset === 'mes') {
+    desdeDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (preset === '30dias') {
+    desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+  } else if (preset === 'personalizado') {
+    return;
+  }
+
+  const inputDesde = document.getElementById('txtFechaVentasDesde');
+  const inputHasta = document.getElementById('txtFechaVentasHasta');
+  if (inputDesde) inputDesde.value = formatYMD(desdeDate);
+  if (inputHasta) inputHasta.value = formatYMD(hastaDate);
+
+  consultarVentasProductosServidor();
+};
+
+window.activarRangoPersonalizadoVentas = function() {
+  window.filtroVentasPreset = 'personalizado';
+  document.querySelectorAll('.btn-preset-fecha').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-preset') === 'personalizado');
+  });
+};
+
+window.consultarVentasProductosServidor = async function(productoId = null) {
+  try {
+    const inputDesde = document.getElementById('txtFechaVentasDesde');
+    const inputHasta = document.getElementById('txtFechaVentasHasta');
+    const selCat = document.getElementById('selectFiltroCatVentas');
+
+    const desde = inputDesde ? inputDesde.value : '';
+    const hasta = inputHasta ? inputHasta.value : '';
+    const catId = selCat ? selCat.value : 'todas';
+
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+
+    let url = `/api/admin/reportes/ventas-productos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`;
+    if (catId && catId !== 'todas') url += `&categoria_id=${encodeURIComponent(catId)}`;
+    if (productoId) url += `&producto_id=${encodeURIComponent(productoId)}`;
+
+    const tbody = document.getElementById('tbodyVentasProductos');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#38bdf8;">⏳ Consultando base de datos de ventas e insumos...</td></tr>';
+    }
+
+    const res = await fetch(url, { headers: { 'x-user-rol': rol } });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Error al consultar reporte de ventas');
+    }
+
+    const data = await res.json();
+    window.reporteVentasActual = data;
+
+    actualizarKpisVentas(data.resumen);
+    renderizarTablaVentasProductos(data.productos || []);
+
+  } catch (err) {
+    console.error('Error al consultar ventas:', err);
+    const tbody = document.getElementById('tbodyVentasProductos');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#ef4444;">❌ ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+};
+
+function actualizarKpisVentas(resumen = {}) {
+  const elUnidades = document.getElementById('kpiVentasTotalUnidades');
+  const elIngresos = document.getElementById('kpiVentasTotalIngresos');
+  const elCosto = document.getElementById('kpiVentasTotalCosto');
+  const elMargen = document.getElementById('kpiVentasMargenPct');
+
+  if (elUnidades) elUnidades.textContent = (resumen.total_unidades_vendidas || 0).toLocaleString();
+  if (elIngresos) elIngresos.textContent = typeof formatCRC === 'function' ? formatCRC(resumen.total_ingresos || 0) : `₡${(resumen.total_ingresos || 0).toLocaleString()}`;
+  if (elCosto) elCosto.textContent = typeof formatCRC === 'function' ? formatCRC(resumen.total_costo_insumos || 0) : `₡${(resumen.total_costo_insumos || 0).toLocaleString()}`;
+  if (elMargen) {
+    const pct = resumen.margen_bruto_promedio_pct || 0;
+    elMargen.textContent = `${pct}%`;
+    elMargen.style.color = pct >= 65 ? '#10b981' : (pct >= 45 ? '#f59e0b' : '#ef4444');
+  }
+}
+
+window.renderizarTablaVentasProductos = function(productos = []) {
+  const tbody = document.getElementById('tbodyVentasProductos');
+  const lblContador = document.getElementById('lblContadorVentasProductos');
+  if (!tbody) return;
+
+  if (lblContador) {
+    lblContador.textContent = `Mostrando ${productos.length} producto${productos.length === 1 ? '' : 's'}`;
+  }
+
+  tbody.innerHTML = '';
+
+  if (!productos || !productos.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px; color:#94a3b8; font-weight:600;">No se registraron ventas de productos en el período seleccionado.</td></tr>';
+    return;
+  }
+
+  productos.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.onclick = (e) => {
+      if (!e.target.closest('button')) {
+        abrirModalDetalleInsumos(p.producto_id);
+      }
+    };
+
+    const margenColor = p.margen_bruto_pct >= 65 ? '#10b981' : (p.margen_bruto_pct >= 45 ? '#f59e0b' : '#ef4444');
+    const badgeBg = p.margen_bruto_pct >= 65 ? 'rgba(16, 185, 129, 0.15)' : (p.margen_bruto_pct >= 45 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)');
+
+    tr.innerHTML = `
+      <td>
+        <div style="display:flex; align-items:center; gap:10px;">
+          ${p.imagen_url ? `<img src="${escapeHtml(p.imagen_url)}" alt="" style="width:36px; height:36px; object-fit:cover; border-radius:6px; border:1px solid #334155;">` : `<div style="width:36px; height:36px; border-radius:6px; background:#1e293b; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">${p.categoria_icono || '🍽️'}</div>`}
+          <div>
+            <strong style="color:#fff; font-size:0.95rem;">${escapeHtml(p.producto_nombre)}</strong>
+            <small style="color:#64748b; display:block;">En ${p.total_ordenes} orden${p.total_ordenes === 1 ? '' : 'es'}</small>
+          </div>
+        </div>
+      </td>
+      <td>
+        <span style="background:#1e293b; color:#94a3b8; padding:4px 8px; border-radius:6px; font-size:0.8rem; border:1px solid #334155;">
+          ${p.categoria_icono || '🍽️'} ${escapeHtml(p.categoria_nombre)}
+        </span>
+      </td>
+      <td style="text-align:center;">
+        <span style="font-weight:800; font-size:1.1rem; color:#fff;">${p.cantidad_vendida}</span>
+      </td>
+      <td style="text-align:right; color:#cbd5e1; font-weight:600;">
+        ${typeof formatCRC === 'function' ? formatCRC(p.precio_actual) : `₡${p.precio_actual.toLocaleString()}`}
+      </td>
+      <td style="text-align:right; color:#10b981; font-weight:800; font-size:1rem;">
+        ${typeof formatCRC === 'function' ? formatCRC(p.total_ingresos) : `₡${p.total_ingresos.toLocaleString()}`}
+      </td>
+      <td style="text-align:right; color:#f59e0b; font-weight:700;">
+        ${typeof formatCRC === 'function' ? formatCRC(p.costo_insumos_total) : `₡${p.costo_insumos_total.toLocaleString()}`}
+      </td>
+      <td style="text-align:center;">
+        <span style="background:${badgeBg}; color:${margenColor}; border:1px solid ${margenColor}; padding:3px 8px; border-radius:12px; font-weight:800; font-size:0.85rem;">
+          ${p.margen_bruto_pct}%
+        </span>
+      </td>
+      <td style="text-align:center;">
+        <button class="btn-tool" style="background:#1e1b4b; border-color:#6366f1; color:#c7d2fe; padding:4px 10px; font-size:0.8rem; font-weight:700;" onclick="abrirModalDetalleInsumos(${p.producto_id})">
+          🔍 Ver Insumos
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+};
+
+// Buscador Inteligente
+window.onInputBuscarVentaProd = function() {
+  const input = document.getElementById('txtBuscarVentaProd');
+  const btnLimpiar = document.getElementById('btnLimpiarBuscarVenta');
+  const dropdown = document.getElementById('dropdownBuscarVentasProd');
+  if (!input) return;
+
+  const q = input.value.trim().toLowerCase();
+  if (btnLimpiar) btnLimpiar.style.display = q ? 'block' : 'none';
+
+  if (!q) {
+    if (dropdown) dropdown.style.display = 'none';
+    aplicarFiltroLocalVentas();
+    return;
+  }
+
+  const productosReporte = (window.reporteVentasActual && window.reporteVentasActual.productos) ? window.reporteVentasActual.productos : [];
+  const catalogoMenu = estado.productos || [];
+
+  const sugerencias = [];
+  const idsVistos = new Set();
+
+  productosReporte.forEach(p => {
+    if (p.producto_nombre.toLowerCase().includes(q) || (p.categoria_nombre && p.categoria_nombre.toLowerCase().includes(q))) {
+      sugerencias.push({
+        id: p.producto_id,
+        nombre: p.producto_nombre,
+        categoria: p.categoria_nombre,
+        icono: p.categoria_icono || '🍽️',
+        precio: p.precio_actual,
+        vendidas: p.cantidad_vendida,
+        ingresos: p.total_ingresos,
+        imagen_url: p.imagen_url
+      });
+      idsVistos.add(p.producto_id);
+    }
+  });
+
+  catalogoMenu.forEach(p => {
+    if (!idsVistos.has(p.id) && p.nombre.toLowerCase().includes(q)) {
+      sugerencias.push({
+        id: p.id,
+        nombre: p.nombre,
+        categoria: 'Catálogo General',
+        icono: '🍽️',
+        precio: p.precio,
+        vendidas: 0,
+        ingresos: 0,
+        imagen_url: p.imagen_url
+      });
+    }
+  });
+
+  if (dropdown) {
+    if (!sugerencias.length) {
+      dropdown.innerHTML = '<div style="padding:12px; color:#94a3b8; font-size:0.85rem; text-align:center;">No se encontraron productos coincidentes.</div>';
+      dropdown.style.display = 'block';
+    } else {
+      dropdown.innerHTML = sugerencias.slice(0, 8).map(s => `
+        <div class="item-sug-venta" onclick="seleccionarProductoDesdeBuscador(${s.id}, '${escapeHtml(s.nombre).replace(/'/g, "\\'")}')">
+          ${s.imagen_url ? `<img src="${escapeHtml(s.imagen_url)}" style="width:32px; height:32px; object-fit:cover; border-radius:4px;">` : `<div style="width:32px; height:32px; background:#1e293b; border-radius:4px; display:flex; align-items:center; justify-content:center;">${s.icono}</div>`}
+          <div style="flex:1;">
+            <strong style="color:#fff; font-size:0.9rem; display:block;">${escapeHtml(s.nombre)}</strong>
+            <small style="color:#64748b;">${escapeHtml(s.categoria)} • ₡${s.precio.toLocaleString()}</small>
+          </div>
+          <div style="text-align:right;">
+            <strong style="color:#38bdf8; font-size:0.85rem;">${s.vendidas} vendidos</strong>
+            <small style="display:block; color:#10b981;">₡${s.ingresos.toLocaleString()}</small>
+          </div>
+        </div>
+      `).join('');
+      dropdown.style.display = 'block';
+    }
+  }
+
+  aplicarFiltroLocalVentas();
+};
+
+window.seleccionarProductoDesdeBuscador = function(productoId, productoNombre) {
+  const input = document.getElementById('txtBuscarVentaProd');
+  const dropdown = document.getElementById('dropdownBuscarVentasProd');
+  if (input) input.value = productoNombre;
+  if (dropdown) dropdown.style.display = 'none';
+
+  const prods = (window.reporteVentasActual && window.reporteVentasActual.productos) ? window.reporteVentasActual.productos : [];
+  const match = prods.find(p => p.producto_id === productoId);
+  if (match) {
+    renderizarTablaVentasProductos([match]);
+    abrirModalDetalleInsumos(productoId);
+  } else {
+    consultarVentasProductosServidor(productoId);
+  }
+};
+
+window.limpiarBuscadorVentaProd = function() {
+  const input = document.getElementById('txtBuscarVentaProd');
+  const btnLimpiar = document.getElementById('btnLimpiarBuscarVenta');
+  const dropdown = document.getElementById('dropdownBuscarVentasProd');
+  if (input) input.value = '';
+  if (btnLimpiar) btnLimpiar.style.display = 'none';
+  if (dropdown) dropdown.style.display = 'none';
+  aplicarFiltroLocalVentas();
+};
+
+window.aplicarFiltroLocalVentas = function() {
+  if (!window.reporteVentasActual || !window.reporteVentasActual.productos) return;
+
+  const q = (document.getElementById('txtBuscarVentaProd')?.value || '').trim().toLowerCase();
+  const cat = document.getElementById('selectFiltroCatVentas')?.value || 'todas';
+
+  const filtrados = window.reporteVentasActual.productos.filter(p => {
+    const matchQ = !q || p.producto_nombre.toLowerCase().includes(q) || (p.categoria_nombre && p.categoria_nombre.toLowerCase().includes(q));
+    const matchCat = cat === 'todas' || String(p.categoria_id) === String(cat);
+    return matchQ && matchCat;
+  });
+
+  renderizarTablaVentasProductos(filtrados);
+};
+
+// Modal de Insumos Kárdex Consumidos
+window.abrirModalDetalleInsumos = async function(productoId) {
+  const modal = document.getElementById('modalDetalleInsumosVentas');
+  if (!modal) return;
+
+  let prod = (window.reporteVentasActual && window.reporteVentasActual.productos) ? 
+    window.reporteVentasActual.productos.find(p => p.producto_id === productoId) : null;
+
+  if (!prod) {
+    try {
+      const inputDesde = document.getElementById('txtFechaVentasDesde')?.value || '';
+      const inputHasta = document.getElementById('txtFechaVentasHasta')?.value || '';
+      const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+      const r = await fetch(`/api/admin/reportes/ventas-productos?producto_id=${productoId}&desde=${encodeURIComponent(inputDesde)}&hasta=${encodeURIComponent(inputHasta)}`, {
+        headers: { 'x-user-rol': rol }
+      });
+      const d = await r.json();
+      if (d.productos && d.productos.length) prod = d.productos[0];
+    } catch(e) {}
+  }
+
+  if (!prod) {
+    alert('No se encontraron datos de ventas para este producto en el período.');
+    return;
+  }
+
+  document.getElementById('lblTituloDetalleInsumos').innerHTML = `📦 ${escapeHtml(prod.producto_nombre)}`;
+  document.getElementById('lblSubtituloDetalleInsumos').textContent = `Categoría: ${prod.categoria_nombre} • Precio: ₡${prod.precio_actual.toLocaleString()}`;
+
+  const boxKpis = document.getElementById('boxKpisProductoSeleccionado');
+  if (boxKpis) {
+    boxKpis.innerHTML = `
+      <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #38bdf8;">
+        <span style="font-size:0.75rem; color:#94a3b8; display:block;">Unidades:</span>
+        <strong style="color:#fff; font-size:1.15rem;">${prod.cantidad_vendida}</strong>
+      </div>
+      <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #10b981;">
+        <span style="font-size:0.75rem; color:#94a3b8; display:block;">Ingresos:</span>
+        <strong style="color:#10b981; font-size:1.15rem;">₡${prod.total_ingresos.toLocaleString()}</strong>
+      </div>
+      <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #f59e0b;">
+        <span style="font-size:0.75rem; color:#94a3b8; display:block;">Costo Insumos:</span>
+        <strong style="color:#f59e0b; font-size:1.15rem;">₡${prod.costo_insumos_total.toLocaleString()}</strong>
+      </div>
+      <div style="background:#1e293b; padding:8px 12px; border-radius:8px; border-left:3px solid #c084fc;">
+        <span style="font-size:0.75rem; color:#94a3b8; display:block;">Margen Bruto:</span>
+        <strong style="color:#c084fc; font-size:1.15rem;">${prod.margen_bruto_pct}%</strong>
+      </div>
+    `;
+  }
+
+  const tbodyInsumos = document.getElementById('tbodyInsumosDesglosados');
+  if (tbodyInsumos) {
+    tbodyInsumos.innerHTML = '';
+    const ins = prod.insumos_requeridos || [];
+    if (!ins.length) {
+      tbodyInsumos.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#94a3b8;">Este producto no tiene escandallos ni insumos ligados en Kárdex.</td></tr>';
+    } else {
+      ins.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(item.nombre)}</strong></td>
+          <td style="text-align:right;">${item.cantidad_por_unidad} <small style="color:#94a3b8;">${escapeHtml(item.unidad_medida)}</small></td>
+          <td style="text-align:right; font-weight:800; color:#38bdf8;">${item.cantidad_total_consumida} <small>${escapeHtml(item.unidad_medida)}</small></td>
+          <td style="text-align:right; color:#cbd5e1;">₡${item.costo_unitario.toLocaleString()}</td>
+          <td style="text-align:right; font-weight:700; color:#f59e0b;">₡${item.costo_total.toLocaleString()}</td>
+          <td style="text-align:center;">
+            <span style="color:${item.stock_actual <= 0 ? '#ef4444' : '#34d399'}; font-weight:700;">
+              ${item.stock_actual} ${escapeHtml(item.unidad_medida)}
+            </span>
+          </td>
+        `;
+        tbodyInsumos.appendChild(tr);
+      });
+    }
+  }
+
+  const boxHistorial = document.getElementById('boxHistorialVentasRecientes');
+  const tbodyHist = document.getElementById('tbodyHistorialVentasProd');
+  if (boxHistorial && tbodyHist) {
+    const hist = prod.historial_ventas || [];
+    if (hist.length) {
+      boxHistorial.style.display = 'block';
+      tbodyHist.innerHTML = hist.map(h => `
+        <tr>
+          <td>${h.fecha_hora ? new Date(h.fecha_hora).toLocaleDateString('es-CR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '-'}</td>
+          <td><strong style="color:#38bdf8;">${escapeHtml(h.numero_orden || 'ORD')}</strong></td>
+          <td>${escapeHtml(h.mesa_numero ? 'Mesa ' + h.mesa_numero : 'Barra')}</td>
+          <td>${escapeHtml(h.mesero || '-')}</td>
+          <td style="text-align:center; font-weight:700;">${h.cantidad}</td>
+          <td style="text-align:right; color:#10b981; font-weight:600;">₡${h.subtotal.toLocaleString()}</td>
+        </tr>
+      `).join('');
+    } else {
+      boxHistorial.style.display = 'none';
+    }
+  }
+
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalDetalleInsumos = function() {
+  const modal = document.getElementById('modalDetalleInsumosVentas');
+  if (modal) modal.style.display = 'none';
+};
+
+// Exportar a Excel / CSV bien estructurado
+window.exportarVentasProductosCSV = function() {
+  if (!window.reporteVentasActual || !window.reporteVentasActual.productos || !window.reporteVentasActual.productos.length) {
+    alert('No hay datos de ventas en el período seleccionado para exportar.');
+    return;
+  }
+
+  const data = window.reporteVentasActual;
+  const desde = document.getElementById('txtFechaVentasDesde')?.value || 'inicio';
+  const hasta = document.getElementById('txtFechaVentasHasta')?.value || 'fin';
+
+  const rows = [];
+  rows.push(['REPORTE DE VENTAS DE PRODUCTOS Y CONSUMO EN KARDEX']);
+  rows.push(['Negocio', 'GastroBar Fuego & Brasas']);
+  rows.push(['Periodo Desde', desde]);
+  rows.push(['Periodo Hasta', hasta]);
+  rows.push(['Fecha de Generacion', new Date().toLocaleString('es-CR')]);
+  rows.push([]);
+  rows.push(['RESUMEN GERENCIAL']);
+  rows.push(['Total Productos Distintos', data.resumen.total_productos_distintos]);
+  rows.push(['Total Unidades Vendidas', data.resumen.total_unidades_vendidas]);
+  rows.push(['Total Ingresos Facturados (CRC)', data.resumen.total_ingresos]);
+  rows.push(['Total Costo Insumos Estimado (CRC)', data.resumen.total_costo_insumos]);
+  rows.push(['Ganancia Bruta Estimada (CRC)', data.resumen.ganancia_bruta]);
+  rows.push(['Margen Bruto General (%)', `${data.resumen.margen_bruto_promedio_pct}%`]);
+  rows.push([]);
+  rows.push([
+    'ID Producto',
+    'Producto',
+    'Categoria',
+    'Unidades Vendidas',
+    'Precio Unitario Actual (CRC)',
+    'Total Ingresos (CRC)',
+    'Costo Insumos (CRC)',
+    'Margen Bruto (%)',
+    'Ordenes Distintas',
+    'Insumos y Receta Asociada'
+  ]);
+
+  data.productos.forEach(p => {
+    const insumoStr = (p.insumos_requeridos || []).map(i => `${i.nombre} (${i.cantidad_total_consumida} ${i.unidad_medida} = CRC ${i.costo_total})`).join('; ');
+    rows.push([
+      p.producto_id,
+      `"${(p.producto_nombre || '').replace(/"/g, '""')}"`,
+      `"${(p.categoria_nombre || '').replace(/"/g, '""')}"`,
+      p.cantidad_vendida,
+      p.precio_actual,
+      p.total_ingresos,
+      p.costo_insumos_total,
+      `${p.margen_bruto_pct}%`,
+      p.total_ordenes,
+      `"${insumoStr.replace(/"/g, '""')}"`
+    ]);
+  });
+
+  if (data.insumos_consumidos && data.insumos_consumidos.length) {
+    rows.push([]);
+    rows.push(['MATERIAS PRIMAS E INSUMOS GLOBALES CONSUMIDOS EN EL PERIODO']);
+    rows.push(['ID Insumo', 'Nombre Insumo', 'Unidad de Medida', 'Cantidad Consumida', 'Costo Unitario (CRC)', 'Costo Total (CRC)', 'Stock Restante']);
+    data.insumos_consumidos.forEach(ins => {
+      rows.push([
+        ins.insumo_id,
+        `"${(ins.nombre || '').replace(/"/g, '""')}"`,
+        ins.unidad_medida,
+        ins.cantidad_total_consumida,
+        ins.costo_unitario,
+        ins.costo_total,
+        ins.stock_actual
+      ]);
+    });
+  }
+
+  const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Ventas_Productos_${desde}_${hasta}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// Imprimir o Guardar como PDF con diseño profesional estilizado
+window.imprimirReporteVentasProductos = function() {
+  if (!window.reporteVentasActual || !window.reporteVentasActual.productos || !window.reporteVentasActual.productos.length) {
+    alert('No hay datos de ventas en el período seleccionado para imprimir.');
+    return;
+  }
+
+  const data = window.reporteVentasActual;
+  const desde = document.getElementById('txtFechaVentasDesde')?.value || '';
+  const hasta = document.getElementById('txtFechaVentasHasta')?.value || '';
+
+  const printWindow = window.open('', '_blank', 'width=1000,height=800');
+  if (!printWindow) {
+    alert('Por favor permite las ventanas emergentes para generar el reporte imprimible.');
+    return;
+  }
+
+  const formatMoney = (m) => '₡' + Number(m || 0).toLocaleString();
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Reporte de Ventas por Producto - GastroBar Fuego & Brasas</title>
+      <style>
+        @page { size: A4; margin: 15mm; }
+        body {
+          font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+          color: #1e293b;
+          background: #fff;
+          margin: 0;
+          padding: 20px;
+          font-size: 13px;
+        }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 2px solid #0284c7;
+          padding-bottom: 15px;
+          margin-bottom: 20px;
+        }
+        .header-brand h1 {
+          margin: 0;
+          font-size: 22px;
+          color: #0f172a;
+          letter-spacing: -0.5px;
+        }
+        .header-brand p {
+          margin: 4px 0 0;
+          color: #64748b;
+          font-size: 13px;
+        }
+        .header-meta {
+          text-align: right;
+          font-size: 12px;
+          color: #475569;
+        }
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          margin-bottom: 25px;
+        }
+        .kpi-card {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 12px 14px;
+        }
+        .kpi-card span {
+          display: block;
+          font-size: 11px;
+          color: #64748b;
+          text-transform: uppercase;
+          font-weight: 600;
+        }
+        .kpi-card strong {
+          display: block;
+          font-size: 18px;
+          color: #0f172a;
+          margin-top: 4px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 25px;
+          font-size: 12px;
+        }
+        th {
+          background: #0f172a;
+          color: #fff;
+          font-weight: 600;
+          text-align: left;
+          padding: 8px 10px;
+        }
+        td {
+          padding: 8px 10px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        tr:nth-child(even) td {
+          background: #f8fafc;
+        }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 11px;
+        }
+        .badge-green { background: #dcfce7; color: #15803d; }
+        .badge-amber { background: #fef3c7; color: #b45309; }
+        .badge-red { background: #fee2e2; color: #b91c1c; }
+        .footer {
+          border-top: 1px solid #cbd5e1;
+          padding-top: 10px;
+          font-size: 11px;
+          color: #94a3b8;
+          display: flex;
+          justify-content: space-between;
+        }
+        @media print {
+          body { padding: 0; }
+          .no-print { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="margin-bottom:15px; text-align:right;">
+        <button onclick="window.print()" style="background:#0284c7; color:#fff; border:none; padding:8px 18px; border-radius:6px; font-weight:700; cursor:pointer;">🖨️ Imprimir / Guardar como PDF</button>
+      </div>
+
+      <div class="header">
+        <div class="header-brand">
+          <h1>🔥 GastroBar Fuego & Brasas</h1>
+          <p>Informe Ejecutivo de Ventas por Producto & Consumo Kárdex</p>
+        </div>
+        <div class="header-meta">
+          <div><strong>Período:</strong> ${desde || 'Histórico'} al ${hasta || 'Hoy'}</div>
+          <div><strong>Generado:</strong> ${new Date().toLocaleString('es-CR')}</div>
+          <div><strong>Auditoría:</strong> Administrador</div>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card" style="border-left: 4px solid #0284c7;">
+          <span>Unidades Vendidas</span>
+          <strong>${(data.resumen.total_unidades_vendidas || 0).toLocaleString()}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #10b981;">
+          <span>Ingresos Facturados</span>
+          <strong style="color:#15803d;">${formatMoney(data.resumen.total_ingresos)}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #f59e0b;">
+          <span>Costo Insumos Estimado</span>
+          <strong style="color:#b45309;">${formatMoney(data.resumen.total_costo_insumos)}</strong>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #8b5cf6;">
+          <span>Margen Bruto Promedio</span>
+          <strong style="color:#7c3aed;">${data.resumen.margen_bruto_promedio_pct}%</strong>
+        </div>
+      </div>
+
+      <h3 style="margin:0 0 10px; color:#0f172a; font-size:14px;">📋 Detalle de Productos Vendidos</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th class="text-center">Cant.</th>
+            <th class="text-right">Precio Actual</th>
+            <th class="text-right">Total Facturado</th>
+            <th class="text-right">Costo Insumos</th>
+            <th class="text-center">Margen %</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.productos.map(p => {
+            const badgeClass = p.margen_bruto_pct >= 65 ? 'badge-green' : (p.margen_bruto_pct >= 45 ? 'badge-amber' : 'badge-red');
+            return `
+              <tr>
+                <td><strong>${p.producto_nombre}</strong></td>
+                <td>${p.categoria_nombre}</td>
+                <td class="text-center"><strong>${p.cantidad_vendida}</strong></td>
+                <td class="text-right">${formatMoney(p.precio_actual)}</td>
+                <td class="text-right" style="color:#15803d; font-weight:700;">${formatMoney(p.total_ingresos)}</td>
+                <td class="text-right" style="color:#b45309;">${formatMoney(p.costo_insumos_total)}</td>
+                <td class="text-center"><span class="badge ${badgeClass}">${p.margen_bruto_pct}%</span></td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+
+      ${data.insumos_consumidos && data.insumos_consumidos.length ? `
+        <h3 style="margin:25px 0 10px; color:#0f172a; font-size:14px;">📦 Materias Primas e Insumos Consumidos en Bodega (Kárdex)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Insumo</th>
+              <th class="text-right">Cantidad Consumida</th>
+              <th class="text-right">Costo Unitario</th>
+              <th class="text-right">Costo Acumulado</th>
+              <th class="text-center">Stock Remanente</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.insumos_consumidos.map(i => `
+              <tr>
+                <td><strong>${i.nombre}</strong></td>
+                <td class="text-right">${i.cantidad_total_consumida} ${i.unidad_medida}</td>
+                <td class="text-right">${formatMoney(i.costo_unitario)}</td>
+                <td class="text-right" style="font-weight:700;">${formatMoney(i.costo_total)}</td>
+                <td class="text-center">${i.stock_actual} ${i.unidad_medida}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+
+      <div class="footer">
+        <span>GastroBar POS Cloud • Sistema Integral de Restaurantes & Bares</span>
+        <span>Página 1 de 1</span>
+      </div>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
 };
 
 // 3. SISTEMA DE AUDITORÍA
