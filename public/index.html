@@ -86,7 +86,13 @@
       </div>
 
       <div class="dev-user-panel">
-        <button class="btn-pri" style="margin-right:12px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border:none; padding:8px 16px; border-radius:8px; font-weight:700; color:#fff; cursor:pointer;" onclick="irAPuntoDeVentaAdmin()">🏪 Ir a Salón / POS (Modo Admin)</button>
+        <div class="dev-negocio-selector-box" style="display:flex; align-items:center; gap:8px; margin-right:16px;">
+          <label style="color:#93c5fd; font-size:0.8rem; font-weight:700; white-space:nowrap;">🏬 Local Activo:</label>
+          <select id="devGlobalNegocioSelector" class="select-styled" onchange="cambiarNegocioActivoDev(this.value)" style="padding:6px 12px; background:#0f172a; border:1px solid #3b82f6; color:#fff; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer;">
+            <!-- Opciones cargadas dinámicamente -->
+          </select>
+        </div>
+        <button class="btn-pri" style="margin-right:12px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border:none; padding:8px 16px; border-radius:8px; font-weight:700; color:#fff; cursor:pointer;" onclick="irAPuntoDeVentaAdmin()">🏪 Abrir Punto de Venta</button>
         <span class="dev-user-name">Juan Developer (Desarrollador Global)</span>
         <button class="btn-dev-logout" onclick="cerrarSesion()">🚪 Cerrar Sesión</button>
       </div>
@@ -105,18 +111,18 @@
           💾 Monitor de Base de Datos
         </button>
         <button class="dev-nav-btn" data-dev-tab="editor-pagina" style="background: linear-gradient(135deg, rgba(168,85,247,0.22), rgba(99,102,241,0.22)); border: 1px solid #a855f7; color: #d8b4fe; font-weight: 800;">
-          🎨 Editar Página / Personalizador Total
+          🎨 Editar Página / Studio Total
         </button>
         <div style="margin:16px 0 8px; border-top:1px solid #374151; padding-top:12px; font-size:0.75rem; color:#9ca3af; font-weight:700; text-transform:uppercase;">
           ⚡ Módulos GastroBar POS
         </div>
-        <button class="dev-nav-btn" onclick="abrirModuloAdmin('metricas')">
+        <button class="dev-nav-btn" data-dev-tab="metricas">
           📊 Dashboard & Métricas
         </button>
-        <button class="dev-nav-btn" onclick="abrirModuloAdmin('inventario')">
+        <button class="dev-nav-btn" data-dev-tab="inventario">
           📦 Control de Inventario
         </button>
-        <button class="dev-nav-btn" onclick="abrirModuloAdmin('auditoria')">
+        <button class="dev-nav-btn" data-dev-tab="auditoria">
           🛡️ Bitácora de Auditoría
         </button>
         <button class="dev-nav-btn" style="background:rgba(37,99,235,0.2); border:1px solid #2563eb; color:#60a5fa; font-weight:800; margin-top:8px;" onclick="irAPuntoDeVentaAdmin()">
@@ -451,6 +457,195 @@
             </div>
           </div>
 
+        </section>
+
+        <!-- TAB 5: DASHBOARD & MÉTRICAS (DEVELOPER) -->
+        <section id="devTabMetricas" class="dev-tab-panel">
+          <div class="panel-header-action" style="margin-bottom:20px;">
+            <div>
+              <h3 style="display:flex; align-items:center; gap:8px; margin:0 0 6px;">
+                📊 Dashboard Ejecutivo & Métricas
+                <span class="kds-live-tag" style="font-size:0.75rem; background:rgba(34,197,94,0.15); color:#4ade80; border:1px solid #22c55e; padding:2px 8px; border-radius:12px;">⚡ En Vivo</span>
+              </h3>
+              <p style="margin:0; color:#94a3b8; font-size:0.9rem;" id="devMetricasSubtitulo">Visualizando métricas e indicadores de rendimiento del comercio activo.</p>
+            </div>
+            <button class="btn-pri" onclick="cargarMetricasDev()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8); display:flex; align-items:center; gap:8px;">
+              🔄 Actualizar Métricas
+            </button>
+          </div>
+
+          <!-- KPIs PRINCIPALES -->
+          <div class="kpi-cards-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+            <div class="kpi-card" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center;">
+              <div style="font-size:2rem; background:rgba(34,197,94,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">💰</div>
+              <div>
+                <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Ventas Hoy</span>
+                <strong id="devKpiVentasHoy" style="display:block; font-size:1.35rem; color:#4ade80; margin:2px 0;">₡ 0.00</strong>
+                <small id="devKpiComparativaAyer" style="font-size:0.75rem; color:#9ca3af;">vs ayer: 0%</small>
+              </div>
+            </div>
+
+            <div class="kpi-card" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center;">
+              <div style="font-size:2rem; background:rgba(59,130,246,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">🧾</div>
+              <div>
+                <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Cuentas Cobradas</span>
+                <strong id="devKpiCuentasCobradas" style="display:block; font-size:1.35rem; color:#60a5fa; margin:2px 0;">0</strong>
+                <small style="font-size:0.75rem; color:#9ca3af;">Comandas finalizadas hoy</small>
+              </div>
+            </div>
+
+            <div class="kpi-card" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center;">
+              <div style="font-size:2rem; background:rgba(234,179,8,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">🎯</div>
+              <div>
+                <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Ticket Promedio</span>
+                <strong id="devKpiTicketPromedio" style="display:block; font-size:1.35rem; color:#facc15; margin:2px 0;">₡ 0.00</strong>
+                <small style="font-size:0.75rem; color:#9ca3af;">Gasto medio por cuenta</small>
+              </div>
+            </div>
+
+            <div class="kpi-card" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:18px; display:flex; gap:16px; align-items:center;">
+              <div style="font-size:2rem; background:rgba(168,85,247,0.15); width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center;">⏱️</div>
+              <div>
+                <span style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase; font-weight:700;">Tiempo Medio Cocina</span>
+                <strong id="devKpiTiempoCocina" style="display:block; font-size:1.35rem; color:#c084fc; margin:2px 0;">0 min</strong>
+                <small style="font-size:0.75rem; color:#9ca3af;">Desde orden a servido</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- ANALYTICS DETALLADOS (2 COLUMNAS) -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px;">
+            <!-- COLUMNA 1: TOP PRODUCTOS & HORAS PICO -->
+            <div style="display:flex; flex-direction:column; gap:20px;">
+              <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px;">
+                <h4 style="margin:0 0 16px; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+                  🏆 Top 5 Productos Más Vendidos
+                </h4>
+                <div id="devTopSellersContainer" style="display:flex; flex-direction:column; gap:10px;">
+                  <!-- Lista de productos top -->
+                </div>
+              </div>
+
+              <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px;">
+                <h4 style="margin:0 0 16px; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+                  📈 Ventas por Hora (Distribución)
+                </h4>
+                <div id="devPeakHoursContainer" style="display:flex; gap:6px; align-items:flex-end; height:120px; padding-top:10px; border-bottom:1px solid #374151;">
+                  <!-- Barras dinámicas -->
+                </div>
+              </div>
+            </div>
+
+            <!-- COLUMNA 2: RANKING MESEROS & ALERTAS STOCK -->
+            <div style="display:flex; flex-direction:column; gap:20px;">
+              <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px;">
+                <h4 style="margin:0 0 16px; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+                  👥 Rendimiento por Salonero / Mesero
+                </h4>
+                <div id="devWaitersRankingContainer" style="display:flex; flex-direction:column; gap:10px;">
+                  <!-- Lista de meseros -->
+                </div>
+              </div>
+
+              <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px;">
+                <h4 style="margin:0 0 16px; color:#f87171; display:flex; align-items:center; gap:8px;">
+                  ⚠️ Insumos en Estado Crítico / Mínimo
+                </h4>
+                <div id="devCriticalStockContainer" style="display:flex; flex-direction:column; gap:10px;">
+                  <!-- Alertas de insumos -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 6: CONTROL DE INVENTARIO (DEVELOPER) -->
+        <section id="devTabInventario" class="dev-tab-panel">
+          <div class="panel-header-action" style="margin-bottom:16px;">
+            <div>
+              <h3 style="margin:0 0 6px;">📦 Control de Inventario, Insumos & Bodega</h3>
+              <p style="margin:0; color:#94a3b8; font-size:0.9rem;" id="devInventarioSubtitulo">Audita existencias, niveles de merma y stock en tiempo real.</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <button class="btn-pri" onclick="cargarInventarioDev()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">🔄 Recargar Stock</button>
+            </div>
+          </div>
+
+          <!-- FILTROS Y BÚSQUEDA -->
+          <div style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:16px; margin-bottom:20px; display:flex; gap:16px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+            <div style="display:flex; gap:12px; flex:1; min-width:280px;">
+              <input type="text" id="devTxtBuscarInsumo" placeholder="🔍 Buscar insumo por nombre o categoría..." oninput="filtrarInventarioDev()" style="flex:1; padding:10px 14px; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#fff; font-size:0.9rem;" />
+              <select id="devSelectFiltroEstado" onchange="filtrarInventarioDev()" style="padding:10px 14px; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#fff; font-size:0.9rem;">
+                <option value="todos">Todos los Estados</option>
+                <option value="bajo">⚠️ Stock Bajo / Crítico</option>
+                <option value="agotado">🔴 Agotados (0)</option>
+                <option value="normal">🟢 Stock Adecuado</option>
+              </select>
+            </div>
+            <div style="display:flex; gap:16px; font-size:0.85rem; color:#94a3b8;">
+              <span>Total: <strong id="devInvTotalItems" style="color:#60a5fa;">0</strong> insumos</span>
+              <span>Críticos: <strong id="devInvCriticos" style="color:#f87171;">0</strong></span>
+              <span>Valor: <strong id="devInvValorTotal" style="color:#34d399;">₡ 0</strong></span>
+            </div>
+          </div>
+
+          <!-- TABLA DE INSUMOS -->
+          <div class="table-responsive" style="background:#111827; border:1px solid #1f2937; border-radius:12px; overflow:hidden;">
+            <table class="dev-table" id="devTablaInventario" style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr style="background:#1e293b; color:#cbd5e1; text-align:left; font-size:0.82rem; text-transform:uppercase;">
+                  <th style="padding:12px 16px;">Insumo</th>
+                  <th style="padding:12px 16px;">Categoría</th>
+                  <th style="padding:12px 16px;">Stock Actual</th>
+                  <th style="padding:12px 16px;">Desglose Botellas / Medidas</th>
+                  <th style="padding:12px 16px;">Costo Unitario</th>
+                  <th style="padding:12px 16px;">Mínimo</th>
+                  <th style="padding:12px 16px;">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="devTablaInventarioBody">
+                <!-- Insumos cargados -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- TAB 7: BITÁCORA DE AUDITORÍA (DEVELOPER) -->
+        <section id="devTabAuditoria" class="dev-tab-panel">
+          <div class="panel-header-action" style="margin-bottom:16px;">
+            <div>
+              <h3 style="margin:0 0 6px;">🛡️ Bitácora Inmutable de Auditoría & Seguridad</h3>
+              <p style="margin:0; color:#94a3b8; font-size:0.9rem;" id="devAuditoriaSubtitulo">Registro cronológico de movimientos sensibles, aperturas con PIN y cambios de configuración.</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="devSelectFiltroAuditoriaTipo" onchange="cargarAuditoriaDev()" style="padding:8px 12px; background:#111827; border:1px solid #374151; color:#fff; border-radius:8px; font-size:0.85rem;">
+                <option value="">Todos los Eventos</option>
+                <option value="SEGURIDAD">🛡️ Seguridad & Accesos</option>
+                <option value="INVENTARIO">📦 Inventario & Kardex</option>
+                <option value="ORDEN">🧾 Órdenes & Anulaciones</option>
+                <option value="CAJA">💰 Arqueos & Pagos</option>
+              </select>
+              <button class="btn-pri" onclick="cargarAuditoriaDev()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">🔄 Recargar</button>
+            </div>
+          </div>
+
+          <div class="table-responsive" style="background:#111827; border:1px solid #1f2937; border-radius:12px; overflow:hidden;">
+            <table class="dev-table" id="devTablaAuditoria" style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr style="background:#1e293b; color:#cbd5e1; text-align:left; font-size:0.82rem; text-transform:uppercase;">
+                  <th style="padding:12px 16px;">Fecha / Hora</th>
+                  <th style="padding:12px 16px;">Usuario</th>
+                  <th style="padding:12px 16px;">Módulo</th>
+                  <th style="padding:12px 16px;">Tipo</th>
+                  <th style="padding:12px 16px;">Acción</th>
+                  <th style="padding:12px 16px;">Detalle / Motivo</th>
+                </tr>
+              </thead>
+              <tbody id="devTablaAuditoriaBody">
+                <!-- Registros cargados -->
+              </tbody>
+            </table>
+          </div>
         </section>
 
       </main>

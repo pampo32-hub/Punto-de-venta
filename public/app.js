@@ -1683,6 +1683,10 @@ window.irAPuntoDeVentaAdmin = function() {
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
   document.body.classList.add('is-admin');
+  const perfilBadge = document.getElementById('userProfileBadge');
+  if (perfilBadge && estado.usuarioActual) {
+    perfilBadge.textContent = estado.usuarioActual.perfilVisual || `${estado.usuarioActual.nombre} (${estado.usuarioActual.rol === 'developer' ? 'Desarrollador' : estado.usuarioActual.rol})`;
+  }
   const adminTools = document.getElementById('adminExtraActions');
   if (adminTools) adminTools.style.display = 'flex';
   document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
@@ -1714,6 +1718,20 @@ window.irAPuntoDeVentaAdmin = function() {
   cargarPersonalizacionPagina(nid);
 };
 
+window._pinSupervisorActivo = null;
+
+window.obtenerHeadersAuthAdmin = function(extraHeaders = {}) {
+  const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  const headers = {
+    'x-user-rol': rol,
+    ...extraHeaders
+  };
+  if (window._pinSupervisorActivo) {
+    headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+  }
+  return headers;
+};
+
 window.abrirPanelAdmin = function() {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
@@ -1721,20 +1739,9 @@ window.abrirPanelAdmin = function() {
     const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para ingresar al panel:');
     if (!pin) return;
     if (pin.trim() === '1234' || pin.trim() === '9999') {
-      estado.usuarioActual = {
-        id: 4,
-        usuario: 'admin',
-        nombre: 'Don Alberto',
-        rol: 'admin',
-        rolEtiqueta: 'Administrador',
-        perfilVisual: 'Don Alberto (Administrador)',
-        pin: '1234',
-        negocio_id: estado.negocioActual?.id || 1
-      };
-      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
-      aplicarEnrutamientoPorRol();
+      window._pinSupervisorActivo = pin.trim();
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
       }
       setTimeout(() => {
         const modal = document.getElementById('modalPanelAdmin');
@@ -1795,20 +1802,9 @@ window.abrirModuloAdmin = function(modulo) {
     const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para acceder:');
     if (!pin) return;
     if (pin.trim() === '1234' || pin.trim() === '9999') {
-      estado.usuarioActual = {
-        id: 4,
-        usuario: 'admin',
-        nombre: 'Don Alberto',
-        rol: 'admin',
-        rolEtiqueta: 'Administrador',
-        perfilVisual: 'Don Alberto (Administrador)',
-        pin: '1234',
-        negocio_id: estado.negocioActual?.id || 1
-      };
-      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
-      aplicarEnrutamientoPorRol();
+      window._pinSupervisorActivo = pin.trim();
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
       }
     } else {
       alert('❌ PIN incorrecto.');
@@ -1877,6 +1873,7 @@ function actualizarBrandingNegocio(negocio) {
 // 2. PORTAL DE DESARROLLADOR (SAAS MULTI-COMERCIO)
 // ============================================================================
 function cargarDevPortal() {
+  poblarSelectorNegociosDev();
   cargarNegociosDev();
   cargarUsuariosDev();
 
@@ -1889,20 +1886,346 @@ function cargarDevPortal() {
 
       const target = btn.dataset.devTab;
       if (target === 'comercios') {
-        document.getElementById('devTabComercios').classList.add('active');
+        document.getElementById('devTabComercios')?.classList.add('active');
         cargarNegociosDev();
       } else if (target === 'usuarios') {
-        document.getElementById('devTabUsuarios').classList.add('active');
+        document.getElementById('devTabUsuarios')?.classList.add('active');
         cargarUsuariosDev();
       } else if (target === 'db') {
-        document.getElementById('devTabDb').classList.add('active');
+        document.getElementById('devTabDb')?.classList.add('active');
       } else if (target === 'editor-pagina') {
-        document.getElementById('devTabEditorPagina').classList.add('active');
+        document.getElementById('devTabEditorPagina')?.classList.add('active');
         cargarPersonalizacionPagina();
+      } else if (target === 'metricas') {
+        document.getElementById('devTabMetricas')?.classList.add('active');
+        cargarMetricasDev();
+      } else if (target === 'inventario') {
+        document.getElementById('devTabInventario')?.classList.add('active');
+        cargarInventarioDev();
+      } else if (target === 'auditoria') {
+        document.getElementById('devTabAuditoria')?.classList.add('active');
+        cargarAuditoriaDev();
       }
     });
   });
 }
+
+// ----------------------------------------------------------------------------
+// Módulos Integrados en Consola Developer (Multi-Negocio)
+// ----------------------------------------------------------------------------
+window._negociosDisponiblesDev = [];
+
+window.poblarSelectorNegociosDev = async function() {
+  try {
+    const res = await fetch('/api/dev/negocios');
+    const negocios = await res.json();
+    window._negociosDisponiblesDev = negocios;
+    const selector = document.getElementById('devGlobalNegocioSelector');
+    if (!selector) return;
+
+    const currentId = estado.negocioActual?.id || 1;
+    selector.innerHTML = negocios.map(n => `
+      <option value="${n.id}" ${n.id === currentId ? 'selected' : ''}>${n.nombre} (ID: ${n.id})</option>
+    `).join('');
+  } catch (e) {
+    console.error('Error poblando selector de negocios dev:', e);
+  }
+};
+
+window.cambiarNegocioActivoDev = async function(negocioId) {
+  const nid = Number(negocioId);
+  const negocios = window._negociosDisponiblesDev || [];
+  const found = negocios.find(n => n.id === nid);
+  if (found) {
+    estado.negocioActual = found;
+  } else {
+    try {
+      const res = await fetch('/api/dev/negocios');
+      const all = await res.json();
+      window._negociosDisponiblesDev = all;
+      const f = all.find(n => n.id === nid);
+      if (f) estado.negocioActual = f;
+    } catch (_) {}
+  }
+
+  const activeName = estado.negocioActual?.nombre || `Local ${nid}`;
+  const subMet = document.getElementById('devMetricasSubtitulo');
+  if (subMet) subMet.textContent = `Visualizando métricas en tiempo real de: ${activeName}`;
+  const subInv = document.getElementById('devInventarioSubtitulo');
+  if (subInv) subInv.textContent = `Auditoría de existencias y bodega de: ${activeName}`;
+  const subAud = document.getElementById('devAuditoriaSubtitulo');
+  if (subAud) subAud.textContent = `Bitácora inmutable de seguridad y registros de: ${activeName}`;
+
+  const activeTabBtn = document.querySelector('.dev-nav-btn.active');
+  const target = activeTabBtn?.dataset?.devTab;
+  if (target === 'metricas') {
+    cargarMetricasDev();
+  } else if (target === 'inventario') {
+    cargarInventarioDev();
+  } else if (target === 'auditoria') {
+    cargarAuditoriaDev();
+  } else if (target === 'editor-pagina') {
+    cargarPersonalizacionPagina(nid);
+  }
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro(`🏬 Local activo cambiado a: ${activeName}`, 'info');
+  }
+};
+
+window.cargarMetricasDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const rol = estado.usuarioActual?.rol || 'developer';
+  try {
+    const res = await fetch(`/api/admin/metricas/dashboard?negocio_id=${nid}`, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al obtener métricas');
+    const data = await res.json();
+
+    const r = data.resumen || {};
+    const kpiVentas = document.getElementById('devKpiVentasHoy');
+    if (kpiVentas) kpiVentas.textContent = formatCRC(r.totalVentasHoy || 0);
+
+    const kpiComp = document.getElementById('devKpiComparativaAyer');
+    if (kpiComp) {
+      const diff = r.diferenciaAyer || 0;
+      kpiComp.textContent = `vs ayer: ${diff >= 0 ? '+' : ''}${diff}%`;
+      kpiComp.style.color = diff >= 0 ? '#4ade80' : '#f87171';
+    }
+
+    const kpiCuentas = document.getElementById('devKpiCuentasCobradas');
+    if (kpiCuentas) kpiCuentas.textContent = r.cuentasHoy || 0;
+
+    const kpiTicket = document.getElementById('devKpiTicketPromedio');
+    if (kpiTicket) kpiTicket.textContent = formatCRC(r.ticketPromedio || 0);
+
+    const kpiCocina = document.getElementById('devKpiTiempoCocina');
+    if (kpiCocina) kpiCocina.textContent = `${r.tiempoPromedioCocinaMin || 0} min`;
+
+    // Top Sellers
+    const topCont = document.getElementById('devTopSellersContainer');
+    if (topCont) {
+      if (!data.topProductos || data.topProductos.length === 0) {
+        topCont.innerHTML = `<p style="color:#64748b; font-size:0.85rem; margin:0;">No hay ventas registradas hoy en este local.</p>`;
+      } else {
+        topCont.innerHTML = data.topProductos.map((p, idx) => `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 12px; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-weight:800; color:#38bdf8; font-size:0.9rem;">#${idx + 1}</span>
+              <span style="color:#e2e8f0; font-size:0.9rem; font-weight:600;">${p.nombre_producto}</span>
+            </div>
+            <div style="text-align:right;">
+              <span style="color:#4ade80; font-weight:700; font-size:0.85rem;">${p.total_unidades} u.</span>
+              <small style="display:block; color:#94a3b8; font-size:0.75rem;">${formatCRC(p.total_recaudado)}</small>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Peak Hours Bar Chart
+    const hoursCont = document.getElementById('devPeakHoursContainer');
+    if (hoursCont) {
+      const horas = data.ventasPorHora || [];
+      const maxTotal = Math.max(...horas.map(h => h.total), 1);
+      hoursCont.innerHTML = horas.map(h => {
+        const pct = Math.max(8, Math.round((h.total / maxTotal) * 100));
+        return `
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;" title="${h.hora}: ${formatCRC(h.total)}">
+            <div style="width:100%; max-width:24px; height:${pct}%; background:linear-gradient(180deg,#38bdf8,#0284c7); border-radius:4px 4px 0 0; min-height:4px;"></div>
+            <span style="font-size:0.65rem; color:#94a3b8; margin-top:4px;">${h.hora.split(':')[0]}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Waiters ranking
+    const waitersCont = document.getElementById('devWaitersRankingContainer');
+    if (waitersCont) {
+      if (!data.meseros || data.meseros.length === 0) {
+        waitersCont.innerHTML = `<p style="color:#64748b; font-size:0.85rem; margin:0;">No hay cobros asociados a saloneros hoy.</p>`;
+      } else {
+        waitersCont.innerHTML = data.meseros.map((m, idx) => `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 12px; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:1.1rem;">👤</span>
+              <div>
+                <span style="color:#e2e8f0; font-size:0.9rem; font-weight:600;">${m.nombre}</span>
+                <small style="display:block; color:#94a3b8; font-size:0.75rem;">${m.cuentas} comandas atendidas</small>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <span style="color:#facc15; font-weight:700; font-size:0.9rem;">${formatCRC(m.ventas)}</span>
+              <small style="display:block; color:#a7f3d0; font-size:0.75rem;">Propina: ${formatCRC(m.propinas)}</small>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Critical stock
+    const critCont = document.getElementById('devCriticalStockContainer');
+    if (critCont) {
+      if (!data.alertasStock || data.alertasStock.length === 0) {
+        critCont.innerHTML = `<p style="color:#34d399; font-size:0.85rem; margin:0;">✅ Todos los insumos cuentan con stock por encima del nivel mínimo.</p>`;
+      } else {
+        critCont.innerHTML = data.alertasStock.map(a => `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; border-left:4px solid #ef4444; padding:8px 12px; border-radius:0 8px 8px 0;">
+            <div>
+              <strong style="color:#fff; font-size:0.9rem;">${a.nombre}</strong>
+              <small style="display:block; color:#94a3b8; font-size:0.75rem;">Mínimo requerido: ${a.stock_minimo} ${a.unidad_medida}</small>
+            </div>
+            <div style="text-align:right;">
+              <span style="color:#f87171; font-weight:800; font-size:0.95rem;">${a.stock_actual} ${a.unidad_medida}</span>
+              <span style="display:block; font-size:0.7rem; color:#fca5a5;">${a.stock_actual <= 0 ? 'AGOTADO' : 'STOCK BAJO'}</span>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+  } catch (e) {
+    console.error('Error cargando métricas dev:', e);
+  }
+};
+
+window.cargarInventarioDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const rol = estado.usuarioActual?.rol || 'developer';
+  try {
+    const res = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al obtener inventario');
+    const insumos = await res.json();
+    estado.devInventario = insumos;
+    filtrarInventarioDev();
+  } catch (e) {
+    console.error('Error cargando inventario dev:', e);
+  }
+};
+
+window.filtrarInventarioDev = function() {
+  const insumos = estado.devInventario || [];
+  const q = (document.getElementById('devTxtBuscarInsumo')?.value || '').toLowerCase().trim();
+  const estadoFiltro = document.getElementById('devSelectFiltroEstado')?.value || 'todos';
+
+  let totalItems = 0;
+  let criticos = 0;
+  let valorTotal = 0;
+
+  insumos.forEach(ins => {
+    totalItems++;
+    if (ins.estado_stock === 'bajo' || ins.estado_stock === 'agotado') criticos++;
+    valorTotal += (ins.stock_actual || 0) * (ins.costo_unitario || 0);
+  });
+
+  const lblTotal = document.getElementById('devInvTotalItems');
+  if (lblTotal) lblTotal.textContent = totalItems;
+  const lblCrit = document.getElementById('devInvCriticos');
+  if (lblCrit) lblCrit.textContent = criticos;
+  const lblVal = document.getElementById('devInvValorTotal');
+  if (lblVal) lblVal.textContent = formatCRC(valorTotal);
+
+  const filtrados = insumos.filter(ins => {
+    if (estadoFiltro === 'bajo' && ins.estado_stock !== 'bajo') return false;
+    if (estadoFiltro === 'agotado' && ins.estado_stock !== 'agotado') return false;
+    if (estadoFiltro === 'normal' && ins.estado_stock !== 'normal') return false;
+    if (q) {
+      const nom = (ins.nombre || '').toLowerCase();
+      const cat = (ins.categoria || '').toLowerCase();
+      if (!nom.includes(q) && !cat.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const tbody = document.getElementById('devTablaInventarioBody');
+  if (!tbody) return;
+
+  if (filtrados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748b;">No se encontraron insumos con los criterios indicados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(ins => {
+    let badgeEstado = '<span style="background:rgba(34,197,94,0.15); color:#4ade80; border:1px solid #22c55e; padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">🟢 Normal</span>';
+    if (ins.estado_stock === 'agotado') {
+      badgeEstado = '<span style="background:rgba(239,68,68,0.15); color:#f87171; border:1px solid #ef4444; padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">🔴 Agotado</span>';
+    } else if (ins.estado_stock === 'bajo') {
+      badgeEstado = '<span style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid #eab308; padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">⚠️ Bajo</span>';
+    }
+
+    let desgloseTexto = `<span style="color:#94a3b8; font-size:0.85rem;">${ins.unidad_medida}</span>`;
+    if (ins.es_licor) {
+      desgloseTexto = `
+        <div style="font-size:0.82rem; line-height:1.3;">
+          <strong style="color:#c7d2fe;">🍾 ${ins.botellas_enteras ?? Math.floor(ins.stock_actual)} bot.</strong>
+          <span style="color:#38bdf8; display:block;">🍸 +${ins.shots_remanentes ?? 0} shots (${ins.medida_shot_ml || 30}ml)</span>
+          <small style="color:#64748b;">Total: ${ins.total_shots_actual ?? 0} shots</small>
+        </div>
+      `;
+    }
+
+    return `
+      <tr style="border-bottom:1px solid #1f2937;">
+        <td style="padding:12px 16px; font-weight:700; color:#fff;">${ins.nombre}</td>
+        <td style="padding:12px 16px; color:#94a3b8;"><span style="background:#1e293b; padding:2px 8px; border-radius:6px; font-size:0.8rem;">${ins.categoria}</span></td>
+        <td style="padding:12px 16px; font-weight:800; color:#38bdf8;">${ins.stock_actual}</td>
+        <td style="padding:12px 16px;">${desgloseTexto}</td>
+        <td style="padding:12px 16px; color:#34d399; font-weight:600;">${formatCRC(ins.costo_unitario)}</td>
+        <td style="padding:12px 16px; color:#cbd5e1;">${ins.stock_minimo}</td>
+        <td style="padding:12px 16px;">${badgeEstado}</td>
+      </tr>
+    `;
+  }).join('');
+};
+
+window.cargarAuditoriaDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const rol = estado.usuarioActual?.rol || 'developer';
+  const tipo = document.getElementById('devSelectFiltroAuditoriaTipo')?.value || '';
+  try {
+    let url = `/api/admin/auditoria?negocio_id=${nid}&limite=100`;
+    if (tipo) url += `&tipo=${encodeURIComponent(tipo)}`;
+
+    const res = await fetch(url, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al obtener auditoría');
+    const logs = await res.json();
+    const tbody = document.getElementById('devTablaAuditoriaBody');
+    if (!tbody) return;
+
+    if (!logs || logs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748b;">No hay eventos registrados en la bitácora para este filtro.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = logs.map(l => {
+      const fecha = l.fecha_hora ? new Date(l.fecha_hora).toLocaleString('es-CR') : '-';
+      let tagTipo = `<span style="background:#1e293b; color:#94a3b8; padding:2px 8px; border-radius:6px; font-size:0.75rem;">${l.tipo_evento || 'GENERAL'}</span>`;
+      if (l.tipo_evento === 'SEGURIDAD') {
+        tagTipo = `<span style="background:rgba(239,68,68,0.15); color:#f87171; border:1px solid #ef4444; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:700;">🛡️ SEGURIDAD</span>`;
+      } else if (l.tipo_evento === 'INVENTARIO') {
+        tagTipo = `<span style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid #3b82f6; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:700;">📦 INVENTARIO</span>`;
+      } else if (l.tipo_evento === 'ORDEN') {
+        tagTipo = `<span style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid #eab308; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:700;">🧾 ORDEN</span>`;
+      }
+
+      return `
+        <tr style="border-bottom:1px solid #1f2937;">
+          <td style="padding:10px 16px; font-size:0.8rem; color:#94a3b8; white-space:nowrap;">${fecha}</td>
+          <td style="padding:10px 16px; font-weight:700; color:#fff;"><span style="color:#a78bfa;">👤</span> ${l.usuario_nombre || 'Sistema'}</td>
+          <td style="padding:10px 16px; color:#cbd5e1; font-size:0.82rem;">${l.modulo || '-'}</td>
+          <td style="padding:10px 16px;">${tagTipo}</td>
+          <td style="padding:10px 16px; font-weight:600; color:#38bdf8;">${l.accion || '-'}</td>
+          <td style="padding:10px 16px; color:#e2e8f0; font-size:0.85rem;">${l.detalle || ''} ${l.motivo ? `<em style="color:#9ca3af; display:block; font-size:0.75rem;">Motivo: ${l.motivo}</em>` : ''}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Error cargando auditoría dev:', e);
+  }
+};
 
 async function cargarNegociosDev() {
   try {
@@ -7174,15 +7497,9 @@ window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
     const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para realizar movimientos de inventario:');
     if (!pin) return;
     if (pin.trim() === '1234' || pin.trim() === '9999') {
-      estado.usuarioActual = {
-        id: 4, usuario: 'admin', nombre: 'Don Alberto', rol: 'admin',
-        rolEtiqueta: 'Administrador', perfilVisual: 'Don Alberto (Administrador)',
-        pin: '1234', negocio_id: estado.negocioActual?.id || 1
-      };
-      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
-      aplicarEnrutamientoPorRol();
+      window._pinSupervisorActivo = pin.trim();
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+        mostrarNotificacionCentro('👑 Movimiento de inventario autorizado con PIN', 'success');
       }
     } else {
       alert('❌ PIN incorrecto.');
@@ -7274,10 +7591,9 @@ window.guardarAjusteInventario = async function() {
   }
 
   try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch(`/api/admin/inventario/${insumoId}/ajuste`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
+      headers: obtenerHeadersAuthAdmin({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         tipo: tipoAjusteActivo,
         cantidad,
@@ -7347,15 +7663,9 @@ window.abrirModalNuevoInsumo = function() {
     const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para registrar nuevos insumos:');
     if (!pin) return;
     if (pin.trim() === '1234' || pin.trim() === '9999') {
-      estado.usuarioActual = {
-        id: 4, usuario: 'admin', nombre: 'Don Alberto', rol: 'admin',
-        rolEtiqueta: 'Administrador', perfilVisual: 'Don Alberto (Administrador)',
-        pin: '1234', negocio_id: estado.negocioActual?.id || 1
-      };
-      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
-      aplicarEnrutamientoPorRol();
+      window._pinSupervisorActivo = pin.trim();
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+        mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
       }
     } else {
       alert('❌ PIN incorrecto.');
@@ -7417,10 +7727,9 @@ window.guardarNuevoInsumo = async function() {
   }
 
   try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch('/api/admin/inventario', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
+      headers: obtenerHeadersAuthAdmin({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario,
         es_licor, capacidad_ml, medida_shot_ml,
@@ -7884,18 +8193,10 @@ window.abrirModalKardex = async function(insumoId) {
     const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para consultar el Kárdex:');
     if (!pin) return;
     if (pin.trim() === '1234' || pin.trim() === '9999') {
-      estado.usuarioActual = {
-        id: 4,
-        usuario: 'admin',
-        nombre: 'Don Alberto',
-        rol: 'admin',
-        rolEtiqueta: 'Administrador',
-        perfilVisual: 'Don Alberto (Administrador)',
-        pin: '1234',
-        negocio_id: estado.negocioActual?.id || 1
-      };
-      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
-      aplicarEnrutamientoPorRol();
+      window._pinSupervisorActivo = pin.trim();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Consulta de Kárdex autorizada con PIN', 'success');
+      }
     } else {
       alert('❌ PIN incorrecto.');
       return;
@@ -7903,9 +8204,8 @@ window.abrirModalKardex = async function(insumoId) {
   }
 
   try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch(`/api/admin/inventario/${insumoId}/kardex`, {
-      headers: { 'x-user-rol': rol }
+      headers: obtenerHeadersAuthAdmin()
     });
     if (!res.ok) throw new Error('Error al consultar Kardex');
     const data = await res.json();
