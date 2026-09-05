@@ -5891,7 +5891,6 @@ document.querySelectorAll('.cash-chip[data-amt]').forEach(chip => {
 });
 
 document.getElementById('btnPagoExacto').addEventListener('click', () => {
-  const totalNum = parseFloat(document.getElementById('cobroTotalDisplay').textContent.replace(/[^0-9.]/g, '')) || 0;
   const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   document.getElementById('txtEfectivoRecibido').value = totalNum;
   calcularVueltoCobro();
@@ -5900,7 +5899,6 @@ document.getElementById('btnPagoExacto').addEventListener('click', () => {
 document.getElementById('txtEfectivoRecibido').addEventListener('input', calcularVueltoCobro);
 
 function calcularVueltoCobro() {
-  const total = parseFloat(document.getElementById('cobroTotalDisplay').textContent.replace(/[^0-9.]/g, '')) || 0;
   const total = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || 0;
   const vuelto = Math.max(0, recibido - total);
@@ -5908,12 +5906,12 @@ function calcularVueltoCobro() {
 }
 
 document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
-  const totalNum = parseFloat(document.getElementById('cobroTotalDisplay').textContent.replace(/[^0-9.]/g, '')) || 0;
   const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   const metodoActivo = document.querySelector('.pay-method-tab.active');
   const metodo = metodoActivo ? metodoActivo.dataset.method : 'Efectivo';
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
   const cambio = Math.max(0, recibido - totalNum);
+
 
   const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
   const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
