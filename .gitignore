@@ -4,3 +4,5 @@ pos.db
 build_installer/
 Instalador_Listo/
 pos.db.test-bak
+database.sqlite
+*.sqlite

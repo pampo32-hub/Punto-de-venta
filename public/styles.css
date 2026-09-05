@@ -785,7 +785,7 @@ body {
   border-radius: 10px;
   padding: 10px 14px;
   z-index: 999999 !important;
-  pointer-events: none;
+  pointer-events: auto;
   text-align: left;
 }
 
@@ -823,6 +823,35 @@ body {
   padding-bottom: 5px;
 }
 
+.mesa-tooltip-mesero {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 7px;
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+
+.m-tip-mesero-lbl {
+  color: #94a3b8;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.m-tip-mesero-nom {
+  color: #38bdf8;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .mesa-tooltip-list {
   list-style: none;
   padding: 0;
@@ -830,6 +859,28 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.mesa-tooltip-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.mesa-tooltip-list::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 4px;
+}
+
+.mesa-tooltip-list::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.4);
+  border-radius: 4px;
+}
+
+.mesa-tooltip-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.7);
 }
 
 .mesa-tooltip-list li {
@@ -1033,7 +1084,7 @@ body {
   inset: 0;
   background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(5px);
-  z-index: 1000;
+  z-index: 100000;
   align-items: center;
   justify-content: center;
 }
@@ -5996,6 +6047,128 @@ body.dev-inspecting-active * {
   border-color: #38bdf8;
   transform: scale(1.15);
 }
+
+/* ============================================================================
+   MODAL ESTILIZADO PARA CAPACIDAD DE MESAS (GASTROBAR THEME)
+   ============================================================================ */
+#modalCapacidadMesa {
+  z-index: 100000;
+}
+
+.cap-stepper-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.btn-cap-step {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  font-size: 1.4rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-cap-step:hover {
+  background: #334155;
+  border-color: #a78bfa;
+  color: #a78bfa;
+  transform: scale(1.08);
+}
+
+.btn-cap-step:active {
+  transform: scale(0.95);
+}
+
+.input-cap-display {
+  width: 90px;
+  height: 44px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f8fafc;
+  background: #090d16;
+  border: 2px solid #6366f1;
+  border-radius: 12px;
+  outline: none;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.25);
+}
+
+.cap-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.btn-cap-quick {
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-cap-quick:hover {
+  background: #6366f1;
+  border-color: #818cf8;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* ============================================================================
+   PESTAÑAS DE ACCESO DIRECTO ADMIN & KÁRDEX EN BARRA SUPERIOR
+   ============================================================================ */
+.top-nav {
+  flex-wrap: nowrap !important;
+}
+
+.nav-pill.admin-only-tab {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border: 1px solid rgba(99, 102, 241, 0.35) !important;
+  color: #c7d2fe !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  transition: all 0.2s ease;
+}
+
+.nav-pill.admin-only-tab:hover {
+  background: rgba(99, 102, 241, 0.28) !important;
+  color: #ffffff !important;
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+.nav-pill.admin-only-tab.active {
+  background: linear-gradient(135deg, #4f46e5, #4338ca) !important;
+  color: #ffffff !important;
+  border-color: #a5b4fc !important;
+  box-shadow: 0 0 14px rgba(79, 70, 229, 0.6) !important;
+}
+
+#modalPanelAdmin {
+  z-index: 100005 !important;
+}
+
+#modalKardexInsumo {
+  z-index: 100010 !important;
+}
+
 
 
 

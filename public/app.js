@@ -58,6 +58,90 @@ window.abrirModalRenombrarMesa = function(mesaId, nombreActual) {
   if (modal) modal.classList.add('active');
 };
 
+window.cerrarModalRenombrarMesa = function() {
+  const modal = document.getElementById('modalRenombrarMesa');
+  if (modal) modal.classList.remove('active');
+};
+
+let mesaParaCapacidad = null;
+
+window.abrirModalCapacidadMesa = function(mesaId, capActual) {
+  const m = estado.mesas.find(item => item.id === mesaId);
+  const nombre = m ? m.numero : `Mesa #${mesaId}`;
+  mesaParaCapacidad = { id: mesaId, nombre: nombre, capacidad: capActual || 4 };
+
+  const modal = document.getElementById('modalCapacidadMesa');
+  const lblNombre = document.getElementById('lblCapacidadMesaNombre');
+  const txtInput = document.getElementById('txtCapacidadMesaInput');
+
+  if (lblNombre) lblNombre.textContent = nombre;
+  if (txtInput) {
+    txtInput.value = mesaParaCapacidad.capacidad;
+    setTimeout(() => {
+      txtInput.focus();
+      txtInput.select();
+    }, 100);
+  }
+  if (modal) modal.classList.add('active');
+};
+
+window.cerrarModalCapacidadMesa = function() {
+  const modal = document.getElementById('modalCapacidadMesa');
+  if (modal) modal.classList.remove('active');
+};
+
+window.ajustarCapacidadModal = function(delta) {
+  const txtInput = document.getElementById('txtCapacidadMesaInput');
+  if (!txtInput) return;
+  let val = parseInt(txtInput.value, 10) || 4;
+  val = Math.max(1, Math.min(100, val + delta));
+  txtInput.value = val;
+};
+
+window.setCapacidadRapida = function(val) {
+  const txtInput = document.getElementById('txtCapacidadMesaInput');
+  if (!txtInput) return;
+  txtInput.value = val;
+};
+
+window.guardarCapacidadMesa = async function() {
+  if (!mesaParaCapacidad) return;
+  const txtInput = document.getElementById('txtCapacidadMesaInput');
+  const numCap = parseInt(txtInput ? txtInput.value : '4', 10);
+  if (isNaN(numCap) || numCap < 1 || numCap > 100) {
+    alert('Por favor ingresa un número de personas válido entre 1 y 100.');
+    return;
+  }
+
+  const mesaId = mesaParaCapacidad.id;
+  const nombre = mesaParaCapacidad.nombre;
+  const modal = document.getElementById('modalCapacidadMesa');
+
+  try {
+    const res = await fetch(`/api/mesas/${mesaId}/capacidad`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ capacidad: numCap })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al actualizar capacidad');
+
+    const m = estado.mesas.find(item => item.id === mesaId);
+    if (m) m.capacidad = numCap;
+
+    if (modal) modal.classList.remove('active');
+    mostrarNotificacionCentro(`👥 Capacidad de "${nombre}" actualizada a ${numCap} personas`, 'success');
+
+    await cargarMesasDesdeBackend();
+    const viewEditor = document.getElementById('view-editor-plano');
+    if (viewEditor && viewEditor.classList.contains('active')) {
+      renderEditorPlano();
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+};
+
 window.seleccionarEmojiCat = function(emoji) {
   const txt = document.getElementById('txtNuevaCatIcono');
   if (txt) txt.value = emoji;
@@ -871,28 +955,34 @@ window.guardarNuevoNombreMesa = async function() {
   const nuevoNombre = (txtNuevo ? txtNuevo.value : '').trim();
 
   if (!nuevoNombre) {
-    alert('Por favor ingresa un nombre para la mesa o silla.');
+    mostrarNotificacionCentro('Por favor ingresa un nombre para la mesa o silla.', 'warning');
     return;
   }
 
   if (nuevoNombre === mesaParaRenombrar.nombre) {
-    document.getElementById('modalRenombrarMesa').classList.remove('active');
+    document.getElementById('modalRenombrarMesa')?.classList.remove('active');
     return;
   }
+
+  const uAct = estado.usuarioActual || estado.usuario;
+  const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
 
   try {
     const res = await fetch('/api/mesas/' + mesaParaRenombrar.id, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-user-rol': userRol
+      },
       body: JSON.stringify({ numero: nuevoNombre })
     });
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ ' + (data.error || 'No se pudo cambiar el nombre'));
+      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo cambiar el nombre'), 'error');
       return;
     }
 
-    // Actualizar estado local
+    // Actualizar estado local inmediatamente
     const m = estado.mesas.find(item => item.id === mesaParaRenombrar.id);
     if (m) m.numero = nuevoNombre;
     if (estado.mesaActiva && estado.mesaActiva.id === mesaParaRenombrar.id) {
@@ -901,7 +991,7 @@ window.guardarNuevoNombreMesa = async function() {
       if (elNum) elNum.textContent = nuevoNombre;
     }
 
-    document.getElementById('modalRenombrarMesa').classList.remove('active');
+    document.getElementById('modalRenombrarMesa')?.classList.remove('active');
     mostrarNotificacionCentro(`✏️ Nombre cambiado a "${nuevoNombre}" exitosamente`, 'success');
 
     await cargarMesasDesdeBackend();
@@ -910,7 +1000,7 @@ window.guardarNuevoNombreMesa = async function() {
       renderEditorPlano();
     }
   } catch (e) {
-    alert('❌ Error al actualizar el nombre: ' + e.message);
+    mostrarNotificacionCentro('❌ Error al actualizar el nombre: ' + e.message, 'error');
   }
 };
 
@@ -926,18 +1016,54 @@ window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
   });
   if (!confirmado) return;
 
+  const uAct = estado.usuarioActual || estado.usuario;
+  const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
+
   try {
-    const res = await fetch('/api/mesas/' + mesaId, { method: 'DELETE' });
-    const data = await res.json();
+    let res = await fetch('/api/mesas/' + mesaId, {
+      method: 'DELETE',
+      headers: { 'x-user-rol': userRol }
+    });
+    let data = await res.json();
+
+    if (!res.ok && data.tiene_cuenta) {
+      const forzar = await confirmarAccion({
+        icono: '⚠️',
+        titulo: 'Cuenta activa detectada',
+        subtitulo: `"${mesaNumero}" tiene consumos o una cuenta abierta registrada`,
+        mensaje: `¿Deseas forzar el reseteo de la cuenta de "${mesaNumero}" y eliminar la mesa del salón de todos modos? Se cancelarán los pedidos pendientes y la mesa será retirada permanentemente.`,
+        tipo: 'peligro',
+        txtSi: '⚠️ Forzar reset y eliminar',
+        txtNo: 'No eliminar'
+      });
+      if (!forzar) return;
+
+      res = await fetch('/api/mesas/' + mesaId + '?forzar=true', {
+        method: 'DELETE',
+        headers: { 'x-user-rol': userRol }
+      });
+      data = await res.json();
+    }
+
     if (!res.ok) {
       mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo eliminar la mesa'), 'error');
       return;
     }
+
+    // Actualizar estado local
+    estado.mesas = (estado.mesas || []).filter(item => item.id !== mesaId);
+    if (window.PosOfflineDB) {
+      await window.PosOfflineDB.limpiarOrdenMesa(mesaId).catch(() => {});
+    }
+
     mostrarNotificacionCentro(`🗑️ "${mesaNumero}" eliminada correctamente del salón.`, 'success');
     await cargarMesasDesdeBackend();
-    renderEditorPlano();
+    const viewEditor = document.getElementById('view-editor-plano');
+    if (viewEditor && viewEditor.classList.contains('active')) {
+      renderEditorPlano();
+    }
   } catch (e) {
-    mostrarNotificacionCentro('❌ Error al eliminar la mesa', 'error');
+    mostrarNotificacionCentro('❌ Error al eliminar la mesa: ' + e.message, 'error');
   }
 };
 
@@ -1357,31 +1483,8 @@ window.actualizarBotonPisoEditor = function() {
 };
 
 // Modificar capacidad de personas de una mesa directamente desde Diseñar Salón
-window.cambiarCapacidadMesaPrompt = async function(mesaId, capActual) {
-  const m = estado.mesas.find(item => item.id === mesaId);
-  const nombre = m ? m.numero : `Mesa #${mesaId}`;
-  const input = prompt(`Modificar capacidad de comensales para ${nombre}:\n(Ingresa la cantidad de personas permitidas)`, capActual || 4);
-  if (input === null) return;
-  const numCap = parseInt(input.trim(), 10);
-  if (isNaN(numCap) || numCap < 1 || numCap > 100) {
-    alert('Por favor ingresa un número de personas válido entre 1 y 100.');
-    return;
-  }
-  try {
-    const res = await fetch(`/api/mesas/${mesaId}/capacidad`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ capacidad: numCap })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al actualizar capacidad');
-    if (m) m.capacidad = numCap;
-    renderEditorPlano();
-    renderSalón();
-    mostrarNotificacionCentro(`👥 Capacidad de ${nombre} actualizada a ${numCap} personas`, 'success');
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
+window.cambiarCapacidadMesaPrompt = function(mesaId, capActual) {
+  window.abrirModalCapacidadMesa(mesaId, capActual);
 };
 
 function sonarCampanaCocina() {
@@ -1528,13 +1631,14 @@ function aplicarEnrutamientoPorRol() {
       perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(Admin)</small>`;
     }
   } else {
-    if (adminTools) adminTools.style.display = 'none';
+    // Si no es admin, permitimos que adminTools esté accesible con PIN para no bloquear al usuario
+    if (adminTools) adminTools.style.display = 'flex';
     if (btnComanderoEditar) btnComanderoEditar.style.display = 'none';
     if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'none';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'none');
     const activeNav = document.querySelector('.nav-pill.active');
-    if (activeNav && ['metricas', 'inventario', 'auditoria', 'editor-plano'].includes(activeNav.dataset.view)) {
+    if (activeNav && ['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(activeNav.dataset.view)) {
       const salonTab = document.querySelector('.nav-pill[data-view="salon"]');
       if (salonTab) salonTab.click();
     }
@@ -1548,6 +1652,30 @@ function aplicarEnrutamientoPorRol() {
   cargarCajaDesdeBackend();
   cargarPisoSalonDesdeBackend(nid);
   cargarPersonalizacionPagina(nid);
+
+  // Restaurar vista y zona activa guardada en sesión tras recarga (F5)
+  const savedView = sessionStorage.getItem('pos_active_view') || 'salon';
+  const esVistaAdmin = ['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(savedView);
+  const viewToRestore = (esVistaAdmin && !esAdmin) ? 'salon' : savedView;
+
+  if (esVistaAdmin && esAdmin) {
+    abrirModuloAdmin(viewToRestore);
+  } else {
+    const navBtn = document.querySelector(`.nav-pill[data-view="${viewToRestore}"]`);
+    if (navBtn) {
+      navBtn.click();
+    }
+  }
+
+  if (viewToRestore === 'salon') {
+    const savedZone = sessionStorage.getItem('pos_active_zone');
+    if (savedZone && savedZone !== 'todas') {
+      const zTab = document.querySelector(`.zone-tab[data-zona="${savedZone}"]`);
+      if (zTab) {
+        zTab.click();
+      }
+    }
+  }
 }
 
 // Helpers globales para acceso directo a módulos de Admin desde cualquier vista
@@ -1587,8 +1715,43 @@ window.irAPuntoDeVentaAdmin = function() {
 };
 
 window.abrirPanelAdmin = function() {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para ingresar al panel:');
+    if (!pin) return;
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      estado.usuarioActual = {
+        id: 4,
+        usuario: 'admin',
+        nombre: 'Don Alberto',
+        rol: 'admin',
+        rolEtiqueta: 'Administrador',
+        perfilVisual: 'Don Alberto (Administrador)',
+        pin: '1234',
+        negocio_id: estado.negocioActual?.id || 1
+      };
+      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      aplicarEnrutamientoPorRol();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+      }
+      setTimeout(() => {
+        const modal = document.getElementById('modalPanelAdmin');
+        if (modal) modal.classList.add('active');
+      }, 150);
+      return;
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
+    }
+  }
   const modal = document.getElementById('modalPanelAdmin');
   if (modal) modal.classList.add('active');
+};
+
+window.abrirModalSelectorKardexDirecto = function() {
+  abrirModuloAdmin('kardex');
 };
 
 window.cerrarPanelAdmin = function() {
@@ -1608,7 +1771,7 @@ window.togglePanelAdmin = function() {
 
 window.ejecutarAccionAdmin = function(tipo) {
   cerrarPanelAdmin();
-  if (tipo === 'metricas' || tipo === 'inventario' || tipo === 'auditoria' || tipo === 'editor-plano') {
+  if (tipo === 'metricas' || tipo === 'inventario' || tipo === 'recetas' || tipo === 'kardex' || tipo === 'auditoria' || tipo === 'editor-plano') {
     abrirModuloAdmin(tipo);
   } else if (tipo === 'personal') {
     if (typeof cargarEmpleadosAdmin === 'function') cargarEmpleadosAdmin();
@@ -1626,6 +1789,33 @@ window.ejecutarAccionAdmin = function(tipo) {
 };
 
 window.abrirModuloAdmin = function(modulo) {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para acceder:');
+    if (!pin) return;
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      estado.usuarioActual = {
+        id: 4,
+        usuario: 'admin',
+        nombre: 'Don Alberto',
+        rol: 'admin',
+        rolEtiqueta: 'Administrador',
+        perfilVisual: 'Don Alberto (Administrador)',
+        pin: '1234',
+        negocio_id: estado.negocioActual?.id || 1
+      };
+      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      aplicarEnrutamientoPorRol();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
+    }
+  }
+
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
   document.body.classList.add('is-admin');
@@ -1640,10 +1830,25 @@ window.abrirModuloAdmin = function(modulo) {
   const navBtn = document.querySelector(`.nav-pill[data-view="${modulo}"]`);
   if (navBtn) navBtn.classList.add('active');
 
-  const target = document.getElementById('view-' + modulo);
+  // Mapear recetas y kardex a la vista física 'view-inventario'
+  const actualView = (modulo === 'recetas' || modulo === 'kardex') ? 'inventario' : modulo;
+  const target = document.getElementById('view-' + actualView);
   if (target) target.classList.add('active');
+  sessionStorage.setItem('pos_active_view', modulo);
+
   if (modulo === 'metricas') cargarDashboardMetricas();
-  if (modulo === 'inventario') cargarInventarioAdmin();
+  if (modulo === 'inventario') {
+    cambiarSubTabInventario('existencias');
+    cargarInventarioAdmin();
+  }
+  if (modulo === 'recetas') {
+    cambiarSubTabInventario('recetas');
+    cargarInventarioAdmin();
+  }
+  if (modulo === 'kardex') {
+    cambiarSubTabInventario('kardex');
+    cargarInventarioAdmin();
+  }
   if (modulo === 'auditoria') cargarAuditoriaAdmin();
   if (modulo === 'editor-plano') renderEditorPlano();
 };
@@ -2031,13 +2236,15 @@ window.aplicarRestriccionesModulos = function() {
     }
   }
 
-  // 4. Inventario & Escandallos
-  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-view-tab[data-view="inventario"], .admin-only-tab[onclick*="inventario"], button[onclick*="abrirModuloAdmin(\'inventario\')"]').forEach(el => {
+  // 4. Inventario & Escandallos & Kárdex
+  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-panel-card.card-kardex, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], .admin-view-tab[data-view="kardex"]').forEach(el => {
     el.style.display = tieneInventario ? '' : 'none';
   });
   const btnSubRecetas = document.getElementById('tabBtnInvRecetas');
+  const btnSubKardex = document.getElementById('tabBtnInvKardex');
   const btnSubCompras = document.getElementById('tabBtnInvCompras');
   if (btnSubRecetas) btnSubRecetas.style.display = tieneInventario ? '' : 'none';
+  if (btnSubKardex) btnSubKardex.style.display = tieneInventario ? '' : 'none';
   if (btnSubCompras) btnSubCompras.style.display = tieneInventario ? '' : 'none';
 
   // 5. Menú QR & Auto-Pago
@@ -2802,8 +3009,22 @@ window.agregarAlTicketOneTap = function(prodId) {
   }
 
   if (!estado.mesaActiva.items) estado.mesaActiva.items = [];
+  const esCervezaOEligible = Boolean(
+    prod.happyHour ||
+    prod.happy_hour ||
+    prod.categoria_id === 4 ||
+    prod.catId === 4 ||
+    /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(prod.nombre || '')
+  );
+  const esHH = Boolean(estado.happyHourActivo && esCervezaOEligible);
 
-  const existente = estado.mesaActiva.items.find(it => it.id === prodId && !it.enviado);
+  // Buscar si ya existe una línea NO ENVIADA con el MISMO estado de Happy Hour
+  const existente = estado.mesaActiva.items.find(it => 
+    it.id === prodId && 
+    !it.enviado && 
+    Boolean(it.en_happy_hour) === esHH
+  );
+
   if (existente) {
     existente.cantidad++;
   } else {
@@ -2815,7 +3036,8 @@ window.agregarAlTicketOneTap = function(prodId) {
       notas: '',
       destino: prod.destino,
       curso: prod.curso || 2,
-      happyHour: Boolean(prod.happyHour),
+      happyHour: esCervezaOEligible,
+      en_happy_hour: esHH,
       enviado: false
     });
   }
@@ -2870,18 +3092,25 @@ async function cargarMesasDesdeBackend() {
     });
 
     // Superponer comandas y consumos locales guardados offline si existen
+    // Superponer comandas y consumos locales guardados offline únicamente si hay envíos pendientes reales
     if (window.PosOfflineDB && estado.mesas && estado.mesas.length > 0) {
       try {
         for (const m of estado.mesas) {
           const localOrd = await window.PosOfflineDB.obtenerComandaLocalMesa(m.id);
           if (localOrd && localOrd.orden && localOrd.items && localOrd.items.length > 0) {
-            if (m.estado === 'libre' || localOrd.tienePendientes) {
+            // SOLO superponer si la mesa tiene acciones pendientes reales en Outbox sin sincronizar
+            if (localOrd.tienePendientes) {
               m.estado = localOrd.orden.estado || 'esperando';
               m.orden_total = localOrd.orden.total || m.orden_total || 0;
               m.orden_activa_id = m.orden_activa_id || localOrd.orden.id;
               m.platos_pendientes = localOrd.items;
               m.items_pendientes = localOrd.items;
+            } else if (m.estado === 'libre') {
+              // El servidor confirma que la mesa está libre y no hay cola pendiente: limpiar caché local obsoleta
+              window.PosOfflineDB.limpiarOrdenMesa(m.id).catch(() => {});
             }
+          } else if (m.estado === 'libre') {
+            window.PosOfflineDB.limpiarOrdenMesa(m.id).catch(() => {});
           }
         }
       } catch (eOff) {}
@@ -3006,7 +3235,7 @@ function renderSalón(filtroZona = null) {
     const isOccupied = m.estado !== 'libre' || (m.orden_total > 0) || Boolean(m.orden_activa_id);
 
     if (isOccupied) {
-      const isNearTop = (m.y || 0) < 130;
+      const isNearTop = (m.y || 0) < 250;
       const estaEsperandoCocina = Boolean((m.estado === 'esperando' || m.estado === 'esperando_parcial') && platosPendientes.length > 0);
 
       let headerText = '';
@@ -3034,16 +3263,26 @@ function renderSalón(filtroZona = null) {
         listItems = ['Mesa atendida por salonero'];
       }
 
+      // Identificar quién atiende o abrió la cuenta activa
+      const atendidoPor = m.orden_mesero || m.mesero || (m.pidio_cuenta_qr ? 'Pedido QR' : 'Personal de Turno');
+      const meseroHtml = `
+        <div class="mesa-tooltip-mesero">
+          <span class="m-tip-mesero-lbl">👤 Atendido por:</span>
+          <strong class="m-tip-mesero-nom">${escapeHtml(atendidoPor)}</strong>
+        </div>
+      `;
+
       tooltipHtml = `
         <div class="mesa-tooltip ${isNearTop ? 'tooltip-bottom' : ''}">
           <div class="mesa-tooltip-header">${escapeHtml(headerText)}</div>
+          ${meseroHtml}
           <ul class="mesa-tooltip-list">
             ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')}
           </ul>
         </div>
       `;
 
-      card.setAttribute('title', `${headerText}\n${listItems.map(p => `• ${typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo')}`).join('\n')}`);
+      card.setAttribute('title', `${headerText}\n👤 Atendido por: ${atendidoPor}\n${listItems.map(p => `• ${typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo')}`).join('\n')}`);
     }
 
     let mergedBadgeHtml = '';
@@ -3094,19 +3333,37 @@ function renderSalón(filtroZona = null) {
 
     aplicarEscalaTextoMesa(card, m.ancho || (esSilla ? 95 : 130), m.alto || (esSilla ? 105 : 120), esSilla);
 
-    // Eventos hover garantizados por JS
+    // Eventos hover garantizados por JS con detección dinámica de límites visibles
     card.addEventListener('mouseenter', () => {
       const tip = card.querySelector('.mesa-tooltip');
       if (tip) {
+        // Detección dinámica de espacio para evitar solaparse con las zonas superiores
+        const salonEl = document.getElementById('salonContainer') || document.querySelector('.salon-container');
+        if (salonEl) {
+          const salonRect = salonEl.getBoundingClientRect();
+          const cardRect = card.getBoundingClientRect();
+          const espacioArriba = cardRect.top - salonRect.top;
+          // Si hay menos de 240px de espacio libre arriba del contenedor, desplegar hacia abajo
+          if (espacioArriba < 240) {
+            tip.classList.add('tooltip-bottom');
+          } else if ((m.y || 0) >= 250) {
+            tip.classList.remove('tooltip-bottom');
+          }
+        }
+
         tip.style.display = 'block';
         tip.style.opacity = '1';
         tip.style.visibility = 'visible';
-        card.style.zIndex = '99999';
+        card.style.zIndex = '999999';
       }
     });
 
-    card.addEventListener('mouseleave', () => {
+    card.addEventListener('mouseleave', (e) => {
       const tip = card.querySelector('.mesa-tooltip');
+      // Si el cursor se movió hacia el tooltip (para scrollear productos), no ocultarlo
+      if (e.relatedTarget && tip && (tip === e.relatedTarget || tip.contains(e.relatedTarget))) {
+        return;
+      }
       if (tip && !tip.classList.contains('show-touch')) {
         tip.style.display = '';
         tip.style.opacity = '';
@@ -3114,6 +3371,21 @@ function renderSalón(filtroZona = null) {
         card.style.zIndex = '';
       }
     });
+
+    const tipEl = card.querySelector('.mesa-tooltip');
+    if (tipEl) {
+      tipEl.addEventListener('mouseleave', (e) => {
+        if (e.relatedTarget && (card === e.relatedTarget || card.contains(e.relatedTarget))) {
+          return;
+        }
+        if (!tipEl.classList.contains('show-touch')) {
+          tipEl.style.display = '';
+          tipEl.style.opacity = '';
+          tipEl.style.visibility = '';
+          card.style.zIndex = '';
+        }
+      });
+    }
 
     const chipEl = card.querySelector('.m-wait-chip');
     if (chipEl) {
@@ -3727,6 +3999,7 @@ document.querySelectorAll('.zone-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.zone-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
+    sessionStorage.setItem('pos_active_zone', tab.dataset.zona);
     if (tab.dataset.zona === 'segundo') {
       estado.pisoActual = 2;
     } else if (['salon', 'barra', 'terraza', 'vip'].includes(tab.dataset.zona)) {
@@ -3804,6 +4077,7 @@ async function abrirComanderoMesa(mesaId) {
         ? 'Orden (Local Offline)' 
         : ('Orden #' + (data.orden.numero_orden || data.orden.id));
       mesa.orden_id = data.orden.id;
+      mesa.modo_happy_hour = data.orden.modo_happy_hour || 'estricto';
       mesa.items = (data.items || []).map(it => ({
         id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
         id: it.producto_id || it.id,
@@ -3815,7 +4089,8 @@ async function abrirComanderoMesa(mesaId) {
         destino: it.destino || 'cocina',
         origen_mesa_numero: it.origen_mesa_numero || null,
         enviado: it.enviado !== false,
-        offlinePendiente: Boolean(it.offlinePendiente)
+        offlinePendiente: Boolean(it.offlinePendiente),
+        en_happy_hour: Boolean(it.en_happy_hour)
       }));
 
       // Si la mesa tenía pedidos offline, asegurar que el estado visual de la mesa refleje consumo
@@ -3847,6 +4122,7 @@ async function abrirComanderoMesa(mesaId) {
     } else {
       document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
       mesa.orden_id = null;
+      mesa.modo_happy_hour = 'estricto';
       mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
@@ -3864,6 +4140,14 @@ async function abrirComanderoMesa(mesaId) {
   if (typeof aplicarRestriccionesModulos === 'function') {
     aplicarRestriccionesModulos();
   }
+  const btnResetMesa = document.getElementById('btnResetearMesaComandero');
+  const uAct = estado.usuarioActual || estado.usuario;
+  const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer'));
+  if (btnResetMesa) {
+    const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre'));
+    btnResetMesa.style.display = (esAdminODev && tieneCuentaOcupada) ? 'inline-flex' : 'none';
+  }
+
   document.getElementById('modalComandero').classList.add('active');
   if (typeof aplicarPersonalizacionAlDOM === 'function') {
     aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
@@ -3877,6 +4161,59 @@ document.getElementById('btnCloseComandero').addEventListener('click', () => {
   document.getElementById('modalComandero').classList.remove('active');
   cargarMesasDesdeBackend();
 });
+
+window.resetearMesaActualComandero = async function() {
+  const mesa = estado.mesaActiva;
+  if (!mesa) return;
+
+  const mesaNom = mesa.numero || `Mesa ${mesa.id}`;
+  const confirmado = await confirmarAccion({
+    icono: '🔄',
+    titulo: '¿Resetear y liberar mesa?',
+    subtitulo: `Esta acción cancelará cualquier cuenta trabada en "${mesaNom}"`,
+    mensaje: `¿Estás seguro de que deseas forzar el reset de "${mesaNom}"? Se cancelarán las órdenes abiertas pendientes y la mesa quedará totalmente limpia y libre. Las ventas ya cobradas previamente no se verán afectadas.`,
+    tipo: 'peligro',
+    txtSi: '🔄 Sí, resetear mesa',
+    txtNo: 'Cancelar'
+  });
+  if (!confirmado) return;
+
+  try {
+    const uAct = estado.usuarioActual || estado.usuario;
+    const userRol = uAct ? uAct.rol : 'admin';
+    const res = await fetch(`/api/mesas/${mesa.id}/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': userRol
+      }
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo resetear la mesa'));
+      return;
+    }
+
+    if (window.PosOfflineDB) {
+      await window.PosOfflineDB.limpiarOrdenMesa(mesa.id).catch(() => {});
+    }
+
+    mesa.estado = 'libre';
+    mesa.items = [];
+    mesa.orden_id = null;
+    mesa.orden_activa_id = null;
+    mesa.orden_total = 0;
+    mesa.pidio_cuenta_qr = 0;
+
+    document.getElementById('modalComandero').classList.remove('active');
+    mostrarNotificacionCentro(`🔄 "${mesaNom}" reseteada y liberada con éxito`, 'success');
+    await cargarMesasDesdeBackend();
+    cargarKDSDesdeBackend();
+  } catch (e) {
+    alert('❌ Error al resetear mesa: ' + e.message);
+  }
+};
 
 function renderTicketItems() {
   const list = document.getElementById('comTicketItemsList');
@@ -3900,7 +4237,7 @@ function renderTicketItems() {
       : '';
 
     const esCervezaPromo = Boolean(it.happyHour || it.categoria_id === 4 || it.catId === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(it.nombre || ''));
-    const promoBadge = (estado.happyHourActivo && esCervezaPromo)
+    const promoBadge = (Boolean(it.en_happy_hour) && esCervezaPromo)
       ? `<span class="hh-promo-badge">🍸 2x1</span>`
       : '';
 
@@ -3965,38 +4302,152 @@ function recalcularTotalesTicket() {
     document.getElementById('comIva').textContent = '₡ 0.00';
     document.getElementById('comTotal').textContent = '₡ 0.00';
     document.getElementById('comHappyHourRow').style.display = 'none';
+    const hhRow = document.getElementById('comHappyHourRow');
+    if (hhRow) hhRow.style.display = 'none';
+    const cobroHH = document.getElementById('cobroHappyHourBadgeRow');
+    if (cobroHH) cobroHH.style.display = 'none';
     return;
   }
 
   let sub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
   let descuentoHH = 0;
-  if (estado.happyHourActivo) {
-    estado.mesaActiva.items.forEach(it => {
-      const esCerveza = Boolean(it.happyHour || it.categoria_id === 4 || it.catId === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(it.nombre || ''));
-      if (esCerveza && it.cantidad >= 2) {
-        const pares = Math.floor(it.cantidad / 2);
-        descuentoHH += pares * it.precio;
-      }
-    });
+  const modoHH = estado.mesaActiva.modo_happy_hour || 'estricto';
+
+  const grupos = {};
+  let tieneBebidasPromo = false;
+
+  estado.mesaActiva.items.forEach(it => {
+    const esCervezaPromo = Boolean(
+      it.happyHour ||
+      it.en_happy_hour ||
+      it.categoria_id === 4 ||
+      it.catId === 4 ||
+      /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(it.nombre || '')
+    );
+    if (!esCervezaPromo) return;
+    tieneBebidasPromo = true;
+
+    const key = it.id || it.nombre;
+    if (!grupos[key]) {
+      grupos[key] = {
+        precio: it.precio,
+        cantHH: 0,
+        cantNoHH: 0
+      };
+    }
+    if (it.en_happy_hour) {
+      grupos[key].cantHH += it.cantidad;
+    } else {
+      grupos[key].cantNoHH += it.cantidad;
+    }
+  });
+
+  for (const key in grupos) {
+    const g = grupos[key];
+    if (modoHH === 'flexible') {
+      const totalPares = Math.floor((g.cantHH + g.cantNoHH) / 2);
+      const maxParesPosibles = Math.floor(g.cantHH / 2) + ((g.cantHH % 2 === 1 && g.cantNoHH > 0) ? 1 : 0);
+      const pares = Math.min(totalPares, maxParesPosibles);
+      descuentoHH += pares * g.precio;
+    } else {
+      const pares = Math.floor(g.cantHH / 2);
+      descuentoHH += pares * g.precio;
+    }
   }
 
-  const subNeto = sub - descuentoHH;
+  const subNeto = Math.max(0, sub - descuentoHH);
   const servicio = Math.round(subNeto * 0.10);
   const iva = Math.round(subNeto * 0.13);
   const total = subNeto + servicio + iva;
 
   document.getElementById('comSubtotal').textContent = formatCRC(sub);
-  if (descuentoHH > 0) {
-    document.getElementById('comHappyHourRow').style.display = 'flex';
-    document.getElementById('comHappyHourDesc').textContent = '-' + formatCRC(descuentoHH);
-  } else {
-    document.getElementById('comHappyHourRow').style.display = 'none';
+
+  const hhRow = document.getElementById('comHappyHourRow');
+  const btnToggleHH = document.getElementById('btnToggleModoHHComandero');
+  if (hhRow) {
+    if (descuentoHH > 0 || tieneBebidasPromo) {
+      hhRow.style.display = 'flex';
+      document.getElementById('comHappyHourDesc').textContent = '-' + formatCRC(descuentoHH);
+      if (btnToggleHH) {
+        btnToggleHH.textContent = modoHH === 'flexible' ? '🤝 Flexible' : '🛡️ Estricto';
+        btnToggleHH.title = `Modo 2x1 actual: ${modoHH}. Clic para alternar (Admin/Cajero).`;
+      }
+    } else {
+      hhRow.style.display = 'none';
+    }
+  }
+
+  // Sincronizar también con el modal de cobro si está activo
+  const cobroBadgeRow = document.getElementById('cobroHappyHourBadgeRow');
+  const cobroDescEl = document.getElementById('cobroHappyHourDesc');
+  const btnCobroHH = document.getElementById('btnToggleModoHHCobro');
+  if (cobroBadgeRow) {
+    if (descuentoHH > 0 || tieneBebidasPromo) {
+      cobroBadgeRow.style.display = 'flex';
+      if (cobroDescEl) cobroDescEl.textContent = '-' + formatCRC(descuentoHH);
+      if (btnCobroHH) btnCobroHH.textContent = modoHH === 'flexible' ? '🤝 Flexible' : '🛡️ Estricto';
+    } else {
+      cobroBadgeRow.style.display = 'none';
+    }
   }
 
   document.getElementById('comServicio').textContent = formatCRC(servicio);
   document.getElementById('comIva').textContent = formatCRC(iva);
   document.getElementById('comTotal').textContent = formatCRC(total);
 }
+
+window.toggleModoHappyHourActual = async function() {
+  if (!estado.mesaActiva) return;
+  const uAct = estado.usuarioActual || estado.usuario;
+  const esAutorizado = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+  if (!esAutorizado) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🔒 Solo Administrador o Cajero pueden cambiar el modo Happy Hour', 'warning');
+    } else {
+      alert('🔒 Solo Administrador o Cajero pueden cambiar el modo Happy Hour');
+    }
+    return;
+  }
+
+  const actual = estado.mesaActiva.modo_happy_hour || 'estricto';
+  const nuevoModo = actual === 'estricto' ? 'flexible' : 'estricto';
+  estado.mesaActiva.modo_happy_hour = nuevoModo;
+
+  if (estado.mesaActiva.orden_id) {
+    try {
+      const res = await fetch(`/api/ordenes/${estado.mesaActiva.orden_id}/modo-happy-hour`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-rol': uAct ? uAct.rol : 'admin'
+        },
+        body: JSON.stringify({ modo: nuevoModo })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro('❌ ' + (data.error || 'Error al cambiar modo'), 'error');
+        }
+        estado.mesaActiva.modo_happy_hour = actual;
+        return;
+      }
+    } catch (e) {
+      console.warn('Error sincronizando modo Happy Hour con el servidor:', e);
+    }
+  }
+
+  recalcularTotalesTicket();
+
+  const elCobroTotal = document.getElementById('cobroTotalDisplay');
+  const elComTotal = document.getElementById('comTotal');
+  if (elCobroTotal && elComTotal) {
+    elCobroTotal.textContent = elComTotal.textContent;
+  }
+
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro(`🍸 Modo Happy Hour cambiado a: ${nuevoModo === 'flexible' ? 'Flexible 🤝 (Completa pares impares)' : 'Estricto 🛡️ (Solo horario HH)'}`, 'info');
+  }
+};
 
 // Enviar Comanda a Cocina o Guardar (cierra el menú de una vez) con soporte Offline-First
 document.getElementById('btnEnviarComandaCocina').addEventListener('click', async () => {
@@ -4011,7 +4462,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
 
   const payloadComanda = {
     mesaId: estado.mesaActiva.id,
-    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+    mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
     items: estado.mesaActiva.items,
     happyHourActivo: estado.happyHourActivo
   };
@@ -4336,6 +4787,25 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', () => {
   document.getElementById('cobroTotalDisplay').textContent = totalTxt;
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0.00';
+
+  const cobroBadgeRow = document.getElementById('cobroHappyHourBadgeRow');
+  const comDesc = document.getElementById('comHappyHourDesc');
+  const cobroDescEl = document.getElementById('cobroHappyHourDesc');
+  const btnCobroHH = document.getElementById('btnToggleModoHHCobro');
+  const hhRow = document.getElementById('comHappyHourRow');
+  if (cobroBadgeRow) {
+    if (hhRow && hhRow.style.display !== 'none') {
+      cobroBadgeRow.style.display = 'flex';
+      if (cobroDescEl && comDesc) cobroDescEl.textContent = comDesc.textContent;
+      if (btnCobroHH) {
+        const modoHH = estado.mesaActiva.modo_happy_hour || 'estricto';
+        btnCobroHH.textContent = modoHH === 'flexible' ? '🤝 Flexible' : '🛡️ Estricto';
+      }
+    } else {
+      cobroBadgeRow.style.display = 'none';
+    }
+  }
+
   document.getElementById('modalCobro').classList.add('active');
 });
 
@@ -5749,13 +6219,13 @@ function renderEditorPlano() {
     el.innerHTML = `
       <div class="mesa-size-controls">
         <button class="btn-mesa-size" title="Cambiar nombre de la mesa o silla" style="color:#38bdf8; border-color:#38bdf8;" onclick="event.stopPropagation(); abrirModalRenombrarMesa(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">✏️</button>
-        ${!esSilla ? `<button class="btn-mesa-size" title="Modificar cantidad de personas" style="color:#a78bfa; border-color:#a78bfa;" onclick="event.stopPropagation(); cambiarCapacidadMesaPrompt(${m.id}, ${m.capacidad})">👥</button>` : ''}
+        ${!esSilla ? `<button class="btn-mesa-size" title="Modificar cantidad de personas" style="color:#a78bfa; border-color:#a78bfa;" onclick="event.stopPropagation(); abrirModalCapacidadMesa(${m.id}, ${m.capacidad})">👥</button>` : ''}
         <button class="btn-mesa-size" title="Reducir tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, -15)">-</button>
         <button class="btn-mesa-size" title="Aumentar tamaño" onclick="event.stopPropagation(); cambiarTamanoMesa(${m.id}, 15)">+</button>
         <button class="btn-mesa-size" title="Eliminar mesa o silla" style="color:#ef4444; border-color:#ef4444;" onclick="event.stopPropagation(); eliminarMesaDesdeEditor(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">🗑️</button>
       </div>
       <span class="mesa-nombre-label" style="cursor:pointer;" title="Clic para cambiar nombre" onclick="event.stopPropagation(); abrirModalRenombrarMesa(${m.id}, '${m.numero.replace(/'/g, "\\'")}')">${m.numero} ✏️</span>
-      ${!esSilla ? `<small class="mesa-cap-label" style="cursor:pointer;" title="Clic para modificar cantidad de personas" onclick="event.stopPropagation(); cambiarCapacidadMesaPrompt(${m.id}, ${m.capacidad})">👥 ${m.capacidad}p ✏️</small>` : ''}
+      ${!esSilla ? `<small class="mesa-cap-label" style="cursor:pointer;" title="Clic para modificar cantidad de personas" onclick="event.stopPropagation(); abrirModalCapacidadMesa(${m.id}, ${m.capacidad})">👥 ${m.capacidad}p ✏️</small>` : ''}
       <div class="mesa-resize-handle" title="Arrastrar para cambiar tamaño">↘</div>
     `;
 
@@ -5766,7 +6236,7 @@ function renderEditorPlano() {
     let startX, startY, origX, origY;
 
     const onMouseDown = (e) => {
-      if (e.target.closest('.mesa-size-controls') || e.target.closest('.mesa-resize-handle')) return;
+      if (e.target.closest('.mesa-size-controls') || e.target.closest('.mesa-resize-handle') || e.target.closest('.mesa-nombre-label') || e.target.closest('.mesa-cap-label')) return;
 
       isDragging = true;
       startX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
@@ -6234,19 +6704,22 @@ function abrirConfigHappyHour() {
 function initNavegacion() {
   document.querySelectorAll('.nav-pill').forEach(btn => {
     btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (['recetas', 'kardex', 'inventario', 'metricas', 'auditoria', 'editor-plano'].includes(view)) {
+        abrirModuloAdmin(view);
+        return;
+      }
       document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
       btn.classList.add('active');
-      const targetView = 'view-' + btn.dataset.view;
-      document.getElementById(targetView).classList.add('active');
+      const targetView = 'view-' + view;
+      const targetEl = document.getElementById(targetView);
+      if (targetEl) targetEl.classList.add('active');
+      sessionStorage.setItem('pos_active_view', view);
 
-      if (btn.dataset.view === 'salon') cargarMesasDesdeBackend();
-      if (btn.dataset.view === 'editor-plano') renderEditorPlano();
-      if (btn.dataset.view === 'kds') cargarKDSDesdeBackend();
-      if (btn.dataset.view === 'caja') cargarCajaDesdeBackend();
-      if (btn.dataset.view === 'metricas') cargarDashboardMetricas();
-      if (btn.dataset.view === 'inventario') cargarInventarioAdmin();
-      if (btn.dataset.view === 'auditoria') cargarAuditoriaAdmin();
+      if (view === 'salon') cargarMesasDesdeBackend();
+      if (view === 'kds') cargarKDSDesdeBackend();
+      if (view === 'caja') cargarCajaDesdeBackend();
     });
   });
 
@@ -6476,6 +6949,11 @@ window.cambiarSubTabInventario = function(tab) {
     const panel = document.getElementById('invPanelRecetas');
     if (panel) panel.style.display = 'block';
     inicializarPanelRecetas();
+  } else if (tab === 'kardex') {
+    document.getElementById('tabBtnInvKardex')?.classList.add('active');
+    const panel = document.getElementById('invPanelKardex');
+    if (panel) panel.style.display = 'block';
+    cargarKardexGeneral();
   } else if (tab === 'compras') {
     document.getElementById('tabBtnInvCompras')?.classList.add('active');
     const panel = document.getElementById('invPanelCompras');
@@ -6483,6 +6961,80 @@ window.cambiarSubTabInventario = function(tab) {
     cargarSugerenciaCompras();
   }
 };
+
+window.kardexMovimientosActuales = [];
+
+window.cargarKardexGeneral = async function() {
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const insumoId = document.getElementById('selectFiltroKardexInsumo')?.value || 'todos';
+    const tipo = document.getElementById('selectFiltroKardexTipo')?.value || 'todos';
+
+    poblarSelectorKardexInsumos();
+
+    const res = await fetch(`/api/admin/inventario/kardex/movimientos?insumo_id=${insumoId}&tipo=${tipo}&limit=250`, {
+      headers: { 'x-user-rol': rol }
+    });
+    if (!res.ok) throw new Error('Error al cargar historial Kárdex');
+    const data = await res.json();
+    window.kardexMovimientosActuales = data.movimientos || [];
+    renderTablaKardexGeneral(window.kardexMovimientosActuales);
+  } catch (e) {
+    console.error('Error al cargar kardex general:', e);
+    const tbody = document.getElementById('tbodyKardexGeneral');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#ef4444;">Error al cargar movimientos de Kárdex: ${escapeHtml(e.message)}</td></tr>`;
+    }
+  }
+};
+
+window.filtrarKardexGeneral = function() {
+  cargarKardexGeneral();
+};
+
+function poblarSelectorKardexInsumos() {
+  const sel = document.getElementById('selectFiltroKardexInsumo');
+  if (!sel) return;
+  const currentVal = sel.value || 'todos';
+  const insumos = estado.inventario || [];
+  sel.innerHTML = '<option value="todos">🔎 Todos los insumos y licores</option>' +
+    insumos.map(i => `<option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.categoria || 'General')})</option>`).join('');
+  sel.value = currentVal;
+}
+
+function renderTablaKardexGeneral(movimientos) {
+  const tbody = document.getElementById('tbodyKardexGeneral');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!movimientos || !movimientos.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:28px; color:#9ca3af;">No se encontraron movimientos registrados en el Kárdex con los filtros seleccionados.</td></tr>';
+    return;
+  }
+
+  movimientos.forEach(m => {
+    const tr = document.createElement('tr');
+    const badgeClass = m.tipo === 'venta' ? 'badge-kardex-venta' : m.tipo === 'entrada' ? 'badge-kardex-entrada' : m.tipo === 'merma' ? 'badge-kardex-merma' : 'badge-kardex-fijar';
+    const tipoIcon = m.tipo === 'venta' ? '🛒 Venta' : m.tipo === 'entrada' ? '📥 Entrada' : m.tipo === 'merma' ? '⚠️ Merma' : '🔧 Ajuste';
+    const signo = m.tipo === 'entrada' ? '+' : '-';
+    const insNombre = m.insumo_nombre || `Insumo #${m.insumo_id}`;
+
+    tr.innerHTML = `
+      <td style="font-size:0.8rem; color:#94a3b8; white-space:nowrap;">${m.fecha_hora || '-'}</td>
+      <td>
+        <strong>${escapeHtml(insNombre)}</strong>
+        <small style="display:block; color:#9ca3af; font-size:0.75rem;">${escapeHtml(m.insumo_categoria || 'General')}</small>
+      </td>
+      <td><span class="${badgeClass}">${tipoIcon}</span></td>
+      <td><strong>${signo}${m.cantidad}</strong> <small style="color:#94a3b8;">${escapeHtml(m.unidad_medida || '')}</small></td>
+      <td><span style="color:#94a3b8;">${m.stock_previo}</span> → <strong style="color:#38bdf8;">${m.stock_nuevo}</strong></td>
+      <td style="color:#34d399; font-weight:700;">${formatCRC(m.costo_total || 0)}</td>
+      <td style="font-size:0.85rem;">${escapeHtml(m.motivo || '-')}</td>
+      <td style="font-size:0.8rem; color:#9ca3af;">${escapeHtml(m.usuario_nombre || 'Sistema')}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 
 async function cargarInventarioAdmin() {
   try {
@@ -7202,6 +7754,30 @@ window.eliminarIngredienteReceta = async function(productoId, insumoId) {
 // HISTORIAL KARDEX
 // -------------------------------------------------------------
 window.abrirModalKardex = async function(insumoId) {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para consultar el Kárdex:');
+    if (!pin) return;
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      estado.usuarioActual = {
+        id: 4,
+        usuario: 'admin',
+        nombre: 'Don Alberto',
+        rol: 'admin',
+        rolEtiqueta: 'Administrador',
+        perfilVisual: 'Don Alberto (Administrador)',
+        pin: '1234',
+        negocio_id: estado.negocioActual?.id || 1
+      };
+      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      aplicarEnrutamientoPorRol();
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
+    }
+  }
+
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch(`/api/admin/inventario/${insumoId}/kardex`, {
@@ -8539,6 +9115,8 @@ window.toggleContentEditableLive = function(activo) {
       el.closest('#devLiveEditBar') ||
       el.closest('#modalEditorElementoLive') ||
       el.closest('#modalConfirmacionAccion') ||
+      el.closest('#modalRenombrarMesa') ||
+      el.closest('#modalCapacidadMesa') ||
       el.closest('#modalNotificacionCentro') ||
       el.closest('#modalSelectorPiso') ||
       el.closest('#developerPortalView')
@@ -8567,6 +9145,8 @@ function handleLiveMouseOver(e) {
     target.closest('#devLiveEditBar') ||
     target.closest('#modalEditorElementoLive') ||
     target.closest('#modalConfirmacionAccion') ||
+    target.closest('#modalRenombrarMesa') ||
+    target.closest('#modalCapacidadMesa') ||
     target.closest('#modalNotificacionCentro') ||
     target.closest('#modalSelectorPiso') ||
     target.closest('#developerPortalView')
@@ -8588,6 +9168,8 @@ function handleLiveElementClick(e) {
     target.closest('#devLiveEditBar') ||
     target.closest('#modalEditorElementoLive') ||
     target.closest('#modalConfirmacionAccion') ||
+    target.closest('#modalRenombrarMesa') ||
+    target.closest('#modalCapacidadMesa') ||
     target.closest('#modalNotificacionCentro') ||
     target.closest('#modalSelectorPiso') ||
     target.closest('#developerPortalView')

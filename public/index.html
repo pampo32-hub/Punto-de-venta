@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>PUNTO DE VENTA | Restaurantes & Bares</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=2.9.1" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -506,24 +506,30 @@
         <button class="nav-pill" data-view="facturacion">
           <span class="pill-icon">⚡</span> Facturación Express
         </button>
-        <!-- Pestañas internas para vistas admin (gestionadas desde el Panel de Admin) -->
-        <button class="nav-pill admin-view-tab" data-view="metricas" style="display: none !important;">
+        <!-- Pestañas de administración directa: visibles y con acceso seguro -->
+        <button class="nav-pill admin-view-tab" data-view="inventario" id="tabNavInventario" title="Control de Inventario, Insumos y Bodega">
+          <span class="pill-icon">📦</span> Inventario & Bodega
+        </button>
+        <button class="nav-pill admin-view-tab" data-view="recetas" id="tabNavRecetas" title="Fichas Técnicas, Recetas y Escandallos de Platillos y Bebidas">
+          <span class="pill-icon">👨‍🍳</span> Recetas & Escandallos
+        </button>
+        <button class="nav-pill admin-view-tab" data-view="kardex" id="tabNavKardex" title="Historial y Trazabilidad Kárdex de Insumos">
+          <span class="pill-icon">📜</span> Kárdex
+        </button>
+        <button class="nav-pill admin-view-tab admin-only-tab" data-view="editor-plano" id="tabNavEditorPlano" style="display: none;" title="Diseño y distribución física de mesas">
+          <span class="pill-icon">📐</span> Editor Salón
+        </button>
+        <button class="nav-pill admin-view-tab admin-only-tab" data-view="metricas" id="tabNavMetricas" style="display: none;" title="Métricas y Dashboard en vivo">
           <span class="pill-icon">📊</span> Dashboard
         </button>
-        <button class="nav-pill admin-view-tab" data-view="inventario" style="display: none !important;">
-          <span class="pill-icon">📦</span> Inventario
-        </button>
-        <button class="nav-pill admin-view-tab" data-view="auditoria" style="display: none !important;">
+        <button class="nav-pill admin-view-tab admin-only-tab" data-view="auditoria" id="tabNavAuditoria" style="display: none;" title="Bitácora de seguridad y auditoría">
           <span class="pill-icon">🛡️</span> Auditoría
-        </button>
-        <button class="nav-pill admin-view-tab" data-view="editor-plano" style="display: none !important;">
-          <span class="pill-icon">📐</span> Editor Salón
         </button>
       </nav>
 
-      <!-- BOTÓN ÚNICO DEL PANEL DE ADMINISTRACIÓN (SOLO ADMIN & DEV) -->
+      <!-- BOTÓN ÚNICO DEL PANEL DE ADMINISTRACIÓN (ADMIN & DEV CON ACCESO POR PIN) -->
       <div class="admin-extra-actions" id="adminExtraActions">
-        <button class="btn-topbar-tool btn-admin-panel-trigger" id="btnAbrirPanelAdmin" onclick="abrirPanelAdmin()" title="Abrir Panel con todas las funciones de administración">
+        <button class="btn-topbar-tool btn-admin-panel-trigger" id="btnAbrirPanelAdmin" onclick="abrirPanelAdmin()" title="Abrir Panel con todas las funciones de administración y Kárdex">
           👑 Panel de Admin <span class="arrow-indicator">▼</span>
         </button>
       </div>
@@ -879,6 +885,7 @@
             <button class="btn-tool" onclick="abrirModalNuevoInsumo()">➕ Nuevo Insumo</button>
             <button class="btn-tool" style="background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada')">📥 Entrada de Mercadería</button>
             <button class="btn-tool" style="background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma')">⚠️ Registrar Merma</button>
+            <button class="btn-tool" style="background:#1e1b4b; border-color:#6366f1; color:#c7d2fe; font-weight:700;" onclick="cambiarSubTabInventario('kardex')" title="Ver historial y movimientos de Kárdex">📜 Ver Kárdex</button>
           </div>
         </div>
 
@@ -888,7 +895,10 @@
             📦 Existencias en Bodega
           </button>
           <button class="inv-subnav-btn" id="tabBtnInvRecetas" onclick="cambiarSubTabInventario('recetas')">
-            👨‍🍳 Fichas Técnicas & Escandallos
+            👨‍🍳 Recetas & Escandallos
+          </button>
+          <button class="inv-subnav-btn" id="tabBtnInvKardex" onclick="cambiarSubTabInventario('kardex')">
+            📜 Historial Kárdex
           </button>
           <button class="inv-subnav-btn" id="tabBtnInvCompras" onclick="cambiarSubTabInventario('compras')">
             🛒 Sugerencia de Compras
@@ -1017,8 +1027,6 @@
                   </select>
                 </div>
                 <div>
-                  <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px;">Cantidad en Receta:</label>
-                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" placeholder="Ej: 0.2 o 1" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <label style="font-size:0.75rem; color:#9ca3af;">Cantidad en Receta:</label>
                     <select id="selNuevoIngredienteUnidadTipo" style="background:#0f172a; color:#38bdf8; border:1px solid #374151; font-size:0.72rem; border-radius:4px; padding:2px 6px;" onchange="actualizarPlaceholderCantidadReceta()">
@@ -1041,7 +1049,63 @@
             </div>
           </div>
 
-          <!-- PANEL 3: SUGERENCIA DE COMPRAS -->
+          <!-- PANEL 3: KARDEX & HISTORIAL DE MOVIMIENTOS -->
+          <div class="inv-tab-panel" id="invPanelKardex" style="display:none;">
+            <div class="kardex-header-banner" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div>
+                <h3 style="margin:0 0 4px; color:#fff; font-size:1.15rem; display:flex; align-items:center; gap:8px;">
+                  📜 Historial General de Kárdex y Movimientos
+                </h3>
+                <p style="margin:0; font-size:0.82rem; color:#9ca3af;">
+                  Registro inmutable de todas las entradas, ventas automáticas por comandas, mermas y ajustes de bodega.
+                </p>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-tool" onclick="cargarKardexGeneral()" style="background:#1e293b; border-color:#475569;">🔄 Actualizar Kárdex</button>
+              </div>
+            </div>
+
+            <!-- Filtros de Kárdex -->
+            <div class="inventory-filters-row" style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:220px;">
+                <select id="selectFiltroKardexInsumo" class="select-styled" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;" onchange="filtrarKardexGeneral()">
+                  <option value="todos">🔎 Todos los insumos y licores</option>
+                </select>
+              </div>
+              <div style="width:200px;">
+                <select id="selectFiltroKardexTipo" class="select-styled" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;" onchange="filtrarKardexGeneral()">
+                  <option value="todos">Todos los Tipos</option>
+                  <option value="venta">🛒 Ventas (Comandas/Shots)</option>
+                  <option value="entrada">📥 Entradas de Bodega</option>
+                  <option value="merma">⚠️ Mermas Registradas</option>
+                  <option value="fijar">🔧 Ajustes de Inventario</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Tabla de Kárdex -->
+            <div class="inventory-table-container">
+              <table class="inventory-table" id="tablaKardexGeneral">
+                <thead>
+                  <tr>
+                    <th>Fecha / Hora</th>
+                    <th>Insumo</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Stock Previo → Nuevo</th>
+                    <th>Costo Impacto</th>
+                    <th>Detalle / Motivo</th>
+                    <th>Usuario</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyKardexGeneral">
+                  <!-- Filas de movimientos cargadas dinámicamente -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PANEL 4: SUGERENCIA DE COMPRAS -->
           <div class="inv-tab-panel" id="invPanelCompras" style="display:none;">
             <div class="compras-header-banner">
               <div>
@@ -1181,6 +1245,9 @@
             <small id="comTicketOrdenId">Orden #ORD-0000</small>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-tool" id="btnResetearMesaComandero" onclick="resetearMesaActualComandero()" title="Resetear mesa y cancelar cuenta trabada (Exclusivo Admin y Dev)" style="display:none; background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#f87171; padding:4px 10px; font-size:0.78rem; font-weight:700; border-radius:6px; cursor:pointer;">
+              🔄 Resetear Mesa
+            </button>
             <button class="btn-top-modo-edicion dev-modal-action" id="btnToggleModoEdicionComandero" onclick="toggleModoEdicionGlobal()" style="display:none; padding:4px 10px; font-size:0.78rem;" title="Activar o desactivar modo de edición 100% editable">
               🎨 Modo Edición
             </button>
@@ -1212,6 +1279,14 @@
             <div class="calc-line"><span>Subtotal Neto:</span><span id="comSubtotal">₡ 0.00</span></div>
             <div class="calc-line" id="comHappyHourRow" style="display:none; color:#f59e0b;">
               <span>Descuento Happy Hour:</span><span id="comHappyHourDesc">-₡ 0.00</span>
+            <div class="calc-line" id="comHappyHourRow" style="display:none; color:#f59e0b; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span>Descuento Happy Hour:</span>
+                <button type="button" id="btnToggleModoHHComandero" class="btn-toggle-modo-hh" onclick="toggleModoHappyHourActual()" title="Cambiar modo de emparejamiento 2x1 (Admin/Cajero)" style="background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#fbbf24; border-radius:12px; font-size:0.72rem; padding:1px 6px; cursor:pointer; font-weight:700;">
+                  🛡️ Estricto
+                </button>
+              </div>
+              <span id="comHappyHourDesc">-₡ 0.00</span>
             </div>
             <div class="calc-line"><span>Servicio Salón (10%):</span><span id="comServicio">₡ 0.00</span></div>
             <div class="calc-line"><span>I.V.A (13%):</span><span id="comIva">₡ 0.00</span></div>
@@ -1702,7 +1777,7 @@
   </div>
 
   <!-- MODAL RENOMBRAR MESA O SILLA -->
-  <div class="modal-backdrop" id="modalRenombrarMesa">
+  <div class="modal-backdrop" id="modalRenombrarMesa" style="z-index: 100000;">
     <div class="modal-dialog" style="width: 440px; max-width: 92vw;">
       <div class="dialog-header">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -1724,8 +1799,49 @@
       </div>
       <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px;">
         <button class="btn-sec" onclick="document.getElementById('modalRenombrarMesa').classList.remove('active')">Cancelar</button>
-        <button class="btn-pri" id="btnGuardarRenombrarMesa" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; font-weight:800; padding: 10px 22px;">
+        <button class="btn-pri" id="btnGuardarRenombrarMesa" onclick="guardarNuevoNombreMesa()" style="background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; font-weight:800; padding: 10px 22px;">
           💾 Guardar Nombre
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CAMBIAR CAPACIDAD DE PERSONAS (GASTROBAR THEME) -->
+  <div class="modal-backdrop" id="modalCapacidadMesa" style="z-index: 100000;">
+    <div class="modal-dialog" style="width: 440px; max-width: 92vw;">
+      <div class="dialog-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">👥</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem;">Cantidad de Personas</h3>
+            <small style="color:var(--text-muted);" id="lblCapacidadMesaNombre">Mesa o Silla de Barra</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" id="btnCloseCapacidadMesa" onclick="document.getElementById('modalCapacidadMesa').classList.remove('active')">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 22px 20px;">
+        <label style="display:block; text-align:center; font-weight:600; font-size:0.9rem; color:#94a3b8; margin-bottom:4px;">Capacidad de comensales:</label>
+        
+        <div class="cap-stepper-box">
+          <button type="button" class="btn-cap-step" onclick="ajustarCapacidadModal(-1)" title="Disminuir 1 persona">-</button>
+          <input type="number" id="txtCapacidadMesaInput" class="input-cap-display" min="1" max="100" value="4" />
+          <button type="button" class="btn-cap-step" onclick="ajustarCapacidadModal(1)" title="Aumentar 1 persona">+</button>
+        </div>
+
+        <small style="display:block; text-align:center; color:#64748b; font-size:0.8rem; margin-bottom:10px;">Selección rápida de capacidad:</small>
+        <div class="cap-quick-grid">
+          <button type="button" class="btn-cap-quick" onclick="setCapacidadRapida(1)">1 pers</button>
+          <button type="button" class="btn-cap-quick" onclick="setCapacidadRapida(2)">2 pers</button>
+          <button type="button" class="btn-cap-quick" onclick="setCapacidadRapida(4)">4 pers</button>
+          <button type="button" class="btn-cap-quick" onclick="setCapacidadRapida(6)">6 pers</button>
+          <button type="button" class="btn-cap-quick" onclick="setCapacidadRapida(8)">8 pers</button>
+          <button type="button" class="btn-cap-quick" onclick="setCapacidadRapida(12)">12 pers</button>
+        </div>
+      </div>
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px;">
+        <button class="btn-sec" onclick="document.getElementById('modalCapacidadMesa').classList.remove('active')">Cancelar</button>
+        <button class="btn-pri" id="btnGuardarCapacidadMesa" onclick="guardarCapacidadMesa()" style="background:linear-gradient(135deg, #6366f1, #4f46e5); color:#fff; font-weight:800; padding: 10px 22px;">
+          💾 Guardar Capacidad
         </button>
       </div>
     </div>
@@ -1962,7 +2078,7 @@
   <!-- ===================================================================== -->
   <!-- MODAL CENTRAL: PANEL DE ADMINISTRACIÓN (ADMIN & DEV) -->
   <!-- ===================================================================== -->
-  <div class="modal-backdrop" id="modalPanelAdmin" onclick="if(event.target===this) cerrarPanelAdmin();">
+  <div class="modal-backdrop" id="modalPanelAdmin" style="z-index: 100005;" onclick="if(event.target===this) cerrarPanelAdmin();">
     <div class="modal-dialog admin-panel-dialog">
       <div class="dialog-header">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -1996,12 +2112,40 @@
           <div class="admin-panel-card card-inventario" onclick="ejecutarAccionAdmin('inventario')">
             <div class="admin-card-header">
               <div class="admin-card-icon">📦</div>
-              <span class="admin-card-tag stock">Stock & Kardex</span>
+              <span class="admin-card-tag stock">Stock & Bodega</span>
             </div>
             <h4>Control de Inventario</h4>
             <p>Existencias de insumos y bebidas, alertas de stock crítico, entradas y registro de mermas.</p>
             <div class="admin-card-action">
               <span>Gestionar Stock</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 2.1 Recetas & Escandallos -->
+          <div class="admin-panel-card card-recetas" onclick="ejecutarAccionAdmin('recetas')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">👨‍🍳</div>
+              <span class="admin-card-tag" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);">Costos & Fichas</span>
+            </div>
+            <h4>Recetas & Escandallos</h4>
+            <p>Fichas técnicas de platillos y tragos, costeo exacto por porción, ingredientes y margen de utilidad.</p>
+            <div class="admin-card-action">
+              <span>Abrir Recetas</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 2.2 Historial Kárdex -->
+          <div class="admin-panel-card card-kardex" onclick="ejecutarAccionAdmin('kardex')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">📜</div>
+              <span class="admin-card-tag" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4);">Trazabilidad</span>
+            </div>
+            <h4>Historial Kárdex</h4>
+            <p>Auditoría de todos los movimientos de inventario: salidas automáticas por comanda, compras y mermas.</p>
+            <div class="admin-card-action">
+              <span>Ver Kárdex</span>
               <span class="arrow">→</span>
             </div>
           </div>
@@ -2441,6 +2585,12 @@
         <div class="cobro-total-banner">
           <span>Monto Total a Cancelar:</span>
           <h1 id="cobroTotalDisplay">₡ 0.00</h1>
+          <div id="cobroHappyHourBadgeRow" style="display:none; font-size:0.85rem; color:#f59e0b; margin-top:6px; justify-content:center; align-items:center; gap:8px;">
+            <span>🍸 Descuento HH: <strong id="cobroHappyHourDesc">-₡ 0.00</strong></span>
+            <button type="button" id="btnToggleModoHHCobro" class="btn-toggle-modo-hh" onclick="toggleModoHappyHourActual()" title="Cambiar modo de emparejamiento 2x1 (Admin/Cajero)" style="background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#fbbf24; border-radius:12px; font-size:0.75rem; padding:2px 8px; cursor:pointer; font-weight:700;">
+              🛡️ Estricto
+            </button>
+          </div>
         </div>
         <label class="section-label">Selecciona el Método de Pago:</label>
         <div class="pay-methods-tabs">
@@ -2708,7 +2858,7 @@
   </div>
 
   <!-- MODAL: KARDEX Y MOVIMIENTOS DE INSUMO -->
-  <div class="modal-backdrop" id="modalKardexInsumo">
+  <div class="modal-backdrop" id="modalKardexInsumo" style="z-index: 100010;">
     <div class="modal-dialog" style="max-width:760px; width:95%;">
       <div class="dialog-header">
         <div>
@@ -3034,7 +3184,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.4.0"></script>
+  <script src="app.js?v=2.9.1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

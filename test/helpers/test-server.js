@@ -178,6 +178,7 @@ async function startTestServer() {
       await dbRun(db, 'DELETE FROM DetalleOrden');
       await dbRun(db, 'DELETE FROM Ordenes');
       await dbRun(db, 'DELETE FROM Anulaciones');
+      await dbRun(db, 'DELETE FROM IdempotencyLog').catch(() => {});
       await dbRun(db, "UPDATE Mesas SET estado = 'libre', mesero = NULL");
       // Check if unida_a_mesa_id exists and reset
       try {

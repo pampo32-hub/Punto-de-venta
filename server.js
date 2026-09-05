@@ -69,6 +69,8 @@ db.serialize(() => {
   db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
   db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
+  db.run("ALTER TABLE DetalleOrden ADD COLUMN en_happy_hour INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE Ordenes ADD COLUMN modo_happy_hour TEXT DEFAULT 'estricto'", () => {});
   db.run("ALTER TABLE InventarioRecetas ADD COLUMN merma_porcentaje REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN es_licor INTEGER DEFAULT 0", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN capacidad_ml REAL DEFAULT 750", () => {});
@@ -156,6 +158,7 @@ db.serialize(() => {
 
 // Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
 setInterval(() => {
+  if (process.env.NODE_ENV === 'test') return;
   if (!happyHourEstado.activo) return;
   const ahora = new Date();
   const [hFin, mFin] = happyHourEstado.horaFin.split(':').map(Number);
@@ -1063,15 +1066,110 @@ app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
 });
 
 
+// Resetear y Liberar Mesa Trabada (Admin & Developer)
+app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
+  try {
+    const mesaId = req.params.id;
+    const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    const ahora = new Date().toISOString();
+
+    // 1. Obtener todas las órdenes activas asociadas a la mesa
+    const ordenesActivas = await dbAll(
+      "SELECT id FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [mesaId]
+    );
+
+    const ordenesIds = ordenesActivas.map(o => o.id);
+    if (ordenesIds.length > 0) {
+      const placeholders = ordenesIds.map(() => '?').join(',');
+
+      // Cancelar las órdenes con auditoría
+      await dbRun(
+        `UPDATE Ordenes 
+         SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Reset forzado por Admin/Dev]'
+         WHERE id IN (${placeholders})`,
+        [ahora, ...ordenesIds]
+      );
+
+      // Anular detalles de orden que no hayan sido pagados
+      await dbRun(
+        `UPDATE DetalleOrden 
+         SET estado_comanda = 'anulado' 
+         WHERE orden_id IN (${placeholders}) AND estado_comanda != 'pagado'`,
+        ordenesIds
+      );
+    }
+
+    // 2. Deshacer cualquier agrupación o unión activa
+    await dbRun(
+      'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+      [mesaId, mesaId]
+    );
+
+    // 3. Restaurar mesa a libre total
+    await dbRun(
+      `UPDATE Mesas 
+       SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL 
+       WHERE id = ?`,
+      [mesaId]
+    );
+
+    // 4. Notificar a todos los clientes conectados por sockets
+    io.emit('mesa_actualizada', {
+      mesaId: Number(mesaId),
+      estado: 'libre',
+      total: 0,
+      mesero: null,
+      transferida_de: null,
+      mesas_unidas: []
+    });
+    io.emit('comanda_anulada', { mesaId: Number(mesaId), ordenesIds });
+    io.emit('kds_actualizado');
+
+    res.json({
+      success: true,
+      message: `Mesa "${mesa.numero}" reseteada y liberada exitosamente.`,
+      mesaId: Number(mesaId),
+      ordenesCanceladas: ordenesIds.length
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Eliminar Mesa o Silla de Barra
 app.delete('/api/mesas/:id', async (req, res) => {
   try {
     const mesaId = req.params.id;
+    const forzar = req.query.forzar === 'true' || (req.body && req.body.forzar === true);
+    const rol = req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol);
+    const esAdmin = rol === 'admin' || rol === 'developer';
+
     // Verificar si la mesa tiene orden activa con consumos
     const ordenActiva = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [mesaId]);
     if (ordenActiva) {
-      return res.status(400).json({ error: 'No se puede eliminar la mesa porque tiene una cuenta activa pendiente de cobro.' });
+      if (forzar && esAdmin) {
+        // Forzar cancelación de órdenes antes de eliminar
+        const ahora = new Date().toISOString();
+        await dbRun(
+          "UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Cancelada por eliminación forzada de mesa]' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+          [ahora, mesaId]
+        );
+        await dbRun(
+          "UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE mesa_id = ? AND estado = 'cancelada') AND estado_comanda != 'pagado'",
+          [mesaId]
+        );
+      } else {
+        return res.status(400).json({
+          error: 'No se puede eliminar la mesa porque tiene una cuenta activa pendiente de cobro.',
+          tiene_cuenta: true
+        });
+      }
     }
+
+    await dbRun('UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1', [mesaId, mesaId]);
     await dbRun('DELETE FROM Mesas WHERE id = ?', [mesaId]);
     io.emit('mesa_eliminada', { id: Number(mesaId) });
     res.json({ message: 'Mesa o silla eliminada exitosamente', id: mesaId });
@@ -2153,7 +2251,7 @@ app.get('/api/happy-hour', (req, res) => {
 
 // POST: Activar / Desactivar (y opcionalmente cambiar horario)
 app.post('/api/happy-hour', async (req, res) => {
-  const { activo, horaInicio, horaFin } = req.body;
+  const { activo, horaInicio, horaFin } = req.body || {};
 
   if (horaInicio !== undefined) happyHourEstado.horaInicio = horaInicio;
   if (horaFin !== undefined) happyHourEstado.horaFin = horaFin;
@@ -2173,6 +2271,73 @@ app.post('/api/happy-hour', async (req, res) => {
 app.get('/api/ping', (req, res) => {
   res.json({ ok: true, timestamp: Date.now() });
 });
+
+// Recalcula y persiste los totales de una orden respetando el 2x1 ganado en Happy Hour
+async function recalcularTotalesOrden(ordenId) {
+  const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+  if (!orden) return { subtotal: 0, descuentoHH: 0, servicio: 0, iva: 0, total: 0, modoHH: 'estricto' };
+
+  const modoHH = orden.modo_happy_hour || 'estricto';
+
+  const rows = await dbAll(
+    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'",
+    [ordenId]
+  );
+
+  const subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
+
+  // Agrupar items elegibles para Happy Hour por producto_id o nombre
+  const grupos = {};
+  rows.forEach(r => {
+    const esCervezaOEligible = Boolean(
+      r.en_happy_hour === 1 ||
+      r.prod_happy_hour ||
+      r.prod_categoria_id === 4 ||
+      /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(r.nombre_producto || '')
+    );
+    if (!esCervezaOEligible) return;
+
+    const key = r.producto_id || r.nombre_producto;
+    if (!grupos[key]) {
+      grupos[key] = {
+        precio: r.precio_unitario,
+        cantHH: 0,
+        cantNoHH: 0
+      };
+    }
+    if (r.en_happy_hour === 1) {
+      grupos[key].cantHH += r.cantidad;
+    } else {
+      grupos[key].cantNoHH += r.cantidad;
+    }
+  });
+
+  let descuentoHH = 0;
+  for (const key in grupos) {
+    const g = grupos[key];
+    if (modoHH === 'flexible') {
+      const totalPares = Math.floor((g.cantHH + g.cantNoHH) / 2);
+      const maxParesPosibles = Math.floor(g.cantHH / 2) + ((g.cantHH % 2 === 1 && g.cantNoHH > 0) ? 1 : 0);
+      const pares = Math.min(totalPares, maxParesPosibles);
+      descuentoHH += pares * g.precio;
+    } else {
+      const pares = Math.floor(g.cantHH / 2);
+      descuentoHH += pares * g.precio;
+    }
+  }
+
+  const subNeto = Math.max(0, subtotal - descuentoHH);
+  const servicio = Math.round(subNeto * 0.10);
+  const iva = Math.round(subNeto * 0.13);
+  const total = subNeto + servicio + iva;
+
+  await dbRun(
+    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+    [subtotal, descuentoHH, servicio, iva, total, ordenId]
+  );
+
+  return { subtotal, descuentoHH, servicio, iva, total, modoHH };
+}
 
 async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null }) {
   const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
@@ -2232,6 +2397,19 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
+    const prodDb = await dbGet('SELECT happy_hour, categoria_id FROM Productos WHERE id = ?', [prodId]);
+    const esCervezaOEligible = Boolean(
+      it.happyHour ||
+      (prodDb && prodDb.happy_hour) ||
+      (prodDb && prodDb.categoria_id === 4) ||
+      it.categoria_id === 4 ||
+      it.catId === 4 ||
+      /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(nombre || '')
+    );
+    const itemEnHH = (it.en_happy_hour !== undefined)
+      ? (it.en_happy_hour ? 1 : 0)
+      : (((happyHourEstado.activo || happyHourActivo) && esCervezaOEligible) ? 1 : 0);
+
     itemsProcesados.push({
       id: prodId,
       nombre: nombre || 'Producto',
@@ -2240,7 +2418,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       notas: it.notas || '',
       curso: curso || 2,
       destino: destino || 'cocina',
-      origen_mesa_numero: it.origen_mesa_numero || null
+      origen_mesa_numero: it.origen_mesa_numero || null,
+      en_happy_hour: itemEnHH
     });
   }
 
@@ -2291,9 +2470,9 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   for (const it of itemsProcesados) {
     const subtotal = it.precio * it.cantidad;
     const rItem = await dbRun(
-      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero]
+      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero, en_happy_hour)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero, it.en_happy_hour]
     );
     nuevasComandas.push({
       id: rItem.lastID,
@@ -2306,38 +2485,21 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       notas: it.notas,
       curso: it.curso,
       destino: it.destino,
-      hora_pedido: ahora
+      hora_pedido: ahora,
+      en_happy_hour: it.en_happy_hour
     });
   }
 
   // Descontar existencias de inventario en tiempo real
   await descontarInventarioPorItems(itemsProcesados);
 
-  // 7. Recalcular totales de orden
-  const rows = await dbAll("SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'", [ordenId]);
-  let subtotal = rows.reduce((acc, r) => acc + (r.precio_unitario * r.cantidad), 0);
-
-  // Usar el estado de HH del servidor (fuente de verdad), no el del cliente
-  let descuentoHH = 0;
-  if (happyHourEstado.activo) {
-    rows.forEach(r => {
-      const esCerveza = Boolean(r.prod_happy_hour || r.prod_categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(r.nombre_producto || ''));
-      if (esCerveza) {
-        const pares = Math.floor(r.cantidad / 2);
-        descuentoHH += pares * r.precio_unitario;
-      }
-    });
-  }
-
-  const subNeto = subtotal - descuentoHH;
-  const servicio = Math.round(subNeto * 0.10);
-  const iva = Math.round(subNeto * 0.13);
-  const total = subNeto + servicio + iva;
-
-  await dbRun(
-    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-    [subtotal, descuentoHH, servicio, iva, total, ordenId]
-  );
+  // 7. Recalcular totales de orden respetando Happy Hour inmutable
+  const totalesOrden = await recalcularTotalesOrden(ordenId);
+  const subtotal = totalesOrden.subtotal;
+  const descuentoHH = totalesOrden.descuentoHH;
+  const servicio = totalesOrden.servicio;
+  const iva = totalesOrden.iva;
+  const total = totalesOrden.total;
 
   // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
   const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
@@ -2832,6 +2994,8 @@ async function procesarCobroOrden(ordenId, { metodo = 'Efectivo', monto, propina
       message: 'Cobro completado y mesa liberada',
       ordenId,
       es_parcial: false,
+      total: orden.total,
+      descuentoHH: orden.descuento_happy_hour,
       ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
     };
   } else {
@@ -2927,6 +3091,51 @@ app.post('/api/ordenes/:id/cobrar', async (req, res) => {
     res.json(resultado);
   } catch (e) {
     res.status(e.message === 'Orden no encontrada' ? 404 : 500).json({ error: e.message });
+  }
+});
+
+// Endpoint para alternar modo Happy Hour de la orden (Estricto vs Flexible)
+app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
+  try {
+    const ordenId = req.params.id;
+    const { modo } = req.body;
+    const rol = req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol);
+
+    // Permisos: solo admin, developer o cajero
+    const esAutorizado = rol === 'admin' || rol === 'developer' || rol === 'cajero';
+    if (!esAutorizado) {
+      return res.status(403).json({ error: 'Requiere permisos de Administrador o Cajero para cambiar el modo de Happy Hour.' });
+    }
+
+    if (modo !== 'estricto' && modo !== 'flexible') {
+      return res.status(400).json({ error: 'Modo inválido. Debe ser "estricto" o "flexible".' });
+    }
+
+    const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    await dbRun('UPDATE Ordenes SET modo_happy_hour = ? WHERE id = ?', [modo, ordenId]);
+
+    const resultado = await recalcularTotalesOrden(ordenId);
+
+    if (orden.mesa_id) {
+      io.emit('mesa_actualizada', {
+        mesaId: Number(orden.mesa_id),
+        total: resultado.total,
+        descuentoHH: resultado.descuentoHH,
+        modo_happy_hour: modo
+      });
+    }
+
+    res.json({
+      success: true,
+      mensaje: `Modo de Happy Hour actualizado a ${modo}.`,
+      ordenId: Number(ordenId),
+      modo,
+      ...resultado
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -3670,7 +3879,36 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
   }
 });
 
-// --- KARDEX DE INVENTARIO ---
+// --- KARDEX GENERAL / MOVIMIENTOS COMPLETOS ---
+app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, res) => {
+  try {
+    const { insumo_id, tipo, limit } = req.query;
+    let query = `
+      SELECT m.*, i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, i.es_licor, i.rendimiento_shots
+      FROM InventarioMovimientos m
+      LEFT JOIN Inventario i ON m.insumo_id = i.id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (insumo_id && insumo_id !== 'todos') {
+      query += ' AND m.insumo_id = ?';
+      params.push(insumo_id);
+    }
+    if (tipo && tipo !== 'todos') {
+      query += ' AND m.tipo = ?';
+      params.push(tipo);
+    }
+    query += ' ORDER BY m.id DESC LIMIT ?';
+    params.push(parseInt(limit) || 200);
+
+    const movimientos = await dbAll(query, params);
+    res.json({ movimientos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- KARDEX DE INVENTARIO POR INSUMO ---
 app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => {
   try {
     const id = req.params.id;
