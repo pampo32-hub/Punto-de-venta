@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>PUNTO DE VENTA | Restaurantes & Bares</title>
-  <link rel="stylesheet" href="styles.css?v=2.9.1" />
+  <link rel="stylesheet" href="styles.css?v=2.9.2" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -494,43 +494,28 @@
       <!-- MENÚS DE NAVEGACIÓN -->
       <nav class="nav-pills">
         <button class="nav-pill active" data-view="salon">
-          <span class="pill-icon">🗺️</span> Salón & Mesas
+          <span class="pill-icon">🗺️</span> Salón
         </button>
         <button class="nav-pill" data-view="kds">
-          <span class="pill-icon">🍳</span> Cocina & Barra
+          <span class="pill-icon">🍳</span> Cocina
           <span class="pill-counter" id="kdsCounter">0</span>
         </button>
         <button class="nav-pill" data-view="caja">
-          <span class="pill-icon">💵</span> Caja & Propinas
+          <span class="pill-icon">💵</span> Caja
         </button>
         <button class="nav-pill" data-view="facturacion">
-          <span class="pill-icon">⚡</span> Facturación Express
+          <span class="pill-icon">⚡</span> Facturación
         </button>
-        <!-- Pestañas de administración directa: visibles y con acceso seguro -->
-        <button class="nav-pill admin-view-tab" data-view="inventario" id="tabNavInventario" title="Control de Inventario, Insumos y Bodega">
-          <span class="pill-icon">📦</span> Inventario & Bodega
-        </button>
-        <button class="nav-pill admin-view-tab" data-view="recetas" id="tabNavRecetas" title="Fichas Técnicas, Recetas y Escandallos de Platillos y Bebidas">
-          <span class="pill-icon">👨‍🍳</span> Recetas & Escandallos
-        </button>
-        <button class="nav-pill admin-view-tab" data-view="kardex" id="tabNavKardex" title="Historial y Trazabilidad Kárdex de Insumos">
-          <span class="pill-icon">📜</span> Kárdex
-        </button>
-        <button class="nav-pill admin-view-tab admin-only-tab" data-view="editor-plano" id="tabNavEditorPlano" style="display: none;" title="Diseño y distribución física de mesas">
-          <span class="pill-icon">📐</span> Editor Salón
-        </button>
-        <button class="nav-pill admin-view-tab admin-only-tab" data-view="metricas" id="tabNavMetricas" style="display: none;" title="Métricas y Dashboard en vivo">
-          <span class="pill-icon">📊</span> Dashboard
-        </button>
-        <button class="nav-pill admin-view-tab admin-only-tab" data-view="auditoria" id="tabNavAuditoria" style="display: none;" title="Bitácora de seguridad y auditoría">
-          <span class="pill-icon">🛡️</span> Auditoría
+        <!-- Pestaña de Inventario & Recetas -->
+        <button class="nav-pill admin-view-tab" data-view="inventario" id="tabNavInventario" title="Control de Inventario, Insumos, Recetas y Kárdex">
+          <span class="pill-icon">📦</span> Inventario
         </button>
       </nav>
 
       <!-- BOTÓN ÚNICO DEL PANEL DE ADMINISTRACIÓN (ADMIN & DEV CON ACCESO POR PIN) -->
       <div class="admin-extra-actions" id="adminExtraActions">
         <button class="btn-topbar-tool btn-admin-panel-trigger" id="btnAbrirPanelAdmin" onclick="abrirPanelAdmin()" title="Abrir Panel con todas las funciones de administración y Kárdex">
-          👑 Panel de Admin <span class="arrow-indicator">▼</span>
+          👑 Admin <span class="arrow-indicator">▼</span>
         </button>
       </div>
 
@@ -952,17 +937,28 @@
 
           <!-- PANEL 2: FICHAS TÉCNICAS & ESCANDALLOS -->
           <div class="inv-tab-panel" id="invPanelRecetas" style="display:none;">
-            <div class="receta-selector-bar">
-              <div style="flex:1; min-width:280px;">
-                <label style="display:block; font-size:0.8rem; font-weight:700; color:#94a3b8; margin-bottom:6px;">
-                  🍽️ Seleccionar Platillo o Bebida del Menú:
+            <div class="receta-selector-bar" style="background:#111827; border:1px solid #1f2937; border-radius:12px; padding:16px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end;">
+              <div style="flex:1; min-width:260px;">
+                <label style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:700; color:#38bdf8; margin-bottom:6px;">
+                  <span>🔎 Buscador Inteligente de Platillos & Bebidas:</span>
+                  <span id="badgeConteoRecetas" style="color:#94a3b8; font-weight:500;"></span>
                 </label>
-                <select id="selectProductoEscandallo" class="select-styled" onchange="cargarFichaTecnica(this.value)" style="width:100%; padding:10px 14px; font-size:0.95rem; font-weight:700; background:#111827; border:1px solid #374151; color:#fff; border-radius:8px;">
+                <div style="position:relative;">
+                  <input type="text" id="txtBuscarPlatilloReceta" placeholder="Escribe para buscar... (ej: Hamburguesa, Casado, Cacique, Mojito)" oninput="filtrarProductosReceta()" style="width:100%; padding:10px 14px; padding-left:36px; font-size:0.95rem; background:#0f172a; border:1px solid #3b82f6; color:#fff; border-radius:8px; outline:none;" />
+                  <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:1rem; pointer-events:none;">🔍</span>
+                </div>
+              </div>
+              <div style="flex:1.2; min-width:280px;">
+                <label style="display:block; font-size:0.8rem; font-weight:700; color:#94a3b8; margin-bottom:6px;">
+                  🍽️ Platillo / Bebida Seleccionado:
+                </label>
+                <select id="selectProductoEscandallo" class="select-styled" onchange="cargarFichaTecnica(this.value)" style="width:100%; padding:10px 14px; font-size:0.95rem; font-weight:700; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px;">
                   <!-- Opciones de productos cargadas dinámicamente -->
                 </select>
               </div>
-              <div class="receta-actions-top">
-                <button class="btn-tool" onclick="recargarFichaTecnicaActual()">🔄 Refrescar Ficha</button>
+              <div class="receta-actions-top" style="display:flex; gap:8px;">
+                <button class="btn-tool" onclick="limpiarBuscadorRecetas()" title="Limpiar búsqueda y mostrar lista completa">🧹 Limpiar</button>
+                <button class="btn-tool" onclick="recargarFichaTecnicaActual()" title="Recargar ficha técnica actual">🔄 Refrescar</button>
               </div>
             </div>
 
@@ -2627,7 +2623,7 @@
     </div>
   </div>
   <!-- MODAL: AJUSTE DE INVENTARIO (ENTRADA / MERMA / CONTEO) -->
-  <div class="modal-backdrop" id="modalAjusteInventario">
+  <div class="modal-backdrop" id="modalAjusteInventario" style="z-index: 100020;">
     <div class="modal-dialog" style="max-width:440px;">
       <div class="dialog-header">
         <h3 id="lblTituloAjusteInv">📦 Movimiento de Inventario</h3>
@@ -2671,7 +2667,7 @@
   </div>
 
   <!-- MODAL: REGISTRAR NUEVO INSUMO -->
-  <div class="modal-backdrop" id="modalNuevoInsumo">
+  <div class="modal-backdrop" id="modalNuevoInsumo" style="z-index: 100020;">
     <div class="modal-dialog" style="max-width:460px;">
       <div class="dialog-header">
         <h3>➕ Registrar Nuevo Insumo / Artículo</h3>
@@ -2711,7 +2707,6 @@
           </div>
           <div>
             <label>Costo Unitario:</label>
-            <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
             <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" oninput="actualizarCalculoShotsNuevo()" />
           </div>
         </div>
@@ -3184,7 +3179,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.9.1"></script>
+  <script src="app.js?v=2.9.2"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

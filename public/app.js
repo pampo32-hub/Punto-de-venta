@@ -1827,7 +1827,7 @@ window.abrirModuloAdmin = function(modulo) {
   document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
 
-  const navBtn = document.querySelector(`.nav-pill[data-view="${modulo}"]`);
+  const navBtn = document.querySelector(`.nav-pill[data-view="${modulo}"]`) || ((modulo === 'recetas' || modulo === 'kardex') ? document.querySelector('.nav-pill[data-view="inventario"]') : null);
   if (navBtn) navBtn.classList.add('active');
 
   // Mapear recetas y kardex a la vista física 'view-inventario'
@@ -7167,13 +7167,42 @@ function filtrarTablaInventario() {
 // Modales de Inventario
 let tipoAjusteActivo = 'entrada';
 
-function abrirModalAjusteRapido(tipo = 'entrada', insumoId = null) {
-  tipoAjusteActivo = tipo;
-  seleccionarTipoAjuste(tipo);
+window.abrirModalAjusteRapido = function(tipo = 'entrada', insumoId = null) {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para realizar movimientos de inventario:');
+    if (!pin) return;
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      estado.usuarioActual = {
+        id: 4, usuario: 'admin', nombre: 'Don Alberto', rol: 'admin',
+        rolEtiqueta: 'Administrador', perfilVisual: 'Don Alberto (Administrador)',
+        pin: '1234', negocio_id: estado.negocioActual?.id || 1
+      };
+      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      aplicarEnrutamientoPorRol();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
+    }
+  }
 
-  if (insumoId) {
-    const sel = document.getElementById('selectAjusteInsumo');
-    if (sel) sel.value = insumoId;
+  // Asegurar que selectAjusteInsumo tenga opciones
+  const ajusteSelect = document.getElementById('selectAjusteInsumo');
+  if (ajusteSelect && (!ajusteSelect.options || ajusteSelect.options.length === 0) && estado.inventario && estado.inventario.length > 0) {
+    ajusteSelect.innerHTML = estado.inventario.map(i => `
+      <option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>
+    `).join('');
+  }
+
+  tipoAjusteActivo = tipo;
+  window.seleccionarTipoAjuste(tipo);
+
+  if (insumoId && ajusteSelect) {
+    ajusteSelect.value = insumoId;
   }
   actualizarEtiquetaUnidadAjuste();
   const txtCant = document.getElementById('txtAjusteCantidad');
@@ -7181,14 +7210,15 @@ function abrirModalAjusteRapido(tipo = 'entrada', insumoId = null) {
   if (txtCant) txtCant.value = '';
   if (txtMotivo) txtMotivo.value = '';
 
-  document.getElementById('modalAjusteInventario')?.classList.add('active');
-}
+  const modal = document.getElementById('modalAjusteInventario');
+  if (modal) modal.classList.add('active');
+};
 
-function cerrarModalAjusteInventario() {
+window.cerrarModalAjusteInventario = function() {
   document.getElementById('modalAjusteInventario')?.classList.remove('active');
-}
+};
 
-function seleccionarTipoAjuste(tipo) {
+window.seleccionarTipoAjuste = function(tipo) {
   tipoAjusteActivo = tipo;
   const btnEntrada = document.getElementById('btnAjusteTipoEntrada');
   const btnMerma = document.getElementById('btnAjusteTipoMerma');
@@ -7220,7 +7250,7 @@ function seleccionarTipoAjuste(tipo) {
     if (lblCant) lblCant.innerHTML = 'Cantidad a Descontar por Merma/Pérdida (<span id="spanAjusteUnidad">unidades</span>):';
   }
   actualizarEtiquetaUnidadAjuste();
-}
+};
 
 function actualizarEtiquetaUnidadAjuste() {
   const sel = document.getElementById('selectAjusteInsumo');
@@ -7233,7 +7263,7 @@ function actualizarEtiquetaUnidadAjuste() {
 
 document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
 
-async function guardarAjusteInventario() {
+window.guardarAjusteInventario = async function() {
   const insumoId = document.getElementById('selectAjusteInsumo')?.value;
   const cantidad = parseFloat(document.getElementById('txtAjusteCantidad')?.value);
   const motivo = document.getElementById('txtAjusteMotivo')?.value.trim();
@@ -7264,7 +7294,7 @@ async function guardarAjusteInventario() {
   } catch (e) {
     alert('❌ ' + e.message);
   }
-}
+};
 
 // CONTROL DE LICORES Y SHOTS - MODAL NUEVO INSUMO
 window.toggleConfigLicorNuevo = function(checked) {
@@ -7310,7 +7340,29 @@ window.actualizarCalculoShotsNuevo = function() {
   if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
 };
 
-function abrirModalNuevoInsumo() {
+window.abrirModalNuevoInsumo = function() {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para registrar nuevos insumos:');
+    if (!pin) return;
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      estado.usuarioActual = {
+        id: 4, usuario: 'admin', nombre: 'Don Alberto', rol: 'admin',
+        rolEtiqueta: 'Administrador', perfilVisual: 'Don Alberto (Administrador)',
+        pin: '1234', negocio_id: estado.negocioActual?.id || 1
+      };
+      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      aplicarEnrutamientoPorRol();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Modo Administrador activado', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
+    }
+  }
+
   const n = document.getElementById('txtNuevoInsumoNombre');
   const c = document.getElementById('txtNuevoInsumoCat');
   const s = document.getElementById('txtNuevoInsumoStock');
@@ -7327,15 +7379,16 @@ function abrirModalNuevoInsumo() {
   if (chkL) chkL.checked = false;
   if (selCap) selCap.value = '750';
   if (selShot) selShot.value = '30';
-  toggleConfigLicorNuevo(false);
-  document.getElementById('modalNuevoInsumo')?.classList.add('active');
-}
+  window.toggleConfigLicorNuevo(false);
+  const modal = document.getElementById('modalNuevoInsumo');
+  if (modal) modal.classList.add('active');
+};
 
-function cerrarModalNuevoInsumo() {
+window.cerrarModalNuevoInsumo = function() {
   document.getElementById('modalNuevoInsumo')?.classList.remove('active');
-}
+};
 
-async function guardarNuevoInsumo() {
+window.guardarNuevoInsumo = async function() {
   const nombre = document.getElementById('txtNuevoInsumoNombre')?.value.trim();
   const categoria = document.getElementById('txtNuevoInsumoCat')?.value.trim() || 'General';
   const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
@@ -7378,12 +7431,12 @@ async function guardarNuevoInsumo() {
     if (!res.ok) throw new Error(data.error);
 
     mostrarNotificacionCentro(`✅ Insumo "${nombre}" registrado correctamente.`, 'success');
-    cerrarModalNuevoInsumo();
+    window.cerrarModalNuevoInsumo();
     cargarInventarioAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
   }
-}
+};
 
 // CONTROL DE EDICIÓN DE INSUMO / LICOR
 window.abrirModalEditarInsumo = async function(id) {
@@ -7557,6 +7610,66 @@ window.guardarEdicionInsumo = async function() {
 // -------------------------------------------------------------
 // FICHAS TÉCNICAS & ESCANDALLOS
 // -------------------------------------------------------------
+window.productosRecetaDisponibles = [];
+
+function renderOpcionesProductosReceta(lista, valorSeleccionado = null) {
+  const selectProd = document.getElementById('selectProductoEscandallo');
+  const badgeConteo = document.getElementById('badgeConteoRecetas');
+  if (!selectProd) return;
+
+  if (!lista || lista.length === 0) {
+    selectProd.innerHTML = '<option value="">⚠️ No se encontraron platillos o bebidas</option>';
+    if (badgeConteo) badgeConteo.textContent = '(0 encontrados)';
+    return;
+  }
+
+  selectProd.innerHTML = lista.map(r => {
+    const countTxt = r.total_ingredientes > 0 ? ` (${r.total_ingredientes} ingredientes)` : ' (Sin receta)';
+    return `<option value="${r.producto_id}">${escapeHtml(r.producto_nombre)} - PVP: ${formatCRC(r.precio_venta)}${countTxt}</option>`;
+  }).join('');
+
+  if (badgeConteo) {
+    badgeConteo.textContent = `(${lista.length} platillos)`;
+  }
+
+  if (valorSeleccionado && lista.some(r => String(r.producto_id) === String(valorSeleccionado))) {
+    selectProd.value = valorSeleccionado;
+  } else if (lista.length > 0) {
+    selectProd.value = lista[0].producto_id;
+  }
+}
+
+window.filtrarProductosReceta = function() {
+  const q = (document.getElementById('txtBuscarPlatilloReceta')?.value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const selectProd = document.getElementById('selectProductoEscandallo');
+  if (!window.productosRecetaDisponibles || window.productosRecetaDisponibles.length === 0) return;
+
+  if (!q) {
+    renderOpcionesProductosReceta(window.productosRecetaDisponibles);
+    if (selectProd && selectProd.value) {
+      window.cargarFichaTecnica(selectProd.value);
+    }
+    return;
+  }
+
+  const filtrados = window.productosRecetaDisponibles.filter(r => {
+    const nom = (r.producto_nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return nom.includes(q);
+  });
+
+  renderOpcionesProductosReceta(filtrados);
+
+  if (filtrados.length > 0 && selectProd) {
+    window.cargarFichaTecnica(filtrados[0].producto_id);
+  }
+};
+
+window.limpiarBuscadorRecetas = function() {
+  const inp = document.getElementById('txtBuscarPlatilloReceta');
+  if (inp) inp.value = '';
+  window.filtrarProductosReceta();
+};
+
 async function inicializarPanelRecetas() {
   const selectProd = document.getElementById('selectProductoEscandallo');
   const selectInsumo = document.getElementById('selectNuevoIngredienteInsumo');
@@ -7580,20 +7693,31 @@ async function inicializarPanelRecetas() {
     if (res.ok) {
       const recetas = await res.json();
       if (recetas && recetas.length > 0) {
-        selectProd.innerHTML = recetas.map(r => `
-          <option value="${r.producto_id}">${escapeHtml(r.producto_nombre)} - PVP: ${formatCRC(r.precio_venta)} (${r.total_ingredientes} ingredientes)</option>
-        `).join('');
-        cargarFichaTecnica(recetas[0].producto_id);
+        window.productosRecetaDisponibles = recetas;
+        const currentSearch = document.getElementById('txtBuscarPlatilloReceta')?.value?.trim();
+        if (currentSearch) {
+          window.filtrarProductosReceta();
+        } else {
+          renderOpcionesProductosReceta(recetas);
+          const pid = selectProd.value || recetas[0].producto_id;
+          window.cargarFichaTecnica(pid);
+        }
         return;
       }
     }
 
     // Fallback a productos locales
     if (estado.productos && estado.productos.length) {
-      selectProd.innerHTML = estado.productos.map(p => `
-        <option value="${p.id}">${escapeHtml(p.nombre)} - PVP: ${formatCRC(p.precio)}</option>
-      `).join('');
-      cargarFichaTecnica(estado.productos[0].id);
+      const adaptados = estado.productos.map(p => ({
+        producto_id: p.id,
+        producto_nombre: p.nombre,
+        precio_venta: p.precio,
+        total_ingredientes: 0,
+        costo_receta: 0
+      }));
+      window.productosRecetaDisponibles = adaptados;
+      renderOpcionesProductosReceta(adaptados);
+      window.cargarFichaTecnica(adaptados[0].producto_id);
     }
   } catch (e) {
     console.error('Error al inicializar recetas:', e);

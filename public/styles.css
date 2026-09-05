@@ -48,40 +48,53 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  gap: 16px;
+  padding: 0 10px;
+  gap: 8px;
   z-index: 100;
+  max-width: 100vw;
+  box-sizing: border-box;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .brand-logo {
-  font-size: 1.8rem;
+  font-size: 1.3rem;
+}
+
+.brand-info {
+  max-width: 130px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .brand-info h2 {
-  font-size: 1.05rem;
+  font-size: 0.88rem;
   font-weight: 800;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .badge-tag {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   background: rgba(2, 132, 199, 0.2);
   color: var(--primary-glow);
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
   font-weight: 700;
 }
 
 .quick-search-box {
   position: relative;
-  flex: 1;
-  max-width: 380px;
+  flex: 0 1 180px;
+  max-width: 200px;
+  min-width: 100px;
   display: flex;
   align-items: center;
 }
@@ -156,23 +169,25 @@ body {
 
 .nav-pills {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .nav-pill {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-muted);
-  padding: 8px 14px;
+  padding: 5px 9px;
   border-radius: 8px;
   cursor: pointer;
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   position: relative;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 
 .nav-pill:hover, .nav-pill.active {
@@ -198,26 +213,46 @@ body {
 .user-status-pill {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #111827;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 20px;
   border: 1px solid var(--border);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.user-status-pill .user-subtitle {
+  display: none;
+}
+
+.user-status-pill .user-title {
+  font-size: 0.8rem;
 }
 
 /* HAPPY HOUR TOPBAR PILL */
 .happy-hour-pill {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   background: linear-gradient(135deg, #ec4899, #8b5cf6);
-  padding: 6px 14px;
+  padding: 4px 10px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   cursor: pointer;
   box-shadow: 0 0 15px rgba(236, 72, 153, 0.45);
   transition: all 0.2s ease;
   user-select: none;
+  flex-shrink: 0;
+}
+
+.happy-hour-pill small {
+  display: none;
+}
+
+.happy-hour-pill .hh-title {
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
 .happy-hour-pill:hover {
@@ -258,8 +293,7 @@ body {
 }
 
 .happy-hour-pill .hh-info small {
-  font-size: 0.68rem;
-  color: rgba(255, 255, 255, 0.85);
+  display: none;
 }
 
 .happy-hour-pill.inactive .hh-info small {
@@ -323,8 +357,7 @@ body {
 }
 
 .user-subtitle {
-  font-size: 0.68rem;
-  color: var(--text-muted);
+  display: none;
 }
 
 /* ------------------------------------------------------------- */
@@ -3671,13 +3704,13 @@ textarea:focus, select:focus, input:focus {
   }
 
   .quick-search-box {
-    max-width: 170px;
+    max-width: 130px;
   }
 
   .quick-search-box input {
-    height: 34px;
-    font-size: 0.78rem;
-    padding: 0 28px 0 28px;
+    height: 32px;
+    font-size: 0.76rem;
+    padding: 0 24px 0 24px;
   }
 
   .search-shortcut {
@@ -3697,18 +3730,12 @@ textarea:focus, select:focus, input:focus {
   }
 
   .nav-pills {
-    gap: 4px;
-    flex-shrink: 1;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .nav-pills::-webkit-scrollbar {
-    display: none;
+    gap: 3px;
+    flex-shrink: 0;
   }
 
   .nav-pill {
-    padding: 6px 10px;
+    padding: 5px 8px;
     font-size: 0.78rem;
     white-space: nowrap;
   }
@@ -3738,6 +3765,25 @@ textarea:focus, select:focus, input:focus {
 
   .user-subtitle {
     display: none;
+  }
+
+  @media screen and (max-width: 1300px) {
+    .brand {
+      max-width: 130px;
+    }
+    .happy-hour-pill {
+      padding: 3px 6px;
+    }
+    .user-status-pill {
+      padding: 3px 8px;
+    }
+    .quick-search-box {
+      max-width: 110px;
+    }
+    .top-nav {
+      gap: 5px;
+      padding: 0 8px;
+    }
   }
 
   /* COMANDERO COMPACTO PARA LAPTOPS 768px DE ALTO */
