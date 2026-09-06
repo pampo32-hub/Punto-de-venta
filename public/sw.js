@@ -1,4 +1,5 @@
 const CACHE_NAME = 'pos-static-v39';
+const CACHE_NAME = 'pos-static-v40';
 
 
 

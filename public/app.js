@@ -10131,6 +10131,7 @@ window.imprimirListaCompras = function() {
 // =====================================================================
 window.reporteVentasActual = null;
 window.filtroVentasPreset = 'mes';
+window.filtroVentasPreset = 'hoy';
 window.productoVentasSeleccionadoId = null;
 
 window.inicializarModuloVentasInventario = function() {
@@ -10140,6 +10141,7 @@ window.inicializarModuloVentasInventario = function() {
   } else {
     consultarVentasProductosServidor();
   }
+  seleccionarPresetFechaVentas('hoy');
 };
 
 function poblarCategoriasFiltroVentas() {
@@ -10168,6 +10170,7 @@ window.seleccionarPresetFechaVentas = function(preset) {
 
   if (preset === 'hoy') {
     desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    hastaDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   } else if (preset === 'ayer') {
     desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
     hastaDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -10175,10 +10178,13 @@ window.seleccionarPresetFechaVentas = function(preset) {
     const day = now.getDay();
     const diff = (day === 0 ? -6 : 1) - day;
     desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+    hastaDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   } else if (preset === 'mes') {
     desdeDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    hastaDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   } else if (preset === '30dias') {
     desdeDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    hastaDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   } else if (preset === 'personalizado') {
     return;
   }
@@ -10206,7 +10212,20 @@ window.consultarVentasProductosServidor = async function(productoId = null) {
 
     const desde = inputDesde ? inputDesde.value : '';
     const hasta = inputHasta ? inputHasta.value : '';
+    const desdeRaw = inputDesde ? inputDesde.value : '';
+    const hastaRaw = inputHasta ? inputHasta.value : '';
     const catId = selCat ? selCat.value : 'todas';
+
+    let desde = desdeRaw;
+    let hasta = hastaRaw;
+    if (desdeRaw && desdeRaw.length === 10) {
+      const dLocal = new Date(`${desdeRaw}T00:00:00`);
+      if (!isNaN(dLocal.getTime())) desde = dLocal.toISOString();
+    }
+    if (hastaRaw && hastaRaw.length === 10) {
+      const hLocal = new Date(`${hastaRaw}T23:59:59.999`);
+      if (!isNaN(hLocal.getTime())) hasta = hLocal.toISOString();
+    }
 
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
     const nid = estado.negocioActual?.id || 1;
@@ -10601,8 +10620,19 @@ window.abrirModalDetalleInsumos = async function(productoId) {
     try {
       const inputDesde = document.getElementById('txtFechaVentasDesde')?.value || '';
       const inputHasta = document.getElementById('txtFechaVentasHasta')?.value || '';
+      let desdeISO = inputDesde;
+      let hastaISO = inputHasta;
+      if (inputDesde && inputDesde.length === 10) {
+        const d = new Date(`${inputDesde}T00:00:00`);
+        if (!isNaN(d.getTime())) desdeISO = d.toISOString();
+      }
+      if (inputHasta && inputHasta.length === 10) {
+        const h = new Date(`${inputHasta}T23:59:59.999`);
+        if (!isNaN(h.getTime())) hastaISO = h.toISOString();
+      }
       const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
       const r = await fetch(`/api/admin/reportes/ventas-productos?producto_id=${productoId}&desde=${encodeURIComponent(inputDesde)}&hasta=${encodeURIComponent(inputHasta)}`, {
+      const r = await fetch(`/api/admin/reportes/ventas-productos?producto_id=${productoId}&desde=${encodeURIComponent(desdeISO)}&hasta=${encodeURIComponent(hastaISO)}`, {
         headers: { 'x-user-rol': rol }
       });
       const d = await r.json();
@@ -12195,6 +12225,8 @@ window.restablecerPersonalizacionPagina = async function() {
   if (!confirmado) return;
 
   try {
+    aw
+... [truncated for diff preview]
     await fetch('/api/dev/personalizacion-pagina/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
