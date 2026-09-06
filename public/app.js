@@ -1626,6 +1626,12 @@ try {
       if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
     });
     socket.on('venta_registrada', () => {
+      if (typeof window.consultarVentasProductosServidor === 'function') {
+        window.consultarVentasProductosServidor();
+      }
+      if (document.getElementById('modalCuentasCobradas')?.classList.contains('active')) {
+        if (typeof window.recargarCuentasCobradasHoy === 'function') window.recargarCuentasCobradasHoy();
+      }
       if (document.getElementById('view-inventario')?.classList.contains('active')) {
         cargarInventarioAdmin();
         if (window.subTabInventarioActiva === 'ventas') {
@@ -4008,6 +4014,18 @@ window.agregarAlTicketOneTap = function(prodId) {
   if (existente) {
     existente.cantidad++;
   } else {
+    let itemDest = prod.destino;
+    let itemCurso = prod.curso;
+    const prodCat = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
+    if (prodCat === 4 || prodCat === 5 || prodCat === 6 || prodCat === 7 || /cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua|cas|horchata|resbaladera|jugo|batido/i.test(prod.nombre || '')) {
+      itemDest = 'barra';
+    } else if (!itemDest) {
+      itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
+    }
+    if (!itemCurso) {
+      itemCurso = itemDest === 'barra' ? 1 : 3;
+    }
+
     estado.mesaActiva.items.push({
       id: prod.id,
       nombre: prod.nombre,
@@ -4016,6 +4034,8 @@ window.agregarAlTicketOneTap = function(prodId) {
       notas: '',
       destino: prod.destino,
       curso: prod.curso || 2,
+      destino: itemDest,
+      curso: itemCurso,
       happyHour: esCervezaOEligible,
       en_happy_hour: esHH,
       enviado: false

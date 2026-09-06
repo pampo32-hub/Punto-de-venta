@@ -212,6 +212,7 @@ body {
 
 .user-status-pill {
   display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   background: #111827;
@@ -220,6 +221,14 @@ body {
   border: 1px solid var(--border);
   flex-shrink: 0;
   margin-left: auto;
+  white-space: nowrap;
+  max-height: 38px;
+}
+
+.user-status-pill .user-details {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .user-status-pill .user-subtitle {
@@ -228,6 +237,28 @@ body {
 
 .user-status-pill .user-title {
   font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.btn-user-pin, .btn-user-logout {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.btn-user-pin:hover, .btn-user-logout:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
 }
 
 /* HAPPY HOUR TOPBAR PILL */

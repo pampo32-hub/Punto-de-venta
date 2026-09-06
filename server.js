@@ -2584,15 +2584,13 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
-    // Si aún no tiene destino explícito, determinarlo inteligentemente
-    if (!destino) {
+    // Determinar destino inteligentemente (Bebidas, Cervezas, Cocteles, Frescos, Cafés van a Barra)
+    if (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6 || prodDb.categoria_id === 7)) {
+      destino = 'barra';
+    } else if (/cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua|cas|horchata|resbaladera|jugo|batido/i.test(nombre || '')) {
+      destino = 'barra';
+    } else if (!destino) {
       if (curso === 1 || curso === 5 || curso === 6) {
-        destino = 'barra';
-      } else if (curso === 2 || curso === 3 || curso === 4) {
-        destino = 'cocina';
-      } else if (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6)) {
-        destino = 'barra';
-      } else if (/cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua/i.test(nombre || '')) {
         destino = 'barra';
       } else {
         destino = 'cocina';
