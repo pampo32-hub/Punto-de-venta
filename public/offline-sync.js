@@ -146,11 +146,11 @@
      * y ejecuta optimistaFn para que el usuario no se detenga.
      */
     ejecutarConRespaldo: async function ({ tipo, endpoint, metodo = 'POST', payload = {}, descripcion = '', optimistaFn }) {
-      // Si creemos que estamos online, intentamos la llamada
-      if (navigator.onLine && isOnline) {
+      // Intentar siempre llamada en vivo primero si el navegador reporta red disponible
+      if (navigator.onLine !== false) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           const res = await fetch(endpoint, {
             method: metodo,
@@ -161,12 +161,14 @@
           clearTimeout(timeoutId);
 
           if (res.ok) {
+            isOnline = true;
+            PosOfflineSync.actualizarUI();
             const data = await res.json().catch(() => ({ ok: true }));
             return { exito: true, datos: data, offline: false };
           }
 
           // Si es error 502, 503, 504 o caída del proxy, tratamos como offline
-          if (res.status >= 500) {
+          if (res.status >= 502 && res.status <= 504) {
             console.warn('[OfflineSync] Error del servidor ' + res.status + ', guardando en cola offline.');
             return await PosOfflineSync.encolarOffline({ tipo, endpoint, metodo, payload, descripcion, optimistaFn });
           }
@@ -181,7 +183,7 @@
           return await PosOfflineSync.encolarOffline({ tipo, endpoint, metodo, payload, descripcion, optimistaFn });
         }
       } else {
-        // Modo offline directo
+        // Modo offline directo si navigator.onLine es falso
         return await PosOfflineSync.encolarOffline({ tipo, endpoint, metodo, payload, descripcion, optimistaFn });
       }
     },

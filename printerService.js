@@ -317,7 +317,7 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
 function enviarAPuertoTCP(ip, puerto, rawData) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
-    socket.setTimeout(3500);
+    socket.setTimeout(1800);
 
     const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
@@ -327,7 +327,7 @@ function enviarAPuertoTCP(ip, puerto, rawData) {
           socket.end(() => {
             resolve({ ok: true, mensaje: `Enviados ${buf.length} bytes a ${ip}:${puerto}` });
           });
-        }, 300);
+        }, 150);
       });
     });
 
@@ -351,12 +351,6 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   const cfg = printerConfig[destinoImpresora] || printerConfig.caja;
   const ahora = new Date().toISOString();
 
-  let resTCP = { ok: true, simulado: true, mensaje: 'Simulación virtual' };
-
-  if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
-    resTCP = await enviarAPuertoTCP(cfg.ip, cfg.puerto, ticketInfo.raw);
-  }
-
   const registro = {
     id: Date.now() + '-' + Math.floor(Math.random() * 1000),
     timestamp: ahora,
@@ -366,14 +360,30 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
     titulo: ticketInfo.ticketVisual.titulo,
     mesa: ticketInfo.ticketVisual.mesa,
     bytes: Buffer.byteLength(ticketInfo.raw),
-    estado: resTCP.ok ? 'impreso' : 'simulado',
-    detalleConexion: resTCP.mensaje || 'Enviado correctamente',
+    estado: 'enviando',
+    detalleConexion: `Despachando a ${cfg.ip || 'simulador'}...`,
     ticketVisual: ticketInfo.ticketVisual,
     rawHexPreview: Buffer.from(ticketInfo.raw).toString('hex').substring(0, 64) + '...'
   };
 
   historialImpresiones.unshift(registro);
   if (historialImpresiones.length > MAX_HISTORIAL) historialImpresiones.pop();
+
+  // Despacho TCP asíncrono para respuesta HTTP instantánea
+  if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
+    enviarAPuertoTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
+      registro.estado = resTCP.ok ? 'impreso' : 'simulado';
+      registro.detalleConexion = resTCP.mensaje || 'Enviado correctamente';
+      if (io) io.emit('ticket_impreso', registro);
+    }).catch((err) => {
+      registro.estado = 'simulado';
+      registro.detalleConexion = 'Error: ' + err.message;
+      if (io) io.emit('ticket_impreso', registro);
+    });
+  } else {
+    registro.estado = 'simulado';
+    registro.detalleConexion = 'Simulación virtual';
+  }
 
   // Emitir evento por Socket.IO en tiempo real a las terminales para feedback instantáneo
   if (io) {
