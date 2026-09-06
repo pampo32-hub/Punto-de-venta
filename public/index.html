@@ -4210,6 +4210,20 @@
     </div>
   </div>
 
+  <!-- MODAL DE CONFIRMACIÓN GLOBAL DE ACCIONES -->
+  <div class="modal-backdrop" id="modalConfirmacionAccion" style="display:none; z-index:100000;">
+    <div class="modal-dialog" style="max-width:440px; width:90vw; background:#111827; border:1px solid #374151; border-radius:16px; padding:24px; text-align:center; box-shadow:0 20px 40px rgba(0,0,0,0.7);">
+      <div id="modalConfirmIcono" style="font-size:3rem; margin-bottom:12px;">⚠️</div>
+      <h3 id="modalConfirmTitulo" style="color:#f8fafc; font-size:1.25rem; font-weight:800; margin-bottom:6px;">¿Confirmar acción?</h3>
+      <p id="modalConfirmSubtitulo" style="color:#94a3b8; font-size:0.85rem; margin-bottom:16px;">Esta acción no se puede deshacer</p>
+      <div id="modalConfirmMensaje" style="color:#e2e8f0; font-size:0.95rem; margin-bottom:20px; line-height:1.5; background:rgba(15,23,42,0.6); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.06);"></div>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button id="modalConfirmBtnNo" onclick="window._confirmarRechazar()" class="btn-sec" style="flex:1; padding:12px; background:#1e293b; border:1px solid #334155; color:#cbd5e1; border-radius:10px; font-weight:700; cursor:pointer;">Cancelar</button>
+        <button id="modalConfirmBtnSi" onclick="window._confirmarAceptar()" class="btn-pri" style="flex:1; padding:12px; background:linear-gradient(135deg,#0284c7,#0369a1); border:none; color:#fff; border-radius:10px; font-weight:700; cursor:pointer;">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>

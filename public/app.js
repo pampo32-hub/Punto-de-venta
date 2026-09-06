@@ -4051,7 +4051,107 @@ window.seleccionarOpcionVariante = function(prodId) {
 };
 
 
-window.agregarAlTicketOneTap = function(prodId) {
+// ============================================================================
+// ASISTENTE INTELIGENTE: CONTROL DE TIEMPO Y OFERTA DE BALDES (CERVEZA NACIONAL)
+// ============================================================================
+window._trackerRafagaCervezas = {};
+
+window.esCervezaNacionalEligible = function(prod) {
+  if (!prod) return false;
+  const prodCat = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
+  const cat = (estado.categorias || []).find(c => Number(c.id) === prodCat);
+  const nombreCat = (cat ? cat.nombre : '').toLowerCase();
+  if (nombreCat.includes('cerveza') || prodCat === 4) return true;
+  return /imperial|pilsen|bavaria|rock ice|cerveza/i.test(prod.nombre || '');
+};
+
+window.verificarOfertaBaldeCerveza = async function(prodId, delta = 1) {
+  if (!estado.mesaActiva || delta <= 0) return;
+  const prod = (estado.productos || []).find(p => p.id === prodId);
+  if (!prod || !window.esCervezaNacionalEligible(prod)) return;
+
+  const mesaId = estado.mesaActiva.id || 'general';
+  const trackerKey = `${mesaId}_${prod.id}`;
+  if (!window._trackerRafagaCervezas[trackerKey]) {
+    window._trackerRafagaCervezas[trackerKey] = { count: 0, startTime: null };
+  }
+
+  const tracker = window._trackerRafagaCervezas[trackerKey];
+  const now = Date.now();
+
+  if (tracker.count === 0 || !tracker.startTime) {
+    tracker.startTime = now;
+    tracker.count = delta;
+  } else {
+    const elapsed = now - tracker.startTime;
+    if (elapsed > 60000) {
+      // Excedió el límite de 1 minuto sin llegar a 6 -> reiniciar nuevo ciclo
+      tracker.startTime = now;
+      tracker.count = delta;
+    } else {
+      tracker.count += delta;
+    }
+  }
+
+  // Si se alcanzan 6 cervezas de la misma marca dentro de la ventana de 1 minuto
+  if (tracker.count >= 6) {
+    const totalElapsed = now - tracker.startTime;
+    if (totalElapsed <= 60000) {
+      // Condición rápida cumplida (< 1 minuto): Detener confirmación y preguntar
+      const nombreMarca = prod.nombre || 'Cerveza';
+      const deseaBalde = await window.confirmarAccion({
+        icono: '🍺',
+        titulo: '¡Oferta de Balde!',
+        subtitulo: 'Detección automática de 6 unidades',
+        mensaje: `Veo que agregaste 6 ${nombreMarca} rápidamente. ¿Deseas convertir en balde?`,
+        txtSi: '🍺 Sí, convertir en balde (₡7.500)',
+        txtNo: 'No, mantener individuales'
+      });
+
+      if (deseaBalde) {
+        // Retirar 6 unidades sueltas no enviadas
+        let restantes = 6;
+        if (estado.mesaActiva && estado.mesaActiva.items) {
+          for (let i = estado.mesaActiva.items.length - 1; i >= 0; i--) {
+            const it = estado.mesaActiva.items[i];
+            if (it.id === prod.id && !it.enviado && !it.es_balde) {
+              if (it.cantidad <= restantes) {
+                restantes -= it.cantidad;
+                estado.mesaActiva.items.splice(i, 1);
+              } else {
+                it.cantidad -= restantes;
+                restantes = 0;
+              }
+              if (restantes <= 0) break;
+            }
+          }
+
+          // Agregar el Balde a ₡7.500
+          estado.mesaActiva.items.push({
+            id: 'balde_' + prod.id + '_' + Date.now(),
+            producto_id: prod.id,
+            nombre: `Balde de ${nombreMarca} (6 unidades)`,
+            precio: 7500,
+            cantidad: 1,
+            notas: 'Balde promo 6 unidades',
+            destino: 'barra',
+            curso: 1,
+            es_balde: true,
+            enviado: false
+          });
+
+          renderTicketItems();
+        }
+      }
+    }
+
+    // Regla de reinicio: Reiniciar contador y reloj para las siguientes adiciones
+    tracker.count = 0;
+    tracker.startTime = null;
+  }
+};
+
+window.agregarAlTicketOneTap = async function(prodId) {
   if (!estado.mesaActiva) return;
   const prod = estado.productos.find(p => p.id === prodId);
   if (!prod) return;
@@ -4114,6 +4214,7 @@ window.agregarAlTicketOneTap = function(prodId) {
   }
 
   renderTicketItems();
+  await window.verificarOfertaBaldeCerveza(prodId, 1);
 };
 
 // ============================================================================
@@ -5472,8 +5573,11 @@ function renderTicketItems() {
   }
 }
 
-window.modificarCantidadTicket = function(idx, delta) {
+window.modificarCantidadTicket = async function(idx, delta) {
+  if (!estado.mesaActiva || !estado.mesaActiva.items) return;
   const item = estado.mesaActiva.items[idx];
+  if (!item) return;
+  const prodId = item.producto_id || item.id;
   item.cantidad += delta;
   if (item.cantidad <= 0) {
     if (item.enviado) {
@@ -5485,6 +5589,9 @@ window.modificarCantidadTicket = function(idx, delta) {
     }
   }
   renderTicketItems();
+  if (delta > 0 && typeof prodId === 'number') {
+    await window.verificarOfertaBaldeCerveza(prodId, delta);
+  }
 };
 
 function recalcularTotalesTicket() {
