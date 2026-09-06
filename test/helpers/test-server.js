@@ -262,7 +262,7 @@ function evaluarBotonComanda(items = []) {
     (it) =>
       !it.enviado &&
       !it.id_detalle_existente &&
-      (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+      it.destino === 'cocina'
   );
 
   return {
@@ -280,7 +280,7 @@ function evaluarBotonComanda(items = []) {
  */
 function evaluarEstadoMesaKDS(detalles = []) {
   const cocinaItems = detalles.filter(
-    (it) => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
+    (it) => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
   );
 
   if (!cocinaItems.length) return 'abierta';

@@ -563,6 +563,34 @@ function initDb() {
       { cat: 1, nombre: 'Chicharrón de cerdo con yuca', precio: 4800, destino: 'cocina', curso: 2 },
       { cat: 1, nombre: 'Sándwich de carne mechada', precio: 4200, destino: 'cocina', curso: 2 },
       { cat: 1, nombre: 'Hamburguesa de la casa con plátano maduro', precio: 4900, destino: 'cocina', curso: 2 },
+      { cat: 1, nombre: 'Casado con carne mechada', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Casado con bistec encebollado', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Casado con chuleta de cerdo', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Casado con pollo en salsa', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Casado con pescado frito', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Casado con pollo a la plancha', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Arroz con pollo', precio: 5000, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Arroz con camarones', precio: 6500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Arroz con calamares', precio: 6000, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Arroz con mariscos', precio: 6500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Arroz de la casa', precio: 6500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Chifrijo tradicional', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Chifrijo gigante', precio: 6500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Olla de carne', precio: 5500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Sopa negra con huevo duro', precio: 4000, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Sopa de mondongo', precio: 4500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Sopa de mariscos', precio: 6500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de carne de res', precio: 3500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de salchichón', precio: 3000, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de chicharrón de cerdo', precio: 3800, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de picadillo de papa', precio: 3000, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de picadillo de chayote con carne', precio: 3500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de picadillo de arracache', precio: 3500, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Gallos de picadillo de plátano verde', precio: 3200, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Vigorón costarricense', precio: 4000, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Chicharrón de cerdo con yuca', precio: 4800, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Sándwich de carne mechada', precio: 4200, destino: 'cocina', curso: 3 },
+      { cat: 1, nombre: 'Hamburguesa de la casa con plátano maduro', precio: 4900, destino: 'cocina', curso: 3 },
 
       // 2. Entradas y Bocas de Bar (cat: 2)
       { cat: 2, nombre: 'Patacones con frijoles molidos', precio: 3000, destino: 'cocina', curso: 1 },
@@ -588,6 +616,29 @@ function initDb() {
       { cat: 2, nombre: 'Tamal de pollo', precio: 2500, destino: 'cocina', curso: 1 },
       { cat: 2, nombre: 'Plátano maduro con queso y natilla', precio: 2800, destino: 'cocina', curso: 1 },
       { cat: 2, nombre: 'Canastas de patacón rellenas de mariscos', precio: 4800, destino: 'cocina', curso: 1 },
+      { cat: 2, nombre: 'Patacones con frijoles molidos', precio: 3000, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Patacones con queso blanco', precio: 3200, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Patacones con carne desmechada', precio: 3800, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Patacones con guacamole', precio: 3500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Yuca frita con natilla', precio: 2800, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Yuca al mojo de ajo', precio: 2900, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Chorreadas con natilla', precio: 3000, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Deditos de queso frito', precio: 3200, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Ceviche de pescado blanco', precio: 4000, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Ceviche de camarón', precio: 5000, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Ceviche mixto', precio: 5500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Ceviche con plátano verde', precio: 4200, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Caldosa', precio: 3000, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Empanada de queso', precio: 1800, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Empanada de frijol', precio: 1500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Empanada de carne', precio: 1800, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Empanada arreglada', precio: 2500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Tortilla aliñada con queso', precio: 2500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Pejibayes con mayonesa', precio: 2800, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Tamal de cerdo tradicional', precio: 2500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Tamal de pollo', precio: 2500, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Plátano maduro con queso y natilla', precio: 2800, destino: 'cocina', curso: 2 },
+      { cat: 2, nombre: 'Canastas de patacón rellenas de mariscos', precio: 4800, destino: 'cocina', curso: 2 },
 
       // 3. Postres (cat: 3)
       { cat: 3, nombre: 'Tres leches tradicional', precio: 2800, destino: 'cocina', curso: 3 },
@@ -604,6 +655,20 @@ function initDb() {
       { cat: 3, nombre: 'Churchilleta', precio: 2800, destino: 'cocina', curso: 3 },
       { cat: 3, nombre: 'Empanaditas dulces de chiverre', precio: 2200, destino: 'cocina', curso: 3 },
       { cat: 3, nombre: 'Prestiños con miel de caña', precio: 2500, destino: 'cocina', curso: 3 },
+      { cat: 3, nombre: 'Tres leches tradicional', precio: 2800, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Cuatro leches', precio: 3000, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Arroz con leche', precio: 2500, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Flan de coco', precio: 2600, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Flan de caramelo', precio: 2600, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Torta chilena', precio: 3000, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Cajeta de coco', precio: 1800, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Cajeta de leche', precio: 1800, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Pie de limón', precio: 2800, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Tamal de masa asado', precio: 2500, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Granizado / Copo tradicional', precio: 2500, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Churchilleta', precio: 2800, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Empanaditas dulces de chiverre', precio: 2200, destino: 'cocina', curso: 4 },
+      { cat: 3, nombre: 'Prestiños con miel de caña', precio: 2500, destino: 'cocina', curso: 4 },
 
       // 4. Cervezas (cat: 4)
       { cat: 4, nombre: 'Imperial Regular', precio: 1800, destino: 'barra', curso: 1 },
@@ -646,6 +711,8 @@ function initDb() {
       { cat: 6, nombre: 'Resbaladera', precio: 2200, destino: 'barra', curso: 1 },
       { cat: 6, nombre: 'Café chorreado tradicional', precio: 1500, destino: 'barra', curso: 1 },
       { cat: 6, nombre: 'Café con leche estilo tico', precio: 1800, destino: 'barra', curso: 1 },
+      { cat: 6, nombre: 'Café chorreado tradicional', precio: 1500, destino: 'barra', curso: 5 },
+      { cat: 6, nombre: 'Café con leche estilo tico', precio: 1800, destino: 'barra', curso: 5 },
       { cat: 6, nombre: 'Agua de pipa natural', precio: 1800, destino: 'barra', curso: 1 }
     ];
 
@@ -674,6 +741,14 @@ function initDb() {
     db.run("UPDATE Productos SET categoria_id = 2 WHERE LOWER(nombre) LIKE '%patacon%' OR LOWER(nombre) LIKE '%yuca%' OR LOWER(nombre) LIKE '%chorreada%' OR LOWER(nombre) LIKE '%ceviche%' OR LOWER(nombre) LIKE '%empanada%' OR LOWER(nombre) LIKE '%tamal%' OR LOWER(nombre) LIKE '%alita%' OR LOWER(nombre) LIKE '%caldosa%'");
     db.run("UPDATE Productos SET categoria_id = 3 WHERE LOWER(nombre) LIKE '%tres leches%' OR LOWER(nombre) LIKE '%flan%' OR LOWER(nombre) LIKE '%torta chilena%' OR LOWER(nombre) LIKE '%cajeta%' OR LOWER(nombre) LIKE '%granizado%' OR LOWER(nombre) LIKE '%copo%' OR LOWER(nombre) LIKE '%pie%'");
     db.run("UPDATE Productos SET categoria_id = 1 WHERE categoria_id NOT IN (1,2,3,4,5,6) OR LOWER(nombre) LIKE '%casado%' OR LOWER(nombre) LIKE '%arroz con%' OR LOWER(nombre) LIKE '%chifrijo%' OR LOWER(nombre) LIKE '%sopa%' OR LOWER(nombre) LIKE '%gallo%' OR LOWER(nombre) LIKE '%vigorón%' OR LOWER(nombre) LIKE '%hamburguesa%' OR LOWER(nombre) LIKE '%rib eye%' OR LOWER(nombre) LIKE '%sandwich%' OR LOWER(nombre) LIKE '%sándwich%'");
+    db.run("UPDATE Productos SET categoria_id = 4, happy_hour = 1, destino = 'barra', curso = 1 WHERE LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%cerveza%'");
+    db.run("UPDATE Productos SET happy_hour = 1, destino = 'barra', curso = 1 WHERE categoria_id = 4");
+    db.run("UPDATE Productos SET categoria_id = 5, destino = 'barra', curso = 1 WHERE LOWER(nombre) LIKE '%mojito%' OR LOWER(nombre) LIKE '%margarita%' OR LOWER(nombre) LIKE '%gin tonic%' OR LOWER(nombre) LIKE '%chiliguaro%' OR LOWER(nombre) LIKE '%guaro%' OR LOWER(nombre) LIKE '%coctel%' OR LOWER(nombre) LIKE '%shot%'");
+    db.run("UPDATE Productos SET categoria_id = 6, destino = 'barra', curso = 1 WHERE LOWER(nombre) LIKE '%fresco%' OR LOWER(nombre) LIKE '%refresco%' OR LOWER(nombre) LIKE '%agua%' OR LOWER(nombre) LIKE '%horchata%' OR LOWER(nombre) LIKE '%resbaladera%'");
+    db.run("UPDATE Productos SET categoria_id = 6, destino = 'barra', curso = 5 WHERE LOWER(nombre) LIKE '%café%' OR LOWER(nombre) LIKE '%cafe%'");
+    db.run("UPDATE Productos SET categoria_id = 2, destino = 'cocina', curso = 2 WHERE LOWER(nombre) LIKE '%patacon%' OR LOWER(nombre) LIKE '%yuca%' OR LOWER(nombre) LIKE '%chorreada%' OR LOWER(nombre) LIKE '%ceviche%' OR LOWER(nombre) LIKE '%empanada%' OR LOWER(nombre) LIKE '%tamal%' OR LOWER(nombre) LIKE '%alita%' OR LOWER(nombre) LIKE '%caldosa%'");
+    db.run("UPDATE Productos SET categoria_id = 3, destino = 'cocina', curso = 4 WHERE LOWER(nombre) LIKE '%tres leches%' OR LOWER(nombre) LIKE '%flan%' OR LOWER(nombre) LIKE '%torta chilena%' OR LOWER(nombre) LIKE '%cajeta%' OR LOWER(nombre) LIKE '%granizado%' OR LOWER(nombre) LIKE '%copo%' OR LOWER(nombre) LIKE '%pie%'");
+    db.run("UPDATE Productos SET categoria_id = 1, destino = 'cocina', curso = 3 WHERE categoria_id NOT IN (1,2,3,4,5,6) OR LOWER(nombre) LIKE '%casado%' OR LOWER(nombre) LIKE '%arroz con%' OR LOWER(nombre) LIKE '%chifrijo%' OR LOWER(nombre) LIKE '%sopa%' OR LOWER(nombre) LIKE '%gallo%' OR LOWER(nombre) LIKE '%vigorón%' OR LOWER(nombre) LIKE '%hamburguesa%' OR LOWER(nombre) LIKE '%rib eye%' OR LOWER(nombre) LIKE '%sandwich%' OR LOWER(nombre) LIKE '%sándwich%'");
     db.run("UPDATE Productos SET agotado = 0 WHERE codigo = 'BEB01' OR LOWER(nombre) = 'imperial regular'");
     console.log('🌱 Menú completo y categorías oficiales sembrados/sincronizados.');
   });

@@ -2608,6 +2608,12 @@ textarea:focus, select:focus, input:focus {
 .course-badge.c1 { background: #0284c733; color: #38bdf8; border: 1px solid #0284c7; }
 .course-badge.c2 { background: #ea580c33; color: #fb923c; border: 1px solid #ea580c; }
 .course-badge.c3 { background: #8b5cf633; color: #c084fc; border: 1px solid #8b5cf6; }
+.course-badge.c1, .course-badge.c-bebida { background: #0284c733; color: #38bdf8; border: 1px solid #0284c7; }
+.course-badge.c2, .course-badge.c-entrada { background: #ea580c33; color: #fb923c; border: 1px solid #ea580c; }
+.course-badge.c3, .course-badge.c-fuerte { background: #8b5cf633; color: #c084fc; border: 1px solid #8b5cf6; }
+.course-badge.c4, .course-badge.c-postre { background: #ec489933; color: #f472b6; border: 1px solid #ec4899; }
+.course-badge.c5, .course-badge.c-cafe { background: #78350f33; color: #fbbf24; border: 1px solid #b45309; }
+.course-badge.c6, .course-badge.c-otros { background: #33415566; color: #cbd5e1; border: 1px solid #475569; }
 
 .kitchen-course-fire-box {
   margin-bottom: 10px;

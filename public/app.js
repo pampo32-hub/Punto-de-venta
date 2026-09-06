@@ -474,6 +474,56 @@ function poblarSelectoresKardexProducto(insumoIdSeleccionado = null, tipoPre = '
   window.cambiarTipoKardexProducto();
 }
 
+window.alCambiarCursoProducto = function() {
+  const selCurso = document.getElementById('selectNuevoProdCurso');
+  const selDest = document.getElementById('selectNuevoProdDestino');
+  if (!selCurso || !selDest) return;
+  const cursoVal = String(selCurso.value);
+  if (cursoVal === '1' || cursoVal === '5' || cursoVal === '6') {
+    selDest.value = 'barra';
+  } else if (cursoVal === '2' || cursoVal === '3' || cursoVal === '4') {
+    selDest.value = 'cocina';
+  }
+};
+
+window.alCambiarCategoriaProducto = function() {
+  const selCat = document.getElementById('selectNuevoProdCategoria');
+  const boxNuevaCat = document.getElementById('boxNuevaCategoriaCampos');
+  const txtNuevaCatNombre = document.getElementById('txtNuevaCatNombre');
+  const selDest = document.getElementById('selectNuevoProdDestino');
+  const selCurso = document.getElementById('selectNuevoProdCurso');
+  if (!selCat) return;
+
+  if (selCat.value === '__nueva__') {
+    if (boxNuevaCat) boxNuevaCat.style.display = 'block';
+    if (txtNuevaCatNombre) txtNuevaCatNombre.focus();
+  } else {
+    if (boxNuevaCat) boxNuevaCat.style.display = 'none';
+    const opt = selCat.options[selCat.selectedIndex];
+    const dest = opt ? opt.getAttribute('data-destino') : 'cocina';
+    const catId = Number(selCat.value);
+
+    if (selDest) selDest.value = dest || 'cocina';
+    if (selCurso) {
+      if (catId === 4 || catId === 5) {
+        selCurso.value = '1'; // Bebidas
+      } else if (catId === 6) {
+        selCurso.value = '5'; // Café
+      } else if (catId === 2) {
+        selCurso.value = '2'; // Entradas
+      } else if (catId === 1) {
+        selCurso.value = '3'; // Platos Fuertes
+      } else if (catId === 3) {
+        selCurso.value = '4'; // Postres
+      } else if (dest === 'barra') {
+        selCurso.value = '1';
+      } else {
+        selCurso.value = '3';
+      }
+    }
+  }
+};
+
 window.abrirModalNuevoProducto = async function() {
   const modal = document.getElementById('modalAgregarProducto');
   const txtId = document.getElementById('txtNuevoProdId');
@@ -573,8 +623,10 @@ window.abrirModalNuevoProducto = async function() {
         if (selCurso) selCurso.value = (dest === 'barra' ? '1' : '2');
       }
     };
+    selCat.onchange = window.alCambiarCategoriaProducto;
     if (selCat.options.length > 0) {
       selCat.dispatchEvent(new Event('change'));
+      window.alCambiarCategoriaProducto();
     }
   }
 
@@ -669,6 +721,7 @@ window.abrirModalEditarProducto = async function(prodId) {
         if (selCurso) selCurso.value = (dest === 'barra' ? '1' : '2');
       }
     };
+    selCat.onchange = window.alCambiarCategoriaProducto;
   }
 
   // Consultar vinculación Kárdex actual
@@ -1387,7 +1440,7 @@ function actualizarBotonEnviarComanda() {
 
   // Verifica si hay algún alimento/platillo para cocina NO enviado aún
   const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
-    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+    !it.enviado && it.destino === 'cocina'
   );
   const tieneCualquierNuevo = estado.mesaActiva.items.some(it => !it.enviado);
 
@@ -1616,7 +1669,7 @@ function escapeHtml(str) {
 
 function evaluarEstadoMesaKDS(detalles = []) {
   const cocinaItems = detalles.filter(
-    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
+    (it) => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
   );
 
   if (!cocinaItems.length) return 'abierta';
@@ -5279,9 +5332,9 @@ function renderTicketItems() {
   }
 
   list.innerHTML = estado.mesaActiva.items.map((it, idx) => {
-    const cursoLabels = { 1: 'Entrada', 2: 'Plato Fuerte', 3: 'Postre' };
-    const cursoClasses = { 1: 'c1', 2: 'c2', 3: 'c3' };
-    const cursoBadge = `<span class="course-badge ${cursoClasses[it.curso] || 'c2'}">${cursoLabels[it.curso] || 'Fuerte'}</span>`;
+    const cursoLabels = { 1: 'Bebida', 2: 'Entrada', 3: 'Plato Fuerte', 4: 'Postre', 5: 'Café', 6: 'Otros' };
+    const cursoClasses = { 1: 'c-bebida', 2: 'c-entrada', 3: 'c-fuerte', 4: 'c-postre', 5: 'c-cafe', 6: 'c-otros' };
+    const cursoBadge = `<span class="course-badge ${cursoClasses[it.curso] || 'c-fuerte'}">${cursoLabels[it.curso] || 'Fuerte'}</span>`;
 
     // Trazabilidad de mesa de origen para mesas unidas
     const origenBadge = (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(estado.mesaActiva.numero))
@@ -5515,7 +5568,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
 
   // Verificar si hay algún alimento/platillo para cocina NO enviado aún
   const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
-    !it.enviado && (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra'))
+    !it.enviado && it.destino === 'cocina'
   );
   const tieneNuevosCualquiera = estado.mesaActiva.items.some(it => !it.enviado);
 
@@ -5653,7 +5706,7 @@ if (btnLanzarFuertesEl) btnLanzarFuertesEl.addEventListener('click', async () =>
 async function cargarKDSDesdeBackend() {
   try {
     const activeTab = document.querySelector('.kds-tab.active');
-    const dest = activeTab ? activeTab.dataset.kdsDest : 'todos';
+    const dest = activeTab ? activeTab.dataset.kdsDest : 'cocina';
     const res = await fetch('/api/kds?destino=' + dest);
     estado.comandasKDS = await res.json();
     renderKDS();
@@ -5692,8 +5745,8 @@ function renderKDS() {
     ticketsMap[key].items.push(c);
   });
 
-  const cursoLabels = { 1: 'Entrada', 2: 'Plato Fuerte', 3: 'Postre' };
-  const cursoClasses = { 1: 'c1', 2: 'c2', 3: 'c3' };
+  const cursoLabels = { 1: 'Bebida', 2: 'Entrada', 3: 'Plato Fuerte', 4: 'Postre', 5: 'Café', 6: 'Otros' };
+  const cursoClasses = { 1: 'c-bebida', 2: 'c-entrada', 3: 'c-fuerte', 4: 'c-postre', 5: 'c-cafe', 6: 'c-otros' };
 
   ticketsOrder.forEach((key) => {
     const t = ticketsMap[key];
@@ -5716,7 +5769,7 @@ function renderKDS() {
           const originTag = (c.origen_mesa_numero && String(c.origen_mesa_numero) !== String(t.mesaNumero))
             ? `<span class="mesa-origin-badge" style="font-size:0.72rem; margin-right:4px;" title="Pedido originalmente en ${escapeHtml(c.origen_mesa_numero)}">[${escapeHtml(c.origen_mesa_numero)}]</span>`
             : '';
-          const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c2'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
+          const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c-fuerte'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
           return `
             <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
               <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); line-height:1.25; flex:1;">
@@ -6267,7 +6320,7 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
 
   // Verificar si hay platillos de cocina no enviados aún
   const tieneNuevosCocina = estado.mesaActiva.items.some(it => 
-    !it.enviado && (it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3 && it.destino !== 'barra') || (it.categoria_id && it.categoria_id !== 4 && it.categoria_id !== 5))
+    !it.enviado && it.destino === 'cocina'
   );
 
   let enviarCocina = false;

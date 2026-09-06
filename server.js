@@ -202,7 +202,7 @@ const dbRun = (sql, params = []) => new Promise((res, rej) => db.run(sql, params
 // ============================================================================
 function evaluarEstadoMesaKDS(detalles = []) {
   const cocinaItems = detalles.filter(
-    (it) => (it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')) && it.estado_comanda !== 'anulado'
+    (it) => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
   );
 
   if (!cocinaItems.length) return 'abierta';
@@ -1009,7 +1009,7 @@ app.get('/api/mesas', async (req, res) => {
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
       const cocinaItems = items.filter(
-        it => it.destino === 'cocina' && it.destino !== 'barra' && it.estado_comanda !== 'anulado'
+        it => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
       );
       const pendientes = cocinaItems.filter(
         it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
@@ -2567,31 +2567,42 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     let destino = it.destino;
     let curso = it.curso;
 
+    let prodDb = null;
     if (prodId) {
-      if (!nombre || precio == null || !destino || !curso) {
-        const prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
-        if (prodDb) {
-          if (!nombre) nombre = prodDb.nombre;
-          if (precio == null) precio = prodDb.precio;
-          if (!destino) destino = prodDb.destino;
-          if (!curso) curso = prodDb.curso || 2;
-        }
-      }
+      prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
     } else if (nombre) {
-      const prodDb = await dbGet('SELECT * FROM Productos WHERE nombre = ? OR nombre LIKE ?', [nombre, `%${nombre}%`]);
-      if (prodDb) {
-        prodId = prodDb.id;
-        if (precio == null) precio = prodDb.precio;
-        if (!destino) destino = prodDb.destino;
-        if (!curso) curso = prodDb.curso || 2;
-      } else {
-        prodId = 1;
-      }
-    } else {
+      prodDb = await dbGet('SELECT * FROM Productos WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?', [nombre, `%${nombre}%`]);
+    }
+
+    if (prodDb) {
+      prodId = prodDb.id;
+      if (!nombre) nombre = prodDb.nombre;
+      if (precio == null) precio = prodDb.precio;
+      if (!destino) destino = prodDb.destino;
+      if (!curso) curso = prodDb.curso;
+    } else if (!prodId) {
       prodId = 1;
     }
 
-    const prodDb = await dbGet('SELECT happy_hour, categoria_id FROM Productos WHERE id = ?', [prodId]);
+    // Si aún no tiene destino explícito, determinarlo inteligentemente
+    if (!destino) {
+      if (curso === 1 || curso === 5 || curso === 6) {
+        destino = 'barra';
+      } else if (curso === 2 || curso === 3 || curso === 4) {
+        destino = 'cocina';
+      } else if (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6)) {
+        destino = 'barra';
+      } else if (/cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua/i.test(nombre || '')) {
+        destino = 'barra';
+      } else {
+        destino = 'cocina';
+      }
+    }
+
+    if (!curso) {
+      curso = destino === 'barra' ? 1 : 3;
+    }
+
     const esCervezaOEligible = Boolean(
       it.happyHour ||
       (prodDb && prodDb.happy_hour) ||
@@ -2610,7 +2621,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       precio: precio || 0,
       cantidad: Number(it.cantidad) || 1,
       notas: it.notas || '',
-      curso: curso || 2,
+      curso: Number(curso) || 3,
       destino: destino || 'cocina',
       origen_mesa_numero: it.origen_mesa_numero || null,
       en_happy_hour: itemEnHH
@@ -2618,9 +2629,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   }
 
   // 3. Evaluar si algún nuevo item va a cocina
-  const tieneNuevosCocina = itemsProcesados.some(it => 
-    it.destino === 'cocina' || (it.destino !== 'barra' && it.curso && it.curso <= 3)
-  );
+  const tieneNuevosCocina = itemsProcesados.some(it => it.destino === 'cocina');
 
   // 4. Buscar orden activa o crear una nueva
   let orden = await dbGet(
@@ -3014,7 +3023,7 @@ app.get('/api/mesas/:id/espera', async (req, res) => {
     );
 
     const cocinaItems = items.filter(
-      it => it.destino === 'cocina' || (it.curso && it.curso <= 3 && it.destino !== 'barra')
+      it => it.destino === 'cocina'
     );
     const pendientes = cocinaItems.filter(
       it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'

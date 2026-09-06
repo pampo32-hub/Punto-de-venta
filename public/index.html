@@ -882,7 +882,9 @@
           <div class="kds-filter-tabs">
             <button class="kds-tab active" data-kds-dest="todos">📋 Todas las Comandas</button>
             <button class="kds-tab" data-kds-dest="cocina">🍳 Cocina Caliente</button>
+            <button class="kds-tab active" data-kds-dest="cocina">🍳 Cocina Caliente</button>
             <button class="kds-tab" data-kds-dest="barra">🍸 Barra & Bebidas</button>
+            <button class="kds-tab" data-kds-dest="todos">📋 Todas las Comandas</button>
           </div>
           <div class="kds-audio-controls">
             <button class="btn-bell" id="btnTestBellSound" title="Probar sonido de comanda">🔔 Probar Campana</button>
@@ -2371,6 +2373,7 @@
           <div>
             <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">Categoría:</label>
             <select id="selectNuevoProdCategoria" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
+            <select id="selectNuevoProdCategoria" onchange="alCambiarCategoriaProducto()" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
             </select>
           </div>
         </div>
@@ -2427,6 +2430,13 @@
               <option value="1">1 - Entradas / Bebidas</option>
               <option value="2" selected>2 - Platos Fuertes</option>
               <option value="3">3 - Postres / Café</option>
+            <select id="selectNuevoProdCurso" onchange="alCambiarCursoProducto()" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
+              <option value="1">1 - Bebidas</option>
+              <option value="2">2 - Entradas</option>
+              <option value="3" selected>3 - Platos Fuertes</option>
+              <option value="4">4 - Postres</option>
+              <option value="5">5 - Café</option>
+              <option value="6">6 - Otros</option>
             </select>
           </div>
         </div>
