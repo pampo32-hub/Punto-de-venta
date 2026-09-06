@@ -327,7 +327,22 @@
       return new Promise((resolve, reject) => {
         const tx = db.transaction('outbox', 'readwrite');
         const store = tx.objectStore('outbox');
-        const req = store.delete(id);
+        const numId = Number(id);
+        const req = store.delete(!isNaN(numId) && String(numId) === String(id) ? numId : id);
+        req.onsuccess = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    },
+
+    /**
+     * Limpia completamente la cola Outbox
+     */
+    limpiarOutbox: async function () {
+      const db = await abrirDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('outbox', 'readwrite');
+        const store = tx.objectStore('outbox');
+        const req = store.clear();
         req.onsuccess = () => resolve(true);
         tx.onerror = (e) => reject(e.target.error);
       });

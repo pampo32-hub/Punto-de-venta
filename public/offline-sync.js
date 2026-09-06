@@ -263,11 +263,16 @@
         const data = await res.json();
         const procesadas = data.procesadas || [];
         const duplicadas = data.duplicadas || [];
-        const exitosasIds = [...procesadas, ...duplicadas];
+        const exitosasIds = [...procesadas, ...duplicadas].map(String);
 
         // Eliminar del outbox local las que fueron procesadas o ya existían (idempotentes)
         for (const item of pendientes) {
-          if (exitosasIds.includes(item.idempotencyKey) || exitosasIds.includes(item.id)) {
+          const itemKeys = [
+            String(item.idempotencyKey || ''),
+            String(item.id || ''),
+            `act_${item.id}`
+          ];
+          if (itemKeys.some((k) => k && exitosasIds.includes(k))) {
             await window.PosOfflineDB.eliminarAccion(item.id);
           }
         }
@@ -291,6 +296,37 @@
         isSyncing = false;
         PosOfflineSync.actualizarUI();
       }
+    },
+
+    /**
+     * Descarta y vacía todas las operaciones de la cola offline
+     */
+    descartarCola: async function () {
+      if (!confirm('¿Deseas descartar y limpiar todas las operaciones pendientes de la cola local?')) return;
+      if (window.PosOfflineDB) {
+        if (typeof window.PosOfflineDB.limpiarOutbox === 'function') {
+          await window.PosOfflineDB.limpiarOutbox();
+        } else {
+          const p = await window.PosOfflineDB.obtenerAccionesPendientes();
+          for (const item of p) {
+            await window.PosOfflineDB.eliminarAccion(item.id);
+          }
+        }
+      }
+      PosOfflineSync.actualizarUI();
+      PosOfflineSync.mostrarModalDetalles();
+      PosOfflineSync.mostrarNotificacion('🗑️ Cola offline vaciada correctamente.', 'info');
+    },
+
+    /**
+     * Elimina una operación específica de la cola offline
+     */
+    eliminarItemCola: async function (id) {
+      if (window.PosOfflineDB) {
+        await window.PosOfflineDB.eliminarAccion(Number(id) || id);
+      }
+      PosOfflineSync.actualizarUI();
+      PosOfflineSync.mostrarModalDetalles();
     },
 
     /**
@@ -356,9 +392,8 @@
             <div class="modal-body" id="modalRedBody" style="padding: 16px 20px;">
               <!-- Dinámico -->
             </div>
-            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-top: 1px solid var(--border-color, #e2e8f0);">
-              <button class="btn btn-secondary" id="btnProbarPing">🔄 Probar Conexión</button>
-              <button class="btn btn-primary" id="btnForzarSync">⚡ Sincronizar Ahora</button>
+            <div class="modal-footer" id="modalRedFooter" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-top: 1px solid var(--border-color, #e2e8f0); gap: 8px;">
+              <!-- Botones dinámicos -->
             </div>
           </div>
         `;
@@ -366,12 +401,6 @@
 
         modal.querySelector('#btnCerrarModalRed').addEventListener('click', () => {
           modal.style.display = 'none';
-        });
-        modal.querySelector('#btnProbarPing').addEventListener('click', () => {
-          PosOfflineSync.verificarConexion(false).then(() => PosOfflineSync.mostrarModalDetalles());
-        });
-        modal.querySelector('#btnForzarSync').addEventListener('click', () => {
-          PosOfflineSync.sincronizar().then(() => PosOfflineSync.mostrarModalDetalles());
         });
       }
 
@@ -383,6 +412,7 @@
       }
 
       const body = modal.querySelector('#modalRedBody');
+      const footer = modal.querySelector('#modalRedFooter');
       const estadoHtml = isOnline
         ? '<div style="display: flex; align-items: center; gap: 8px; color: #10b981; font-weight: bold; font-size: 1.05rem;">🟢 En línea (Conexión activa con el servidor)</div>'
         : '<div style="display: flex; align-items: center; gap: 8px; color: #f59e0b; font-weight: bold; font-size: 1.05rem;">🟡 Modo Offline (Sin conexión a internet)</div>';
@@ -399,11 +429,14 @@
                 .map(
                   (p) => `
                 <li style="padding: 8px 12px; background: var(--bg-hover, rgba(0,0,0,0.05)); border-radius: 6px; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
-                  <div>
+                  <div style="flex:1;">
                     <span style="font-weight: 600;">${p.descripcion || p.tipo}</span>
                     <div style="color: var(--text-muted, #64748b); font-size: 0.75rem;">${new Date(p.creadoEn).toLocaleTimeString()}</div>
                   </div>
-                  <span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: bold;">En cola</span>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: bold;">En cola</span>
+                    <button type="button" onclick="window.PosOfflineSync.eliminarItemCola(${p.id})" style="background:none; border:none; color:#ef4444; font-size:1.1rem; cursor:pointer; padding:2px 6px;" title="Eliminar de la cola">🗑️</button>
+                  </div>
                 </li>
               `
                 )
@@ -420,6 +453,27 @@
         </p>
         ${listaItems}
       `;
+
+      footer.innerHTML = `
+        <button class="btn btn-secondary" id="btnProbarPing">🔄 Probar Conexión</button>
+        <div style="display:flex; gap:6px;">
+          ${pendientes.length > 0 ? `<button class="btn btn-danger" id="btnDescartarCola" style="background:#dc2626; color:#fff; border:none; padding:8px 12px; border-radius:6px; font-size:0.85rem; font-weight:600; cursor:pointer;">🗑️ Descartar Cola</button>` : ''}
+          <button class="btn btn-primary" id="btnForzarSync">⚡ Sincronizar Ahora</button>
+        </div>
+      `;
+
+      footer.querySelector('#btnProbarPing').addEventListener('click', () => {
+        PosOfflineSync.verificarConexion(false).then(() => PosOfflineSync.mostrarModalDetalles());
+      });
+      const btnDescartar = footer.querySelector('#btnDescartarCola');
+      if (btnDescartar) {
+        btnDescartar.addEventListener('click', () => {
+          PosOfflineSync.descartarCola();
+        });
+      }
+      footer.querySelector('#btnForzarSync').addEventListener('click', () => {
+        PosOfflineSync.sincronizar().then(() => PosOfflineSync.mostrarModalDetalles());
+      });
 
       modal.style.display = 'flex';
     }

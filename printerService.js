@@ -7,9 +7,27 @@ const net = require('net');
 
 // Estado en memoria de configuración de impresoras
 let printerConfig = {
-  caja: { nombre: 'Impresora Caja (80mm)', tipo: 'virtual', ip: '127.0.0.1', puerto: 9100, activa: true },
-  cocina: { nombre: 'Impresora Cocina (80mm)', tipo: 'virtual', ip: '127.0.0.1', puerto: 9101, activa: true },
-  barra: { nombre: 'Impresora Barra (80mm)', tipo: 'virtual', ip: '127.0.0.1', puerto: 9102, activa: true },
+  caja: {
+    nombre: process.env.PRINTER_CAJA_NAME || 'Impresora Caja (80mm)',
+    tipo: process.env.PRINTER_CAJA_TYPE || (process.env.PRINTER_CAJA_IP ? 'red' : 'red'),
+    ip: process.env.PRINTER_CAJA_IP || '192.168.1.30',
+    puerto: Number(process.env.PRINTER_CAJA_PORT) || 9100,
+    activa: true
+  },
+  cocina: {
+    nombre: process.env.PRINTER_COCINA_NAME || 'Impresora Cocina (80mm)',
+    tipo: process.env.PRINTER_COCINA_TYPE || (process.env.PRINTER_COCINA_IP ? 'red' : 'red'),
+    ip: process.env.PRINTER_COCINA_IP || '192.168.1.30',
+    puerto: Number(process.env.PRINTER_COCINA_PORT) || 9100,
+    activa: true
+  },
+  barra: {
+    nombre: process.env.PRINTER_BARRA_NAME || 'Impresora Barra (80mm)',
+    tipo: process.env.PRINTER_BARRA_TYPE || (process.env.PRINTER_BARRA_IP ? 'red' : 'red'),
+    ip: process.env.PRINTER_BARRA_IP || '192.168.1.30',
+    puerto: Number(process.env.PRINTER_BARRA_PORT) || 9100,
+    activa: true
+  },
 };
 
 // Historial de impresiones recientes (simulador y auditoría)
@@ -299,12 +317,17 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
 function enviarAPuertoTCP(ip, puerto, rawData) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
-    socket.setTimeout(2500);
+    socket.setTimeout(3500);
+
+    const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
     socket.connect(puerto, ip, () => {
-      socket.write(rawData, 'binary', () => {
-        socket.end();
-        resolve({ ok: true, mensaje: `Enviados ${Buffer.byteLength(rawData)} bytes a ${ip}:${puerto}` });
+      socket.write(buf, () => {
+        setTimeout(() => {
+          socket.end(() => {
+            resolve({ ok: true, mensaje: `Enviados ${buf.length} bytes a ${ip}:${puerto}` });
+          });
+        }, 300);
       });
     });
 
