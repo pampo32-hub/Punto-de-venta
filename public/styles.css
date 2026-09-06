@@ -3561,15 +3561,52 @@ textarea:focus, select:focus, input:focus {
   width: 95px;
   height: 105px;
   border-radius: 18px 18px 50% 50% !important;
-  background: radial-gradient(circle at center, #1e293b 20%, #0f172a 100%) !important;
-  border: 2px solid #38bdf8 !important;
-  box-shadow: 0 8px 16px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,255,255,0.2) !important;
+  background: radial-gradient(circle at center, #1e293b 20%, #0f172a 100%);
+  border: 2px solid #38bdf8;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255,255,255,0.2);
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: space-between !important;
   padding: 8px 6px !important;
   position: absolute !important;
+}
+
+/* Silla en estado libre: Verde esmeralda idéntico a las mesas */
+.mesa-render-card.silla.libre {
+  border-color: #10b98166 !important;
+  background: radial-gradient(circle at center, #064e3b44 20%, #111827 100%) !important;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.5), inset 0 2px 4px rgba(16,185,129,0.2) !important;
+}
+
+.mesa-render-card.silla.libre .m-num {
+  color: #34d399 !important;
+}
+
+.mesa-render-card.silla.esperando {
+  border-color: var(--accent) !important;
+  background: radial-gradient(circle at center, #7c2d1255 20%, #111827 100%) !important;
+}
+.mesa-render-card.silla.esperando .m-num {
+  color: #fb923c !important;
+}
+
+.mesa-render-card.silla.esperando_parcial {
+  border-color: #f59e0b !important;
+  background: radial-gradient(circle at center, #78350f55 20%, #111827 100%) !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25) !important;
+}
+.mesa-render-card.silla.esperando_parcial .m-num {
+  color: #fde047 !important;
+}
+
+.mesa-render-card.silla.activa {
+  border-color: #2563eb !important;
+  background: radial-gradient(circle at center, #1e40af55 20%, #111827 100%) !important;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.35) !important;
+}
+.mesa-render-card.silla.activa .m-num {
+  color: #93c5fd !important;
 }
 
 /* Respaldo curvado de la silla de barra */

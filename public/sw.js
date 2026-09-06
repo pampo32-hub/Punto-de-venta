@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-static-v50';
+const CACHE_NAME = 'pos-static-v51';
 
 
 
