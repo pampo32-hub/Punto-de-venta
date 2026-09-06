@@ -248,26 +248,94 @@ function formatearNombreItemConOrigen(item, mesaActualNumero) {
 // ============================================================================
 // 1. AUTENTICACIÓN & LOGIN CON PERFIL DE GÉNERO
 // ============================================================================
+// GESTIÓN DE AUTENTICACIÓN, SESIÓN & USUARIOS PÚBLICOS
+// ============================================================================
+app.get('/api/auth/usuarios-publicos', async (req, res) => {
+  try {
+    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : 1;
+    const usuarios = await dbAll(`
+      SELECT id, usuario, nombre_completo, rol, genero, pin, negocio_id
+      FROM Usuarios
+      WHERE (negocio_id = ? OR negocio_id IS NULL OR ? = 1) AND activo = 1
+      ORDER BY 
+        CASE rol 
+          WHEN 'developer' THEN 1 
+          WHEN 'admin' THEN 2 
+          WHEN 'cajero' THEN 3 
+          ELSE 4 
+        END, id ASC
+    `, [negocioId, negocioId]);
+
+    const lista = usuarios.map(u => {
+      let rolDisplay = u.rol.toUpperCase();
+      let avatar = '👤';
+      if (u.rol === 'developer') {
+        rolDisplay = 'Developer';
+        avatar = '🛠️';
+      } else if (u.rol === 'admin') {
+        rolDisplay = 'Admin';
+        avatar = '👑';
+      } else if (u.rol === 'cajero') {
+        rolDisplay = 'Cajero';
+        avatar = '💵';
+      } else if (u.rol === 'salonero') {
+        rolDisplay = u.genero === 'F' ? 'Salonera' : 'Salonero';
+        avatar = u.genero === 'F' ? '👩‍🍳' : '🤵';
+      }
+      return {
+        id: u.id,
+        usuario: u.usuario,
+        nombre_completo: u.nombre_completo,
+        rol: u.rol,
+        genero: u.genero,
+        rolDisplay,
+        avatar
+      };
+    });
+
+    res.json(lista);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { usuario, password } = req.body;
+    const { usuario, password, pin } = req.body;
     const uInput = (usuario || '').trim();
-    const pInput = (password || '').trim();
+    const pInput = (password || pin || '').trim();
 
-    if (!uInput || !pInput) {
+    if (!uInput && !pInput) {
       return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
     }
+    if (uInput && !pInput && isNaN(Number(uInput))) {
+      return res.status(400).json({ error: 'Contraseña o PIN requerido' });
+    }
 
-    // 1. Búsqueda por usuario (insensible a mayúsculas) y password o PIN
-    let u = await dbGet(`
-      SELECT * FROM Usuarios 
-      WHERE (LOWER(usuario) = LOWER(?) OR pin = ?) 
-        AND (password = ? OR pin = ?) 
-        AND activo = 1
-    `, [uInput, uInput, pInput, pInput]);
+    let u = null;
+    if (uInput && pInput) {
+      u = await dbGet(`
+        SELECT * FROM Usuarios 
+        WHERE (LOWER(usuario) = LOWER(?) OR pin = ?) 
+          AND (password = ? OR pin = ?) 
+          AND activo = 1
+      `, [uInput, uInput, pInput, pInput]);
+    } else if (uInput && !pInput) {
+      // Intento de login por PIN o usuario directo
+      u = await dbGet(`
+        SELECT * FROM Usuarios 
+        WHERE (pin = ? OR LOWER(usuario) = LOWER(?)) AND activo = 1
+      `, [uInput, uInput]);
+    } else if (!uInput && pInput) {
+      // Intento de login por PIN directo
+      u = await dbGet(`
+        SELECT * FROM Usuarios 
+        WHERE (pin = ? OR password = ?) AND activo = 1
+      `, [pInput, pInput]);
+    }
 
     if (!u) {
-      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario y contraseña.' });
+      return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
     }
 
 

@@ -1923,12 +1923,50 @@ function sonarCampanaCocina() {
 // ============================================================================
 // 1. GESTIÓN DE SESIÓN & LOGIN CON GÉNERO Y ENRUTAMIENTO
 // ============================================================================
+window.cargarUsuariosPublicosLogin = async function() {
+  const container = document.getElementById('loginUsuariosDisponiblesGrid');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/auth/usuarios-publicos');
+    if (!res.ok) return;
+    const usuarios = await res.json();
+    if (!Array.isArray(usuarios) || !usuarios.length) return;
+
+    const demoDefaults = {
+      'dev': 'dev123',
+      'admin': 'admin123',
+      'cajero': 'caja123',
+      'carlos': 'mesero123',
+      'sofia': 'mesera123'
+    };
+
+    container.innerHTML = usuarios.map(u => {
+      const defaultPass = demoDefaults[u.usuario] || '';
+      return `
+        <button type="button" class="chip-account ${escapeHtml(u.rol)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}')" title="Ingresar como ${escapeHtml(u.nombre_completo)}">
+          ${u.avatar || '👤'} ${escapeHtml(u.nombre_completo)} <small style="opacity:0.8; font-size:0.75rem;">(${escapeHtml(u.rolDisplay)})</small>
+        </button>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Error cargando usuarios públicos login:', e);
+  }
+};
+
 window.cargarCredencialDemo = function(user, pass) {
   const u = document.getElementById('loginUsuario');
   const p = document.getElementById('loginPassword');
   if (u) u.value = user;
   if (p) p.value = pass;
   window.ejecutarLogin();
+  if (p) {
+    p.value = pass || '';
+    if (pass) {
+      window.ejecutarLogin();
+    } else {
+      p.focus();
+    }
+  }
 };
 
 window.ejecutarLogin = async function() {
@@ -2104,6 +2142,9 @@ window.cerrarSesion = function() {
   document.getElementById('developerPortalView').classList.remove('active');
   document.getElementById('posMainView').classList.remove('active');
   document.getElementById('loginPassword').value = '';
+  if (typeof cargarUsuariosPublicosLogin === 'function') {
+    cargarUsuariosPublicosLogin();
+  }
 };
 
 function aplicarEnrutamientoPorRol() {
@@ -3274,11 +3315,21 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
 async function cargarUsuariosDev() {
   try {
     const res = await fetch('/api/dev/usuarios');
-    const usuarios = await res.json();
     const tbody = document.getElementById('devUsuariosTableBody');
+    if (!tbody) return;
+
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#ef4444; padding:20px;">Error al cargar usuarios de desarrollador</td></tr>';
+      return;
+    }
+    const usuarios = await res.json();
+    if (!Array.isArray(usuarios)) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#ef4444; padding:20px;">${escapeHtml(usuarios.error || 'Respuesta inválida')}</td></tr>`;
+      return;
+    }
 
     tbody.innerHTML = usuarios.map(u => {
-      let rolBadge = u.rol.toUpperCase();
+      let rolBadge = (u.rol || '').toUpperCase();
       let genBadge = u.genero === 'F' ? '👩 Mujer' : '👨 Hombre';
       if (u.rol === 'salonero') {
         rolBadge = u.genero === 'F' ? 'Salonera' : 'Salonero';
@@ -3286,12 +3337,12 @@ async function cargarUsuariosDev() {
 
       return `
         <tr>
-          <td><strong>${u.usuario}</strong></td>
-          <td>${u.nombre_completo}</td>
-          <td><span class="badge-tag" style="background:#1e293b; color:#38bdf8;">${rolBadge}</span></td>
+          <td><strong>${escapeHtml(u.usuario)}</strong></td>
+          <td>${escapeHtml(u.nombre_completo)}</td>
+          <td><span class="badge-tag" style="background:#1e293b; color:#38bdf8;">${escapeHtml(rolBadge)}</span></td>
           <td>${genBadge}</td>
-          <td>${u.negocio_nombre || 'Comercio Principal'}</td>
-          <td><code>${u.pin}</code></td>
+          <td>${escapeHtml(u.negocio_nombre || 'Comercio Principal')}</td>
+          <td><code>${escapeHtml(u.pin || '1234')}</code></td>
           <td>
             ${u.usuario === 'dev' ? '<small style="color:#a855f7;">Protegido</small>' : `
               <button class="btn-item-tool" style="color:#ef4444;" onclick="eliminarUsuarioDev(${u.id})">🗑️ Eliminar</button>
@@ -3301,7 +3352,8 @@ async function cargarUsuariosDev() {
       `;
     }).join('');
 
-    document.getElementById('dbUsuariosCount').textContent = usuarios.length;
+    const lblCount = document.getElementById('dbUsuariosCount');
+    if (lblCount) lblCount.textContent = usuarios.length;
   } catch (e) {
     console.error('Error cargando usuarios dev:', e);
   }
@@ -3424,16 +3476,31 @@ document.getElementById('btnCloseAdminPersonal')?.addEventListener('click', () =
 async function cargarEmpleadosAdmin() {
   try {
     const res = await fetch('/api/admin/empleados?negocio_id=' + (estado.negocioActual ? estado.negocioActual.id : 1));
-    const empleados = await res.json();
     const tbody = document.getElementById('adminStaffTableBody');
+    if (!tbody) return;
+
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444; padding:20px;">Error al cargar lista de personal</td></tr>';
+      return;
+    }
+    const empleados = await res.json();
+    if (!Array.isArray(empleados)) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#ef4444; padding:20px;">${escapeHtml(empleados.error || 'Respuesta inválida')}</td></tr>`;
+      return;
+    }
+
+    if (!empleados.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:20px;">No hay colaboradores registrados en este local.</td></tr>';
+      return;
+    }
 
     // Muestra solo cajeros, saloneros y saloneras. NUNCA a developer.
     tbody.innerHTML = empleados.map(e => `
       <tr>
-        <td><strong>${e.nombre_completo}</strong></td>
-        <td><code>${e.usuario}</code></td>
-        <td><span class="badge-tag" style="background:#1e293b; color:#38bdf8;">${e.rolDisplay}</span></td>
-        <td><code>${e.pin}</code></td>
+        <td><strong>${escapeHtml(e.nombre_completo)}</strong></td>
+        <td><code>${escapeHtml(e.usuario)}</code></td>
+        <td><span class="badge-tag" style="background:#1e293b; color:#38bdf8;">${escapeHtml(e.rolDisplay)}</span></td>
+        <td><code>${escapeHtml(e.pin || '1234')}</code></td>
         <td>
           <button class="btn-item-tool" style="color:#ef4444;" onclick="eliminarEmpleadoAdmin(${e.id})">🗑️ Despedir</button>
         </td>
@@ -8390,6 +8457,9 @@ document.addEventListener('DOMContentLoaded', () => {
     aplicarEnrutamientoPorRol();
   } else {
     document.getElementById('landingLoginView').classList.add('active');
+    if (typeof cargarUsuariosPublicosLogin === 'function') {
+      cargarUsuariosPublicosLogin();
+    }
   }
 });
 
@@ -10130,17 +10200,11 @@ window.imprimirListaCompras = function() {
 // 2.5 MÓDULO DE ANÁLISIS DE VENTAS DE PRODUCTOS POR PERÍODO & KÁRDEX
 // =====================================================================
 window.reporteVentasActual = null;
-window.filtroVentasPreset = 'mes';
 window.filtroVentasPreset = 'hoy';
 window.productoVentasSeleccionadoId = null;
 
 window.inicializarModuloVentasInventario = function() {
   poblarCategoriasFiltroVentas();
-  if (!document.getElementById('txtFechaVentasDesde')?.value) {
-    seleccionarPresetFechaVentas('mes');
-  } else {
-    consultarVentasProductosServidor();
-  }
   seleccionarPresetFechaVentas('hoy');
 };
 
@@ -10210,8 +10274,6 @@ window.consultarVentasProductosServidor = async function(productoId = null) {
     const inputHasta = document.getElementById('txtFechaVentasHasta');
     const selCat = document.getElementById('selectFiltroCatVentas');
 
-    const desde = inputDesde ? inputDesde.value : '';
-    const hasta = inputHasta ? inputHasta.value : '';
     const desdeRaw = inputDesde ? inputDesde.value : '';
     const hastaRaw = inputHasta ? inputHasta.value : '';
     const catId = selCat ? selCat.value : 'todas';
@@ -10631,7 +10693,6 @@ window.abrirModalDetalleInsumos = async function(productoId) {
         if (!isNaN(h.getTime())) hastaISO = h.toISOString();
       }
       const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-      const r = await fetch(`/api/admin/reportes/ventas-productos?producto_id=${productoId}&desde=${encodeURIComponent(inputDesde)}&hasta=${encodeURIComponent(inputHasta)}`, {
       const r = await fetch(`/api/admin/reportes/ventas-productos?producto_id=${productoId}&desde=${encodeURIComponent(desdeISO)}&hasta=${encodeURIComponent(hastaISO)}`, {
         headers: { 'x-user-rol': rol }
       });
@@ -12197,7 +12258,6 @@ window.guardarPersonalizacionPaginaTotal = async function() {
     if (typeof aplicarPersonalizacionAlDOM === 'function') {
       aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
     }
-
     mostrarNotificacionCentro(`💾 ¡Personalización guardada para "${nombreNegocio}" y Modo Edición finalizado!`, 'success');
   } catch (e) {
     mostrarNotificacionCentro('❌ Error guardando personalización: ' + e.message, 'error');
@@ -12225,8 +12285,6 @@ window.restablecerPersonalizacionPagina = async function() {
   if (!confirmado) return;
 
   try {
-    aw
-... [truncated for diff preview]
     await fetch('/api/dev/personalizacion-pagina/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
