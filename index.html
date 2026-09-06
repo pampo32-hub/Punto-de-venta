@@ -68,15 +68,15 @@
           <p>Ingresa tus credenciales para acceder al sistema</p>
         </div>
 
-        <form id="formLogin" onsubmit="event.preventDefault(); ejecutarLogin();">
+        <form id="formLogin" onsubmit="event.preventDefault(); window.ejecutarLogin();">
           <div class="field-group">
-            <label>Usuario:</label>
-            <input type="text" id="loginUsuario" placeholder="Ej: dev, admin, carlos, sofia..." required autocomplete="username" />
+            <label>Usuario / PIN:</label>
+            <input type="text" id="loginUsuario" placeholder="Ej: dev, admin, o PIN 1234..." autocomplete="username" />
           </div>
 
           <div class="field-group">
-            <label>Contraseña:</label>
-            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
+            <label>Contraseña / PIN:</label>
+            <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
           </div>
 
           <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
@@ -878,11 +878,7 @@
       <section id="view-kds" class="pos-view">
         <div class="view-subbar">
           <div class="kds-filter-tabs">
-            <button class="kds-tab active" data-kds-dest="todos">📋 Todas las Comandas</button>
-            <button class="kds-tab" data-kds-dest="cocina">🍳 Cocina Caliente</button>
-            <button class="kds-tab active" data-kds-dest="cocina">🍳 Cocina Caliente</button>
-            <button class="kds-tab" data-kds-dest="barra">🍸 Barra & Bebidas</button>
-            <button class="kds-tab" data-kds-dest="todos">📋 Todas las Comandas</button>
+            <button class="kds-tab active" data-kds-dest="cocina">🍳 Cocina (Platillos)</button>
           </div>
           <div class="kds-audio-controls">
             <button class="btn-bell" id="btnTestBellSound" title="Probar sonido de comanda">🔔 Probar Campana</button>
@@ -3797,6 +3793,52 @@
       <div class="dialog-footer" style="padding:14px 24px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18;">
         <button id="modalConfirmBtnNo" class="btn-sec" style="padding:9px 20px; border-radius:10px; font-weight:700; font-size:0.88rem;" onclick="window._confirmarRechazar && window._confirmarRechazar()">Cancelar</button>
         <button id="modalConfirmBtnSi" style="padding:9px 22px; border-radius:10px; font-weight:800; font-size:0.88rem; background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; border:none; cursor:pointer; box-shadow:0 4px 12px rgba(239,68,68,0.4);" onclick="window._confirmarAceptar && window._confirmarAceptar()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: AUTORIZACIÓN PIN DE ADMINISTRADOR (Cierre Parcial / Z) -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="modalSolicitarPinAdmin" style="display:none; z-index: 100150; backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.85);">
+    <div class="dialog-box" style="max-width:380px; width:92vw; border-radius:20px; background:#0f172a; border:1px solid #334155; box-shadow:0 25px 65px rgba(0,0,0,0.8); padding:0; overflow:hidden;">
+      <div class="dialog-header" style="background:linear-gradient(135deg,#1e293b,#0f172a); border-bottom:1px solid #334155; padding:18px 22px; display:flex; align-items:center; gap:12px;">
+        <span id="pinAdminModalIcono" style="font-size:1.6rem;">🔒</span>
+        <div>
+          <h3 id="pinAdminModalTitulo" style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:800;">Autorización Requerida</h3>
+          <p id="pinAdminModalSubtitulo" style="margin:2px 0 0; color:#94a3b8; font-size:0.78rem;">Ingresa el PIN de Administrador</p>
+        </div>
+      </div>
+      
+      <div style="padding:20px 24px;">
+        <p id="pinAdminModalMensaje" style="color:#cbd5e1; font-size:0.88rem; margin:0 0 16px; text-align:center;"></p>
+        
+        <div style="display:flex; justify-content:center; align-items:center; gap:14px; margin-bottom:18px;" id="pinAdminDotsDisplay">
+          <span class="pin-admin-dot" style="font-size:1.6rem; color:#475569;">○</span>
+          <span class="pin-admin-dot" style="font-size:1.6rem; color:#475569;">○</span>
+          <span class="pin-admin-dot" style="font-size:1.6rem; color:#475569;">○</span>
+          <span class="pin-admin-dot" style="font-size:1.6rem; color:#475569;">○</span>
+        </div>
+
+        <div class="numeric-keypad" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px;">
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(1)">1</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(2)">2</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(3)">3</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(4)">4</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(5)">5</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(6)">6</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(7)">7</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(8)">8</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(9)">9</button>
+          <button type="button" class="num-btn clear" style="padding:14px; font-size:1rem; font-weight:800; border-radius:10px; background:#334155; color:#f87171; border:1px solid #475569; cursor:pointer;" onclick="borrarTodoPinAdmin()">C</button>
+          <button type="button" class="num-btn" style="padding:14px; font-size:1.25rem; font-weight:800; border-radius:10px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="presionarTeclaPinAdmin(0)">0</button>
+          <button type="button" class="num-btn del" style="padding:14px; font-size:1.1rem; font-weight:800; border-radius:10px; background:#334155; color:#38bdf8; border:1px solid #475569; cursor:pointer;" onclick="borrarUnDigitoPinAdmin()">⌫</button>
+        </div>
+      </div>
+      
+      <div class="dialog-footer" style="padding:14px 24px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18;">
+        <button type="button" class="btn-sec" style="padding:9px 20px; border-radius:10px; font-weight:700; font-size:0.88rem;" onclick="cancelarPinAdminModal()">Cancelar</button>
+        <button type="button" style="padding:9px 22px; border-radius:10px; font-weight:800; font-size:0.88rem; background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; border:none; cursor:pointer;" onclick="validarPinAdminManual()">Continuar</button>
       </div>
     </div>
   </div>
