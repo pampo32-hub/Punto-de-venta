@@ -1,11 +1,15 @@
 const net = require('net');
 const cp = require('child_process');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
-
 const fs = require('fs');
+
 const DB_MAIN_PATH = path.join(__dirname, '../../pos.db');
 const DB_PATH = path.join(__dirname, '../../pos.test.db');
+
+process.env.NODE_ENV = 'test';
+process.env.POS_DB_PATH = DB_PATH;
+
+const sqlite3 = require('sqlite3').verbose();
 
 // Create isolated test db copy from main db
 try {
