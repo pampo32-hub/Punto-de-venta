@@ -542,13 +542,15 @@ body {
 }
 
 .mesa-render-card.ocupada {
-  border-color: #ef444499;
-  background: linear-gradient(180deg, #111827 0%, #7f1d1d44 100%);
+  border-color: #ef4444;
+  background: linear-gradient(180deg, #111827 0%, #1e3a8a33 100%);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15);
 }
 
 .mesa-render-card.abierta {
-  border-color: var(--primary);
-  background: linear-gradient(180deg, #111827 0%, #2563eb33 100%);
+  border-color: #ef4444;
+  background: linear-gradient(180deg, #111827 0%, #1e3a8a33 100%);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15);
 }
 
 .mesa-render-card.esperando {
@@ -3581,6 +3583,17 @@ textarea:focus, select:focus, input:focus {
 
 .mesa-render-card.silla.libre .m-num {
   color: #34d399 !important;
+}
+
+.mesa-render-card.silla.abierta,
+.mesa-render-card.silla.ocupada {
+  border-color: #ef4444 !important;
+  background: radial-gradient(circle at center, #1e3a8a44 20%, #111827 100%) !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+}
+.mesa-render-card.silla.abierta .m-num,
+.mesa-render-card.silla.ocupada .m-num {
+  color: #f87171 !important;
 }
 
 .mesa-render-card.silla.esperando {
