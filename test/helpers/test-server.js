@@ -111,8 +111,10 @@ async function startTestServer() {
     };
 
     child.stdout.on('data', onData);
+    let stderrBuf = '';
     child.stderr.on('data', (errData) => {
       // Ignore warnings
+      stderrBuf += errData.toString();
     });
 
     child.on('error', (err) => {
@@ -123,7 +125,7 @@ async function startTestServer() {
     child.on('exit', (code) => {
       if (code !== null && code !== 0) {
         clearTimeout(timeout);
-        reject(new Error(`Server process exited prematurely with code ${code}`));
+        reject(new Error(`Server process exited prematurely with code ${code}: ${stderrBuf}`));
       }
     });
   });

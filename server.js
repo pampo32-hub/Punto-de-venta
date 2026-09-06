@@ -290,6 +290,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       ok: true,
+      debe_cambiar_password: Boolean(u.debe_cambiar_password),
       usuario: {
         id: u.id,
         usuario: u.usuario,
@@ -299,6 +300,7 @@ app.post('/api/auth/login', async (req, res) => {
         rolEtiqueta,
         perfilVisual,
         pin: u.pin,
+        debe_cambiar_password: Boolean(u.debe_cambiar_password),
         permisos: JSON.parse(u.permisos || '{}'),
         negocio_id: u.negocio_id
       },
@@ -309,6 +311,157 @@ app.post('/api/auth/login', async (req, res) => {
         logo_url: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80'
       }
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Cambio Obligatorio de Contraseña Temporal (Primer Login o Restablecimiento)
+app.post('/api/auth/cambiar-password-temporal', async (req, res) => {
+  try {
+    const { usuario, password_actual, password_nuevo, pin_nuevo } = req.body;
+    const uInput = (usuario || '').trim();
+    const pActual = (password_actual || '').trim();
+    const pNuevo = (password_nuevo || '').trim();
+
+    if (!uInput || !pActual || !pNuevo) {
+      return res.status(400).json({ error: 'Todos los campos de contraseña son obligatorios' });
+    }
+
+    if (pNuevo.length < 4) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 4 caracteres' });
+    }
+
+    const u = await dbGet(`
+      SELECT * FROM Usuarios 
+      WHERE LOWER(usuario) = LOWER(?) AND (password = ? OR pin = ?) AND activo = 1
+    `, [uInput, pActual, pActual]);
+
+    if (!u) {
+      return res.status(401).json({ error: 'La contraseña temporal o credencial actual es incorrecta' });
+    }
+
+    let pinFinal = u.pin;
+    if (pin_nuevo && String(pin_nuevo).trim().length === 4 && !isNaN(Number(pin_nuevo))) {
+      pinFinal = String(pin_nuevo).trim();
+    }
+
+    await dbRun(
+      'UPDATE Usuarios SET password = ?, pin = ?, debe_cambiar_password = 0 WHERE id = ?',
+      [pNuevo, pinFinal, u.id]
+    );
+
+    await registrarAuditoria({
+      negocioId: u.negocio_id || 1,
+      usuarioId: u.id,
+      usuarioNombre: u.nombre_completo,
+      accion: 'CAMBIO_PASSWORD_OBLIGATORIO',
+      tipoEvento: 'seguridad',
+      modulo: 'usuarios',
+      detalle: `El usuario ${u.usuario} actualizó su contraseña temporal obligatoria exitosamente.`
+    });
+
+    res.json({ ok: true, message: '¡Contraseña actualizada exitosamente! Ahora puedes ingresar con tu nueva clave.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Validación Rápida de PIN al Tocar Mesas en Salón Compartido
+app.post('/api/auth/validar-pin-mesa', async (req, res) => {
+  try {
+    const { pin, negocio_id = 1 } = req.body;
+    const pinInput = String(pin || '').trim();
+
+    if (!pinInput || pinInput.length !== 4) {
+      return res.status(400).json({ error: 'Debes ingresar un PIN de 4 dígitos.' });
+    }
+
+    const u = await dbGet(`
+      SELECT * FROM Usuarios 
+      WHERE pin = ? AND activo = 1 AND (negocio_id = ? OR rol = 'developer')
+      LIMIT 1
+    `, [pinInput, negocio_id]);
+
+    if (!u) {
+      return res.status(401).json({ error: 'PIN incorrecto. Verifica con tu usuario o administrador.' });
+    }
+
+    let rolEtiqueta = u.rol.toUpperCase();
+    if (u.rol === 'salonero') {
+      rolEtiqueta = u.genero === 'F' ? 'Salonera' : 'Salonero';
+    } else if (u.rol === 'admin') {
+      rolEtiqueta = 'Administrador';
+    } else if (u.rol === 'cajero') {
+      rolEtiqueta = 'Cajero';
+    } else if (u.rol === 'developer') {
+      rolEtiqueta = 'Desarrollador Global';
+    }
+
+    const perfilVisual = `${u.nombre_completo} (${rolEtiqueta})`;
+
+    res.json({
+      ok: true,
+      usuario: {
+        id: u.id,
+        usuario: u.usuario,
+        nombre: u.nombre_completo,
+        rol: u.rol,
+        genero: u.genero,
+        rolEtiqueta,
+        perfilVisual,
+        pin: u.pin,
+        debe_cambiar_password: Boolean(u.debe_cambiar_password),
+        permisos: JSON.parse(u.permisos || '{}'),
+        negocio_id: u.negocio_id
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Autoservicio para Cambio de PIN Personal
+app.post('/api/usuarios/cambiar-pin', async (req, res) => {
+  try {
+    const { usuarioId, pin_actual, pin_nuevo, password } = req.body;
+    const pNuevo = String(pin_nuevo || '').trim();
+
+    if (!usuarioId) {
+      return res.status(400).json({ error: 'Identificador de usuario requerido' });
+    }
+
+    if (!pNuevo || pNuevo.length !== 4 || isNaN(Number(pNuevo))) {
+      return res.status(400).json({ error: 'El nuevo PIN debe ser de exactamente 4 dígitos numéricos' });
+    }
+
+    const u = await dbGet('SELECT * FROM Usuarios WHERE id = ? AND activo = 1', [usuarioId]);
+    if (!u) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const pinActualInput = String(pin_actual || '').trim();
+    const passInput = String(password || '').trim();
+    const coincidePin = pinActualInput && u.pin === pinActualInput;
+    const coincidePass = passInput && u.password === passInput;
+
+    if (!coincidePin && !coincidePass) {
+      return res.status(401).json({ error: 'El PIN actual o contraseña proporcionada es incorrecta' });
+    }
+
+    await dbRun('UPDATE Usuarios SET pin = ? WHERE id = ?', [pNuevo, usuarioId]);
+
+    await registrarAuditoria({
+      negocioId: u.negocio_id || 1,
+      usuarioId: u.id,
+      usuarioNombre: u.nombre_completo,
+      accion: 'CAMBIO_PIN_AUTOSERVICIO',
+      tipoEvento: 'seguridad',
+      modulo: 'usuarios',
+      detalle: `El usuario ${u.usuario} cambió su PIN personal en autoservicio.`
+    });
+
+    res.json({ ok: true, message: '¡PIN personal actualizado exitosamente!', nuevoPin: pNuevo });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -713,10 +866,12 @@ app.post('/api/admin/empleados', async (req, res) => {
       ? '{"salon":true,"caja":true,"facturacion":true}'
       : '{"salon":true,"kds":true}';
 
+    const debeCambiar = (rol !== 'admin' && rol !== 'developer') ? 1 : 0;
+
     const r = await dbRun(
-      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocio_id, usuario.trim(), nombre_completo.trim(), password.trim(), rol, genero, pin, permisos]
+      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, debe_cambiar_password)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocio_id, usuario.trim(), nombre_completo.trim(), password.trim(), rol, genero, pin, permisos, debeCambiar]
     );
 
     res.json({ message: 'Empleado registrado con éxito', id: r.lastID });
@@ -735,13 +890,14 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
       return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil' });
     }
 
-    const { nombre_completo, password, rol, genero, pin } = req.body;
+    const { nombre_completo, password, rol, genero, pin, debe_cambiar_password } = req.body;
     if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
 
     if (password) {
+      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((rol !== 'admin' && rol !== 'developer') ? 1 : 0);
       await dbRun(
-        'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ? WHERE id = ?',
-        [nombre_completo, password, rol, genero, pin, req.params.id]
+        'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ? WHERE id = ?',
+        [nombre_completo, password, rol, genero, pin, debeCambiar, req.params.id]
       );
     } else {
       await dbRun(

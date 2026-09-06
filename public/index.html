@@ -785,9 +785,12 @@
       <div class="user-status-pill">
         <div class="status-indicator online"></div>
         <div class="user-details">
+        <div class="user-details" onclick="abrirModalCambiarPinAutoservicio()" style="cursor:pointer;" title="Clic para cambiar tu PIN personal">
           <span class="user-title" id="userProfileBadge">Usuario (Salonero)</span>
           <small class="user-subtitle">Turno Activo</small>
+          <small class="user-subtitle">Turno Activo • 🔑 PIN</small>
         </div>
+        <button class="btn-user-pin" onclick="abrirModalCambiarPinAutoservicio()" style="background:transparent; border:none; cursor:pointer; font-size:1rem; padding:4px 6px; opacity:0.8; transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'" title="Cambiar mi PIN">🔑</button>
         <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión">🚪</button>
       </div>
     </header>
@@ -4073,14 +4076,139 @@
         <button class="btn-sec" onclick="cerrarModalCuentasCobradas()" style="padding:8px 20px; background:#334155; color:#f8fafc; border:none; border-radius:8px; font-weight:600; cursor:pointer;">Cerrar</button>
       </div>
 
+  <!-- MODAL 1: ACTUALIZACIÓN OBLIGATORIA DE CONTRASEÑA TEMPORAL -->
+  <div class="modal" id="modalCambioPasswordObligatorio" style="z-index: 10000; backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.88);">
+    <div class="modal-card" style="max-width: 460px; width: 92%; background: #0f172a; border: 1px solid #38bdf8; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85); border-radius: 16px; overflow: hidden; padding: 24px;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 2.8rem; margin-bottom: 8px;">🔐</div>
+        <h3 style="margin: 0 0 6px; color: #f8fafc; font-size: 1.3rem; font-weight: 800;">Actualización de Contraseña</h3>
+        <p style="margin: 0; color: #94a3b8; font-size: 0.85rem; line-height: 1.4;">
+          Por seguridad, debes cambiar tu contraseña provisional por una personal y secreta para continuar.
+        </p>
+      </div>
+
+      <form id="formCambioPassObligatorio" onsubmit="event.preventDefault(); guardarPasswordTemporalObligatorio();">
+        <input type="hidden" id="txtObligatorioUsuario" />
+
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px;">Contraseña Provisional Actual:</label>
+          <input type="password" id="txtObligatorioPassActual" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.95rem;" autocomplete="current-password" />
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px;">Nueva Contraseña Personal:</label>
+          <input type="password" id="txtObligatorioPassNuevo" placeholder="Mínimo 4 caracteres" required minlength="4" style="width: 100%; padding: 10px 14px; background: #1e293b; border: 1px solid #38bdf8; border-radius: 8px; color: #fff; font-size: 0.95rem;" autocomplete="new-password" />
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px;">Confirmar Nueva Contraseña:</label>
+          <input type="password" id="txtObligatorioPassConfirm" placeholder="Repite tu nueva contraseña" required minlength="4" style="width: 100%; padding: 10px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.95rem;" autocomplete="new-password" />
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-bottom: 6px;">Nuevo PIN de Salón (4 dígitos numéricos, opcional):</label>
+          <input type="text" id="txtObligatorioPinNuevo" placeholder="Ej: 1111, 2222" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" style="width: 100%; padding: 10px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #38bdf8; font-size: 1.1rem; font-weight: 700; letter-spacing: 4px; text-align: center;" />
+        </div>
+
+        <button type="submit" id="btnGuardarPassObligatorio" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7, #0369a1); border: none; border-radius: 10px; color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 14px rgba(2,132,199,0.4); transition: transform 0.15s;">
+          🔒 Guardar y Entrar al Sistema
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: KEYPAD IDENTIFICACIÓN DE MESERO POR PIN AL TOCAR MESA -->
+  <div class="modal" id="modalPinMesaSalonero" style="z-index: 9999; backdrop-filter: blur(6px); background: rgba(15, 23, 42, 0.82);">
+    <div class="modal-card" style="max-width: 380px; width: 90%; background: #0f172a; border: 1px solid #6366f1; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85); border-radius: 18px; overflow: hidden; padding: 22px;">
+      <div style="text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 2.4rem; margin-bottom: 4px;">🍽️</div>
+        <h3 style="margin: 0; color: #f8fafc; font-size: 1.25rem; font-weight: 800;">Identificación de Mesero</h3>
+        <p style="margin: 4px 0 0; color: #a5b4fc; font-size: 0.88rem; font-weight: 600;">
+          Atendiendo: <span id="lblPinMesaNumero" style="color: #38bdf8; font-weight: 800;">Mesa 1</span>
+        </p>
+      </div>
+
+      <!-- VISOR DE PIN (4 PUNTOS / DIGITOS) -->
+      <div style="background: #1e1b4b; border: 2px solid #6366f1; border-radius: 12px; padding: 12px; margin-bottom: 16px; text-align: center;">
+        <div id="pinMesaDisplay" style="font-size: 2rem; font-weight: 900; letter-spacing: 12px; color: #818cf8; min-height: 40px; display: flex; align-items: center; justify-content: center;">
+          <span class="pin-dot" style="opacity:0.3;">○</span>
+          <span class="pin-dot" style="opacity:0.3;">○</span>
+          <span class="pin-dot" style="opacity:0.3;">○</span>
+          <span class="pin-dot" style="opacity:0.3;">○</span>
+        </div>
+        <small style="color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Ingresa tu PIN de 4 dígitos</small>
+      </div>
+
+      <!-- KEYPAD NUMÉRICO TÁCTIL (GRID 3x4) -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;">
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('1')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">1</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('2')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">2</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('3')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">3</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('4')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">4</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('5')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">5</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('6')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">6</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('7')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">7</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('8')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">8</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('9')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">9</button>
+        <button type="button" class="btn-pin-key" onclick="borrarTeclaPinMesa()" style="padding: 14px 0; font-size: 1.1rem; font-weight: 800; background: rgba(239,68,68,0.15); border: 1px solid #ef4444; color: #f87171; border-radius: 10px; cursor: pointer; transition: all 0.1s;">⌫</button>
+        <button type="button" class="btn-pin-key" onclick="presionarTeclaPinMesa('0')" style="padding: 14px 0; font-size: 1.35rem; font-weight: 800; background: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 10px; cursor: pointer; transition: all 0.1s;">0</button>
+        <button type="button" class="btn-pin-key" onclick="confirmarPinMesaManual()" style="padding: 14px 0; font-size: 1.1rem; font-weight: 800; background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff; border-radius: 10px; cursor: pointer; transition: all 0.1s;">✓</button>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn-sec" onclick="cerrarModalPinMesa()" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: 700; background: #334155; color: #fff; border: none; cursor: pointer;">
+          Cancelar
+        </button>
+        <button type="button" id="btnContinuarMismoMesero" onclick="continuarConMeseroActualMesa()" style="display: none; flex: 1.5; padding: 10px; border-radius: 8px; font-weight: 700; background: #312e81; color: #c7d2fe; border: 1px solid #4338ca; cursor: pointer; font-size: 0.8rem;">
+          👤 Seguir como <span id="lblNombreMeseroActual">Carlos</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: AUTOSERVICIO DE CAMBIO DE PIN -->
+  <div class="modal" id="modalCambiarPinAutoservicio" style="z-index: 9998; backdrop-filter: blur(6px); background: rgba(15, 23, 42, 0.82);">
+    <div class="modal-card" style="max-width: 420px; width: 90%; background: #0f172a; border: 1px solid #10b981; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85); border-radius: 16px; overflow: hidden; padding: 22px;">
+      <div style="text-align: center; margin-bottom: 18px;">
+        <div style="font-size: 2.5rem; margin-bottom: 6px;">🔑</div>
+        <h3 style="margin: 0 0 4px; color: #f8fafc; font-size: 1.25rem; font-weight: 800;">Cambiar mi PIN Personal</h3>
+        <p style="margin: 0; color: #94a3b8; font-size: 0.82rem;">
+          Actualiza tu código de 4 dígitos para atender mesas rápidamente.
+        </p>
+      </div>
+
+      <form id="formCambiarPinAutoservicio" onsubmit="event.preventDefault(); guardarNuevoPinAutoservicio();">
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">PIN Actual o Contraseña:</label>
+          <input type="password" id="txtAutoPinActual" placeholder="••••" required style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.95rem;" />
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Nuevo PIN (4 dígitos numéricos):</label>
+          <input type="text" id="txtAutoPinNuevo" placeholder="Ej: 3344" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #10b981; border-radius: 8px; color: #34d399; font-size: 1.2rem; font-weight: 800; letter-spacing: 4px; text-align: center;" />
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Confirmar Nuevo PIN:</label>
+          <input type="text" id="txtAutoPinConfirm" placeholder="Repite tu nuevo PIN" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #34d399; font-size: 1.2rem; font-weight: 800; letter-spacing: 4px; text-align: center;" />
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn-sec" onclick="cerrarModalCambiarPinAutoservicio()" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: 700; background: #334155; color: #fff; border: none; cursor: pointer;">
+            Cancelar
+          </button>
+          <button type="submit" style="flex: 1.5; padding: 10px; border-radius: 8px; font-weight: 800; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16,185,129,0.35);">
+            💾 Guardar PIN
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=2.9.8"></script>
-  <script src="app.js?v=2.9.9"></script>
+  <script src="app.js?v=3.0.0"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

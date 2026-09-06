@@ -1899,6 +1899,16 @@ window.ejecutarLogin = async function() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error de autenticación');
 
+    if (data.debe_cambiar_password) {
+      document.getElementById('txtObligatorioUsuario').value = data.usuario.usuario;
+      document.getElementById('txtObligatorioPassActual').value = password;
+      document.getElementById('txtObligatorioPassNuevo').value = '';
+      document.getElementById('txtObligatorioPassConfirm').value = '';
+      document.getElementById('txtObligatorioPinNuevo').value = data.usuario.pin || '';
+      document.getElementById('modalCambioPasswordObligatorio')?.classList.add('active');
+      return;
+    }
+
     estado.usuarioActual = data.usuario;
     estado.negocioActual = data.negocio;
 
@@ -1914,6 +1924,113 @@ window.ejecutarLogin = async function() {
       btnSubmit.disabled = false;
       btnSubmit.textContent = '🔐 Ingresar al Sistema';
     }
+  }
+};
+
+window.guardarPasswordTemporalObligatorio = async function() {
+  const usuario = document.getElementById('txtObligatorioUsuario')?.value;
+  const password_actual = document.getElementById('txtObligatorioPassActual')?.value;
+  const password_nuevo = document.getElementById('txtObligatorioPassNuevo')?.value?.trim();
+  const password_confirm = document.getElementById('txtObligatorioPassConfirm')?.value?.trim();
+  const pin_nuevo = document.getElementById('txtObligatorioPinNuevo')?.value?.trim();
+
+  if (!password_nuevo || !password_confirm) {
+    alert('Por favor completa todos los campos de contraseña.');
+    return;
+  }
+
+  if (password_nuevo.length < 4) {
+    alert('La nueva contraseña debe tener al menos 4 caracteres.');
+    return;
+  }
+
+  if (password_nuevo !== password_confirm) {
+    alert('Las contraseñas no coinciden. Por favor verifica.');
+    return;
+  }
+
+  const btn = document.getElementById('btnGuardarPassObligatorio');
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/auth/cambiar-password-temporal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, password_actual, password_nuevo, pin_nuevo })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al actualizar contraseña');
+
+    alert(`✅ ${data.message || 'Contraseña actualizada exitosamente.'}`);
+    document.getElementById('modalCambioPasswordObligatorio')?.classList.remove('active');
+
+    // Iniciar sesión automáticamente con la nueva clave
+    document.getElementById('loginUsuario').value = usuario;
+    document.getElementById('loginPassword').value = password_nuevo;
+    ejecutarLogin();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+window.abrirModalCambiarPinAutoservicio = function() {
+  if (!estado.usuarioActual) {
+    alert('Debes iniciar sesión primero.');
+    return;
+  }
+  document.getElementById('txtAutoPinActual').value = '';
+  document.getElementById('txtAutoPinNuevo').value = '';
+  document.getElementById('txtAutoPinConfirm').value = '';
+  document.getElementById('modalCambiarPinAutoservicio')?.classList.add('active');
+  setTimeout(() => document.getElementById('txtAutoPinActual')?.focus(), 100);
+};
+
+window.cerrarModalCambiarPinAutoservicio = function() {
+  document.getElementById('modalCambiarPinAutoservicio')?.classList.remove('active');
+};
+
+window.guardarNuevoPinAutoservicio = async function() {
+  const pin_actual = document.getElementById('txtAutoPinActual')?.value?.trim();
+  const pin_nuevo = document.getElementById('txtAutoPinNuevo')?.value?.trim();
+  const pin_confirm = document.getElementById('txtAutoPinConfirm')?.value?.trim();
+
+  if (!pin_actual || !pin_nuevo || !pin_confirm) {
+    alert('Por favor completa todos los campos del PIN.');
+    return;
+  }
+
+  if (pin_nuevo.length !== 4 || isNaN(Number(pin_nuevo))) {
+    alert('El nuevo PIN debe ser de exactamente 4 dígitos numéricos.');
+    return;
+  }
+
+  if (pin_nuevo !== pin_confirm) {
+    alert('Los nuevos PINes no coinciden. Por favor verifica.');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/usuarios/cambiar-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usuarioId: estado.usuarioActual.id,
+        pin_actual,
+        pin_nuevo
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al cambiar PIN');
+
+    estado.usuarioActual.pin = data.nuevoPin;
+    sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+
+    alert(`✅ ${data.message || 'PIN actualizado exitosamente.'}`);
+    cerrarModalCambiarPinAutoservicio();
+  } catch (e) {
+    alert('❌ ' + e.message);
   }
 };
 
@@ -4455,6 +4572,7 @@ function agregarDragMesa(card, mesaData, canvas) {
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
       if (dist <= 12) {
         abrirComanderoMesa(mesaData.id);
+        solicitarAccesoMesa(mesaData.id);
       }
     }
   });
@@ -4819,6 +4937,128 @@ document.querySelectorAll('.zone-tab').forEach(tab => {
     renderSalón(tab.dataset.zona);
   });
 });
+
+let _mesaIdPinPendiente = null;
+let _pinMesaBuffer = '';
+
+window.solicitarAccesoMesa = function(mesaId) {
+  _mesaIdPinPendiente = mesaId;
+  _pinMesaBuffer = '';
+
+  const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(mesaId));
+  const numDisplay = mesa ? (mesa.numero || mesaId) : mesaId;
+  const lblMesa = document.getElementById('lblPinMesaNumero');
+  if (lblMesa) {
+    lblMesa.textContent = `Mesa ${numDisplay}`;
+  }
+
+  const btnContinuar = document.getElementById('btnContinuarMismoMesero');
+  const lblMeseroActual = document.getElementById('lblNombreMeseroActual');
+  if (estado.usuarioActual) {
+    if (btnContinuar) btnContinuar.style.display = 'inline-flex';
+    if (lblMeseroActual) lblMeseroActual.textContent = estado.usuarioActual.nombre || estado.usuarioActual.usuario;
+  } else {
+    if (btnContinuar) btnContinuar.style.display = 'none';
+  }
+
+  actualizarVisorPinMesa();
+  document.getElementById('modalPinMesaSalonero')?.classList.add('active');
+};
+
+window.presionarTeclaPinMesa = function(tecla) {
+  if (_pinMesaBuffer.length < 4) {
+    _pinMesaBuffer += String(tecla);
+    actualizarVisorPinMesa();
+    if (_pinMesaBuffer.length === 4) {
+      setTimeout(() => {
+        validarPinMesaIngresado();
+      }, 80);
+    }
+  }
+};
+
+window.borrarTeclaPinMesa = function() {
+  if (_pinMesaBuffer.length > 0) {
+    _pinMesaBuffer = _pinMesaBuffer.slice(0, -1);
+    actualizarVisorPinMesa();
+  }
+};
+
+function actualizarVisorPinMesa() {
+  const visor = document.getElementById('pinMesaDisplay');
+  if (!visor) return;
+  const dots = [];
+  for (let i = 0; i < 4; i++) {
+    if (i < _pinMesaBuffer.length) {
+      dots.push('<span class="pin-dot" style="opacity: 1; color: #38bdf8; transform: scale(1.2); display: inline-block;">●</span>');
+    } else {
+      dots.push('<span class="pin-dot" style="opacity: 0.3; color: #818cf8;">○</span>');
+    }
+  }
+  visor.innerHTML = dots.join('');
+}
+
+window.confirmarPinMesaManual = function() {
+  if (_pinMesaBuffer.length < 4) {
+    alert('Por favor ingresa los 4 dígitos de tu PIN.');
+    return;
+  }
+  validarPinMesaIngresado();
+};
+
+window.cerrarModalPinMesa = function() {
+  _mesaIdPinPendiente = null;
+  _pinMesaBuffer = '';
+  document.getElementById('modalPinMesaSalonero')?.classList.remove('active');
+};
+
+window.continuarConMeseroActualMesa = function() {
+  if (!estado.usuarioActual) {
+    alert('No hay una sesión activa de mesero.');
+    return;
+  }
+  const mesaId = _mesaIdPinPendiente;
+  cerrarModalPinMesa();
+  if (mesaId != null) {
+    abrirComanderoMesa(mesaId);
+  }
+};
+
+window.validarPinMesaIngresado = async function() {
+  const pin = _pinMesaBuffer;
+  const mesaId = _mesaIdPinPendiente;
+  if (!pin || pin.length !== 4) return;
+
+  try {
+    const res = await fetch('/api/auth/validar-pin-mesa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin, mesaId })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'PIN incorrecto');
+    }
+
+    // Actualizar usuario activo con el usuario del PIN
+    estado.usuarioActual = data.usuario;
+    sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
+
+    const perfilBadge = document.getElementById('userProfileBadge');
+    if (perfilBadge) {
+      perfilBadge.textContent = data.usuario.perfilVisual || `${data.usuario.nombre} (${data.usuario.rol})`;
+    }
+
+    cerrarModalPinMesa();
+    if (mesaId != null) {
+      abrirComanderoMesa(mesaId);
+    }
+  } catch (e) {
+    _pinMesaBuffer = '';
+    actualizarVisorPinMesa();
+    alert('❌ ' + e.message);
+  }
+};
 
 window.abrirComanderoMesa = abrirComanderoMesa;
 async function abrirComanderoMesa(mesaId) {

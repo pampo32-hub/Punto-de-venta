@@ -232,8 +232,10 @@ function initDb() {
       pin TEXT DEFAULT '1234',
       permisos TEXT DEFAULT '{"salon":true,"kds":true,"caja":true,"facturacion":true}',
       activo INTEGER DEFAULT 1,
+      debe_cambiar_password INTEGER DEFAULT 0,
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
     )`);
+    db.run("ALTER TABLE Usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 0", () => {});
 
     // 13. Historial de Uniones de Mesas (Snapshots para Separación Exacta)
     db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
