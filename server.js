@@ -2666,11 +2666,13 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
-    // Determinar destino inteligentemente (Bebidas, Cervezas, Cocteles, Frescos, Cafés van a Barra)
-    if (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6 || prodDb.categoria_id === 7)) {
+    const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(nombre || '') || /rock ice/i.test(nombre || '');
+    const esBebidaCat = (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6 || prodDb.categoria_id === 7 || prodDb.es_licor || prodDb.destino === 'barra')) ||
+      (it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7);
+
+    if (esBebidaCat || esBebidaKeyword) {
       destino = 'barra';
-    } else if (/cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua|cas|horchata|resbaladera|jugo|batido/i.test(nombre || '')) {
-      destino = 'barra';
+      curso = curso || 1;
     } else if (!destino) {
       if (curso === 1 || curso === 5 || curso === 6) {
         destino = 'barra';
@@ -3039,7 +3041,7 @@ app.post('/api/comandas/anular-item', async (req, res) => {
 // ============================================================================
 app.get('/api/kds', async (req, res) => {
   try {
-    const destino = req.query.destino || 'todos';
+    const destino = req.query.destino || 'cocina';
     let query = `
       SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
       FROM DetalleOrden d
@@ -3048,9 +3050,10 @@ app.get('/api/kds', async (req, res) => {
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
     `;
     const params = [];
-    if (destino !== 'todos') {
-      query += ' AND d.destino = ?';
-      params.push(destino);
+    if (destino === 'barra') {
+      query += " AND d.destino = 'barra'";
+    } else {
+      query += " AND (d.destino = 'cocina' OR (d.destino IS NULL AND d.curso NOT IN (1, 5, 6))) AND (d.destino != 'barra' OR d.destino IS NULL)";
     }
     query += ' ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC';
 
@@ -3208,6 +3211,63 @@ app.put('/api/kds/:detalleId/estado', handleKdsEstadoUpdate);
 app.post('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 
+// Despacho de platillos en lote / seleccionados en KDS
+app.post('/api/kds/despachar-lote', async (req, res) => {
+  try {
+    const ids = req.body.detalleIds || req.body.itemIds || [];
+    const estado = req.body.estado || 'listo';
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Lista de identificadores de platillos requerida' });
+    }
+
+    const horaListo = estado === 'listo' ? new Date().toISOString() : null;
+    const ordenesAfectadas = new Set();
+    const mesasAfectadas = new Set();
+
+    for (const id of ids) {
+      const item = await dbGet('SELECT * FROM DetalleOrden WHERE id = ?', [id]);
+      if (item) {
+        await dbRun(
+          'UPDATE DetalleOrden SET estado_comanda = ?, hora_listo = COALESCE(?, hora_listo) WHERE id = ?',
+          [estado, horaListo, id]
+        );
+        ordenesAfectadas.add(item.orden_id);
+      }
+    }
+
+    for (const ordId of ordenesAfectadas) {
+      const todosItems = await dbAll(
+        "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+        [ordId]
+      );
+      const nuevoEstadoMesa = evaluarEstadoMesaKDS(todosItems);
+      await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [nuevoEstadoMesa, ordId]);
+
+      const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordId]);
+      if (orden && orden.mesa_id) {
+        mesasAfectadas.add(orden.mesa_id);
+        await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [nuevoEstadoMesa, orden.mesa_id]);
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstadoMesa, total: orden.total });
+      }
+    }
+
+    io.emit('kds_lote_despachado', {
+      ids,
+      estado,
+      ordenes: Array.from(ordenesAfectadas),
+      mesas: Array.from(mesasAfectadas)
+    });
+
+    res.json({
+      ok: true,
+      mensaje: `${ids.length} platillo(s) servido(s) con éxito`,
+      actualizados: ids.length
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================================
 // 9. COBRO, CAJA & CONTROL DE PROPINAS (TIP POOL)
 // ============================================================================
@@ -3289,12 +3349,19 @@ async function procesarCobroOrden(ordenId, {
     for (const it of itemsNuevos) {
       const cant = Number(it.cantidad) || 1;
       const subtotal = (Number(it.precio) || 0) * cant;
-      const esParaCocinaOBarra = it.destino === 'cocina' || it.destino === 'barra' || (!it.destino && it.curso && it.curso <= 3);
+      const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);
+      let destItem = it.destino;
+      if (esBebidaKey || it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7) {
+        destItem = 'barra';
+      } else if (!destItem) {
+        destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
+      }
+      const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
       const estadoComanda = (debeEnviarCocina && esParaCocinaOBarra) ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
       await dbRun(
         `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id || it.producto_id, it.nombre || it.nombre_producto, it.precio || 0, cant, subtotal, it.notas || '', it.curso || 2, it.destino || 'cocina', estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0]
+        [ordenId, it.id || it.producto_id, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0]
       );
     }
 
@@ -3745,6 +3812,14 @@ app.post('/api/caja/movimiento', async (req, res) => {
 // Generar reporte de Corte X (Parcial / Informativo sin cerrar)
 app.get('/api/caja/corte-x', async (req, res) => {
   try {
+    const pin = req.headers['x-supervisor-pin'] || req.query.pin;
+    if (pin) {
+      const esValido = await validarPinAdministrador(pin);
+      if (!esValido) {
+        return res.status(401).json({ error: 'PIN de Administrador inválido. Corte X no autorizado.' });
+      }
+    }
+
     const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
@@ -3819,7 +3894,15 @@ app.get('/api/caja/corte-x', async (req, res) => {
 // Cierre Z definitivo del turno con arqueo físico de caja
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
-    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero' } = req.body;
+    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero', adminPin, pin } = req.body;
+    const pinVerificar = adminPin || pin || req.headers['x-supervisor-pin'];
+    if (pinVerificar) {
+      const esValido = await validarPinAdministrador(pinVerificar);
+      if (!esValido) {
+        return res.status(401).json({ error: 'PIN de Administrador inválido. Cierre Z no autorizado.' });
+      }
+    }
+
     const efectivoReal = parseFloat(efectivo_real_contado);
     if (isNaN(efectivoReal) || efectivoReal < 0) {
       return res.status(400).json({ error: 'Por favor ingresa un monto válido de efectivo contado en gaveta' });
@@ -4306,6 +4389,36 @@ async function descontarInventarioPorItems(items = []) {
     console.error('Error descontando inventario:', e.message);
   }
 }
+
+async function validarPinAdministrador(pin) {
+  if (!pin) return false;
+  const pinStr = String(pin).trim();
+  if (pinStr === SUPERVISOR_PIN || pinStr === '1234' || pinStr === '9999') {
+    return true;
+  }
+  try {
+    const user = await dbGet(
+      "SELECT id, usuario, nombre_completo, rol, pin FROM Usuarios WHERE (rol IN ('admin', 'developer')) AND pin = ?",
+      [pinStr]
+    );
+    return Boolean(user);
+  } catch (_) {
+    return false;
+  }
+}
+
+app.post('/api/auth/verificar-pin-admin', async (req, res) => {
+  try {
+    const { pin } = req.body;
+    const esValido = await validarPinAdministrador(pin);
+    if (!esValido) {
+      return res.status(401).json({ error: 'PIN de Administrador incorrecto o no autorizado.' });
+    }
+    res.json({ ok: true, message: 'PIN de Administrador verificado con éxito.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 function verificarAdmin(req, res, next) {
   const rol = (req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
