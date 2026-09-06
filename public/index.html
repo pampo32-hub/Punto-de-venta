@@ -84,31 +84,23 @@
           </button>
         </form>
 
-        <!-- SELECTOR RÁPIDO DE ACCESOS DEMO -->
         <!-- SELECTOR RÁPIDO DE ACCESOS DIRECTOS -->
         <div class="demo-accounts-box">
-          <span class="demo-title">⚡ Accesos Rápidos de Prueba (Toca para cargar):</span>
-          <div class="demo-chips-grid">
           <span class="demo-title">⚡ Usuarios Disponibles (Toca para seleccionar):</span>
           <div class="demo-chips-grid" id="loginUsuariosDisponiblesGrid">
             <button type="button" class="chip-account dev" onclick="cargarCredencialDemo('dev', 'dev123')">
-              🛠️ Developer (Desarrollador)
               🛠️ Juan Developer <small style="opacity:0.8; font-size:0.75rem;">(Developer)</small>
             </button>
             <button type="button" class="chip-account admin" onclick="cargarCredencialDemo('admin', 'admin123')">
-              👑 Admin (Administrador)
               👑 Don Alberto <small style="opacity:0.8; font-size:0.75rem;">(Admin)</small>
             </button>
             <button type="button" class="chip-account cajero" onclick="cargarCredencialDemo('cajero', 'caja123')">
-              💵 Cajero (Caja)
               💵 Roberto Caja <small style="opacity:0.8; font-size:0.75rem;">(Caja)</small>
             </button>
             <button type="button" class="chip-account salonero" onclick="cargarCredencialDemo('carlos', 'mesero123')">
-              🤵 Carlos (Salonero)
               🤵 Carlos Solano <small style="opacity:0.8; font-size:0.75rem;">(Salonero)</small>
             </button>
             <button type="button" class="chip-account salonera" onclick="cargarCredencialDemo('sofia', 'mesera123')">
-              👩‍🍳 Sofía (Salonera)
               👩‍🍳 Sofía Morales <small style="opacity:0.8; font-size:0.75rem;">(Salonera)</small>
             </button>
           </div>
@@ -792,15 +784,11 @@
       <!-- PERFIL DE USUARIO CON GÉNERO DINÁMICO & CERRAR SESIÓN -->
       <div class="user-status-pill">
         <div class="status-indicator online"></div>
-        <div class="user-details">
         <div class="user-details" onclick="abrirModalCambiarPinAutoservicio()" style="cursor:pointer;" title="Clic para cambiar tu PIN personal">
           <span class="user-title" id="userProfileBadge">Usuario (Salonero)</span>
-          <small class="user-subtitle">Turno Activo</small>
           <small class="user-subtitle">Turno Activo • 🔑 PIN</small>
         </div>
-        <button class="btn-user-pin" onclick="abrirModalCambiarPinAutoservicio()" style="background:transparent; border:none; cursor:pointer; font-size:1rem; padding:4px 6px; opacity:0.8; transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'" title="Cambiar mi PIN">🔑</button>
         <button class="btn-user-pin" onclick="abrirModalCambiarPinAutoservicio()" style="background:transparent; border:none; cursor:pointer; font-size:1rem; padding:4px 6px; opacity:0.85; transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'" title="Cambiar mi PIN">🔑</button>
-        <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión">🚪</button>
         <button class="btn-user-logout" onclick="cerrarSesion()" title="Cerrar sesión / Cambiar usuario">🚪</button>
       </div>
     </header>
@@ -2382,7 +2370,6 @@
           </div>
           <div>
             <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">Categoría:</label>
-            <select id="selectNuevoProdCategoria" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
             <select id="selectNuevoProdCategoria" onchange="alCambiarCategoriaProducto()" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
             </select>
           </div>
@@ -2436,10 +2423,6 @@
           </div>
           <div>
             <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">Tiempo / Curso:</label>
-            <select id="selectNuevoProdCurso" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
-              <option value="1">1 - Entradas / Bebidas</option>
-              <option value="2" selected>2 - Platos Fuertes</option>
-              <option value="3">3 - Postres / Café</option>
             <select id="selectNuevoProdCurso" onchange="alCambiarCursoProducto()" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
               <option value="1">1 - Bebidas</option>
               <option value="2">2 - Entradas</option>
