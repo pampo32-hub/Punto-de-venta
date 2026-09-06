@@ -1999,12 +1999,16 @@ window.cargarUsuariosPublicosLogin = async function() {
 window.cargarCredencialDemo = function(user, pass) {
   const u = document.getElementById('loginUsuario');
   const p = document.getElementById('loginPassword');
-  if (u) u.value = user || '';
-  if (p) p.value = pass || '';
-  if (user && pass) {
-    window.ejecutarLogin();
-  } else if (p) {
-    p.focus();
+  if (u) u.value = user;
+  if (p) p.value = pass;
+  window.ejecutarLogin();
+  if (p) {
+    p.value = pass || '';
+    if (pass) {
+      window.ejecutarLogin();
+    } else {
+      p.focus();
+    }
   }
 };
 
@@ -2245,9 +2249,7 @@ function aplicarEnrutamientoPorRol() {
 
   // Configurar Perfil con Adaptación de Género
   const perfilBadge = document.getElementById('userProfileBadge');
-  if (perfilBadge) {
-    perfilBadge.textContent = u.perfilVisual || `${u.nombre} (${u.rol})`;
-  }
+  perfilBadge.textContent = u.perfilVisual || `${u.nombre} (${u.rol})`;
 
   // Configurar Logo y Nombre del Negocio
   actualizarBrandingNegocio(estado.negocioActual);
@@ -2498,19 +2500,17 @@ function actualizarBrandingNegocio(negocio) {
   const nomTxt = document.getElementById('topbarRestauranteNombre');
   const slogTxt = document.getElementById('topbarSlogan');
 
-  if (logoImg && emoji) {
-    if (negocio.logo_url) {
-      logoImg.src = negocio.logo_url;
-      logoImg.style.display = 'block';
-      emoji.style.display = 'none';
-    } else {
-      logoImg.style.display = 'none';
-      emoji.style.display = 'inline-block';
-    }
+  if (negocio.logo_url) {
+    logoImg.src = negocio.logo_url;
+    logoImg.style.display = 'block';
+    emoji.style.display = 'none';
+  } else {
+    logoImg.style.display = 'none';
+    emoji.style.display = 'inline-block';
   }
 
-  if (nomTxt) nomTxt.textContent = negocio.nombre || 'PUNTO DE VENTA';
-  if (slogTxt) slogTxt.textContent = negocio.slogan || 'GastroBar Pro';
+  nomTxt.textContent = negocio.nombre || 'PUNTO DE VENTA';
+  slogTxt.textContent = negocio.slogan || 'GastroBar Pro';
 }
 
 // ============================================================================
@@ -4428,13 +4428,11 @@ window.agregarAlTicketOneTap = async function(prodId) {
   if (existente) {
     existente.cantidad++;
   } else {
-    const prodCat = Number(prod.categoria_id !== undefined ? prod.categoria_id : (prod.catId !== undefined ? prod.catId : 0));
-    const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(prod.nombre || '') || /rock ice/i.test(prod.nombre || '');
     let itemDest = prod.destino;
     let itemCurso = prod.curso;
-    if (prodCat === 4 || prodCat === 5 || prodCat === 6 || prodCat === 7 || prod.es_licor || esBebidaKey) {
+    const prodCat = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
+    if (prodCat === 4 || prodCat === 5 || prodCat === 6 || prodCat === 7 || /cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua|cas|horchata|resbaladera|jugo|batido/i.test(prod.nombre || '')) {
       itemDest = 'barra';
-      itemCurso = itemCurso || 1;
     } else if (!itemDest) {
       itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
     }
@@ -4448,6 +4446,8 @@ window.agregarAlTicketOneTap = async function(prodId) {
       precio: prod.precio,
       cantidad: 1,
       notas: '',
+      destino: prod.destino,
+      curso: prod.curso || 2,
       destino: itemDest,
       curso: itemCurso,
       happyHour: esCervezaOEligible,
@@ -6170,18 +6170,7 @@ function renderKDS() {
   const container = document.getElementById('kdsTicketsContainer');
   container.innerHTML = '';
 
-  // Filtrar estrictamente ítems de cocina (excluir bebidas)
-  const itemsCocina = (estado.comandasKDS || []).filter(c => {
-    if (c.destino === 'barra') return false;
-    if (c.curso === 1 || c.curso === 5 || c.curso === 6) return false;
-    const esBeb = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(c.nombre_producto || c.platillo || '') || /rock ice|balde/i.test(c.nombre_producto || c.platillo || '');
-    return !esBeb;
-  });
-
-  const kdsCountEl = document.getElementById('kdsCounter');
-  if (kdsCountEl) kdsCountEl.textContent = itemsCocina.length;
-
-  if (!itemsCocina.length) {
+  if (!estado.comandasKDS || !estado.comandasKDS.length) {
     container.innerHTML = '<div style="color:#9ca3af; font-size:1.05rem; grid-column:1/-1; padding:40px; text-align:center;">✨ No hay comandas pendientes en cocina. Todo está servido.</div>';
     return;
   }
@@ -6190,7 +6179,7 @@ function renderKDS() {
   const ticketsMap = {};
   const ticketsOrder = [];
 
-  itemsCocina.forEach((c) => {
+  estado.comandasKDS.forEach((c) => {
     const comandaNum = c.comanda_numero || 1;
     const key = `${c.orden_id}_${comandaNum}`;
     if (!ticketsMap[key]) {
@@ -6215,7 +6204,9 @@ function renderKDS() {
     const t = ticketsMap[key];
     const card = document.createElement('div');
     card.className = 'kds-card';
-    card.id = `kdsCard_${t.key}`;
+    card.dataset.kdsKey = key;
+
+    const itemIdsJson = JSON.stringify(t.items.map(i => i.id));
 
     card.innerHTML = `
       <div class="kds-top">
@@ -6223,46 +6214,47 @@ function renderKDS() {
           <span class="kds-mesa-label">${escapeHtml(t.mesaNumero)}</span>
           <span class="badge-comanda-num" style="background:rgba(59,130,246,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">Comanda #${t.comandaNumero}</span>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <label class="kds-select-all-label" title="Seleccionar todos los platillos de esta comanda" style="display:inline-flex; align-items:center; gap:5px; font-size:0.75rem; color:#93c5fd; cursor:pointer; user-select:none; font-weight:700; background:rgba(59,130,246,0.12); padding:2px 7px; border-radius:5px; border:1px solid rgba(59,130,246,0.25);">
-            <input type="checkbox" id="chkAll_${t.key}" class="kds-chk-all" onchange="window.toggleSeleccionarTodosKDS('${t.key}')" style="cursor:pointer; width:15px; height:15px; accent-color:#10b981;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="kds-stopwatch">⏱️ ${t.horaPedido ? t.horaPedido.slice(11, 16) : 'Ahora'}</span>
+          <label style="display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; color:#94a3b8; cursor:pointer;" title="Seleccionar todos los platillos de esta comanda">
+            <input type="checkbox" class="kds-select-all-check" onchange="toggleSeleccionarTodosKDS('${key}', this.checked)" style="cursor:pointer;" />
             <span>Todos</span>
           </label>
-          <span class="kds-stopwatch">⏱️ ${t.horaPedido ? t.horaPedido.slice(11, 16) : 'Ahora'}</span>
         </div>
       </div>
 
-      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
         ${t.items.map(c => {
           const originTag = (c.origen_mesa_numero && String(c.origen_mesa_numero) !== String(t.mesaNumero))
             ? `<span class="mesa-origin-badge" style="font-size:0.72rem; margin-right:4px;" title="Pedido originalmente en ${escapeHtml(c.origen_mesa_numero)}">[${escapeHtml(c.origen_mesa_numero)}]</span>`
             : '';
           const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c-fuerte'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
           return `
-            <div class="kds-item-row" data-item-id="${c.id}" onclick="window.toggleFilaKDS(event, '${t.key}', ${c.id})" style="display:flex; justify-content:space-between; align-items:center; padding:6px 6px; border-bottom:1px dashed rgba(255,255,255,0.08); cursor:pointer; border-radius:6px; transition:all 0.15s ease;">
-              <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); line-height:1.25; flex:1;">
-                <span style="color:#f59e0b; font-weight:800; margin-right:4px;">${c.cantidad}x</span>
-                ${originTag}${escapeHtml(c.nombre_producto || c.platillo)} ${badge}
-                ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
+            <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
+              <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="checkbox" class="kds-item-checkbox" data-item-id="${c.id}" data-kds-key="${key}" onchange="actualizarContadorSeleccionKDS('${key}')" style="cursor:pointer; width:18px; height:18px; accent-color:#10b981;" />
+                <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); line-height:1.25; flex:1;">
+                  <span style="color:#f59e0b; font-weight:800; margin-right:4px;">${c.cantidad}x</span>
+                  ${originTag}${escapeHtml(c.nombre_producto || c.platillo)} ${badge}
+                  ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
+                </div>
               </div>
-              <div style="margin-left:10px; display:flex; align-items:center;">
-                <input type="checkbox" 
-                       id="kdsChk_${c.id}" 
-                       class="kds-item-checkbox kds-chk-${t.key}" 
-                       data-item-id="${c.id}" 
-                       data-comanda-key="${t.key}"
-                       onchange="window.actualizarContadorSeleccionKDS('${t.key}')" 
-                       onclick="event.stopPropagation()"
-                       style="width:20px; height:20px; cursor:pointer; accent-color:#10b981; border-radius:4px;">
-              </div>
+              <button class="btn-kds-item-ready" title="Marcar este platillo listo" style="background:transparent; border:1px solid rgba(16,185,129,0.4); color:#34d399; border-radius:6px; padding:3px 8px; font-size:0.75rem; cursor:pointer; font-weight:800; margin-left:8px;" onclick="despacharKDSBackend(${c.id})">
+                ✓
+              </button>
             </div>
           `;
         }).join('')}
       </div>
 
-      <button id="btnServir_${t.key}" class="btn-kds-ready btn-kds-batch-disabled" disabled onclick="window.despacharSeleccionadosKDS('${t.key}')" style="transition:all 0.2s ease;">
-        🍽️ Servir Seleccionados (0)
-      </button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-kds-ready btn-kds-despachar-sel" id="btnDespacharSel_${key}" style="display:none; background:linear-gradient(135deg,#059669,#047857); flex:1;" onclick="despacharSeleccionadosKDS('${key}')">
+          🍽️ Servir Seleccionados (<span class="kds-sel-count">0</span>)
+        </button>
+        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1;" onclick='despacharComandaCompletaBackend(${itemIdsJson})'>
+          ✅ Servir Todos (${t.items.length})
+        </button>
+      </div>
     `;
     container.appendChild(card);
   });
@@ -6275,94 +6267,64 @@ function renderKDS() {
   }
 }
 
-window.toggleFilaKDS = function(event, comandaKey, detalleId) {
-  if (event && event.target && (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON')) return;
-  const chk = document.getElementById('kdsChk_' + detalleId);
-  if (chk) {
-    chk.checked = !chk.checked;
-    window.actualizarContadorSeleccionKDS(comandaKey);
-  }
+window.toggleSeleccionarTodosKDS = function(key, checked) {
+  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]`);
+  checkboxes.forEach(cb => { cb.checked = checked; });
+  actualizarContadorSeleccionKDS(key);
 };
 
-window.toggleSeleccionarTodosKDS = function(comandaKey) {
-  const chkAll = document.getElementById('chkAll_' + comandaKey);
-  const isChecked = chkAll ? chkAll.checked : false;
-  const items = document.querySelectorAll('.kds-chk-' + comandaKey);
-  items.forEach(chk => {
-    chk.checked = isChecked;
-  });
-  window.actualizarContadorSeleccionKDS(comandaKey);
-};
-
-window.actualizarContadorSeleccionKDS = function(comandaKey) {
-  const items = document.querySelectorAll('.kds-chk-' + comandaKey);
-  const checkedItems = document.querySelectorAll('.kds-chk-' + comandaKey + ':checked');
-  const total = items.length;
-  const seleccionados = checkedItems.length;
-
-  const btn = document.getElementById('btnServir_' + comandaKey);
-  const chkAll = document.getElementById('chkAll_' + comandaKey);
-
-  if (chkAll) {
-    chkAll.checked = (total > 0 && seleccionados === total);
-    chkAll.indeterminate = (seleccionados > 0 && seleccionados < total);
+window.actualizarContadorSeleccionKDS = function(key) {
+  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]:checked`);
+  const totalChecks = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]`);
+  const selectAll = document.querySelector(`.kds-card[data-kds-key="${key}"] .kds-select-all-check`);
+  if (selectAll) {
+    selectAll.checked = checkboxes.length === totalChecks.length && totalChecks.length > 0;
   }
-
-  if (btn) {
-    if (seleccionados === 0) {
-      btn.disabled = true;
-      btn.className = 'btn-kds-ready btn-kds-batch-disabled';
-      btn.innerHTML = '🍽️ Servir Seleccionados (0)';
-    } else if (seleccionados === total) {
-      btn.disabled = false;
-      btn.className = 'btn-kds-ready btn-kds-batch-active';
-      btn.innerHTML = `✅ Servir Comanda Completa (${total})`;
-    } else if (seleccionados === 1) {
-      btn.disabled = false;
-      btn.className = 'btn-kds-ready btn-kds-batch-active';
-      btn.innerHTML = `🍽️ Servir 1 Platillo Listo`;
+  const btnSel = document.getElementById(`btnDespacharSel_${key}`);
+  const btnTodo = document.getElementById(`btnDespacharTodo_${key}`);
+  if (btnSel && btnTodo) {
+    const count = checkboxes.length;
+    if (count > 0) {
+      btnSel.style.display = 'block';
+      const countEl = btnSel.querySelector('.kds-sel-count');
+      if (countEl) countEl.textContent = count;
+      btnTodo.style.display = count === totalChecks.length ? 'none' : 'block';
     } else {
-      btn.disabled = false;
-      btn.className = 'btn-kds-ready btn-kds-batch-active';
-      btn.innerHTML = `🍽️ Servir (${seleccionados}) Platillos Listos`;
+      btnSel.style.display = 'none';
+      btnTodo.style.display = 'block';
     }
   }
 };
 
-window.despacharSeleccionadosKDS = async function(comandaKey) {
-  const checkedItems = document.querySelectorAll('.kds-chk-' + comandaKey + ':checked');
-  const ids = Array.from(checkedItems).map(chk => Number(chk.dataset.itemId)).filter(id => !isNaN(id) && id > 0);
-  if (ids.length === 0) return;
-
-  const btn = document.getElementById('btnServir_' + comandaKey);
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '⏳ Serviendo...';
+window.despacharSeleccionadosKDS = async function(key) {
+  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]:checked`);
+  const itemIds = Array.from(checkboxes).map(cb => Number(cb.dataset.itemId)).filter(Boolean);
+  if (!itemIds.length) {
+    alert('Por favor selecciona al menos un platillo para servir.');
+    return;
   }
-
   try {
     const res = await fetch('/api/kds/despachar-lote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemIds: ids, estado: 'listo' })
+      body: JSON.stringify({ itemIds, estado: 'listo' })
     });
-    sonarCampanaCocina();
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(`🍽️ ${ids.length} platillo(s) marcado(s) como listo(s) y servido(s).`, 'success');
+    if (!res.ok) {
+      for (const id of itemIds) {
+        await fetch(`/api/kds/${id}/estado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estado: 'listo' })
+        });
+      }
     }
+    sonarCampanaCocina();
+    mostrarNotificacionCentro(`🍽️ ${itemIds.length} platillo(s) marcado(s) como listo(s) y servido(s).`, 'success');
     cargarKDSDesdeBackend();
     cargarMesasDesdeBackend();
   } catch (e) {
-    for (const id of ids) {
-      await fetch(`/api/kds/${id}/estado`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: 'listo' })
-      }).catch(() => {});
-    }
     sonarCampanaCocina();
     cargarKDSDesdeBackend();
-    cargarMesasDesdeBackend();
   }
 };
 
@@ -6384,11 +6346,13 @@ window.despacharKDSBackend = async function(detalleId) {
 
 window.despacharComandaCompletaBackend = async function(itemIds) {
   try {
-    await fetch('/api/kds/despachar-lote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemIds, estado: 'listo' })
-    });
+    for (const id of itemIds) {
+      await fetch(`/api/kds/${id}/estado`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'listo' })
+      });
+    }
     sonarCampanaCocina();
     mostrarNotificacionCentro('🍽️ Comanda marcada como lista y servida.', 'success');
     cargarKDSDesdeBackend();
