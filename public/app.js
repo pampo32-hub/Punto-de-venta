@@ -1,5 +1,37 @@
 
 // ============================================================================
+// MODAL MANAGER CENTRALIZADO (CONTROL DE ESTADO ÚNICO Y EXCLUSIVIDAD DE MODALES)
+// ============================================================================
+window._modalActivoId = null;
+
+window.cerrarTodosLosModales = function(excluirId = null) {
+  const modales = document.querySelectorAll('.modal, .modal-backdrop');
+  modales.forEach(m => {
+    if (m.id === 'modalComandero' && excluirId && ['modalSeleccionBaldeNacional', 'modalSeleccionVariante', 'modalModificadores', 'modalPersonalizarBoton', 'modalCobro', 'modalSplitBill', 'modalConfirmacionAccion'].includes(excluirId)) {
+      return;
+    }
+    if (!excluirId || m.id !== excluirId) {
+      m.classList.remove('active');
+      m.style.display = 'none';
+    }
+  });
+  if (!excluirId) {
+    window._modalActivoId = null;
+  }
+};
+
+window.abrirModalExclusivo = function(modalId) {
+  if (!modalId) return;
+  window.cerrarTodosLosModales(modalId);
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    window._modalActivoId = modalId;
+  }
+};
+
+// ============================================================================
 // MODAL DE CONFIRMACIÓN PERSONALIZADO — reemplaza confirm() nativo del browser
 // ============================================================================
 window.confirmarAccion = function(opciones) {
@@ -2003,6 +2035,13 @@ window.ejecutarLogin = async function() {
       document.getElementById('txtObligatorioPassConfirm').value = '';
       document.getElementById('txtObligatorioPinNuevo').value = data.usuario.pin || '';
       document.getElementById('modalCambioPasswordObligatorio')?.classList.add('active');
+      window.cerrarTodosLosModales('modalCambioPasswordObligatorio');
+      const mPass = document.getElementById('modalCambioPasswordObligatorio');
+      if (mPass) {
+        mPass.classList.add('active');
+        mPass.style.display = 'flex';
+        window._modalActivoId = 'modalCambioPasswordObligatorio';
+      }
       return;
     }
 
@@ -2060,6 +2099,12 @@ window.guardarPasswordTemporalObligatorio = async function() {
 
     alert(`✅ ${data.message || 'Contraseña actualizada exitosamente.'}`);
     document.getElementById('modalCambioPasswordObligatorio')?.classList.remove('active');
+    const mPass = document.getElementById('modalCambioPasswordObligatorio');
+    if (mPass) {
+      mPass.classList.remove('active');
+      mPass.style.display = 'none';
+    }
+    window._modalActivoId = null;
 
     // Iniciar sesión automáticamente con la nueva clave
     document.getElementById('loginUsuario').value = usuario;
@@ -2077,15 +2122,28 @@ window.abrirModalCambiarPinAutoservicio = function() {
     alert('Debes iniciar sesión primero.');
     return;
   }
+  window.cerrarTodosLosModales('modalCambiarPinAutoservicio');
   document.getElementById('txtAutoPinActual').value = '';
   document.getElementById('txtAutoPinNuevo').value = '';
   document.getElementById('txtAutoPinConfirm').value = '';
   document.getElementById('modalCambiarPinAutoservicio')?.classList.add('active');
+  const modal = document.getElementById('modalCambiarPinAutoservicio');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    window._modalActivoId = 'modalCambiarPinAutoservicio';
+  }
   setTimeout(() => document.getElementById('txtAutoPinActual')?.focus(), 100);
 };
 
 window.cerrarModalCambiarPinAutoservicio = function() {
   document.getElementById('modalCambiarPinAutoservicio')?.classList.remove('active');
+  const modal = document.getElementById('modalCambiarPinAutoservicio');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  window._modalActivoId = null;
 };
 
 window.guardarNuevoPinAutoservicio = async function() {
@@ -4064,6 +4122,7 @@ window.esProductoBaldeNacional = function(prod) {
 };
 
 window.abrirModalSeleccionBaldeNacional = function(prodId) {
+  window.cerrarTodosLosModales('modalSeleccionBaldeNacional');
   const modal = document.getElementById('modalSeleccionBaldeNacional');
   const body = document.getElementById('bodyGridCervezasBalde');
   if (!modal || !body) return;
@@ -4109,6 +4168,7 @@ window.abrirModalSeleccionBaldeNacional = function(prodId) {
   actualizarEstadoVisualBalde();
   modal.classList.add('active');
   modal.style.display = 'flex';
+  window._modalActivoId = 'modalSeleccionBaldeNacional';
 };
 
 window.cerrarModalSeleccionBaldeNacional = function() {
@@ -4119,6 +4179,7 @@ window.cerrarModalSeleccionBaldeNacional = function() {
   }
   window._seleccionBaldeActual = {};
   window._productoBaldePadre = null;
+  window._modalActivoId = null;
 };
 
 window.incrementarCervezaBalde = function(prodId) {
@@ -5379,6 +5440,13 @@ window.solicitarAccesoMesa = function(mesaId) {
 
   actualizarVisorPinMesa();
   document.getElementById('modalPinMesaSalonero')?.classList.add('active');
+  window.cerrarTodosLosModales('modalPinMesaSalonero');
+  const mPin = document.getElementById('modalPinMesaSalonero');
+  if (mPin) {
+    mPin.classList.add('active');
+    mPin.style.display = 'flex';
+    window._modalActivoId = 'modalPinMesaSalonero';
+  }
 };
 
 window.presionarTeclaPinMesa = function(tecla) {
@@ -5426,6 +5494,12 @@ window.cerrarModalPinMesa = function() {
   _mesaIdPinPendiente = null;
   _pinMesaBuffer = '';
   document.getElementById('modalPinMesaSalonero')?.classList.remove('active');
+  const mPin = document.getElementById('modalPinMesaSalonero');
+  if (mPin) {
+    mPin.classList.remove('active');
+    mPin.style.display = 'none';
+  }
+  window._modalActivoId = null;
 };
 
 window.continuarConMeseroActualMesa = function() {

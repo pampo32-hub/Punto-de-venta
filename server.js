@@ -4056,7 +4056,6 @@ async function descontarInventarioPorItems(items = []) {
     for (const it of items) {
       const prodId = it.id || it.producto_id;
       const cant = Number(it.cantidad || 1);
-      if (!prodId || cant <= 0) continue;
       if ((!prodId && !it.desglose_balde && !it.es_balde) || cant <= 0) continue;
 
       const ahora = new Date().toISOString();
