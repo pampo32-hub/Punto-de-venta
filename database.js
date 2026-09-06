@@ -685,6 +685,7 @@ function initDb() {
       { cat: 4, nombre: 'Rock Ice Limo-Ness', precio: 1800, destino: 'barra', curso: 1 },
       { cat: 4, nombre: 'Cerveza Artesanal Treintaycinco', precio: 3500, destino: 'barra', curso: 1 },
       { cat: 4, nombre: 'Cerveza Artesanal Costa Rica Beer Factory', precio: 3500, destino: 'barra', curso: 1 },
+      { cat: 4, nombre: 'Balde Nacional', precio: 7500, destino: 'barra', curso: 1 },
       { cat: 4, nombre: 'Cerveza Artesanal Domingo Siete', precio: 3500, destino: 'barra', curso: 1 },
 
       // 5. Cocteles y Shots (cat: 5)

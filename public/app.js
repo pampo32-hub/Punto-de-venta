@@ -4052,6 +4052,175 @@ window.seleccionarOpcionVariante = function(prodId) {
 
 
 // ============================================================================
+// MODAL DE SELECCIÓN MÚLTIPLE: BALDE NACIONAL (HASTA 6 CERVEZAS)
+// ============================================================================
+window._seleccionBaldeActual = {};
+window._productoBaldePadre = null;
+
+window.esProductoBaldeNacional = function(prod) {
+  if (!prod) return false;
+  const nombre = (prod.nombre || '').toLowerCase();
+  return nombre.includes('balde nacional') || (nombre.includes('balde') && !nombre.includes('cubeta'));
+};
+
+window.abrirModalSeleccionBaldeNacional = function(prodId) {
+  const modal = document.getElementById('modalSeleccionBaldeNacional');
+  const body = document.getElementById('bodyGridCervezasBalde');
+  if (!modal || !body) return;
+
+  const prod = (estado.productos || []).find(p => p.id === prodId) || { id: prodId, nombre: 'Balde Nacional', precio: 7500 };
+  window._productoBaldePadre = prod;
+  window._seleccionBaldeActual = {};
+
+  // Obtener cervezas nacionales disponibles
+  const cervezasNacionales = (estado.productos || []).filter(p => {
+    return window.esCervezaNacionalEligible(p) && !window.esProductoBaldeNacional(p);
+  });
+
+  // Si por alguna razón no hay cervezas clasificadas, usamos un fallback con marcas populares
+  let listaCervezas = cervezasNacionales;
+  if (listaCervezas.length === 0) {
+    listaCervezas = (estado.productos || []).filter(p => /imperial|pilsen|bavaria|rock ice/i.test(p.nombre || ''));
+  }
+
+  body.innerHTML = listaCervezas.map(c => {
+    const imgHtml = c.imagen_url 
+      ? `<img src="${c.imagen_url}" alt="${c.nombre}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" />`
+      : `<div style="width: 44px; height: 44px; border-radius: 8px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">🍺</div>`;
+
+    return `
+      <div class="balde-beer-item" id="balde_beer_card_${c.id}" style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+          ${imgHtml}
+          <div style="overflow: hidden;">
+            <strong style="display: block; color: #f8fafc; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.nombre}</strong>
+            <small style="color: #94a3b8; font-size: 0.78rem;">Cerveza Nacional</small>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="btn-balde-count" onclick="decrementarCervezaBalde(${c.id})" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; font-size: 1.2rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;">-</button>
+          <span id="balde_cant_${c.id}" style="min-width: 24px; text-align: center; font-size: 1.1rem; font-weight: 800; color: #38bdf8;">0</span>
+          <button type="button" class="btn-balde-count" onclick="incrementarCervezaBalde(${c.id})" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 1.2rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;">+</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  actualizarEstadoVisualBalde();
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalSeleccionBaldeNacional = function() {
+  const modal = document.getElementById('modalSeleccionBaldeNacional');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  window._seleccionBaldeActual = {};
+  window._productoBaldePadre = null;
+};
+
+window.incrementarCervezaBalde = function(prodId) {
+  const totalActual = Object.values(window._seleccionBaldeActual).reduce((a, b) => a + b, 0);
+  if (totalActual >= 6) {
+    return;
+  }
+  window._seleccionBaldeActual[prodId] = (window._seleccionBaldeActual[prodId] || 0) + 1;
+  const elCant = document.getElementById(`balde_cant_${prodId}`);
+  if (elCant) elCant.textContent = window._seleccionBaldeActual[prodId];
+  actualizarEstadoVisualBalde();
+};
+
+window.decrementarCervezaBalde = function(prodId) {
+  if (!window._seleccionBaldeActual[prodId] || window._seleccionBaldeActual[prodId] <= 0) return;
+  window._seleccionBaldeActual[prodId]--;
+  if (window._seleccionBaldeActual[prodId] === 0) {
+    delete window._seleccionBaldeActual[prodId];
+  }
+  const elCant = document.getElementById(`balde_cant_${prodId}`);
+  if (elCant) elCant.textContent = window._seleccionBaldeActual[prodId] || 0;
+  actualizarEstadoVisualBalde();
+};
+
+window.actualizarEstadoVisualBalde = function() {
+  const total = Object.values(window._seleccionBaldeActual).reduce((a, b) => a + b, 0);
+  const badge = document.getElementById('badgeContadorBaldeNacional');
+  const btn = document.getElementById('btnConfirmarBaldeNacional');
+
+  if (badge) {
+    badge.textContent = `${total} / 6 seleccionadas`;
+    if (total === 6) {
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.borderColor = '#10b981';
+      badge.style.color = '#34d399';
+    } else {
+      badge.style.background = 'rgba(56, 189, 248, 0.2)';
+      badge.style.borderColor = '#38bdf8';
+      badge.style.color = '#38bdf8';
+    }
+  }
+
+  if (btn) {
+    if (total === 6) {
+      btn.disabled = false;
+      btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+      btn.style.color = '#ffffff';
+      btn.style.cursor = 'pointer';
+      btn.textContent = '✅ Confirmar Balde (6 cervezas)';
+    } else {
+      btn.disabled = true;
+      btn.style.background = '#334155';
+      btn.style.color = '#94a3b8';
+      btn.style.cursor = 'not-allowed';
+      const faltan = 6 - total;
+      btn.textContent = `Selecciona 6 cervezas (Faltan ${faltan})`;
+    }
+  }
+};
+
+window.confirmarSeleccionBaldeNacional = function() {
+  const total = Object.values(window._seleccionBaldeActual).reduce((a, b) => a + b, 0);
+  if (total !== 6) return;
+  if (!estado.mesaActiva) return;
+  if (!estado.mesaActiva.items) estado.mesaActiva.items = [];
+
+  // Construir desglose de cervezas seleccionadas
+  const desglosePartes = [];
+  for (const [prodIdStr, cant] of Object.entries(window._seleccionBaldeActual)) {
+    if (cant > 0) {
+      const prod = (estado.productos || []).find(p => String(p.id) === String(prodIdStr));
+      const nombre = prod ? prod.nombre : `Cerveza #${prodIdStr}`;
+      desglosePartes.push(`${cant}x ${nombre}`);
+    }
+  }
+  const notaDesglose = desglosePartes.join(', ');
+
+  const prodPadre = window._productoBaldePadre || { id: 'balde_nacional', nombre: 'Balde Nacional', precio: 7500 };
+
+  estado.mesaActiva.items.push({
+    id: 'balde_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+    producto_id: prodPadre.id || 9999,
+    nombre: prodPadre.nombre || 'Balde Nacional (6 unidades)',
+    precio: prodPadre.precio || 7500,
+    cantidad: 1,
+    notas: notaDesglose,
+    destino: 'barra',
+    curso: 1,
+    es_balde: true,
+    desglose_balde: { ...window._seleccionBaldeActual },
+    enviado: false
+  });
+
+  if (estado.mesaActiva.estado === 'libre') {
+    estado.mesaActiva.estado = 'ocupada';
+  }
+
+  cerrarModalSeleccionBaldeNacional();
+  renderTicketItems();
+};
+
+// ============================================================================
 // ASISTENTE INTELIGENTE: CONTROL DE TIEMPO Y OFERTA DE BALDES (CERVEZA NACIONAL)
 // ============================================================================
 window._trackerRafagaCervezas = {};
@@ -4158,6 +4327,12 @@ window.agregarAlTicketOneTap = async function(prodId) {
 
   if (prod.agotado) {
     alert(`⛔ ¡Platillo Agotado!\n\n"${prod.nombre}" ha sido marcado como agotado (86) por cocina/barra.`);
+    return;
+  }
+
+  // Interceptar Balde Nacional para abrir selector interactivo de hasta 6 cervezas
+  if (window.esProductoBaldeNacional(prod)) {
+    window.abrirModalSeleccionBaldeNacional(prod.id);
     return;
   }
 
