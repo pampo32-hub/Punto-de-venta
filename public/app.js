@@ -876,9 +876,9 @@ window.guardarNuevoProducto = async function() {
   const txtCosto = document.getElementById('txtKardexInsumoCosto');
   const txtMin = document.getElementById('txtKardexInsumoMin');
 
-  const insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
-  const insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
-  const insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
+  let insumo_stock_actual = (txtStock && txtStock.value !== '') ? parseFloat(txtStock.value) : undefined;
+  let insumo_costo_unitario = (txtCosto && txtCosto.value !== '') ? parseFloat(txtCosto.value) : undefined;
+  let insumo_stock_minimo = (txtMin && txtMin.value !== '') ? parseFloat(txtMin.value) : undefined;
 
   if (crearComoInsumo) {
     const unidadAuto = document.getElementById('selectAutoInsumoUnidad')?.value || 'unidades';
