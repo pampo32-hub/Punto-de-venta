@@ -18,6 +18,8 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
         { id: 2, nombre: 'Imperial Silver', precio: 1800, categoria_id: 4, destino: 'barra', curso: 1 },
         { id: 3, nombre: 'Pilsen', precio: 1800, categoria_id: 4, destino: 'barra', curso: 1 },
         { id: 4, nombre: 'Bavaria Gold', precio: 2200, categoria_id: 4, destino: 'barra', curso: 1 },
+        { id: 5, nombre: 'Imperial Ultra', precio: 1900, categoria_id: 4, destino: 'barra', curso: 1 },
+        { id: 6, nombre: 'Pilsen 6.0', precio: 1900, categoria_id: 4, destino: 'barra', curso: 1 },
         { id: 99, nombre: 'Balde Nacional', precio: 7500, categoria_id: 4, destino: 'barra', curso: 1 },
         { id: 10, nombre: 'Casado con Carne', precio: 4500, categoria_id: 1, destino: 'cocina', curso: 2 }
       ],
@@ -78,10 +80,12 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
 
     const filtradas = mockEstado.productos.filter(p => esCervezaNacionalEligible(p) && !esProductoBaldeNacional(p));
     
-    assert.equal(filtradas.length, 4);
+    assert.equal(filtradas.length, 6);
     assert.ok(filtradas.some(p => p.nombre === 'Imperial Regular'));
     assert.ok(filtradas.some(p => p.nombre === 'Imperial Silver'));
+    assert.ok(filtradas.some(p => p.nombre === 'Imperial Ultra'));
     assert.ok(filtradas.some(p => p.nombre === 'Pilsen'));
+    assert.ok(filtradas.some(p => p.nombre === 'Pilsen 6.0'));
     assert.ok(filtradas.some(p => p.nombre === 'Bavaria Gold'));
     assert.ok(!filtradas.some(p => p.nombre.includes('Balde')));
   });
@@ -102,43 +106,42 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
       if (seleccion[id] === 0) delete seleccion[id];
     }
 
-    // Agregar 3 Imperial Regular (id: 1)
-    assert.equal(incrementar(1), true);
-    assert.equal(incrementar(1), true);
-    assert.equal(incrementar(1), true);
-    assert.equal(seleccion[1], 3);
+    // Agregar 2 Imperial Ultra (id: 5)
+    assert.equal(incrementar(5), true);
+    assert.equal(incrementar(5), true);
+    assert.equal(seleccion[5], 2);
 
-    // Agregar 2 Pilsen (id: 3)
-    assert.equal(incrementar(3), true);
-    assert.equal(incrementar(3), true);
-    assert.equal(seleccion[3], 2);
+    // Agregar 2 Imperial Regular (id: 1)
+    assert.equal(incrementar(1), true);
+    assert.equal(incrementar(1), true);
+    assert.equal(seleccion[1], 2);
 
-    // Agregar 1 Bavaria (id: 4) -> Total 6
-    assert.equal(incrementar(4), true);
-    assert.equal(seleccion[4], 1);
+    // Agregar 1 Imperial Silver (id: 2) y 1 Pilsen 6.0 (id: 6) -> Total 6
+    assert.equal(incrementar(2), true);
+    assert.equal(incrementar(6), true);
 
     const totalSeis = Object.values(seleccion).reduce((a, b) => a + b, 0);
     assert.equal(totalSeis, 6);
 
     // Intentar agregar una 7ma cerveza -> Debe ser rechazado
-    assert.equal(incrementar(2), false);
-    assert.equal(incrementar(1), false);
+    assert.equal(incrementar(3), false);
+    assert.equal(incrementar(5), false);
     const totalSigueSeis = Object.values(seleccion).reduce((a, b) => a + b, 0);
     assert.equal(totalSigueSeis, 6);
 
-    // Decrementar 1 Imperial
-    decrementar(1);
-    assert.equal(seleccion[1], 2);
+    // Decrementar 1 Ultra
+    decrementar(5);
+    assert.equal(seleccion[5], 1);
     const totalCinco = Object.values(seleccion).reduce((a, b) => a + b, 0);
     assert.equal(totalCinco, 5);
 
-    // Ahora sí se puede agregar 1 Silver (id: 2)
-    assert.equal(incrementar(2), true);
-    assert.equal(seleccion[2], 1);
+    // Ahora sí se puede agregar 1 Pilsen (id: 3)
+    assert.equal(incrementar(3), true);
+    assert.equal(seleccion[3], 1);
   });
 
-  it('T21.4: Confirmación genera desglose legible (ej. "3x Imperial Regular, 3x Pilsen") y agrega Balde a ₡7.500', () => {
-    const seleccion = { 1: 3, 3: 3 }; // 3 Imperial + 3 Pilsen
+  it('T21.4: Confirmación genera desglose legible con nombres completos y agrega Balde a ₡7.500', () => {
+    const seleccion = { 1: 2, 2: 1, 5: 2, 6: 1 };
     const prodPadre = { id: 99, nombre: 'Balde Nacional', precio: 7500 };
     const items = [];
 
@@ -174,8 +177,11 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
     assert.equal(items[0].cantidad, 1);
     assert.equal(items[0].destino, 'barra');
     assert.equal(items[0].curso, 1);
-    assert.equal(items[0].notas, '3x Imperial Regular, 3x Pilsen');
-    assert.deepEqual(items[0].desglose_balde, { 1: 3, 3: 3 });
+    assert.ok(items[0].notas.includes('2x Imperial Regular'));
+    assert.ok(items[0].notas.includes('1x Imperial Silver'));
+    assert.ok(items[0].notas.includes('2x Imperial Ultra'));
+    assert.ok(items[0].notas.includes('1x Pilsen 6.0'));
+    assert.deepEqual(items[0].desglose_balde, { 1: 2, 2: 1, 5: 2, 6: 1 });
   });
 
   it('T21.5: Enviar Comanda con Balde Nacional seleccionado se persiste en backend con destino Barra y curso 1', async () => {
@@ -189,9 +195,11 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
           nombre: 'Balde Nacional (6 unidades)',
           precio: 7500,
           cantidad: 1,
-          notas: '4x Imperial Regular, 2x Pilsen',
+          notas: '2x Imperial Ultra, 2x Imperial Regular, 1x Imperial Silver, 1x Pilsen 6.0',
           destino: 'barra',
-          curso: 1
+          curso: 1,
+          es_balde: true,
+          desglose_balde: { 5: 2, 1: 2, 2: 1, 6: 1 }
         }
       ]
     });
@@ -209,7 +217,7 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
     assert.equal(itemBalde.precio_unitario, 7500);
     assert.equal(itemBalde.destino, 'barra');
     assert.equal(itemBalde.curso, 1);
-    assert.equal(itemBalde.notas, '4x Imperial Regular, 2x Pilsen');
+    assert.equal(itemBalde.notas, '2x Imperial Ultra, 2x Imperial Regular, 1x Imperial Silver, 1x Pilsen 6.0');
   });
 
   it('T21.6: Base de datos contiene el producto Balde Nacional a ₡7.500 categorizado correctamente', async () => {
@@ -222,5 +230,57 @@ describe('Tier 21: Selector Interactivo de Selección Múltiple para Balde Nacio
     assert.equal(balde.precio, 7500);
     assert.equal(balde.destino, 'barra');
     assert.equal(balde.curso, 1);
+  });
+
+  it('T21.7: Descuento milimétrico en Kárdex por cada cerveza del Balde Nacional (2x Ultra, 2x Regular, 1x Silver, 1x Pilsen)', async () => {
+    // 1. Preparar stock inicial en Inventario
+    await server.dbRun("INSERT OR REPLACE INTO Inventario (id, nombre, stock_actual, costo_unitario, stock_minimo, unidad_medida) VALUES (101, 'Imperial Ultra', 20, 900, 5, 'botellas')");
+    await server.dbRun("INSERT OR REPLACE INTO Inventario (id, nombre, stock_actual, costo_unitario, stock_minimo, unidad_medida) VALUES (102, 'Imperial Regular', 20, 850, 5, 'botellas')");
+    await server.dbRun("INSERT OR REPLACE INTO Inventario (id, nombre, stock_actual, costo_unitario, stock_minimo, unidad_medida) VALUES (103, 'Imperial Silver', 20, 850, 5, 'botellas')");
+    await server.dbRun("INSERT OR REPLACE INTO Inventario (id, nombre, stock_actual, costo_unitario, stock_minimo, unidad_medida) VALUES (104, 'Pilsen 6.0', 20, 900, 5, 'botellas')");
+
+    // 2. Enviar comanda con Balde Nacional y desglose explícito
+    const postRes = await req('/api/comandas/enviar', 'POST', {
+      mesaId: 1,
+      mesero: 'Juan Jival',
+      items: [
+        {
+          producto_id: 99,
+          nombre: 'Balde Nacional (6 unidades)',
+          precio: 7500,
+          cantidad: 1,
+          notas: '2x Imperial Ultra, 2x Imperial Regular, 1x Imperial Silver, 1x Pilsen 6.0',
+          destino: 'barra',
+          curso: 1,
+          es_balde: true,
+          desglose_balde: { 101: 2, 102: 2, 103: 1, 104: 1 }
+        }
+      ]
+    });
+
+    assert.equal(postRes.status, 200);
+
+    // 3. Verificar que el stock_actual de cada cerveza en Inventario se redujo exactamente
+    const ultra = await server.dbGet('SELECT stock_actual FROM Inventario WHERE id = 101');
+    const regular = await server.dbGet('SELECT stock_actual FROM Inventario WHERE id = 102');
+    const silver = await server.dbGet('SELECT stock_actual FROM Inventario WHERE id = 103');
+    const pilsen = await server.dbGet('SELECT stock_actual FROM Inventario WHERE id = 104');
+
+    assert.equal(ultra.stock_actual, 18, 'Imperial Ultra debe haber bajado de 20 a 18 (-2)');
+    assert.equal(regular.stock_actual, 18, 'Imperial Regular debe haber bajado de 20 a 18 (-2)');
+    assert.equal(silver.stock_actual, 19, 'Imperial Silver debe haber bajado de 20 a 19 (-1)');
+    assert.equal(pilsen.stock_actual, 19, 'Pilsen 6.0 debe haber bajado de 20 a 19 (-1)');
+
+    // 4. Verificar registros de auditoría en InventarioMovimientos para estos insumos
+    const movUltra = await server.dbGet("SELECT * FROM InventarioMovimientos WHERE insumo_id = 101 AND cantidad = 2");
+    const movRegular = await server.dbGet("SELECT * FROM InventarioMovimientos WHERE insumo_id = 102 AND cantidad = 2");
+    const movSilver = await server.dbGet("SELECT * FROM InventarioMovimientos WHERE insumo_id = 103 AND cantidad = 1");
+    const movPilsen = await server.dbGet("SELECT * FROM InventarioMovimientos WHERE insumo_id = 104 AND cantidad = 1");
+
+    assert.ok(movUltra, 'Movimiento de 2 unidades para Imperial Ultra debe existir');
+    assert.ok(movRegular, 'Movimiento de 2 unidades para Imperial Regular debe existir');
+    assert.ok(movSilver, 'Movimiento de 1 unidad para Imperial Silver debe existir');
+    assert.ok(movPilsen, 'Movimiento de 1 unidad para Pilsen 6.0 debe existir');
+    assert.ok(movUltra.motivo.includes('Balde Nacional'));
   });
 });

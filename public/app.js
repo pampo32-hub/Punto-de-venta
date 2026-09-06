@@ -4085,22 +4085,22 @@ window.abrirModalSeleccionBaldeNacional = function(prodId) {
 
   body.innerHTML = listaCervezas.map(c => {
     const imgHtml = c.imagen_url 
-      ? `<img src="${c.imagen_url}" alt="${c.nombre}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" />`
-      : `<div style="width: 44px; height: 44px; border-radius: 8px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">🍺</div>`;
+      ? `<img src="${c.imagen_url}" alt="${c.nombre}" style="width: 48px; height: 48px; border-radius: 10px; object-fit: cover; border: 1px solid #334155; flex-shrink: 0;" />`
+      : `<div style="width: 48px; height: 48px; border-radius: 10px; background: #0b1120; border: 1px solid #334155; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;">🍺</div>`;
 
     return `
-      <div class="balde-beer-item" id="balde_beer_card_${c.id}" style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-        <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+      <div class="balde-beer-item" id="balde_beer_card_${c.id}" style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; box-sizing: border-box; transition: all 0.2s ease;">
+        <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
           ${imgHtml}
-          <div style="overflow: hidden;">
-            <strong style="display: block; color: #f8fafc; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.nombre}</strong>
-            <small style="color: #94a3b8; font-size: 0.78rem;">Cerveza Nacional</small>
+          <div style="flex: 1; min-width: 0;">
+            <strong style="display: block; color: #f8fafc; font-size: 1.05rem; font-weight: 800; white-space: normal; word-break: break-word; line-height: 1.3;">${c.nombre}</strong>
+            <span style="display: inline-block; margin-top: 3px; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; font-weight: 700; padding: 1px 8px; border-radius: 6px;">Cerveza Nacional</span>
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button type="button" class="btn-balde-count" onclick="decrementarCervezaBalde(${c.id})" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; font-size: 1.2rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;">-</button>
-          <span id="balde_cant_${c.id}" style="min-width: 24px; text-align: center; font-size: 1.1rem; font-weight: 800; color: #38bdf8;">0</span>
-          <button type="button" class="btn-balde-count" onclick="incrementarCervezaBalde(${c.id})" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 1.2rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;">+</button>
+        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+          <button type="button" class="btn-balde-count" onclick="decrementarCervezaBalde(${c.id})" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #475569; background: #0b1120; color: #f8fafc; font-size: 1.4rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; user-select: none;">-</button>
+          <span id="balde_cant_${c.id}" style="min-width: 28px; text-align: center; font-size: 1.25rem; font-weight: 800; color: #38bdf8;">0</span>
+          <button type="button" class="btn-balde-count" onclick="incrementarCervezaBalde(${c.id})" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.18); color: #38bdf8; font-size: 1.4rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; user-select: none;">+</button>
         </div>
       </div>
     `;
