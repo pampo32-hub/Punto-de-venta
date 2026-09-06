@@ -1083,8 +1083,24 @@ app.get('/api/mesas', async (req, res) => {
         it => it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando'
       );
 
-      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos
-      if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta' && m.estado !== 'libre') {
+      // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos o montos pegados
+      if (m.estado === 'libre') {
+        m.orden_total = 0;
+        m.orden_activa_id = null;
+        m.platos_pendientes = [];
+        m.items_pendientes = [];
+        m.minutos_espera = 0;
+        m.transferida_de = null;
+        m.unida_con = null;
+        m.mesas_unidas = [];
+        m.es_mesa_unida = false;
+        m.pidio_cuenta_qr = 0;
+        m.hora_pidio_cuenta = null;
+        // Si habían órdenes activas huérfanas en una mesa que está libre, cancelarlas para consistencia total
+        if (m.orden_activa_id) {
+          dbRun("UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [new Date().toISOString(), m.id]).catch(() => {});
+        }
+      } else if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta') {
         const estadoCalculado = evaluarEstadoMesaKDS(items);
         if (m.estado !== estadoCalculado) {
           m.estado = estadoCalculado;
@@ -1092,12 +1108,10 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
       } else if (!m.orden_activa_id) {
-        if (m.estado !== 'libre' || m.pidio_cuenta_qr) {
-          m.estado = 'libre';
-          m.pidio_cuenta_qr = 0;
-          m.hora_pidio_cuenta = null;
-          dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
-        }
+        m.estado = 'libre';
+        m.pidio_cuenta_qr = 0;
+        m.hora_pidio_cuenta = null;
+        dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
         m.transferida_de = null;
         m.unida_con = null;
         m.mesas_unidas = [];
@@ -1340,7 +1354,7 @@ app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
 });
 
 
-// Resetear y Liberar Mesa Trabada (Admin & Developer)
+// Resetear y Liberar Mesa Trabada / Forzar Liberación (Admin & Developer)
 app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
   try {
     const mesaId = req.params.id;
@@ -3467,6 +3481,10 @@ async function procesarCobroOrden(ordenId, {
     });
 
     if (orden.mesa_id) {
+      await dbRun(
+        "UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+        [ahora, orden.mesa_id]
+      );
       await dbRun(
         "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
         [orden.mesa_id]

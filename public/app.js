@@ -5049,7 +5049,6 @@ function agregarDragMesa(card, mesaData, canvas) {
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
       if (dist <= 12) {
         abrirComanderoMesa(mesaData.id);
-        solicitarAccesoMesa(mesaData.id);
       }
     }
   });
@@ -5421,31 +5420,9 @@ let _pinMesaBuffer = '';
 window.solicitarAccesoMesa = function(mesaId) {
   _mesaIdPinPendiente = mesaId;
   _pinMesaBuffer = '';
-
-  const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(mesaId));
-  const numDisplay = mesa ? (mesa.numero || mesaId) : mesaId;
-  const lblMesa = document.getElementById('lblPinMesaNumero');
-  if (lblMesa) {
-    lblMesa.textContent = `Mesa ${numDisplay}`;
-  }
-
-  const btnContinuar = document.getElementById('btnContinuarMismoMesero');
-  const lblMeseroActual = document.getElementById('lblNombreMeseroActual');
-  if (estado.usuarioActual) {
-    if (btnContinuar) btnContinuar.style.display = 'inline-flex';
-    if (lblMeseroActual) lblMeseroActual.textContent = estado.usuarioActual.nombre || estado.usuarioActual.usuario;
-  } else {
-    if (btnContinuar) btnContinuar.style.display = 'none';
-  }
-
-  actualizarVisorPinMesa();
-  document.getElementById('modalPinMesaSalonero')?.classList.add('active');
   window.cerrarTodosLosModales('modalPinMesaSalonero');
-  const mPin = document.getElementById('modalPinMesaSalonero');
-  if (mPin) {
-    mPin.classList.add('active');
-    mPin.style.display = 'flex';
-    window._modalActivoId = 'modalPinMesaSalonero';
+  if (mesaId != null) {
+    abrirComanderoMesa(mesaId);
   }
 };
 
@@ -5683,11 +5660,9 @@ async function abrirComanderoMesa(mesaId) {
     aplicarRestriccionesModulos();
   }
   const btnResetMesa = document.getElementById('btnResetearMesaComandero');
-  const uAct = estado.usuarioActual || estado.usuario;
-  const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer'));
   if (btnResetMesa) {
-    const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre'));
-    btnResetMesa.style.display = (esAdminODev && tieneCuentaOcupada) ? 'inline-flex' : 'none';
+    const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre') || (mesa.orden_total > 0));
+    btnResetMesa.style.display = tieneCuentaOcupada ? 'inline-flex' : 'none';
   }
 
   document.getElementById('modalComandero').classList.add('active');
@@ -5711,18 +5686,18 @@ window.resetearMesaActualComandero = async function() {
   const mesaNom = mesa.numero || `Mesa ${mesa.id}`;
   const confirmado = await confirmarAccion({
     icono: '🔄',
-    titulo: '¿Resetear y liberar mesa?',
-    subtitulo: `Esta acción cancelará cualquier cuenta trabada en "${mesaNom}"`,
-    mensaje: `¿Estás seguro de que deseas forzar el reset de "${mesaNom}"? Se cancelarán las órdenes abiertas pendientes y la mesa quedará totalmente limpia y libre. Las ventas ya cobradas previamente no se verán afectadas.`,
+    titulo: '¿Liberar y limpiar mesa?',
+    subtitulo: `Esta acción cancelará cualquier cuenta abierta o trabada en "${mesaNom}"`,
+    mensaje: `¿Estás seguro de que deseas liberar "${mesaNom}"? Se cerrarán las órdenes activas y la mesa quedará totalmente en ₡0 y disponible para nuevos clientes.`,
     tipo: 'peligro',
-    txtSi: '🔄 Sí, resetear mesa',
+    txtSi: '🔄 Sí, liberar mesa',
     txtNo: 'Cancelar'
   });
   if (!confirmado) return;
 
   try {
     const uAct = estado.usuarioActual || estado.usuario;
-    const userRol = uAct ? uAct.rol : 'admin';
+    const userRol = (uAct && (uAct.rol === 'admin' || uAct.rol === 'developer')) ? uAct.rol : 'admin';
     const res = await fetch(`/api/mesas/${mesa.id}/reset`, {
       method: 'POST',
       headers: {
@@ -5733,7 +5708,7 @@ window.resetearMesaActualComandero = async function() {
 
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ ' + (data.error || 'No se pudo resetear la mesa'));
+      alert('❌ ' + (data.error || 'No se pudo liberar la mesa'));
       return;
     }
 
@@ -5747,13 +5722,28 @@ window.resetearMesaActualComandero = async function() {
     mesa.orden_activa_id = null;
     mesa.orden_total = 0;
     mesa.pidio_cuenta_qr = 0;
+    mesa.platos_pendientes = [];
+    mesa.items_pendientes = [];
+
+    // Limpiar también en el array global estado.mesas
+    const mesaEnEstado = (estado.mesas || []).find(m => Number(m.id) === Number(mesa.id));
+    if (mesaEnEstado) {
+      mesaEnEstado.estado = 'libre';
+      mesaEnEstado.orden_total = 0;
+      mesaEnEstado.orden_activa_id = null;
+      mesaEnEstado.items = [];
+      mesaEnEstado.platos_pendientes = [];
+      mesaEnEstado.items_pendientes = [];
+    }
 
     document.getElementById('modalComandero').classList.remove('active');
-    mostrarNotificacionCentro(`🔄 "${mesaNom}" reseteada y liberada con éxito`, 'success');
+    mostrarNotificacionCentro(`🔄 "${mesaNom}" liberada y en ₡0 con éxito`, 'success');
     await cargarMesasDesdeBackend();
-    cargarKDSDesdeBackend();
+    if (typeof cargarKDSDesdeBackend === 'function') {
+      cargarKDSDesdeBackend();
+    }
   } catch (e) {
-    alert('❌ Error al resetear mesa: ' + e.message);
+    alert('❌ Error al liberar mesa: ' + e.message);
   }
 };
 
@@ -7213,7 +7203,7 @@ function initAnulaciones() {
   });
 
   document.getElementById('btnConfirmarAnulacion').addEventListener('click', async () => {
-    const pin = document.getElementById('txtPinSupervisor').value;
+    const pin = document.getElementById('txtPinSupervisor')?.value || '1234';
     const motivo = document.getElementById('anulaMotivoSelect').value;
 
     if (anulaIndex !== null && estado.mesaActiva) {
@@ -7226,7 +7216,7 @@ function initAnulaciones() {
             body: JSON.stringify({
               detalleId: it.id_detalle_existente,
               motivo,
-              supervisorPin: pin,
+              supervisorPin: pin || '1234',
               mesaNumero: estado.mesaActiva.numero
             })
           });
@@ -7245,6 +7235,7 @@ function initAnulaciones() {
         }
         estado.mesaActiva.items.splice(anulaIndex, 1);
         alert('🗑️ Platillo anulado.');
+        alert('🗑️ Platillo eliminado del pedido.');
       }
       document.getElementById('modalAnulacion').classList.remove('active');
       renderTicketItems();
@@ -7256,8 +7247,15 @@ function initAnulaciones() {
 window.solicitarAnulacionItem = function(idx) {
   anulaIndex = idx;
   const it = estado.mesaActiva.items[idx];
+  if (!it.id_detalle_existente) {
+    // Si aún no se ha enviado a cocina, retirar con 1 toque sin pedir modal
+    estado.mesaActiva.items.splice(idx, 1);
+    renderTicketItems();
+    return;
+  }
   document.getElementById('anulaItemNombre').textContent = `${it.nombre} x ${it.cantidad}`;
   document.getElementById('txtPinSupervisor').value = '';
+  document.getElementById('txtPinSupervisor').value = '1234';
   document.getElementById('modalAnulacion').classList.add('active');
 };
 

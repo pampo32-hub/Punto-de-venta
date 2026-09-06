@@ -111,11 +111,8 @@ describe('Tier 18: Seguridad Integral: Contraseña Temporal, PIN por Mesa y Auto
     assert.equal(rPinOk.body.usuario.nombre, 'Sofía Romero');
     assert.equal(rPinOk.body.usuario.rolEtiqueta, 'Salonera');
 
-    // 3. Validar con PIN incorrecto
     // 3. Validar con PIN incorrecto (no registrado)
     const rPinFail = await req('/api/auth/validar-pin-mesa', 'POST', {
-      pin: '9999',
-      pin: '0000',
       pin: '9876',
       negocio_id: 1
     });
