@@ -2140,7 +2140,17 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 app.get('/api/menu', async (req, res) => {
   try {
     const categorias = await dbAll('SELECT * FROM Categorias ORDER BY id ASC');
-    const productos = await dbAll('SELECT * FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, id ASC');
+    const rawProductos = await dbAll('SELECT * FROM Productos WHERE activo = 1 OR activo IS NULL ORDER BY categoria_id ASC, id ASC');
+    const productos = rawProductos.map(p => ({
+      ...p,
+      id: Number(p.id),
+      categoria_id: Number(p.categoria_id),
+      precio: Number(p.precio),
+      curso: Number(p.curso) || 2,
+      happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
+      agotado: (Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1') ? 1 : 0,
+      activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1
+    }));
     res.json({ categorias, productos });
   } catch (e) {
     res.status(500).json({ error: e.message });

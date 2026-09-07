@@ -4,7 +4,16 @@ const path = require('path');
 let db;
 
 if (process.env.DATABASE_URL) {
-  const { Pool } = require('pg');
+  const { Pool, types } = require('pg');
+  
+  // Mapear tipos numéricos de PostgreSQL a Number en JavaScript
+  types.setTypeParser(20, (val) => val === null ? null : parseInt(val, 10)); // int8 / bigint
+  types.setTypeParser(21, (val) => val === null ? null : parseInt(val, 10)); // int2 / smallint
+  types.setTypeParser(23, (val) => val === null ? null : parseInt(val, 10)); // int4 / integer
+  types.setTypeParser(1700, (val) => val === null ? null : parseFloat(val)); // numeric / decimal
+  types.setTypeParser(700, (val) => val === null ? null : parseFloat(val));  // float4 / real
+  types.setTypeParser(701, (val) => val === null ? null : parseFloat(val));  // float8 / double precision
+
   const isInternalRender = process.env.DATABASE_URL.includes('@dpg-') && !process.env.DATABASE_URL.includes('.render.com');
   
   const pool = new Pool({

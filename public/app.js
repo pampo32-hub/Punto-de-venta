@@ -709,8 +709,8 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (selCurso) selCurso.value = String(prod.curso || 2);
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
 
-  if (chkHH) chkHH.checked = Boolean(prod.happy_hour || prod.happyHour);
-  if (chkAgotado) chkAgotado.checked = Boolean(prod.agotado);
+  if (chkHH) chkHH.checked = Number(prod.happy_hour) === 1 || prod.happy_hour === true || Number(prod.happyHour) === 1 || prod.happyHour === true;
+  if (chkAgotado) chkAgotado.checked = Number(prod.agotado) === 1 || prod.agotado === true || prod.agotado === '1';
   if (btnEliminar) btnEliminar.style.display = 'inline-flex';
 
   // Al editar un producto ya existente, ocultar opción de auto-crear insumo
@@ -1126,8 +1126,10 @@ window.filtrarListaProdsParaEditar = function() {
     const cat = (estado.categorias || []).find(c => Number(c.id) === Number(p.categoria_id !== undefined ? p.categoria_id : p.catId));
     const catLabel = cat ? `${cat.icono || '🏷️'} ${cat.nombre}` : 'Sin categoría';
     const statusBadges = [];
-    if (p.agotado) statusBadges.push('<span style="background:rgba(239,68,68,0.2); color:#f87171; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Agotado</span>');
-    if (p.happy_hour || p.happyHour) statusBadges.push('<span style="background:rgba(245,158,11,0.2); color:#fbbf24; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Happy Hour</span>');
+    const isAgotado = Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1';
+    const isHH = Number(p.happy_hour) === 1 || p.happy_hour === true || Number(p.happyHour) === 1 || p.happyHour === true;
+    if (isAgotado) statusBadges.push('<span style="background:rgba(239,68,68,0.2); color:#f87171; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Agotado</span>');
+    if (isHH) statusBadges.push('<span style="background:rgba(245,158,11,0.2); color:#fbbf24; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Happy Hour</span>');
 
     return `
       <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#1e293b; border:1px solid #334155; border-radius:8px; gap:10px; transition:border-color 0.2s;" onmouseover="this.style.borderColor='#38bdf8'" onmouseout="this.style.borderColor='#334155'">
@@ -1616,7 +1618,7 @@ try {
     });
     socket.on('producto_agotado_cambiado', (d) => {
       const prod = estado.productos.find(p => p.id === d.id);
-      if (prod) prod.agotado = d.agotado;
+      if (prod) prod.agotado = Number(d.agotado) === 1 || d.agotado === true;
       renderGridProductos(estado.productos);
     });
     socket.on('producto_visual_cambiado', () => cargarMenuDesdeBackend());
@@ -3723,11 +3725,11 @@ async function cargarMenuDesdeBackend() {
       precio: p.precio,
       destino: p.destino,
       curso: p.curso || 2,
-      happyHour: Boolean(p.happy_hour),
-      happy_hour: p.happy_hour ? 1 : 0,
-      agotado: Boolean(p.agotado),
+      happyHour: Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1',
+      happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
+      agotado: Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1',
       imagen_url: p.imagen_url,
-      activo: p.activo !== undefined ? p.activo : 1
+      activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1
     }));
 
     if (window.PosOfflineDB && estado.productos.length > 0) {
@@ -3950,7 +3952,8 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
   const esAdminODev = Boolean(userActual && (userActual.rol === 'admin' || userActual.rol === 'developer'));
 
   const prodsHtml = standardProds.map(p => {
-    const esCerveza = Boolean(p.happyHour || p.happy_hour || p.catId === 4 || p.categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(p.nombre || ''));
+    const isAgotado = Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1';
+    const esCerveza = Boolean(Number(p.happyHour) === 1 || p.happyHour === true || Number(p.happy_hour) === 1 || p.happy_hour === true || p.catId === 4 || p.categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(p.nombre || ''));
     const isPromo = estado.happyHourActivo && esCerveza;
     const imgHtml = p.imagen_url 
       ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />`
@@ -3961,7 +3964,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
       : '';
 
     return `
-      <div class="prod-card-one-tap ${p.agotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" style="position: relative;">
+      <div class="prod-card-one-tap ${isAgotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" style="position: relative;">
         ${btnEditHtml}
         ${imgHtml}
         ${isPromo ? '<span class="prod-badge-promo">🍸 2x1</span>' : ''}
@@ -4393,7 +4396,8 @@ window.agregarAlTicketOneTap = async function(prodId) {
   const prod = estado.productos.find(p => p.id === prodId);
   if (!prod) return;
 
-  if (prod.agotado) {
+  const isAgotado = Number(prod.agotado) === 1 || prod.agotado === true || prod.agotado === '1';
+  if (isAgotado) {
     alert(`⛔ ¡Platillo Agotado!\n\n"${prod.nombre}" ha sido marcado como agotado (86) por cocina/barra.`);
     return;
   }
@@ -8990,27 +8994,30 @@ function initAgotados86() {
 
 function renderListaAgotados() {
   const container = document.getElementById('agotadosItemsList');
-  container.innerHTML = estado.productos.map((p, idx) => `
+  container.innerHTML = estado.productos.map((p, idx) => {
+    const isAgotado = Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1';
+    return `
     <div class="agotado-row-item">
       <div>
         <strong>${p.nombre}</strong>
         <div style="font-size:0.75rem; color:#9ca3af;">${formatCRC(p.precio)} • ${p.destino.toUpperCase()}</div>
       </div>
-      <button class="btn-toggle-86 ${p.agotado ? 'agotado' : 'disponible'}" onclick="toggleProductoAgotadoBackend(${p.id}, ${idx})">
-        ${p.agotado ? '⛔ Agotado (86)' : '✅ Disponible'}
+      <button class="btn-toggle-86 ${isAgotado ? 'agotado' : 'disponible'}" onclick="toggleProductoAgotadoBackend(${p.id}, ${idx})">
+        ${isAgotado ? '⛔ Agotado (86)' : '✅ Disponible'}
       </button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 window.toggleProductoAgotadoBackend = async function(prodId, prodIdx) {
   try {
     const res = await fetch('/api/productos/' + prodId + '/toggle-86', { method: 'POST' });
     const data = await res.json();
-    estado.productos[prodIdx].agotado = data.agotado;
+    estado.productos[prodIdx].agotado = Number(data.agotado) === 1 || data.agotado === true;
     renderListaAgotados();
   } catch (e) {
-    estado.productos[prodIdx].agotado = !estado.productos[prodIdx].agotado;
+    estado.productos[prodIdx].agotado = !(Number(estado.productos[prodIdx].agotado) === 1 || estado.productos[prodIdx].agotado === true);
     renderListaAgotados();
   }
 };
