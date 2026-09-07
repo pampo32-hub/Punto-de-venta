@@ -114,7 +114,11 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   items.forEach(it => {
     const cursoLabels = { 1: '[Entrada]', 2: '[Fuerte]', 3: '[Postre]' };
     const curLabel = cursoLabels[it.curso] || '';
-    raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${it.cantidad}x ${it.nombre}\n` + ESCPOS.NORMAL;
+    const prodNombre = it.nombre_producto || it.nombre || 'Producto';
+    raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${it.cantidad}x ${prodNombre}\n` + ESCPOS.NORMAL;
+    if (curLabel) {
+      raw += `   ${curLabel}\n`;
+    }
     if (it.notas) {
       raw += ESCPOS.BOLD_ON + `   ⚠️ NOTA: ${it.notas}\n` + ESCPOS.BOLD_OFF;
     }
@@ -142,7 +146,7 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
     fechaHora: fechaStr,
     items: items.map(it => ({
       cantidad: it.cantidad,
-      nombre: it.nombre,
+      nombre: it.nombre_producto || it.nombre || 'Producto',
       notas: it.notas || '',
       curso: it.curso || 2,
       origenMesa: it.origen_mesa_numero || null
@@ -267,8 +271,10 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   raw += '-'.repeat(48) + '\n';
 
   itemsPagados.forEach(it => {
-    const totalL = it.precio * it.cantidad;
-    raw += formatearLinea3Col(`${it.cantidad}x`, it.nombre, `₡${totalL.toLocaleString('es-CR')}`) + '\n';
+    const unitP = it.precio_unitario || it.precio || 0;
+    const totalL = unitP * it.cantidad;
+    const nomProd = it.nombre_producto || it.nombre || 'Consumo';
+    raw += formatearLinea3Col(`${it.cantidad}x`, nomProd, `₡${totalL.toLocaleString('es-CR')}`) + '\n';
   });
 
   raw += '-'.repeat(48) + '\n';
@@ -297,9 +303,9 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
     fechaHora: fechaStr,
     items: itemsPagados.map(it => ({
       cantidad: it.cantidad,
-      nombre: it.nombre,
-      precioUnitario: it.precio,
-      totalLinea: it.precio * it.cantidad
+      nombre: it.nombre_producto || it.nombre || 'Consumo',
+      precioUnitario: it.precio_unitario || it.precio || 0,
+      totalLinea: (it.precio_unitario || it.precio || 0) * it.cantidad
     })),
     subtotal: Math.round(subtotal),
     impuestos: Math.round(impuestos),
