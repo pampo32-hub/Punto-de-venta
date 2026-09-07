@@ -2567,7 +2567,7 @@ async function recalcularTotalesOrden(ordenId) {
   const modoHH = orden.modo_happy_hour || 'estricto';
 
   const rows = await dbAll(
-    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'",
+    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );
 
@@ -2739,8 +2739,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
     const estadoInicialOrden = tieneNuevosCocina ? 'esperando' : 'abierta';
     const r = await dbRun(
-      `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, subtotal, total, servicio_10, iva_13, descuento_happy_hour)
+       VALUES (1, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0)`,
       [numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
     );
     ordenId = r.lastID;
@@ -2763,14 +2763,14 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
   // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
   const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
-  const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
+  const comandaNumero = (rowMax && rowMax.maxNum ? Number(rowMax.maxNum) : 0) + 1;
 
   const nuevasComandas = [];
   for (const it of itemsProcesados) {
     const subtotal = it.precio * it.cantidad;
     const rItem = await dbRun(
-      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, hora_pedido, creado_en, origen_mesa_numero, comanda_numero, en_happy_hour)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, origen_mesa_numero, comanda_numero, en_happy_hour)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)`,
       [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero, it.en_happy_hour]
     );
     nuevasComandas.push({
@@ -3163,7 +3163,7 @@ app.get('/api/mesas/:id/espera', async (req, res) => {
 const handleKdsEstadoUpdate = async (req, res) => {
   try {
     const detalleId = req.params.detalleId || req.params.id;
-    const { estado } = req.body;
+    const estado = req.body.estado || req.body.estado_comanda || req.body.nuevoEstado;
     if (!estado) return res.status(400).json({ error: 'Estado requerido' });
 
     const item = await dbGet('SELECT * FROM DetalleOrden WHERE id = ?', [detalleId]);
