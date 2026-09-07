@@ -5903,6 +5903,85 @@ app.post('/api/impresoras/test', async (req, res) => {
   }
 });
 
+// Listar impresoras instaladas en Windows
+app.get('/api/impresoras/dispositivos-windows', async (req, res) => {
+  try {
+    const impresoras = await printerService.getInstalledPrinters();
+    res.json({ ok: true, impresoras });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Impresión directa bajo demanda desde el frontend sin diálogo del navegador
+app.post('/api/impresoras/imprimir-directo', async (req, res) => {
+  try {
+    const { ticketVisual, destino = 'caja', printerName = null } = req.body;
+    if (!ticketVisual) {
+      return res.status(400).json({ error: 'Datos del ticket requeridos' });
+    }
+
+    let tInfo;
+    if (ticketVisual.tipo === 'comanda') {
+      tInfo = printerService.generarTicketComanda({
+        ordenId: ticketVisual.ordenId,
+        comandaNumero: ticketVisual.comandaNumero,
+        mesaNumero: ticketVisual.mesa,
+        mesero: ticketVisual.mesero,
+        items: ticketVisual.items || [],
+        destino: ticketVisual.destino || destino,
+        pagada: ticketVisual.pagada,
+        fechaHora: ticketVisual.fechaHora
+      });
+    } else if (ticketVisual.tipo === 'pago_parcial') {
+      tInfo = printerService.generarTicketPagoParcial({
+        negocio: ticketVisual.negocio,
+        ordenId: ticketVisual.ordenId,
+        mesaNumero: ticketVisual.mesa,
+        personaNombre: ticketVisual.personaNombre || 'Cliente',
+        mesero: ticketVisual.mesero,
+        metodoPago: ticketVisual.metodoPago,
+        montoCobrado: ticketVisual.total,
+        subtotal: ticketVisual.subtotal,
+        impuestos: ticketVisual.impuestos,
+        itemsPagados: ticketVisual.items || [],
+        saldoRestanteMesa: ticketVisual.saldoRestanteMesa || 0,
+        fechaHora: ticketVisual.fechaHora
+      });
+    } else {
+      tInfo = printerService.generarTicketLiquidacion({
+        negocio: ticketVisual.negocio,
+        ordenId: ticketVisual.ordenId,
+        numeroOrden: ticketVisual.numeroOrden,
+        mesaNumero: ticketVisual.mesa,
+        mesero: ticketVisual.mesero,
+        cliente: ticketVisual.cliente,
+        metodoPago: ticketVisual.metodoPago,
+        subtotal: ticketVisual.subtotal,
+        descuentoHH: ticketVisual.descuentoHH,
+        servicio: ticketVisual.servicio,
+        iva: ticketVisual.iva,
+        total: ticketVisual.total,
+        recibido: ticketVisual.recibido,
+        cambio: ticketVisual.cambio,
+        items: ticketVisual.items || [],
+        fechaHora: ticketVisual.fechaHora
+      });
+    }
+
+    const reg = await printerService.procesarImpresion({
+      destinoImpresora: destino,
+      ticketInfo: tInfo,
+      io
+    });
+
+    res.json({ ok: true, mensaje: 'Ticket despachado directamente a impresora térmica', registro: reg });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 // Emulador Servidor Socket TCP en puerto 9100 (Receptor virtual de datos RAW ESC/POS)
 const net = require('net');
 const tcpPrinterServer = net.createServer((socket) => {

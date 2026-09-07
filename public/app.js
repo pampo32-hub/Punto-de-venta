@@ -12351,19 +12351,45 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     `;
   }
 
+  window.ticketTermicoActual = ticketData;
   container.innerHTML = html;
   modal.classList.add('active');
 
   if (autoImprimir) {
-    setTimeout(() => {
-      ejecutarImpresionNativa();
-    }, 300);
+    // Impresión directa a la impresora térmica USB/Windows sin cuadro de diálogo del navegador
+    ejecutarImpresionDirectaTermica(ticketData);
   }
 };
 
 window.cerrarModalVisorTicket = function() {
   const modal = document.getElementById('modalVisorTicket');
   if (modal) modal.classList.remove('active');
+};
+
+window.ejecutarImpresionDirectaTermica = async function(ticketData) {
+  const tData = ticketData || window.ticketTermicoActual;
+  if (!tData) {
+    mostrarNotificacionCentro('⚠️ No hay datos de ticket para imprimir.', 'warning');
+    return;
+  }
+  try {
+    const res = await fetch('/api/impresoras/imprimir-directo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticketVisual: tData,
+        destino: tData.destino || (tData.tipo === 'comanda' ? 'cocina' : 'caja')
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      mostrarNotificacionCentro('🖨️ Ticket enviado directamente a POS-80-Series', 'success');
+    } else {
+      mostrarNotificacionCentro('⚠️ ' + (data.error || 'No se pudo enviar a la impresora'), 'warning');
+    }
+  } catch (e) {
+    console.warn('Error al imprimir directo:', e);
+  }
 };
 
 window.ejecutarImpresionNativa = function() {

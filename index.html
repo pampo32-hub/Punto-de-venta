@@ -3679,7 +3679,8 @@
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px; background: #0f172a; padding: 10px 16px; border-radius: 12px; border: 1px solid #334155;">
         <h3 style="margin:0; font-size:1rem; color:#f8fafc; display:flex; align-items:center; gap:6px;">🖨️ <span id="txtTituloVisorTicket">Tiquete Térmico (80mm)</span></h3>
         <div style="display:flex; gap:8px;">
-          <button class="btn-pri" onclick="ejecutarImpresionNativa()" style="padding: 4px 12px; font-size: 0.8rem; background: #0284c7;">🖨️ Imprimir</button>
+          <button class="btn-pri" onclick="ejecutarImpresionDirectaTermica()" style="padding: 4px 12px; font-size: 0.8rem; background: #059669; font-weight:700;" title="Imprime directo a la impresora térmica sin abrir ventanas">⚡ Directo Térmica</button>
+          <button class="btn-pri" onclick="ejecutarImpresionNativa()" style="padding: 4px 10px; font-size: 0.8rem; background: #0284c7;" title="Imprimir usando cuadro de diálogo de Windows o guardar PDF">🖨️ PDF / Ventana</button>
           <button class="btn-icon-close" onclick="cerrarModalVisorTicket()" style="color:#fff; background:#334155; border:none; border-radius:6px; width:28px; height:28px; cursor:pointer;">✕</button>
         </div>
       </div>

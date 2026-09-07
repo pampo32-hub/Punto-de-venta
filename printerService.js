@@ -1,32 +1,36 @@
 require('dotenv').config();
 const net = require('net');
+const { sendRawToWindowsPrinter, getInstalledPrinters } = require('./windowsPrinter');
 
 /**
  * SERVICIO DE IMPRESIÓN TÉRMICA ESC/POS & SIMULADOR DE PUERTO TCP 9100
- * Compatible con impresoras térmicas de 80mm (Epson, Bixolon, Star, Xprinter, etc.)
+ * Compatible con impresoras térmicas de 80mm USB (Windows Spooler) y Red TCP (Epson, Bixolon, Star, Xprinter, POS-80, etc.)
  */
 
 // Estado en memoria de configuración de impresoras
 let printerConfig = {
   caja: {
-    nombre: process.env.PRINTER_CAJA_NAME || 'Impresora Caja (80mm)',
-    tipo: process.env.PRINTER_CAJA_TYPE || (process.env.PRINTER_CAJA_IP ? 'red' : 'red'),
+    nombre: process.env.PRINTER_CAJA_NAME || 'POS-80-Series',
+    tipo: process.env.PRINTER_CAJA_TYPE || 'usb',
     ip: process.env.PRINTER_CAJA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_CAJA_PORT) || 9100,
+    windowsPrinter: process.env.PRINTER_CAJA_WIN || 'POS-80-Series',
     activa: true
   },
   cocina: {
-    nombre: process.env.PRINTER_COCINA_NAME || 'Impresora Cocina (80mm)',
-    tipo: process.env.PRINTER_COCINA_TYPE || (process.env.PRINTER_COCINA_IP ? 'red' : 'red'),
+    nombre: process.env.PRINTER_COCINA_NAME || 'POS-80-Series',
+    tipo: process.env.PRINTER_COCINA_TYPE || 'usb',
     ip: process.env.PRINTER_COCINA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_COCINA_PORT) || 9100,
+    windowsPrinter: process.env.PRINTER_COCINA_WIN || 'POS-80-Series',
     activa: true
   },
   barra: {
-    nombre: process.env.PRINTER_BARRA_NAME || 'Impresora Barra (80mm)',
-    tipo: process.env.PRINTER_BARRA_TYPE || (process.env.PRINTER_BARRA_IP ? 'red' : 'red'),
+    nombre: process.env.PRINTER_BARRA_NAME || 'POS-80-Series',
+    tipo: process.env.PRINTER_BARRA_TYPE || 'usb',
     ip: process.env.PRINTER_BARRA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_BARRA_PORT) || 9100,
+    windowsPrinter: process.env.PRINTER_BARRA_WIN || 'POS-80-Series',
     activa: true
   },
 };
@@ -398,15 +402,26 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   historialImpresiones.unshift(registro);
   if (historialImpresiones.length > MAX_HISTORIAL) historialImpresiones.pop();
 
-  // Despacho TCP asíncrono y secuencial para evitar saturación de socket en la impresora térmica
-  if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
-    encolarEnvioTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
-      registro.estado = resTCP.ok ? 'impreso' : 'simulado';
-      registro.detalleConexion = resTCP.mensaje || 'Enviado correctamente';
+  // Despacho directo: USB / Windows Spooler o TCP Red
+  if (cfg.tipo === 'usb' || (!cfg.ip && process.platform === 'win32')) {
+    const winPrinterName = cfg.windowsPrinter || cfg.nombre || 'POS-80-Series';
+    sendRawToWindowsPrinter(winPrinterName, ticketInfo.raw).then((resWin) => {
+      registro.estado = resWin.ok ? 'impreso' : 'simulado';
+      registro.detalleConexion = resWin.mensaje || resWin.error || 'Enviado a Windows Spooler';
       if (io) io.emit('ticket_impreso', registro);
     }).catch((err) => {
       registro.estado = 'simulado';
-      registro.detalleConexion = 'Error: ' + err.message;
+      registro.detalleConexion = 'Error USB: ' + err.message;
+      if (io) io.emit('ticket_impreso', registro);
+    });
+  } else if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
+    encolarEnvioTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
+      registro.estado = resTCP.ok ? 'impreso' : 'simulado';
+      registro.detalleConexion = resTCP.mensaje || 'Enviado correctamente por Red TCP';
+      if (io) io.emit('ticket_impreso', registro);
+    }).catch((err) => {
+      registro.estado = 'simulado';
+      registro.detalleConexion = 'Error TCP: ' + err.message;
       if (io) io.emit('ticket_impreso', registro);
     });
   } else {
@@ -430,5 +445,8 @@ module.exports = {
   generarTicketLiquidacion,
   generarTicketPagoParcial,
   enviarAPuertoTCP,
+  sendRawToWindowsPrinter,
+  getInstalledPrinters,
   procesarImpresion
 };
+
