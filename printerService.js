@@ -346,6 +346,8 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
     estado: resTCP.ok ? 'impreso' : 'simulado',
     detalleConexion: resTCP.mensaje || 'Enviado correctamente',
     ticketVisual: ticketInfo.ticketVisual,
+    rawBase64: Buffer.from(ticketInfo.raw, 'binary').toString('base64'),
+    rawText: ticketInfo.raw,
     rawHexPreview: Buffer.from(ticketInfo.raw).toString('hex').substring(0, 64) + '...'
   };
 

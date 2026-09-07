@@ -6046,6 +6046,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     idempotencyKey
   };
 
+  const itemsCocinaNuevos = estado.mesaActiva.items.filter(it => !it.enviado && it.destino === 'cocina');
+
   const aplicarExitoLocal = () => {
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
@@ -6089,8 +6091,32 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
 
+    // Disparar impresión térmica de Comanda a Cocina si hay alimentos nuevos
+    if (itemsCocinaNuevos && itemsCocinaNuevos.length > 0) {
+      const ticketComanda = {
+        tipo: 'comanda',
+        titulo: 'COMANDA COCINA',
+        destino: 'cocina',
+        mesa: estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id),
+        ordenId: estado.mesaActiva.orden_id || 1,
+        comandaNumero: 1,
+        mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
+        fechaHora: new Date().toLocaleString('es-CR'),
+        items: itemsCocinaNuevos.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre,
+          curso: it.curso || 2,
+          notas: it.notas || '',
+          origenMesa: it.origen_mesa_numero || null
+        }))
+      };
+      if (typeof window.mostrarVisorTicketTermico === 'function') {
+        window.mostrarVisorTicketTermico(ticketComanda, true);
+      }
+    }
+
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina con éxito!' : '💾 ¡Comanda guardada con éxito!', 'success');
+      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina e impresa!' : '💾 ¡Comanda guardada con éxito!', 'success');
     }
   };
 
@@ -7206,7 +7232,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     }
 
     if (esLiquidacionFinal) {
-      alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Registro en Kárdex guardado exitosamente.\n• Mesa liberada.`);
       if (estado.mesaActiva) {
         if (window.PosOfflineDB) {
           window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
@@ -7233,6 +7258,41 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       if (typeof cargarKDSDesdeBackend === 'function') {
         cargarKDSDesdeBackend();
       }
+
+      // Disparar automáticamente la impresión del tiquete final de cliente
+      const ticketFinal = {
+        tipo: 'liquidacion',
+        negocio: {
+          nombre: 'GastroBar Fuego & Brasas',
+          slogan: 'Restaurante, Bar & Lounge',
+          tel: '2222-0000 / 8888-9999'
+        },
+        numeroOrden: ordenId || 'ORD-1',
+        ordenId: ordenId || 'ORD-1',
+        mesa: mesaNumero,
+        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
+        cliente: 'Cliente General',
+        fechaHora: new Date().toLocaleString('es-CR'),
+        items: itemsMesa.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre,
+          precioUnitario: it.precio,
+          totalLinea: it.precio * it.cantidad,
+          notas: it.notas || ''
+        })),
+        subtotal: Math.round(totalNum / 1.23),
+        servicio: Math.round((totalNum / 1.23) * 0.10),
+        iva: totalNum - Math.round(totalNum / 1.23) - Math.round((totalNum / 1.23) * 0.10),
+        total: totalNum,
+        metodoPago: metodo,
+        recibido: recibido,
+        cambio: cambio
+      };
+      if (typeof window.mostrarVisorTicketTermico === 'function') {
+        window.mostrarVisorTicketTermico(ticketFinal, true);
+      }
+
+      mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada e impresa con éxito!`, 'success');
     } else {
     // Cobro parcial:
     // 1. Descontar los productos pagados de estado.mesaActiva.items
@@ -7278,7 +7338,32 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       renderComanda();
     }
 
-    alert(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado!\n\n• Monto cobrado: ${formatCRCSinDecimales(totalNum)}\n• Tiquete impreso.\n• Mesa permanece abierta con productos pendientes.`);
+    // Disparar tiquete de cobro parcial individual
+    const ticketParcial = {
+      tipo: 'pago_parcial',
+      negocio: { nombre: 'GastroBar Fuego & Brasas' },
+      ordenId: ordenId || 'ORD-1',
+      mesa: mesaNumero,
+      personaNombre: personaCobrada ? personaCobrada.nombre : 'Persona',
+      mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+      fechaHora: new Date().toLocaleString('es-CR'),
+      items: (personaCobrada?.items || []).map(it => ({
+        cantidad: it.cantidad,
+        nombre: it.nombre,
+        precioUnitario: it.precio,
+        totalLinea: it.precio * it.cantidad
+      })),
+      subtotal: Math.round(totalNum / 1.23),
+      impuestos: totalNum - Math.round(totalNum / 1.23),
+      total: totalNum,
+      metodoPago: metodo,
+      saldoRestanteMesa: estado.mesaActiva ? estado.mesaActiva.items.reduce((a, b) => a + (b.precio * b.cantidad), 0) : 0
+    };
+    if (typeof window.mostrarVisorTicketTermico === 'function') {
+      window.mostrarVisorTicketTermico(ticketParcial, true);
+    }
+
+    mostrarNotificacionCentro(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado e impreso!`, 'success');
 
     estado.cobroSplitPersonaIndex = null;
     document.getElementById('modalCobro').classList.remove('active');
