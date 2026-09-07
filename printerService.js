@@ -65,7 +65,7 @@ const ESCPOS = {
   UNDERLINE_OFF: `${ESC}-\x00`,
   CUT_FULL: `${GS}V\x00`,
   CUT_PARTIAL: `${GS}V\x01`,
-  FEED_LINES: (n = 3) => `${ESC}d${String.fromCharCode(n)}`,
+  FEED_LINES: (n = 6) => `${ESC}d${String.fromCharCode(n)}`,
   BEEP: `${ESC}B\x03\x02` // 3 beeps
 };
 
@@ -173,7 +173,8 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_CENTER;
   raw += ESCPOS.BOLD_ON + `TOTAL ITEMS: ${items.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0)}\n` + ESCPOS.BOLD_OFF;
-  raw += ESCPOS.FEED_LINES(3);
+  raw += '\n\n\n\n\n\n';
+  raw += ESCPOS.FEED_LINES(6);
   raw += ESCPOS.CUT_FULL;
 
   // 2. Modelo estructurado para vista previa en HTML
@@ -271,7 +272,8 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   raw += 'Muchas gracias por su preferencia!\n';
   raw += 'Esperamos servirle de nuevo muy pronto.\n';
   raw += 'Autorizado mediante resolucion DGT-R-033-2019\n';
-  raw += ESCPOS.FEED_LINES(3);
+  raw += '\n\n\n\n\n\n';
+  raw += ESCPOS.FEED_LINES(6);
   raw += ESCPOS.CUT_FULL;
 
   const ticketVisual = {
@@ -342,7 +344,8 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   raw += `Metodo: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
   raw += ESCPOS.BOLD_ON + `Saldo Pendiente en Mesa: ${formatMontoTermica(saldoRestanteMesa)}\n` + ESCPOS.BOLD_OFF;
   raw += `Estado: Mesa permanece ABIERTA con consumos pendientes.\n`;
-  raw += ESCPOS.FEED_LINES(3);
+  raw += '\n\n\n\n\n\n';
+  raw += ESCPOS.FEED_LINES(6);
   raw += ESCPOS.CUT_FULL;
 
   const ticketVisual = {
