@@ -1,3 +1,4 @@
+require('dotenv').config();
 const QRCode = require('qrcode');
 const express = require('express');
 const http = require('http');
