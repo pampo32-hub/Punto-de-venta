@@ -3939,10 +3939,11 @@ app.post('/api/caja/movimiento', async (req, res) => {
 
     let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
     if (!caja) {
+      const ahoraApertura = new Date().toISOString();
       const r = await dbRun(`
         INSERT INTO Cajas (cajero, fecha_apertura, monto_inicial, estado)
-        VALUES (?, datetime('now', 'localtime'), 50000, 'abierta')
-      `, [usuarioNombre]);
+        VALUES (?, ?, 50000, 'abierta')
+      `, [usuarioNombre, ahoraApertura]);
       caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [r.lastID]);
     }
 
@@ -4177,10 +4178,11 @@ app.post('/api/caja/abrir', async (req, res) => {
       return res.json({ ok: true, message: 'Ya existe una caja abierta', caja_id: activa.id });
     }
 
+    const ahoraApertura = new Date().toISOString();
     const r = await dbRun(`
       INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
-      VALUES (?, ?, datetime('now', 'localtime'), ?, 'abierta')
-    `, [negocio_id, cajero, montoNum]);
+      VALUES (?, ?, ?, ?, 'abierta')
+    `, [negocio_id, cajero, ahoraApertura, montoNum]);
 
     io.emit('caja_actualizada');
     res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
@@ -5235,16 +5237,16 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     let sqlVentas = `
       SELECT 
         d.producto_id,
-        COALESCE(p.nombre, d.nombre_producto) AS producto_nombre,
-        p.categoria_id,
-        c.nombre AS categoria_nombre,
-        c.icono AS categoria_icono,
-        p.imagen_url,
-        p.precio AS precio_actual,
+        COALESCE(MAX(p.nombre), MAX(d.nombre_producto)) AS producto_nombre,
+        MAX(p.categoria_id) AS categoria_id,
+        MAX(c.nombre) AS categoria_nombre,
+        MAX(c.icono) AS categoria_icono,
+        MAX(p.imagen_url) AS imagen_url,
+        MAX(p.precio) AS precio_actual,
         SUM(d.cantidad) AS cantidad_vendida,
         SUM(d.subtotal) AS total_ingresos,
         COUNT(DISTINCT d.orden_id) AS total_ordenes,
-        AVG(d.precio_unitario) AS precio_promedio
+        AVG(CAST(d.precio_unitario AS DOUBLE PRECISION)) AS precio_promedio
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Productos p ON d.producto_id = p.id
@@ -5277,6 +5279,19 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     const productosDetallados = [];
 
+    // Pre-cargar todas las recetas en una sola consulta batch para eliminar N+1 consultas de red
+    const todasLasRecetas = await dbAll(`
+      SELECT r.producto_id, r.insumo_id, r.cantidad, r.merma_porcentaje,
+             i.nombre AS insumo_nombre, i.unidad_medida, i.costo_unitario, i.stock_actual, i.es_licor
+      FROM InventarioRecetas r
+      JOIN Inventario i ON r.insumo_id = i.id
+    `);
+    const recetasPorProducto = {};
+    for (const r of todasLasRecetas) {
+      if (!recetasPorProducto[r.producto_id]) recetasPorProducto[r.producto_id] = [];
+      recetasPorProducto[r.producto_id].push(r);
+    }
+
     for (const fila of ventasRows) {
       const pId = fila.producto_id;
       const cantVendida = Number(fila.cantidad_vendida) || 0;
@@ -5289,13 +5304,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       let costoInsumosProducto = 0;
 
       // 1. Receta explícita en InventarioRecetas
-      const recetas = await dbAll(`
-        SELECT r.insumo_id, r.cantidad, r.merma_porcentaje,
-               i.nombre AS insumo_nombre, i.unidad_medida, i.costo_unitario, i.stock_actual, i.es_licor
-        FROM InventarioRecetas r
-        JOIN Inventario i ON r.insumo_id = i.id
-        WHERE r.producto_id = ?
-      `, [pId]);
+      const recetas = recetasPorProducto[pId] || [];
 
       if (recetas && recetas.length > 0) {
         for (const r of recetas) {
@@ -5428,28 +5437,49 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const ultimasOrdenesRows = await dbAll(sqlUltimasOrdenes, paramsUltimas);
     const ultimasVentas = [];
 
-    for (const ord of ultimasOrdenesRows) {
-      const items = await dbAll(`
-        SELECT 
-          d.id,
-          d.producto_id,
-          COALESCE(p.nombre, d.nombre_producto) AS nombre,
-          d.cantidad,
-          d.precio_unitario,
-          d.subtotal,
-          d.notas,
-          d.curso,
-          d.destino
-        FROM DetalleOrden d
-        LEFT JOIN Productos p ON d.producto_id = p.id
-        WHERE d.orden_id = ? AND d.estado_comanda != 'anulado'
-      `, [ord.id]);
+    const orderIds = ultimasOrdenesRows.map(o => o.id);
+    const itemsByOrderId = {};
+    const pagosByOrderId = {};
 
-      const pagos = await dbAll(`
-        SELECT metodo, monto, propina, cambio, fecha_hora
-        FROM Pagos
-        WHERE orden_id = ?
-      `, [ord.id]);
+    if (orderIds.length > 0) {
+      const placeholders = orderIds.map(() => '?').join(',');
+      const [allItems, allPagos] = await Promise.all([
+        dbAll(`
+          SELECT 
+            d.id,
+            d.orden_id,
+            d.producto_id,
+            COALESCE(p.nombre, d.nombre_producto) AS nombre,
+            d.cantidad,
+            d.precio_unitario,
+            d.subtotal,
+            d.notas,
+            d.curso,
+            d.destino
+          FROM DetalleOrden d
+          LEFT JOIN Productos p ON d.producto_id = p.id
+          WHERE d.orden_id IN (${placeholders}) AND d.estado_comanda != 'anulado'
+        `, orderIds),
+        dbAll(`
+          SELECT orden_id, metodo, monto, propina, cambio, fecha_hora
+          FROM Pagos
+          WHERE orden_id IN (${placeholders})
+        `, orderIds)
+      ]);
+
+      for (const item of allItems) {
+        if (!itemsByOrderId[item.orden_id]) itemsByOrderId[item.orden_id] = [];
+        itemsByOrderId[item.orden_id].push(item);
+      }
+      for (const pago of allPagos) {
+        if (!pagosByOrderId[pago.orden_id]) pagosByOrderId[pago.orden_id] = [];
+        pagosByOrderId[pago.orden_id].push(pago);
+      }
+    }
+
+    for (const ord of ultimasOrdenesRows) {
+      const items = itemsByOrderId[ord.id] || [];
+      const pagos = pagosByOrderId[ord.id] || [];
 
       const metodosSet = new Set(pagos.map(p => p.metodo).filter(Boolean));
       const metodoPago = metodosSet.size > 0 ? Array.from(metodosSet).join(', ') : 'Efectivo';
@@ -5615,18 +5645,18 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       JOIN Ordenes o ON d.orden_id = o.id
       WHERE d.estado_comanda != 'anulado' AND o.estado IN ('pagada', 'activa', 'abierta', 'cuenta')
         AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-      GROUP BY d.nombre_producto
+      GROUP BY d.nombre_producto, d.destino
       ORDER BY total_unidades DESC
       LIMIT 5
     `, [negocioId, negocioId]);
 
     // 5. Ventas por Hora (Horas Pico)
     const pagosHoras = await dbAll(`
-      SELECT strftime('%H', p.fecha_hora) as hora, SUM(p.monto) as total
+      SELECT SUBSTRING(p.fecha_hora, 12, 2) as hora, SUM(p.monto) as total
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-      GROUP BY strftime('%H', p.fecha_hora)
+      GROUP BY SUBSTRING(p.fecha_hora, 12, 2)
       ORDER BY hora ASC
     `, [hoyISO, negocioId, negocioId]);
 
@@ -5717,7 +5747,7 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       WHERE (o.estado = 'pagada' OR p.id IS NOT NULL) 
         AND (p.fecha_hora >= ? OR (p.fecha_hora IS NULL AND COALESCE(o.fecha_cierre, o.fecha_apertura) >= ?))
         AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-      GROUP BY o.id
+      GROUP BY o.id, m.numero, z.nombre
       ORDER BY fecha_cobro DESC, o.id DESC
     `, [hoyISO, hoyISO, negocioId, negocioId]);
 

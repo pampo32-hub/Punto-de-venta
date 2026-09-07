@@ -15,6 +15,10 @@ if (process.env.DATABASE_URL) {
     connectionTimeoutMillis: 10000
   });
 
+  pool.on('error', (err) => {
+    console.error('⚠️ Error inesperado en el pool de PostgreSQL:', err);
+  });
+
   console.log('🐘 Conectado a base de datos central en la nube (Render PostgreSQL).');
 
   function convertSqlToPg(sql) {
@@ -45,6 +49,15 @@ if (process.env.DATABASE_URL) {
     if (/INSERT\s+OR\s+REPLACE\s+INTO/i.test(s)) {
       s = s.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'INSERT INTO');
     }
+
+    // GROUP_CONCAT(x) -> STRING_AGG(x::text, ',')
+    s = s.replace(/GROUP_CONCAT\s*\(\s*([^)]+)\s*\)/gi, 'STRING_AGG($1::text, \',\')');
+
+    // strftime('%H', col) -> SUBSTRING(col FROM 12 FOR 2)
+    s = s.replace(/strftime\s*\(\s*['"]%H['"]\s*,\s*([^)]+)\s*\)/gi, 'SUBSTRING($1 FROM 12 FOR 2)');
+
+    // datetime('now', ...) -> ISO string timestamp
+    s = s.replace(/datetime\s*\(\s*['"]now['"][^)]*\)/gi, "TO_CHAR(NOW() AT TIME ZONE 'America/Costa_Rica', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')");
 
     return s;
   }
