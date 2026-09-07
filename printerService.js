@@ -11,30 +11,24 @@ const { sendRawToWindowsPrinter, getInstalledPrinters } = require('./windowsPrin
 // Estado en memoria de configuración de impresoras
 let printerConfig = {
   caja: {
-    nombre: process.env.PRINTER_CAJA_NAME || 'Impresora Caja (80mm)',
-    tipo: process.env.PRINTER_CAJA_TYPE || (process.env.PRINTER_CAJA_IP ? 'red' : 'red'),
     nombre: process.env.PRINTER_CAJA_NAME || 'POS-80-Series',
-    tipo: process.env.PRINTER_CAJA_TYPE || 'usb',
+    tipo: process.env.PRINTER_CAJA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
     ip: process.env.PRINTER_CAJA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_CAJA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_CAJA_WIN || 'POS-80-Series',
     activa: true
   },
   cocina: {
-    nombre: process.env.PRINTER_COCINA_NAME || 'Impresora Cocina (80mm)',
-    tipo: process.env.PRINTER_COCINA_TYPE || (process.env.PRINTER_COCINA_IP ? 'red' : 'red'),
     nombre: process.env.PRINTER_COCINA_NAME || 'POS-80-Series',
-    tipo: process.env.PRINTER_COCINA_TYPE || 'usb',
+    tipo: process.env.PRINTER_COCINA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
     ip: process.env.PRINTER_COCINA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_COCINA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_COCINA_WIN || 'POS-80-Series',
     activa: true
   },
   barra: {
-    nombre: process.env.PRINTER_BARRA_NAME || 'Impresora Barra (80mm)',
-    tipo: process.env.PRINTER_BARRA_TYPE || (process.env.PRINTER_BARRA_IP ? 'red' : 'red'),
     nombre: process.env.PRINTER_BARRA_NAME || 'POS-80-Series',
-    tipo: process.env.PRINTER_BARRA_TYPE || 'usb',
+    tipo: process.env.PRINTER_BARRA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
     ip: process.env.PRINTER_BARRA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_BARRA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_BARRA_WIN || 'POS-80-Series',
@@ -52,6 +46,9 @@ const GS = '\x1D';
 
 const ESCPOS = {
   INIT: `${ESC}@`,
+  FONT_A: `${ESC}M\x00`,
+  DOUBLE_STRIKE_ON: `${ESC}G\x01`,
+  DOUBLE_STRIKE_OFF: `${ESC}G\x00`,
   ALIGN_LEFT: `${ESC}a\x00`,
   ALIGN_CENTER: `${ESC}a\x01`,
   ALIGN_RIGHT: `${ESC}a\x02`,
@@ -138,11 +135,11 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   
   // 1. ESC/POS Buffer (para enviar al puerto 9100 / socket / USB)
   let raw = '';
-  raw += ESCPOS.INIT;
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.BEEP;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + `*** ${destinoTitulo} ***\n` + ESCPOS.NORMAL;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `MESA: ${limpiarTextoTermica(mesaNumero)}\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + `*** ${destinoTitulo} ***\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `MESA: ${limpiarTextoTermica(mesaNumero)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   if (pagada) {
     raw += ESCPOS.BOLD_ON + `[ ESTADO: COBRADA / DIRECTO ]\n` + ESCPOS.BOLD_OFF;
   }
@@ -216,32 +213,36 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   }
   const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
   const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-0000 / 8888-9999');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
   const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
 
   let raw = '';
-  raw += ESCPOS.INIT;
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += `${negSlogan}\n`;
   raw += `Tel: ${negTel}\n`;
   raw += `${negDir}\n`;
-  raw += `Ced. Juridica: 3-101-789456\n`;
+  raw += `Ced. Juridica: ${negCed}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `COMPROBANTE DE PAGO / FACTURA\n` + ESCPOS.BOLD_OFF;
   raw += ESCPOS.ALIGN_LEFT;
   raw += `Factura / Orden: #${numeroOrden || ordenId || '001'}\n`;
   raw += `Mesa: ${limpiarTextoTermica(mesaNumero)} | Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
-  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
+  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente Test')}\n`;
   raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
   raw += '-'.repeat(48) + '\n';
-  raw += ESCPOS.BOLD_ON + formatearLinea3Col('CANT', 'DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANTDESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
 
   items.forEach(it => {
-    const totalLinea = (it.precio_unitario || it.precio || 0) * it.cantidad;
-    const nombreProd = limpiarTextoTermica(it.nombre_producto || it.nombre);
-    raw += formatearLinea3Col(`${it.cantidad}x`, nombreProd, formatMontoTermica(totalLinea)) + '\n';
+    const unitPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
+    const cant = Number(it.cantidad) || 1;
+    const totalLinea = it.totalLinea !== undefined ? Number(it.totalLinea) : (unitPrice * cant);
+    const nombreProd = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
+    const cantDesc = `${cant}x  ${nombreProd}`;
+    raw += formatearLinea2Col(cantDesc, formatMontoTermica(totalLinea)) + '\n';
     if (it.notas) {
       raw += `   (${limpiarTextoTermica(it.notas)})\n`;
     }
@@ -256,10 +257,11 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servicio)) + '\n';
   raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(iva)) + '\n';
   raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL A PAGAR:', formatMontoTermica(total)) + '\n' + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(total)}\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
-  raw += ESCPOS.ALIGN_LEFT;
   raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
   if (metodoPago === 'Efectivo' && recibido > 0) {
     raw += `Monto Recibido: ${formatMontoTermica(recibido)}\n`;
@@ -276,13 +278,13 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
 
   const ticketVisual = {
     tipo: 'cuenta_total',
-    titulo: 'COMPROBANTE DE PAGO',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir },
+    titulo: 'COMPROBANTE DE PAGO / FACTURA',
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
     ordenId,
     numeroOrden: numeroOrden || ordenId,
     mesa: mesaNumero,
     mesero,
-    cliente: cliente || 'Cliente General',
+    cliente: cliente || 'Cliente Test',
     fechaHora: fechaStr,
     items: items.map(it => ({
       cantidad: it.cantidad,
@@ -304,7 +306,7 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
 }
 
 /**
- * Generador de Pre-Factura / Pre-Cuenta (Revisión de Consumos en Mesa - No Válido como Factura Fiscal)
+ * Generador de Pre-Factura / Pre-Cuenta (Revisión de Consumos en Mesa)
  */
 function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, subtotal, descuentoHH, servicio, iva, total, items, fechaHora = new Date().toISOString() }) {
   let fechaStr = fechaHora;
@@ -319,35 +321,40 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   }
   const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
   const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-0000 / 8888-9999');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
   const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+
+  const subNum = Math.round(Number(subtotal) || 0);
+  const prop10 = Math.round(subNum * 0.10);
+  const prop15 = Math.round(subNum * 0.15);
 
   let raw = '';
-  raw += ESCPOS.INIT;
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += `${negSlogan}\n`;
   raw += `Tel: ${negTel}\n`;
-  raw += `${negDir}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
   raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `*** PRE-CUENTA / PRE-FACTURA ***\n` + ESCPOS.NORMAL;
-  raw += ESCPOS.BOLD_ON + `[ REVISION DE CONSUMOS EN MESA ]\n` + ESCPOS.BOLD_OFF;
-  raw += `* DOCUMENTO NO VALIDO COMO COMPROBANTE FISCAL *\n`;
-  raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.ALIGN_LEFT;
-  raw += `Orden: #${numeroOrden || ordenId || '001'} | Mesa: ${limpiarTextoTermica(mesaNumero)}\n`;
-  raw += `Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
-  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
+  raw += ESCPOS.BOLD_ON + `*** PRE-CUENTA / PRE-FACTURA ***\n`;
+  raw += `[ REVISION DE CONSUMOS EN MESA ]\n` + ESCPOS.BOLD_OFF;
+  raw += `* NO VALIDO COMO FACTURA FISCAL *\n`;
+  raw += ESCPOS.BOLD_ON + `MESA: ${limpiarTextoTermica(mesaNumero)} | Salonero: ${limpiarTextoTermica(mesero || 'Don Alberto')}\n` + ESCPOS.BOLD_OFF;
+  raw += `Orden #${numeroOrden || ordenId || '001'} - Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
   raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
   raw += '-'.repeat(48) + '\n';
-  raw += ESCPOS.BOLD_ON + formatearLinea3Col('CANT', 'DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANT  DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
 
   (items || []).forEach(it => {
-    const unitPrice = it.precio_unitario || it.precio || 0;
-    const totalLinea = unitPrice * (it.cantidad || 1);
+    const unitPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
+    const cant = Number(it.cantidad) || 1;
+    const totalLinea = it.totalLinea !== undefined ? Number(it.totalLinea) : (unitPrice * cant);
     const nombreProd = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
-    raw += formatearLinea3Col(`${it.cantidad}x`, nombreProd, formatMontoTermica(totalLinea)) + '\n';
+    const cantDesc = `${cant}x  ${nombreProd}`;
+    raw += formatearLinea2Col(cantDesc, formatMontoTermica(totalLinea)) + '\n';
     if (it.notas) {
       raw += `   (${limpiarTextoTermica(it.notas)})\n`;
     }
@@ -362,49 +369,52 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servicio)) + '\n';
   raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(iva)) + '\n';
   raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL ESTIMADO:', formatMontoTermica(total)) + '\n' + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(total)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
   raw += ESCPOS.ALIGN_CENTER;
-  raw += '\n';
-  raw += ESCPOS.BOLD_ON + 'PROPINA VOLUNTARIA SUGERIDA:\n' + ESCPOS.BOLD_OFF;
-  const prop10 = Math.round((subtotal || total * 0.8) * 0.10);
-  const prop15 = Math.round((subtotal || total * 0.8) * 0.15);
-  raw += `10%: ${formatMontoTermica(prop10)}   15%: ${formatMontoTermica(prop15)}\n`;
-  raw += '\n';
-  raw += '------------------------------------------------\n';
-  raw += 'Firma / Aprobacion: ___________________________\n';
-  raw += '\n';
-  raw += 'Comprobante preliminar de consumo para revision.\n';
+  raw += ESCPOS.BOLD_ON + 'PROPINA VOLUNTARIA SUGERIDA\n' + ESCPOS.BOLD_OFF;
+  raw += `[ 10%: ${formatMontoTermica(prop10)}     15%: ${formatMontoTermica(prop15)} ]\n`;
+  raw += '-'.repeat(48) + '\n';
+  raw += 'Firma / Aprobacion de Cuenta\n';
+  raw += '-'.repeat(48) + '\n';
+  raw += 'Comprobante preliminar para revision del cliente.\n';
   raw += 'Solicite su Factura Electronica al pagar.\n';
-  raw += 'Muchas gracias por su visita!\n';
+  raw += ESCPOS.BOLD_ON + 'Muchas gracias por su preferencia!\n' + ESCPOS.BOLD_OFF;
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_FULL;
 
   const ticketVisual = {
     tipo: 'prefactura',
     titulo: 'PRE-CUENTA / PRE-FACTURA',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir },
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
     ordenId,
     numeroOrden: numeroOrden || ordenId,
     mesa: mesaNumero,
     mesero,
     cliente: cliente || 'Cliente General',
     fechaHora: fechaStr,
-    items: (items || []).map(it => ({
-      cantidad: it.cantidad,
-      nombre: it.nombre_producto || it.nombre,
-      precioUnitario: it.precio_unitario || it.precio || 0,
-      totalLinea: (it.precio_unitario || it.precio || 0) * (it.cantidad || 1),
-      notas: it.notas || ''
-    })),
+    items: (items || []).map(it => {
+      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
+      const cant = Number(it.cantidad) || 1;
+      const tLinea = it.totalLinea !== undefined && it.totalLinea !== null ? Number(it.totalLinea) : (uPrice * cant);
+      return {
+        cantidad: cant,
+        nombre: it.nombre_producto || it.nombre || 'Producto',
+        precioUnitario: uPrice,
+        totalLinea: tLinea,
+        notas: it.notas || ''
+      };
+    }),
     subtotal: Math.round(subtotal || 0),
     descuentoHH: Math.round(descuentoHH || 0),
     servicio: Math.round(servicio || 0),
     iva: Math.round(iva || 0),
     total: Math.round(total || 0),
-    propinaSugerida10: Math.round((subtotal || total * 0.8) * 0.10),
-    propinaSugerida15: Math.round((subtotal || total * 0.8) * 0.15)
+    propina10: prop10,
+    propina15: prop15
   };
 
   return { raw, ticketVisual };
@@ -418,9 +428,9 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
 
   let raw = '';
-  raw += ESCPOS.INIT;
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.BOLD_ON + `*** COMPROBANTE DE PAGO PARCIAL ***\n` + ESCPOS.BOLD_OFF;
   raw += ESCPOS.DOUBLE_HEIGHT + `MESA: ${limpiarTextoTermica(mesaNumero)} - ${limpiarTextoTermica(personaNombre).toUpperCase()}\n` + ESCPOS.NORMAL;
   raw += `Orden: #${ordenId} | Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
@@ -560,25 +570,23 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   // Despacho directo: USB / Windows Spooler o TCP Red
   if (cfg.tipo === 'usb' || (!cfg.ip && process.platform === 'win32')) {
     const winPrinterName = cfg.windowsPrinter || cfg.nombre || 'POS-80-Series';
-    sendRawToWindowsPrinter(winPrinterName, ticketInfo.raw).then((resWin) => {
+    try {
+      const resWin = await sendRawToWindowsPrinter(winPrinterName, ticketInfo.raw);
       registro.estado = resWin.ok ? 'impreso' : 'simulado';
       registro.detalleConexion = resWin.mensaje || resWin.error || 'Enviado a Windows Spooler';
-      if (io) io.emit('ticket_impreso', registro);
-    }).catch((err) => {
+    } catch (err) {
       registro.estado = 'simulado';
-      registro.detalleConexion = 'Error USB: ' + err.message;
-      if (io) io.emit('ticket_impreso', registro);
-    });
+      registro.detalleConexion = 'Error USB: ' + (err.message || err);
+    }
   } else if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
-    encolarEnvioTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
+    try {
+      const resTCP = await encolarEnvioTCP(cfg.ip, cfg.puerto, ticketInfo.raw);
       registro.estado = resTCP.ok ? 'impreso' : 'simulado';
       registro.detalleConexion = resTCP.mensaje || 'Enviado correctamente por Red TCP';
-      if (io) io.emit('ticket_impreso', registro);
-    }).catch((err) => {
+    } catch (err) {
       registro.estado = 'simulado';
-      registro.detalleConexion = 'Error TCP: ' + err.message;
-      if (io) io.emit('ticket_impreso', registro);
-    });
+      registro.detalleConexion = 'Error TCP: ' + (err.message || err);
+    }
   } else {
     registro.estado = 'simulado';
     registro.detalleConexion = 'Simulacion virtual';

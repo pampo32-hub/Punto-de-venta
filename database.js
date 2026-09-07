@@ -19,13 +19,13 @@ if (process.env.DATABASE_URL) {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: isInternalRender ? false : { rejectUnauthorized: false },
-    max: 20,
+    max: 15,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000
   });
 
   pool.on('error', (err) => {
-    console.error('⚠️ Error inesperado en el pool de PostgreSQL:', err);
+    console.error('⚠️ Error inesperado en el pool de PostgreSQL:', err.message);
   });
 
   console.log('🐘 Conectado a base de datos central en la nube (Render PostgreSQL).');
@@ -46,7 +46,31 @@ if (process.env.DATABASE_URL) {
     // ALTER TABLE ADD COLUMN -> ADD COLUMN IF NOT EXISTS
     s = s.replace(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)/gi, 'ALTER TABLE $1 ADD COLUMN IF NOT EXISTS ');
 
-    // INSERT OR IGNORE -> ON CONFLICT DO NOTHING
+    // INSERT OR IGNORE INTO ConfigNegocio
+    if (/INSERT\s+OR\s+IGNORE\s+INTO\s+ConfigNegocio/i.test(s)) {
+      s = s.replace(/INSERT\s+OR\s+IGNORE\s+INTO\s+ConfigNegocio/gi, 'INSERT INTO ConfigNegocio');
+      if (!/ON\s+CONFLICT/i.test(s)) {
+        s += ' ON CONFLICT (clave) DO NOTHING';
+      }
+    }
+
+    // INSERT OR REPLACE INTO ConfigNegocio
+    if (/INSERT\s+OR\s+REPLACE\s+INTO\s+ConfigNegocio/i.test(s)) {
+      s = s.replace(/INSERT\s+OR\s+REPLACE\s+INTO\s+ConfigNegocio/gi, 'INSERT INTO ConfigNegocio');
+      if (!/ON\s+CONFLICT/i.test(s)) {
+        s += ' ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor';
+      }
+    }
+
+    // INSERT OR IGNORE INTO IdempotencyLog
+    if (/INSERT\s+OR\s+IGNORE\s+INTO\s+IdempotencyLog/i.test(s)) {
+      s = s.replace(/INSERT\s+OR\s+IGNORE\s+INTO\s+IdempotencyLog/gi, 'INSERT INTO IdempotencyLog');
+      if (!/ON\s+CONFLICT/i.test(s)) {
+        s += ' ON CONFLICT (idempotency_key) DO NOTHING';
+      }
+    }
+
+    // Generic INSERT OR IGNORE -> ON CONFLICT DO NOTHING
     if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(s)) {
       s = s.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
       if (!/ON\s+CONFLICT/i.test(s)) {
@@ -54,9 +78,12 @@ if (process.env.DATABASE_URL) {
       }
     }
 
-    // INSERT OR REPLACE -> ON CONFLICT DO NOTHING
+    // Generic INSERT OR REPLACE -> ON CONFLICT DO NOTHING
     if (/INSERT\s+OR\s+REPLACE\s+INTO/i.test(s)) {
       s = s.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'INSERT INTO');
+      if (!/ON\s+CONFLICT/i.test(s)) {
+        s += ' ON CONFLICT DO NOTHING';
+      }
     }
 
     // GROUP_CONCAT(x) -> STRING_AGG(x::text, ',')
@@ -71,6 +98,12 @@ if (process.env.DATABASE_URL) {
     return s;
   }
 
+  function normalizeParams(params) {
+    if (!params) return [];
+    if (!Array.isArray(params)) params = [params];
+    return params.map(p => (p === undefined ? null : p));
+  }
+
   db = {
     isPg: true,
     run(sql, params, cb) {
@@ -78,7 +111,7 @@ if (process.env.DATABASE_URL) {
         cb = params;
         params = [];
       }
-      params = params || [];
+      params = normalizeParams(params);
       const pgSql = convertSqlToPg(sql);
       if (!pgSql) {
         if (cb) setImmediate(() => cb.call({ lastID: 0, changes: 0 }, null));
@@ -121,7 +154,7 @@ if (process.env.DATABASE_URL) {
         cb = params;
         params = [];
       }
-      params = params || [];
+      params = normalizeParams(params);
       const pgSql = convertSqlToPg(sql);
       if (!pgSql) {
         if (cb) setImmediate(() => cb(null, null));
@@ -142,7 +175,7 @@ if (process.env.DATABASE_URL) {
         cb = params;
         params = [];
       }
-      params = params || [];
+      params = normalizeParams(params);
       const pgSql = convertSqlToPg(sql);
       if (!pgSql) {
         if (cb) setImmediate(() => cb(null, []));

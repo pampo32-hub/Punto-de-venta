@@ -158,18 +158,42 @@ db.serialize(() => {
   });
 });
 
-// Auto-desactivar HH cuando llega la hora de fin (revisa cada minuto)
+// Helper de zona horaria oficial: América/Costa Rica (UTC-6)
+function getInicioFinHoyCR() {
+  const ahora = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const fechaCR = formatter.format(ahora); // 'YYYY-MM-DD'
+  
+  const inicioHoy = new Date(`${fechaCR}T00:00:00-06:00`);
+  const finHoy = new Date(`${fechaCR}T23:59:59.999-06:00`);
+  const inicioAyer = new Date(inicioHoy.getTime() - 24 * 60 * 60 * 1000);
+  const finAyer = new Date(finHoy.getTime() - 24 * 60 * 60 * 1000);
+
+  return {
+    inicioHoyISO: inicioHoy.toISOString(),
+    finHoyISO: finHoy.toISOString(),
+    inicioAyerISO: inicioAyer.toISOString(),
+    finAyerISO: finAyer.toISOString(),
+    fechaCR
+  };
+}
+
+// Auto-desactivar HH cuando llega la hora de fin en Costa Rica (revisa cada minuto)
 setInterval(() => {
   if (process.env.NODE_ENV === 'test') return;
   if (!happyHourEstado.activo) return;
-  const ahora = new Date();
-  const [hFin, mFin] = happyHourEstado.horaFin.split(':').map(Number);
-  const finHoy = new Date();
-  finHoy.setHours(hFin, mFin, 0, 0);
-  if (ahora >= finHoy) {
+  
+  const ahoraCR = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Costa_Rica', hour12: false, hour: '2-digit', minute: '2-digit' });
+  const [hActual, mActual] = ahoraCR.split(':').map(Number);
+  const minutosActuales = (hActual || 0) * 60 + (mActual || 0);
+
+  const [hFin, mFin] = (happyHourEstado.horaFin || '19:00').split(':').map(Number);
+  const minutosFin = (hFin || 0) * 60 + (mFin || 0);
+
+  if (minutosActuales >= minutosFin) {
     happyHourEstado.activo = false;
     db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
-    console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado.');
+    console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado (Costa Rica).');
     io.emit('happy_hour_cambio', { activo: false, horaInicio: happyHourEstado.horaInicio, horaFin: happyHourEstado.horaFin });
   }
 }, 60 * 1000);
@@ -5235,13 +5259,13 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       const inicioMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1, 0, 0, 0, 0));
       desde = inicioMes.toISOString();
     } else if (desde.length === 10) {
-      desde = `${desde}T00:00:00.000Z`;
+      desde = new Date(`${desde}T00:00:00-06:00`).toISOString();
     }
 
     if (!hasta) {
       hasta = ahora.toISOString();
     } else if (hasta.length === 10) {
-      hasta = `${hasta}T23:59:59.999Z`;
+      hasta = new Date(`${hasta}T23:59:59.999-06:00`).toISOString();
     }
 
     let sqlVentas = `
@@ -5593,12 +5617,7 @@ app.post('/api/admin/auditoria/registrar', async (req, res) => {
 app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
   try {
     const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
-    const hoyInicio = new Date();
-    hoyInicio.setHours(0, 0, 0, 0);
-    const hoyISO = hoyInicio.toISOString();
-
-    const ayerInicio = new Date(hoyInicio.getTime() - 24 * 60 * 60 * 1000);
-    const ayerISO = ayerInicio.toISOString();
+    const { inicioHoyISO, inicioAyerISO, finHoyISO } = getInicioFinHoyCR();
 
     // 1. Ventas de Hoy
     const ventasHoyRow = await dbGet(`
@@ -5609,7 +5628,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [hoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId, negocioId]);
 
     // 2. Ventas de Ayer (para comparativa)
     const ventasAyerRow = await dbGet(`
@@ -5617,7 +5636,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND p.fecha_hora < ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [ayerISO, hoyISO, negocioId, negocioId]);
+    `, [inicioAyerISO, inicioHoyISO, negocioId, negocioId]);
 
     const totalVentasHoy = Number(ventasHoyRow ? ventasHoyRow.total_ventas : 0) || 0;
     const totalVentasAyer = Number(ventasAyerRow ? ventasAyerRow.total_ventas : 0) || 0;
@@ -5631,7 +5650,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       WHERE d.hora_listo IS NOT NULL AND d.creado_en >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [hoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId, negocioId]);
 
     let sumaMinutos = 0;
     let cantPlatosConTiempo = 0;
@@ -5660,24 +5679,31 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       LIMIT 5
     `, [negocioId, negocioId]);
 
-    // 5. Ventas por Hora (Horas Pico)
+    // 5. Ventas por Hora (Horas Pico - Zona Horaria Costa Rica America/Costa_Rica)
     const pagosHoras = await dbAll(`
-      SELECT SUBSTRING(p.fecha_hora, 12, 2) as hora, SUM(p.monto) as total
+      SELECT p.fecha_hora, p.monto
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-      GROUP BY SUBSTRING(p.fecha_hora, 12, 2)
-      ORDER BY hora ASC
-    `, [hoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId, negocioId]);
+
+    const horasMap = {};
+    for (const p of pagosHoras) {
+      if (!p.fecha_hora) continue;
+      const d = new Date(p.fecha_hora);
+      if (isNaN(d.getTime())) continue;
+      const horaCR = d.toLocaleTimeString('en-US', { timeZone: 'America/Costa_Rica', hour: '2-digit', hour12: false });
+      const hNum = parseInt(horaCR, 10);
+      horasMap[hNum] = (horasMap[hNum] || 0) + (Number(p.monto) || 0);
+    }
 
     // Mapear de 10:00 a 23:00 para gráfico continuo
     const ventasPorHora = [];
     for (let h = 10; h <= 23; h++) {
       const horaStr = String(h).padStart(2, '0');
-      const found = pagosHoras.find(p => p.hora === horaStr);
       ventasPorHora.push({
         hora: `${horaStr}:00`,
-        total: found ? Number(found.total) : 0
+        total: horasMap[h] || 0
       });
     }
 
@@ -5693,7 +5719,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       GROUP BY p.mesero
       ORDER BY ventas DESC
-    `, [hoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId, negocioId]);
 
     // 7. Alertas de Inventario Crítico
     const alertasStock = await dbAll(`
@@ -5728,9 +5754,7 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
 app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
   try {
     const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
-    const hoyInicio = new Date();
-    hoyInicio.setHours(0, 0, 0, 0);
-    const hoyISO = hoyInicio.toISOString();
+    const { inicioHoyISO } = getInicioFinHoyCR();
 
     const ordenesPagadas = await dbAll(`
       SELECT 
@@ -5759,7 +5783,7 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       GROUP BY o.id, m.numero, z.nombre
       ORDER BY fecha_cobro DESC, o.id DESC
-    `, [hoyISO, hoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, inicioHoyISO, negocioId, negocioId]);
 
     // Consultar detalles de items para cada orden
     const ordenesConItems = await Promise.all(ordenesPagadas.map(async (ord) => {
