@@ -1999,16 +1999,12 @@ window.cargarUsuariosPublicosLogin = async function() {
 window.cargarCredencialDemo = function(user, pass) {
   const u = document.getElementById('loginUsuario');
   const p = document.getElementById('loginPassword');
-  if (u) u.value = user;
-  if (p) p.value = pass;
-  window.ejecutarLogin();
-  if (p) {
-    p.value = pass || '';
-    if (pass) {
-      window.ejecutarLogin();
-    } else {
-      p.focus();
-    }
+  if (u) u.value = user || '';
+  if (p) p.value = pass || '';
+  if (pass) {
+    window.ejecutarLogin();
+  } else if (p) {
+    p.focus();
   }
 };
 

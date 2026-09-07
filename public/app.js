@@ -1999,16 +1999,12 @@ window.cargarUsuariosPublicosLogin = async function() {
 window.cargarCredencialDemo = function(user, pass) {
   const u = document.getElementById('loginUsuario');
   const p = document.getElementById('loginPassword');
-  if (u) u.value = user;
-  if (p) p.value = pass;
-  window.ejecutarLogin();
-  if (p) {
-    p.value = pass || '';
-    if (pass) {
-      window.ejecutarLogin();
-    } else {
-      p.focus();
-    }
+  if (u) u.value = user || '';
+  if (p) p.value = pass || '';
+  if (pass) {
+    window.ejecutarLogin();
+  } else if (p) {
+    p.focus();
   }
 };
 
@@ -6116,6 +6112,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     }
 
     if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina con éxito!' : '💾 ¡Comanda guardada con éxito!', 'success');
       mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina e impresa!' : '💾 ¡Comanda guardada con éxito!', 'success');
     }
   };
@@ -7232,6 +7229,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     }
 
     if (esLiquidacionFinal) {
+      alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Registro en Kárdex guardado exitosamente.\n• Mesa liberada.`);
       if (estado.mesaActiva) {
         if (window.PosOfflineDB) {
           window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
@@ -7338,6 +7336,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       renderComanda();
     }
 
+    alert(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado!\n\n• Monto cobrado: ${formatCRCSinDecimales(totalNum)}\n• Tiquete impreso.\n• Mesa permanece abierta con productos pendientes.`);
     // Disparar tiquete de cobro parcial individual
     const ticketParcial = {
       tipo: 'pago_parcial',

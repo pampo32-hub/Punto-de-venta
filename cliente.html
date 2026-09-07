@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mi Mesa | Consulta de Cuenta & Menú</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0284c7" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: #111827;
+      --primary: #0284c7;
+      --primary-glow: #38bdf8;
+      --accent: #ea580c;
+      --success: #10b981;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 80px;
+    }
+
+    /* HEADER */
+    .client-header {
+      background: #0f172a;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      object-fit: cover;
+      border: 1px solid #38bdf8;
+      background: #1e293b;
+    }
+
+    .brand-title h2 {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .brand-title small {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .table-pill {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.4);
+    }
+
+    /* DIÁLOGO / PREGUNTA INICIAL SI LA MESA ESTÁ ACTIVA */
+    .view-container {
+      max-width: 540px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 16px;
+    }
+
+    .prompt-choice-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px 18px;
+      text-align: center;
+      margin-top: 20px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+    }
+
+    .prompt-icon {
+      font-size: 2.5rem;
+      margin-bottom: 8px;
+    }
+
+    .prompt-choice-card h3 {
+      font-size: 1.3rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .prompt-choice-card p {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      margin-bottom: 24px;
+    }
+
+    .choice-buttons-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn-choice {
+      padding: 16px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 800;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s;
+    }
+
+    .btn-choice.cuenta {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-choice.menu {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #38bdf8;
+    }
+
+    .btn-choice:active {
+      transform: scale(0.98);
+    }
+
+    /* VISTA DE LA CUENTA DEL CLIENTE */
+    .cuenta-panel {
+      display: none;
+    }
+
+    .cuenta-panel.active {
+      display: block;
+    }
+
+    .cuenta-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    .cuenta-card-header {
+      background: #0f172a;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cuenta-card-header h3 {
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .cuenta-items-list {
+      padding: 12px 16px;
+    }
+
+    .cuenta-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 12px 0;
+      border-bottom: 1px dashed #1e293b;
+    }
+
+    .cuenta-item-row:last-child {
+      border-bottom: none;
+    }
+
+    .item-qty-name {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .item-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .item-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .item-total-price {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--primary-glow);
+    }
+
+    .cuenta-totals-box {
+      background: #0b1120;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .calc-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .calc-row.total-destacado {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #38bdf8;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+
+    .btn-pedir-cuenta-mesero {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #ea580c, #c2410c);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 16px;
+      box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-pedir-cuenta-mesero:active {
+      transform: scale(0.98);
+    }
+
+    .btn-pedir-cuenta-mesero:disabled,
+    .btn-pedir-cuenta-mesero.disabled {
+      background: #334155 !important;
+      color: #94a3b8 !important;
+      cursor: not-allowed !important;
+      box-shadow: none !important;
+      transform: none !important;
+      opacity: 0.65 !important;
+      filter: grayscale(0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    .btn-ver-menu-link {
+      display: block;
+      width: 100%;
+      text-align: center;
+      padding: 12px;
+      color: #38bdf8;
+      font-size: 0.88rem;
+      font-weight: 700;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .notificacion-aviso {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #34d399;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-top: 12px;
+      text-align: center;
+      display: none;
+    }
+
+    /* VISTA DE MENÚ DIGITAL */
+    .menu-panel {
+      display: none;
+      width: 100%;
+    }
+
+    .menu-panel.active {
+      display: block;
+    }
+
+    .menu-categories-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px 2px 14px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .menu-categories-chips::-webkit-scrollbar {
+      display: none;
+    }
+
+    .cat-pill-client {
+      padding: 8px 14px;
+      background: #111827;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 20px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .cat-pill-client:active {
+      transform: scale(0.96);
+    }
+
+    .cat-pill-client.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.4);
+    }
+
+    .menu-products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 380px) {
+      .menu-products-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .menu-card-img, .menu-card-no-img {
+        height: 100px !important;
+      }
+    }
+
+    .menu-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .menu-card-img {
+      width: 100%;
+      height: 125px;
+      object-fit: cover;
+      background: #1e293b;
+      display: block;
+    }
+
+    .menu-card-no-img {
+      width: 100%;
+      height: 125px;
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+    }
+
+    .menu-card-info {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .menu-card-name {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+
+    .menu-card-price {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #38bdf8;
+      margin-top: 6px;
+    }
+
+    /* BARRA FLOTANTE INFERIOR */
+    .bottom-sticky-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--border);
+      padding: 12px 18px;
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+      box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .bottom-sticky-bar.visible {
+      display: flex;
+    }
+
+    .sticky-cuenta-btn {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 0.88rem;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="client-header">
+    <div class="brand-group">
+      <img id="clienteLogo" class="brand-logo" src="https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=100" alt="Logo" />
+      <div class="brand-title">
+        <h2 id="clienteNegocioNombre">GastroBar Fuego & Brasas</h2>
+        <small id="clienteSlogan">Restaurante, Bar & Lounge</small>
+      </div>
+    </div>
+    <div class="table-pill" id="clienteMesaBadge">Mesa —</div>
+  </header>
+
+  <main class="view-container">
+
+    <!-- 1. PANTALLA DE OPCIÓN (¿QUÉ DESEAS VER: MENÚ O CUENTA?) -->
+    <div id="choicePromptPanel" class="prompt-choice-card" style="display:none;">
+      <div class="prompt-icon">🍸</div>
+      <h3>¡Hola! Tu mesa tiene una comanda activa</h3>
+      <p>Selecciona la opción que deseas consultar en este momento:</p>
+
+      <div class="choice-buttons-grid">
+        <button class="btn-choice cuenta" onclick="mostrarSeccion('cuenta')">
+          <span>🧾 Ver Mi Cuenta / Consumos</span>
+          <strong id="choiceTotalPreview">₡ 0</strong>
+        </button>
+        <button class="btn-choice menu" onclick="mostrarSeccion('menu')">
+          <span>📖 Ver Menú Digital con Fotos</span>
+          <span>➔</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. VISTA DETALLADA DE LA CUENTA -->
+    <div id="cuentaPanel" class="cuenta-panel">
+      <div class="cuenta-card">
+        <div class="cuenta-card-header">
+          <div>
+            <h3>🧾 Mi Cuenta Actual</h3>
+            <small id="cuentaOrdenNumero">Orden #ORD-0000</small>
+          </div>
+          <span class="table-pill" style="background:#10b981;">En Vivo</span>
+        </div>
+
+        <div class="cuenta-items-list" id="cuentaItemsList">
+          <!-- Ítems pedidos -->
+        </div>
+
+        <div class="cuenta-totals-box">
+          <div class="calc-row"><span>Subtotal Consumos:</span><span id="cuentaSubtotal">₡ 0</span></div>
+          <div class="calc-row"><span>Servicio Salón (10%):</span><span id="cuentaServicio">₡ 0</span></div>
+          <div class="calc-row"><span>I.V.A (13%):</span><span id="cuentaIva">₡ 0</span></div>
+          <div class="calc-row total-destacado">
+            <span>TOTAL A PAGAR:</span>
+            <span id="cuentaTotalPagar">₡ 0</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-pedir-cuenta-mesero" id="btnPedirCuenta" onclick="solicitarCuentaAlSalonero()">
+        🙋 Solicitar la Cuenta al Mesero / Pedir Factura
+      </button>
+
+      <div class="notificacion-aviso" id="notifCuentaEnviada">
+        ✅ <strong>¡Salonero notificado!</strong> El personal se acerca a tu mesa con el datáfono o tu factura.
+      </div>
+
+      <button class="btn-ver-menu-link" onclick="mostrarSeccion('menu')">
+        📖 Ver Carta / Menú Gastronómico
+      </button>
+    </div>
+
+    <!-- 3. VISTA DEL MENÚ DIGITAL -->
+    <div id="menuPanel" class="menu-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:12px;">
+        <h3 style="font-size:1.15rem; font-weight:800;">🍽️ Nuestra Carta Digital</h3>
+        <button id="btnVolverACuentaTop" class="btn-ver-menu-link" style="width:auto; margin:0; display:none;" onclick="mostrarSeccion('cuenta')">
+          🧾 Ver Mi Cuenta
+        </button>
+      </div>
+
+      <div class="menu-categories-chips" id="clientCategoryChips"></div>
+      <div class="menu-products-grid" id="clientProductsGrid"></div>
+    </div>
+
+  </main>
+
+  <!-- BARRA FLOTANTE INFERIOR -->
+  <div class="bottom-sticky-bar" id="bottomStickyBar">
+    <div>
+      <small style="color:#94a3b8; display:block;">Total de tu cuenta:</small>
+      <strong style="color:#38bdf8; font-size:1rem;" id="stickyTotalVal">₡ 0</strong>
+    </div>
+    <button class="sticky-cuenta-btn" onclick="mostrarSeccion('cuenta')">
+      🧾 Ver Mi Cuenta
+    </button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/offline-db.js"></script>
+  <script src="/offline-sync.js"></script>
+  <script>
+    function formatCRC(num) {
+      return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function obtenerMesaId() {
+      const pathParts = window.location.pathname.split('/');
+      const mIdx = pathParts.indexOf('m');
+      if (mIdx !== -1 && pathParts[mIdx + 1]) {
+        return pathParts[mIdx + 1];
+      }
+      const params = new URLSearchParams(window.location.search);
+      return params.get('mesa') || '1';
+    }
+
+    const mesaId = obtenerMesaId();
+    let datosMesa = null;
+    let menuProductos = [];
+    let menuCategorias = [];
+
+    async function cargarDatosCliente() {
+      let resMesaOk = false;
+      let resMenuOk = false;
+
+      try {
+        const [resMesa, resMenu] = await Promise.all([
+          fetch('/api/cliente/mesa/' + mesaId).catch(() => null),
+          fetch('/api/menu').catch(() => null)
+        ]);
+
+        if (resMesa && resMesa.ok) {
+          datosMesa = await resMesa.json();
+          resMesaOk = true;
+          if (datosMesa && datosMesa.orden && window.PosOfflineDB) {
+            window.PosOfflineDB.guardarOrdenMesa(mesaId, datosMesa.orden, datosMesa.items).catch(() => {});
+          }
+        }
+
+        if (resMenu && resMenu.ok) {
+          const dataMenu = await resMenu.json();
+          menuCategorias = dataMenu.categorias || [];
+          menuProductos = dataMenu.productos || [];
+          resMenuOk = true;
+          if (window.PosOfflineDB) {
+            window.PosOfflineDB.guardarCatalogo({ categorias: menuCategorias, productos: menuProductos }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('[Cliente] Error en fetch:', e);
+      }
+
+      // Si no pudimos cargar el menú desde la red, cargarlo desde el almacenamiento local
+      if (!resMenuOk && window.PosOfflineDB) {
+        try {
+          const cat = await window.PosOfflineDB.obtenerCatalogo();
+          if (cat) {
+            menuCategorias = cat.categorias || [];
+            menuProductos = cat.productos || [];
+          }
+        } catch (eCat) {}
+      }
+
+      // Si no pudimos cargar la mesa o sus órdenes desde la red, cargar desde almacenamiento local
+      if (!resMesaOk && window.PosOfflineDB) {
+        try {
+          const localOrd = await window.PosOfflineDB.obtenerComandaLocalMesa(mesaId);
+          if (localOrd && (localOrd.orden || (localOrd.items && localOrd.items.length > 0))) {
+            datosMesa = {
+              mesa: { id: Number(mesaId), numero: mesaId, estado: localOrd.orden?.estado || 'esperando' },
+              orden: localOrd.orden,
+              items: localOrd.items,
+              negocio: { nombre: 'GastroBar Pro', slogan: 'Restaurante & Bar' }
+            };
+          }
+        } catch (eOrd) {}
+      }
+
+      if (!datosMesa) {
+        datosMesa = {
+          mesa: { id: Number(mesaId), numero: mesaId, estado: 'libre' },
+          orden: null,
+          items: [],
+          negocio: { nombre: 'GastroBar Pro', slogan: 'Restaurante & Bar' }
+        };
+      }
+
+      renderizarCabecera();
+      renderizarMenu();
+
+      // Si la mesa tiene consumos activos
+      if (datosMesa.orden && datosMesa.items && datosMesa.items.length > 0) {
+        renderizarCuenta();
+        // Preguntarle qué quiere ver: Menú o Cuenta
+        document.getElementById('choicePromptPanel').style.display = 'block';
+        document.getElementById('choiceTotalPreview').textContent = formatCRC(datosMesa.orden.total);
+        document.getElementById('btnVolverACuentaTop').style.display = 'block';
+        document.getElementById('bottomStickyBar').classList.add('visible');
+        document.getElementById('stickyTotalVal').textContent = formatCRC(datosMesa.orden.total);
+      } else {
+        // Si la mesa está libre, ir directo al menú
+        document.getElementById('choicePromptPanel').style.display = 'none';
+        document.getElementById('btnVolverACuentaTop').style.display = 'none';
+        document.getElementById('bottomStickyBar').classList.remove('visible');
+        mostrarSeccion('menu');
+      }
+
+      // Sincronizar estado del temporizador de 2 minutos para solicitar mesero
+      const cuentaAbierta = Boolean(datosMesa.orden && datosMesa.mesa && datosMesa.mesa.estado !== 'libre');
+      if (cuentaAbierta) {
+        let tsSolicitud = null;
+        try {
+          const lsVal = localStorage.getItem('solicitar_mesero_ts_' + mesaId);
+          if (lsVal) tsSolicitud = Number(lsVal);
+        } catch (_) {}
+
+        if (!tsSolicitud && datosMesa.mesa && datosMesa.mesa.hora_pidio_cuenta && datosMesa.mesa.pidio_cuenta_qr) {
+          tsSolicitud = new Date(datosMesa.mesa.hora_pidio_cuenta).getTime();
+        }
+
+        if (tsSolicitud) {
+          const transcurrido = Math.floor((Date.now() - tsSolicitud) / 1000);
+          const restante = 120 - transcurrido;
+          if (restante > 0) {
+            iniciarTemporizadorSolicitarMesero(restante);
+          } else {
+            const btn = document.getElementById('btnPedirCuenta');
+            if (btn) {
+              btn.disabled = false;
+              btn.classList.remove('disabled');
+              btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero / Pedir Factura';
+            }
+          }
+        }
+      } else {
+        if (_cuentaTimerInterval) {
+          clearInterval(_cuentaTimerInterval);
+          _cuentaTimerInterval = null;
+        }
+        try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+      }
+    }
+
+    function renderizarCabecera() {
+      if (!datosMesa) return;
+      document.getElementById('clienteMesaBadge').textContent = datosMesa.mesa.numero;
+      if (datosMesa.negocio) {
+        document.getElementById('clienteNegocioNombre').textContent = datosMesa.negocio.nombre;
+        document.getElementById('clienteSlogan').textContent = datosMesa.negocio.slogan || 'Restaurante & Bar';
+        if (datosMesa.negocio.logo_url) {
+          document.getElementById('clienteLogo').src = datosMesa.negocio.logo_url;
+        }
+      }
+    }
+
+    function renderizarCuenta() {
+      const itemsList = document.getElementById('cuentaItemsList');
+      const numOrden = (datosMesa.orden && datosMesa.orden.numero_orden) 
+        ? ('Orden #' + datosMesa.orden.numero_orden) 
+        : (datosMesa.orden?.offline ? 'Orden (Local Offline)' : 'Orden Activa');
+      document.getElementById('cuentaOrdenNumero').textContent = numOrden;
+
+      itemsList.innerHTML = (datosMesa.items || []).map(it => {
+        const origenBadge = (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(datosMesa.mesa.numero))
+          ? `<span style="display:inline-block; background:rgba(56,189,248,0.25); color:#38bdf8; font-size:0.75rem; font-weight:800; padding:2px 6px; border-radius:6px; margin-right:5px;">[${it.origen_mesa_numero.toString().toLowerCase().includes('mesa') ? it.origen_mesa_numero : 'Mesa ' + it.origen_mesa_numero}]</span>`
+          : '';
+
+        const nombre = it.nombre_producto || it.nombre || 'Producto';
+        const precioUnit = Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0;
+        const cant = Number(it.cantidad) || 1;
+        const offlineBadge = it.offlinePendiente 
+          ? `<span style="display:inline-block; background:rgba(245,158,11,0.15); color:#f59e0b; font-size:0.75rem; font-weight:800; padding:2px 6px; border-radius:6px; margin-left:5px;">🟡 En preparación</span>`
+          : '';
+
+        return `
+          <div class="cuenta-item-row">
+            <div class="item-qty-name">
+              <span class="item-title">${cant}x ${origenBadge}${nombre} ${offlineBadge}</span>
+              <span class="item-sub">${formatCRC(precioUnit)} c/u ${it.notas ? '• ' + it.notas : ''}</span>
+            </div>
+            <span class="item-total-price">${formatCRC(precioUnit * cant)}</span>
+          </div>
+        `;
+      }).join('');
+
+      const tot = datosMesa.orden ? (datosMesa.orden.total || (datosMesa.items || []).reduce((acc, it) => acc + (Number(it.precio_unitario || it.precio || 0) * (Number(it.cantidad) || 1)), 0)) : 0;
+      const sub = datosMesa.orden && datosMesa.orden.subtotal ? datosMesa.orden.subtotal : Math.round(tot / 1.23);
+      const serv = datosMesa.orden && (datosMesa.orden.servicio || datosMesa.orden.servicio_10) ? (datosMesa.orden.servicio || datosMesa.orden.servicio_10) : Math.round(sub * 0.10);
+      const iva = datosMesa.orden && (datosMesa.orden.iva || datosMesa.orden.iva_13) ? (datosMesa.orden.iva || datosMesa.orden.iva_13) : (tot - sub - serv);
+      const total = tot;
+
+      document.getElementById('cuentaSubtotal').textContent = formatCRC(sub);
+      document.getElementById('cuentaServicio').textContent = formatCRC(serv);
+      document.getElementById('cuentaIva').textContent = formatCRC(iva);
+      document.getElementById('cuentaTotalPagar').textContent = formatCRC(total);
+    }
+
+    function renderizarMenu(catId = 'todos') {
+      const chips = document.getElementById('clientCategoryChips');
+      chips.innerHTML = `
+        <button class="cat-pill-client ${catId === 'todos' ? 'active' : ''}" onclick="filtrarMenuCliente('todos')">🍽️ Todos</button>
+        ${menuCategorias.map(c => `
+          <button class="cat-pill-client ${catId === c.id ? 'active' : ''}" onclick="filtrarMenuCliente(${c.id})">
+            ${c.icono || '🍽️'} ${c.nombre}
+          </button>
+        `).join('')}
+      `;
+
+      const prods = catId === 'todos' ? menuProductos : menuProductos.filter(p => p.categoria_id === catId);
+      const grid = document.getElementById('clientProductsGrid');
+
+      grid.innerHTML = prods.map(p => `
+        <div class="menu-card">
+          ${p.imagen_url ? `<img class="menu-card-img" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />` : '<div class="menu-card-no-img">🍽️</div>'}
+          <div class="menu-card-info">
+            <span class="menu-card-name">${p.nombre}</span>
+            <span class="menu-card-price">${formatCRC(p.precio)}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.filtrarMenuCliente = function(catId) {
+      renderizarMenu(catId);
+    };
+
+    window.mostrarSeccion = function(seccion) {
+      document.getElementById('choicePromptPanel').style.display = 'none';
+      if (seccion === 'cuenta') {
+        document.getElementById('cuentaPanel').classList.add('active');
+        document.getElementById('menuPanel').classList.remove('active');
+        document.getElementById('bottomStickyBar').classList.remove('visible');
+      } else {
+        document.getElementById('cuentaPanel').classList.remove('active');
+        document.getElementById('menuPanel').classList.add('active');
+        if (datosMesa && datosMesa.orden && datosMesa.items && datosMesa.items.length > 0) {
+          document.getElementById('bottomStickyBar').classList.add('visible');
+        }
+      }
+    };
+
+    let _cuentaTimerInterval = null;
+
+    function iniciarTemporizadorSolicitarMesero(segundosRestantes) {
+      if (_cuentaTimerInterval) {
+        clearInterval(_cuentaTimerInterval);
+        _cuentaTimerInterval = null;
+      }
+
+      const btn = document.getElementById('btnPedirCuenta');
+      const notif = document.getElementById('notifCuentaEnviada');
+      if (!btn) return;
+
+      btn.disabled = true;
+      btn.classList.add('disabled');
+      if (notif) {
+        notif.style.display = 'block';
+        notif.innerHTML = '✅ <strong>¡Salonero notificado!</strong> El personal se acerca a tu mesa con el datáfono o tu factura.';
+      }
+
+      let segs = Math.max(0, Math.round(segundosRestantes));
+
+      function tick() {
+        if (segs <= 0) {
+          clearInterval(_cuentaTimerInterval);
+          _cuentaTimerInterval = null;
+
+          // Si la cuenta sigue sin cerrarse / cobrarse, se vuelve a activar el botón
+          const cuentaSigueAbierta = Boolean(
+            datosMesa && datosMesa.orden && datosMesa.mesa && datosMesa.mesa.estado !== 'libre'
+          );
+
+          if (cuentaSigueAbierta) {
+            btn.disabled = false;
+            btn.classList.remove('disabled');
+            btn.innerHTML = '🙋 Solicitar la Cuenta al Mesero / Pedir Factura';
+            btn.style.background = '';
+            if (notif) {
+              notif.innerHTML = '🔔 ¿Aún no llega el personal? Puedes volver a solicitar la cuenta pulsando el botón.';
+            }
+            try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+          } else {
+            btn.disabled = true;
+            btn.classList.add('disabled');
+            btn.innerHTML = '✅ Cuenta Cerrada';
+            if (notif) {
+              notif.innerHTML = '✅ La cuenta de tu mesa ya fue cancelada. ¡Muchas gracias por tu visita!';
+            }
+            try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+          }
+          return;
+        }
+
+        const mins = Math.floor(segs / 60);
+        const rem = (segs % 60).toString().padStart(2, '0');
+        btn.innerHTML = `⏳ Mesero Solicitado (Reintentar en ${mins}:${rem})`;
+        segs--;
+      }
+
+      tick();
+      _cuentaTimerInterval = setInterval(tick, 1000);
+    }
+
+    window.solicitarCuentaAlSalonero = async function() {
+      const btn = document.getElementById('btnPedirCuenta');
+      if (btn && btn.disabled) return;
+
+      const ahora = Date.now();
+      try { localStorage.setItem('solicitar_mesero_ts_' + mesaId, ahora.toString()); } catch (_) {}
+
+      // Desactivar inmediatamente y comenzar la cuenta regresiva de 2 minutos
+      iniciarTemporizadorSolicitarMesero(120);
+
+      if (window.PosOfflineSync) {
+        await window.PosOfflineSync.ejecutarConRespaldo({
+          tipo: 'PEDIR_CUENTA',
+          endpoint: '/api/cliente/mesa/' + mesaId + '/pedir-cuenta',
+          metodo: 'POST',
+          payload: { mesaId: Number(mesaId) },
+          descripcion: `Solicitar cuenta Mesa ${mesaId}`
+        });
+      } else {
+        try {
+          await fetch('/api/cliente/mesa/' + mesaId + '/pedir-cuenta', { method: 'POST' });
+        } catch (e) {
+          console.error('Error enviando solicitud de mesero:', e);
+        }
+      }
+    };
+
+    try {
+      const socket = io();
+      socket.on('nueva_comanda', (d) => {
+        if (d && d.mesaId === Number(mesaId)) cargarDatosCliente();
+      });
+      socket.on('mesa_actualizada', (d) => {
+        if (d && (d.mesaId === Number(mesaId) || d.id === Number(mesaId))) {
+          if (d.estado === 'libre' || d.total === 0) {
+            if (_cuentaTimerInterval) {
+              clearInterval(_cuentaTimerInterval);
+              _cuentaTimerInterval = null;
+            }
+            try { localStorage.removeItem('solicitar_mesero_ts_' + mesaId); } catch (_) {}
+          }
+        }
+        cargarDatosCliente();
+      });
+    } catch (e) {}
+
+    document.addEventListener('DOMContentLoaded', cargarDatosCliente);
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
