@@ -1,8 +1,155 @@
-const sqlite3 = require('sqlite3').verbose();
+require('dotenv').config();
 const path = require('path');
 
-const dbPath = process.env.POS_DB_PATH || path.join(__dirname, 'pos.db');
-const db = new sqlite3.Database(dbPath);
+let db;
+
+if (process.env.DATABASE_URL) {
+  const { Pool } = require('pg');
+  const isInternalRender = process.env.DATABASE_URL.includes('@dpg-') && !process.env.DATABASE_URL.includes('.render.com');
+  
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: isInternalRender ? false : { rejectUnauthorized: false },
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
+  });
+
+  console.log('🐘 Conectado a base de datos central en la nube (Render PostgreSQL).');
+
+  function convertSqlToPg(sql) {
+    if (!sql || typeof sql !== 'string') return sql;
+    let idx = 0;
+    let s = sql.replace(/\?/g, () => `$${++idx}`);
+    
+    // SQLite PRAGMA
+    if (/^\s*PRAGMA/i.test(s)) {
+      return null;
+    }
+
+    // Auto-increment primary key
+    s = s.replace(/INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT/gi, 'BIGSERIAL PRIMARY KEY');
+
+    // ALTER TABLE ADD COLUMN -> ADD COLUMN IF NOT EXISTS
+    s = s.replace(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)/gi, 'ALTER TABLE $1 ADD COLUMN IF NOT EXISTS ');
+
+    // INSERT OR IGNORE -> ON CONFLICT DO NOTHING
+    if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(s)) {
+      s = s.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
+      if (!/ON\s+CONFLICT/i.test(s)) {
+        s += ' ON CONFLICT DO NOTHING';
+      }
+    }
+
+    // INSERT OR REPLACE -> ON CONFLICT DO NOTHING
+    if (/INSERT\s+OR\s+REPLACE\s+INTO/i.test(s)) {
+      s = s.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'INSERT INTO');
+    }
+
+    return s;
+  }
+
+  db = {
+    isPg: true,
+    run(sql, params, cb) {
+      if (typeof params === 'function') {
+        cb = params;
+        params = [];
+      }
+      params = params || [];
+      const pgSql = convertSqlToPg(sql);
+      if (!pgSql) {
+        if (cb) setImmediate(() => cb.call({ lastID: 0, changes: 0 }, null));
+        return;
+      }
+
+      let queryToRun = pgSql;
+      const isInsert = /^\s*INSERT\s+INTO/i.test(pgSql);
+      const hasReturning = /RETURNING/i.test(pgSql);
+      if (isInsert && !hasReturning) {
+        queryToRun += ' RETURNING id';
+      }
+
+      pool.query(queryToRun, params)
+        .then(res => {
+          const context = {
+            lastID: (res.rows && res.rows[0] && res.rows[0].id) ? Number(res.rows[0].id) : 0,
+            changes: res.rowCount || 0
+          };
+          if (cb) cb.call(context, null);
+        })
+        .catch(err => {
+          if (isInsert && !hasReturning) {
+            pool.query(pgSql, params)
+              .then(resRetry => {
+                const context = { lastID: 0, changes: resRetry.rowCount || 0 };
+                if (cb) cb.call(context, null);
+              })
+              .catch(errRetry => {
+                if (cb) cb(errRetry);
+              });
+            return;
+          }
+          if (cb) cb(err);
+        });
+    },
+
+    get(sql, params, cb) {
+      if (typeof params === 'function') {
+        cb = params;
+        params = [];
+      }
+      params = params || [];
+      const pgSql = convertSqlToPg(sql);
+      if (!pgSql) {
+        if (cb) setImmediate(() => cb(null, null));
+        return;
+      }
+
+      pool.query(pgSql, params)
+        .then(res => {
+          if (cb) cb(null, res.rows[0] || null);
+        })
+        .catch(err => {
+          if (cb) cb(err);
+        });
+    },
+
+    all(sql, params, cb) {
+      if (typeof params === 'function') {
+        cb = params;
+        params = [];
+      }
+      params = params || [];
+      const pgSql = convertSqlToPg(sql);
+      if (!pgSql) {
+        if (cb) setImmediate(() => cb(null, []));
+        return;
+      }
+
+      pool.query(pgSql, params)
+        .then(res => {
+          if (cb) cb(null, res.rows || []);
+        })
+        .catch(err => {
+          if (cb) cb(err);
+        });
+    },
+
+    serialize(cb) {
+      if (cb) cb();
+    },
+
+    close(cb) {
+      pool.end().then(() => { if (cb) cb(null); }).catch(e => { if (cb) cb(e); });
+    }
+  };
+} else {
+  const sqlite3 = require('sqlite3').verbose();
+  const dbPath = process.env.POS_DB_PATH || path.join(__dirname, 'pos.db');
+  db = new sqlite3.Database(dbPath);
+  console.log('📁 Conectado a base de datos local SQLite (pos.db).');
+}
 
 function initDb() {
   db.serialize(() => {
