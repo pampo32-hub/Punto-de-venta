@@ -324,7 +324,7 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
 function enviarAPuertoTCP(ip, puerto, rawData) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
-    socket.setTimeout(1800);
+    socket.setTimeout(5000);
 
     const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
@@ -349,6 +349,26 @@ function enviarAPuertoTCP(ip, puerto, rawData) {
       resolve({ ok: false, simulado: true, error: err.message, mensaje: `Simulación completada en buffer (Impresora física no detectada en ${ip}:${puerto})` });
     });
   });
+}
+
+// Cola de impresión secuencial (FIFO) para evitar colisiones cuando se envían múltiples tickets a la misma IP
+const colasImpresion = new Map();
+
+function encolarEnvioTCP(ip, puerto, rawData) {
+  const clave = `${ip}:${puerto}`;
+  const colaActual = colasImpresion.get(clave) || Promise.resolve();
+
+  const siguiente = colaActual
+    .catch(() => {})
+    .then(async () => {
+      const res = await enviarAPuertoTCP(ip, puerto, rawData);
+      // Breve pausa entre tickets para permitir el corte de papel y vaciado del buffer de la impresora
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return res;
+    });
+
+  colasImpresion.set(clave, siguiente);
+  return siguiente;
 }
 
 /**
@@ -376,9 +396,9 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   historialImpresiones.unshift(registro);
   if (historialImpresiones.length > MAX_HISTORIAL) historialImpresiones.pop();
 
-  // Despacho TCP asíncrono para respuesta HTTP instantánea
+  // Despacho TCP asíncrono y secuencial para evitar saturación de socket en la impresora térmica
   if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
-    enviarAPuertoTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
+    encolarEnvioTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
       registro.estado = resTCP.ok ? 'impreso' : 'simulado';
       registro.detalleConexion = resTCP.mensaje || 'Enviado correctamente';
       if (io) io.emit('ticket_impreso', registro);
