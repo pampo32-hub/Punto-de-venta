@@ -12272,6 +12272,8 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <strong>${escapeHtml(ticketData.cliente || 'Cliente General')}</strong>
         </div>
         <div class="receipt-meta-row">
+      
+... [truncated for diff preview]
           <span>Fecha/Hora:</span>
           <span>${ticketData.fechaHora}</span>
         </div>

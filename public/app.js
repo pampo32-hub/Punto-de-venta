@@ -12263,6 +12263,8 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
 
       <div class="receipt-meta-grid">
         <div class="receipt-meta-row">
+         
+... [truncated for diff preview]
           <span>Factura / Orden:</span>
           <strong>#${ticketData.numeroOrden || ticketData.ordenId}</strong>
         </div>
