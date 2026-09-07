@@ -5622,31 +5622,47 @@ body.is-admin .admin-only-tab {
     background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
   }
   .modal-backdrop#modalVisorTicket .visor-ticket-dialog {
     max-width: 100% !important;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
   }
+  /* Ocultar únicamente los botones y la barra superior del modal */
+  .modal-backdrop#modalVisorTicket .visor-ticket-toolbar,
   .modal-backdrop#modalVisorTicket .dialog-header,
   .modal-backdrop#modalVisorTicket button,
-  .modal-backdrop#modalVisorTicket [style*="justify-content:space-between"] {
+  .modal-backdrop#modalVisorTicket .btn-icon-close {
     display: none !important;
+    visibility: hidden !important;
   }
   .receipt-paper-80mm-wrapper {
     overflow: visible !important;
     max-height: none !important;
     padding: 0 !important;
     margin: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
   }
   .receipt-paper-80mm {
     visibility: visible !important;
+    display: block !important;
     box-shadow: none !important;
     border-radius: 0 !important;
+    border: none !important;
     width: 80mm !important;
+    max-width: 80mm !important;
     margin: 0 auto !important;
     padding: 2mm 3mm !important;
     color: #000000 !important;
+    background: #ffffff !important;
     font-weight: 900 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -5658,14 +5674,31 @@ body.is-admin .admin-only-tab {
   .receipt-paper-80mm::after {
     display: none !important;
   }
-  .receipt-paper-80mm * {
+  .receipt-paper-80mm,
+  .receipt-paper-80mm *,
+  .receipt-paper-80mm div,
+  .receipt-paper-80mm span,
+  .receipt-paper-80mm strong,
+  .receipt-paper-80mm small,
+  .receipt-paper-80mm table,
+  .receipt-paper-80mm tr,
+  .receipt-paper-80mm td,
+  .receipt-paper-80mm th {
     visibility: visible !important;
     color: #000000 !important;
     font-weight: 800 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     text-shadow: none !important;
-    -webkit-text-stroke: 0.2px #000000 !important;
+  }
+  .receipt-item-row,
+  .receipt-col-header,
+  .receipt-calc-line,
+  .receipt-meta-row,
+  .receipt-paper-80mm [style*="display:flex"],
+  .receipt-paper-80mm [style*="justify-content:space-between"] {
+    display: flex !important;
+    visibility: visible !important;
   }
   @page {
     size: 80mm auto;

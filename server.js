@@ -2847,11 +2847,12 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
         destino: 'cocina',
         fechaHora: ahora
       });
-      ticketCocina = await printerService.procesarImpresion({
+      printerService.procesarImpresion({
         destinoImpresora: 'cocina',
         ticketInfo: tInfoCocina,
         io
-      });
+      }).catch(err => console.error('Error al despachar ticket cocina:', err.message));
+      ticketCocina = tInfoCocina.ticketVisual;
     }
 
     if (itemsBarra.length > 0) {
@@ -2864,11 +2865,12 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
         destino: 'barra',
         fechaHora: ahora
       });
-      ticketBarra = await printerService.procesarImpresion({
+      printerService.procesarImpresion({
         destinoImpresora: 'barra',
         ticketInfo: tInfoBarra,
         io
-      });
+      }).catch(err => console.error('Error al despachar ticket barra:', err.message));
+      ticketBarra = tInfoBarra.ticketVisual;
     }
   }
 
@@ -3433,11 +3435,11 @@ async function procesarCobroOrden(ordenId, {
         pagada: true,
         fechaHora: ahora
       });
-      await printerService.procesarImpresion({
+      printerService.procesarImpresion({
         destinoImpresora: 'cocina',
         ticketInfo: tInfoCocina,
         io
-      });
+      }).catch(err => console.error('Error al despachar comanda cocina:', err.message));
 
       // 2. Notificar a KDS en vivo
       io.emit('nueva_comanda', {
@@ -3479,11 +3481,11 @@ async function procesarCobroOrden(ordenId, {
         pagada: true,
         fechaHora: ahora
       });
-      await printerService.procesarImpresion({
+      printerService.procesarImpresion({
         destinoImpresora: 'barra',
         ticketInfo: tInfoBarra,
         io
-      });
+      }).catch(err => console.error('Error al despachar comanda barra:', err.message));
     }
   } else if (debeEnviarCocina) {
     // Si no habían items nuevos pero debeEnviarCocina es true, buscar platillos en DetalleOrden para despachar
@@ -3508,11 +3510,11 @@ async function procesarCobroOrden(ordenId, {
         pagada: true,
         fechaHora: ahora
       });
-      await printerService.procesarImpresion({
+      printerService.procesarImpresion({
         destinoImpresora: 'cocina',
         ticketInfo: tInfoCocina,
         io
-      });
+      }).catch(err => console.error('Error al despachar comanda cocina:', err.message));
 
       io.emit('nueva_comanda', {
         mesaId: orden.mesa_id,
@@ -3578,11 +3580,11 @@ async function procesarCobroOrden(ordenId, {
       fechaHora: ahora
     });
 
-    ticketGenerado = await printerService.procesarImpresion({
+    printerService.procesarImpresion({
       destinoImpresora: 'caja',
       ticketInfo: tInfoLiquidacion,
       io
-    });
+    }).catch(err => console.error('Error al despachar ticket de liquidación:', err.message));
 
     if (orden.mesa_id) {
       await dbRun(
@@ -3611,7 +3613,7 @@ async function procesarCobroOrden(ordenId, {
       es_parcial: false,
       total: orden.total,
       descuentoHH: orden.descuento_happy_hour,
-      ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
+      ticket: tInfoLiquidacion.ticketVisual
     };
   } else {
     // PAGO PARCIAL
@@ -3650,21 +3652,23 @@ async function procesarCobroOrden(ordenId, {
       "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'",
       [ordenId]
     );
-    const totalActivoBruto = itemsActivos.reduce((acc, it) => acc + (it.precio_unitario * it.cantidad), 0);
-    const nuevoTotal = totalActivoBruto;
-    const nuevoSubtotal = Math.round(nuevoTotal / 1.23);
-    const servicio10 = Math.round(nuevoSubtotal * 0.10);
-    const iva13 = nuevoTotal - nuevoSubtotal - servicio10;
+
+    let nuevoSubtotal = 0;
+    for (const it of itemsActivos) {
+      nuevoSubtotal += Number(it.subtotal) || 0;
+    }
+
+    const nuevoIva = Math.round(nuevoSubtotal * 0.13);
+    const nuevoServicio = Math.round(nuevoSubtotal * 0.10);
+    const nuevoTotal = nuevoSubtotal + nuevoIva + nuevoServicio;
 
     await dbRun(
-      "UPDATE Ordenes SET subtotal = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-      [nuevoSubtotal, servicio10, iva13, nuevoTotal, ordenId]
+      'UPDATE Ordenes SET subtotal = ?, iva_13 = ?, servicio_10 = ?, total = ? WHERE id = ?',
+      [nuevoSubtotal, nuevoIva, nuevoServicio, nuevoTotal, ordenId]
     );
 
-    // Generar ticket térmico de pago parcial
-    const totalParcial = (items_pagados || []).reduce((acc, it) => acc + ((it.precio || 0) * (it.cantidad || 1)), 0);
-    const subParcial = Math.round(totalParcial / 1.23);
-    const impParcial = totalParcial - subParcial;
+    const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
+    const impParcial = Math.round(subParcial * 0.23);
 
     const tInfoParcial = printerService.generarTicketPagoParcial({
       negocio,
@@ -3681,11 +3685,11 @@ async function procesarCobroOrden(ordenId, {
       fechaHora: ahora
     });
 
-    ticketGenerado = await printerService.procesarImpresion({
+    printerService.procesarImpresion({
       destinoImpresora: 'caja',
       ticketInfo: tInfoParcial,
       io
-    });
+    }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
       io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
@@ -3699,7 +3703,7 @@ async function procesarCobroOrden(ordenId, {
       ordenId,
       es_parcial: true,
       saldo_restante: nuevoTotal,
-      ticket: ticketGenerado ? ticketGenerado.ticketVisual : null
+      ticket: tInfoParcial.ticketVisual
     };
   }
 };
@@ -3779,11 +3783,11 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       fechaHora: ahora
     });
 
-    const printResult = await printerService.procesarImpresion({
+    printerService.procesarImpresion({
       destinoImpresora: 'caja',
       ticketInfo: tInfoPreFactura,
       io
-    });
+    }).catch(err => console.error('Error al despachar prefactura orden:', err.message));
 
     // Actualizar estado de mesa a 'cuenta' si está abierta
     if (orden.mesa_id) {
@@ -3797,8 +3801,7 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       success: true,
       message: 'Pre-Factura generada e impresa con éxito',
       ordenId,
-      ticket: tInfoPreFactura.ticketVisual,
-      printResult
+      ticket: tInfoPreFactura.ticketVisual
     });
   } catch (e) {
     console.error('Error al generar prefactura:', e);
@@ -3861,11 +3864,11 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       fechaHora: ahora
     });
 
-    const printResult = await printerService.procesarImpresion({
+    printerService.procesarImpresion({
       destinoImpresora: 'caja',
       ticketInfo: tInfoPreFactura,
       io
-    });
+    }).catch(err => console.error('Error al despachar prefactura mesa:', err.message));
 
     await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = COALESCE(hora_pidio_cuenta, ?) WHERE id = ?", [ahora, mesaId]);
     await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [orden.id]);
@@ -3877,8 +3880,7 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       message: 'Pre-Factura de mesa generada e impresa con éxito',
       mesaId: Number(mesaId),
       ordenId: orden.id,
-      ticket: tInfoPreFactura.ticketVisual,
-      printResult
+      ticket: tInfoPreFactura.ticketVisual
     });
   } catch (e) {
     console.error('Error al generar prefactura de mesa:', e);

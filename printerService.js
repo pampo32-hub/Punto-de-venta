@@ -325,7 +325,33 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
   const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
 
-  const subNum = Math.round(Number(subtotal) || 0);
+  const listaItems = Array.isArray(items) ? items : [];
+
+  let subCalculado = 0;
+  const itemsNormalizados = listaItems.map(it => {
+    const cant = Number(it.cantidad) || 1;
+    const unitPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
+    const totalLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
+      ? Number(it.totalLinea)
+      : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
+        ? Number(it.subtotal)
+        : (unitPrice * cant);
+    subCalculado += totalLinea;
+    return {
+      cantidad: cant,
+      nombre: it.nombre_producto || it.nombre || it.descripcion || 'Producto',
+      precioUnitario: unitPrice,
+      totalLinea: totalLinea,
+      notas: it.notas || ''
+    };
+  });
+
+  const subNum = Math.round(Number(subtotal) || subCalculado || 0);
+  const descHHNum = Math.round(Number(descuentoHH) || 0);
+  const baseImponible = Math.max(0, subNum - descHHNum);
+  const servNum = (servicio !== undefined && servicio !== null && Number(servicio) > 0) ? Math.round(Number(servicio)) : Math.round(baseImponible * 0.10);
+  const ivaNum = (iva !== undefined && iva !== null && Number(iva) > 0) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
+  const totNum = (total !== undefined && total !== null && Number(total) > 0) ? Math.round(Number(total)) : (baseImponible + servNum + ivaNum);
   const prop10 = Math.round(subNum * 0.10);
   const prop15 = Math.round(subNum * 0.15);
 
@@ -348,13 +374,9 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANT  DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
 
-  (items || []).forEach(it => {
-    const unitPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
-    const cant = Number(it.cantidad) || 1;
-    const totalLinea = it.totalLinea !== undefined ? Number(it.totalLinea) : (unitPrice * cant);
-    const nombreProd = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
-    const cantDesc = `${cant}x  ${nombreProd}`;
-    raw += formatearLinea2Col(cantDesc, formatMontoTermica(totalLinea)) + '\n';
+  itemsNormalizados.forEach(it => {
+    const cantDesc = `${it.cantidad}x  ${limpiarTextoTermica(it.nombre)}`;
+    raw += formatearLinea2Col(cantDesc, formatMontoTermica(it.totalLinea)) + '\n';
     if (it.notas) {
       raw += `   (${limpiarTextoTermica(it.notas)})\n`;
     }
@@ -362,15 +384,15 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
 
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subtotal)) + '\n';
-  if (descuentoHH > 0) {
-    raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descuentoHH)}`) + '\n' + ESCPOS.BOLD_OFF;
+  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
+  if (descHHNum > 0) {
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servicio)) + '\n';
-  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(iva)) + '\n';
+  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(total)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
@@ -396,23 +418,12 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
     mesero,
     cliente: cliente || 'Cliente General',
     fechaHora: fechaStr,
-    items: (items || []).map(it => {
-      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
-      const cant = Number(it.cantidad) || 1;
-      const tLinea = it.totalLinea !== undefined && it.totalLinea !== null ? Number(it.totalLinea) : (uPrice * cant);
-      return {
-        cantidad: cant,
-        nombre: it.nombre_producto || it.nombre || 'Producto',
-        precioUnitario: uPrice,
-        totalLinea: tLinea,
-        notas: it.notas || ''
-      };
-    }),
-    subtotal: Math.round(subtotal || 0),
-    descuentoHH: Math.round(descuentoHH || 0),
-    servicio: Math.round(servicio || 0),
-    iva: Math.round(iva || 0),
-    total: Math.round(total || 0),
+    items: itemsNormalizados,
+    subtotal: subNum,
+    descuentoHH: descHHNum,
+    servicio: servNum,
+    iva: ivaNum,
+    total: totNum,
     propina10: prop10,
     propina15: prop15
   };

@@ -1777,6 +1777,50 @@ function formatCRCSinDecimales(num) {
   return formatCRC(num);
 }
 
+/**
+ * Formateador de Fecha y Hora en zona horaria oficial de Costa Rica (America/Costa_Rica) con formato am/pm 12 horas.
+ */
+function formatearFechaHoraCR(fechaInput, opciones = {}) {
+  if (!fechaInput) return '-';
+  try {
+    const d = (fechaInput instanceof Date) ? fechaInput : new Date(fechaInput);
+    if (isNaN(d.getTime())) return String(fechaInput);
+
+    if (opciones.soloHora) {
+      return d.toLocaleTimeString('es-CR', {
+        timeZone: 'America/Costa_Rica',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: opciones.segundos ? '2-digit' : undefined,
+        hour12: true
+      });
+    }
+
+    if (opciones.soloFecha) {
+      return d.toLocaleDateString('es-CR', {
+        timeZone: 'America/Costa_Rica',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+
+    return d.toLocaleString('es-CR', {
+      timeZone: 'America/Costa_Rica',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: opciones.segundos ? '2-digit' : undefined,
+      hour12: true
+    });
+  } catch (err) {
+    return String(fechaInput);
+  }
+}
+window.formatearFechaHoraCR = formatearFechaHoraCR;
+
 // Control y Alternancia de Pisos (1er Piso y Segundo Piso)
 window.cambiarPisoSalon = function(piso) {
   estado.pisoActual = Number(piso) || 1;
@@ -12051,7 +12095,32 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     if (txtTitulo) txtTitulo.textContent = `📄 Pre-Factura / Pre-Cuenta - Mesa ${ticketData.mesa}`;
     if (txtSub) txtSub.textContent = `Orden #${ticketData.numeroOrden || ticketData.ordenId} • Revisión Preliminar 80mm`;
 
-    const subNum = Math.round(Number(ticketData.subtotal) || 0);
+    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
+    let subCalculado = 0;
+    const itemsNormalizados = listaItems.map(it => {
+      const cant = Number(it.cantidad) || 1;
+      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
+      const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
+        ? Number(it.totalLinea)
+        : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
+          ? Number(it.subtotal)
+          : (uPrice * cant);
+      subCalculado += totLinea;
+      return {
+        cantidad: cant,
+        nombre: it.nombre || it.nombre_producto || it.descripcion || 'Producto',
+        precioUnitario: uPrice,
+        totalLinea: totLinea,
+        notas: it.notas || ''
+      };
+    });
+
+    const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
+    const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
+    const baseImp = Math.max(0, subNum - descHH);
+    const servNum = (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) > 0) ? Math.round(Number(ticketData.servicio)) : Math.round(baseImp * 0.10);
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && Number(ticketData.iva) > 0) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const prop10 = Math.round(subNum * 0.10);
     const prop15 = Math.round(subNum * 0.15);
 
@@ -12082,45 +12151,42 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
       </div>
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
       <div class="receipt-items-list" style="margin:4px 0;">
-        ${(ticketData.items || []).map(it => {
-          const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
-          const cant = Number(it.cantidad) || 1;
-          const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0) ? Number(it.totalLinea) : (uPrice * cant);
-          const nom = escapeHtml(it.nombre || it.nombre_producto || 'Producto');
+        ${itemsNormalizados.map(it => {
+          const nom = escapeHtml(it.nombre);
           return `
-            <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; color:#000000; margin-bottom:3px; line-height:1.25;">
-              <span style="flex:1; padding-right:4px;"><strong>${cant}x</strong>  ${nom}</span>
-              <span style="text-align:right; font-weight:900; white-space:nowrap;">${formatCRCSinDecimales(totLinea)}</span>
+            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; color:#000000; margin-bottom:3px; line-height:1.25;">
+              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${nom}</span>
+              <span class="receipt-item-price" style="text-align:right; font-weight:900; white-space:nowrap;">${formatCRCSinDecimales(it.totalLinea)}</span>
             </div>
-            ${it.notas ? `<div style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(${escapeHtml(it.notas)})</div>` : ''}
+            ${it.notas ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(${escapeHtml(it.notas)})</div>` : ''}
           `;
         }).join('')}
       </div>
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
       <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Subtotal (Base Imponible):</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.subtotal)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(subNum)}</span>
         </div>
-        ${ticketData.descuentoHH > 0 ? `
-          <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        ${descHH > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
             <span>Descuento Happy Hour 2x1:</span>
-            <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.descuentoHH)}</span>
+            <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
           </div>
         ` : ''}
-        <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>10% Servicio (Ley):</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.servicio)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
         </div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.iva)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
         </div>
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
         <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL ESTIMADO:</span>
-        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.total)}</span>
+        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
       </div>
       <div style="margin:10px 0 6px 0; text-align:center; color:#000000;">
         <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">PROPINA VOLUNTARIA SUGERIDA</div>
