@@ -7037,6 +7037,72 @@ document.getElementById('btnLiquidarPropinas').addEventListener('click', () => {
   alert('📋 Reporte de reparto de propinas del turno impreso.');
 });
 
+// Solicitud y emisión de Pre-Factura / Pre-Cuenta
+window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
+  try {
+    const mesaActiva = estado.mesaActiva;
+    const mId = mesaId || (mesaActiva && mesaActiva.id);
+    const oId = ordenId || (mesaActiva && (mesaActiva.orden_id || mesaActiva.ordenId));
+
+    if (!mId && !oId) {
+      alert('Por favor selecciona una mesa u orden activa para generar la pre-factura.');
+      return;
+    }
+
+    if (mesaActiva && (!mesaActiva.items || mesaActiva.items.length === 0)) {
+      alert('La mesa no tiene consumos registrados para generar pre-factura.');
+      return;
+    }
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('📄 Generando Pre-Factura...', 'info');
+    }
+
+    const endpoint = oId ? `/api/ordenes/${oId}/prefactura` : `/api/mesas/${mId}/prefactura`;
+    const meseroActual = (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno';
+
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mesero: meseroActual })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      throw new Error(data.error || 'Error al generar la pre-factura.');
+    }
+
+    if (data.ticket && typeof window.mostrarVisorTicketTermico === 'function') {
+      window.mostrarVisorTicketTermico(data.ticket, false);
+    }
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('✅ Pre-Factura generada e impresa en caja.', 'success');
+    }
+
+    if (mId && typeof cargarMesasDesdeBackend === 'function') {
+      cargarMesasDesdeBackend();
+    }
+  } catch (err) {
+    console.error('Error al solicitar pre-factura:', err);
+    alert('Error al generar pre-factura: ' + err.message);
+  }
+};
+
+const btnPreFacturaEl = document.getElementById('btnImprimirPreFactura');
+if (btnPreFacturaEl) {
+  btnPreFacturaEl.addEventListener('click', () => {
+    window.solicitarPreFacturaMesa();
+  });
+}
+
+const btnPreFacturaCobroEl = document.getElementById('btnImprimirPreFacturaCobro');
+if (btnPreFacturaCobroEl) {
+  btnPreFacturaCobroEl.addEventListener('click', () => {
+    window.solicitarPreFacturaMesa();
+  });
+}
+
 // Cobro Modal
 document.getElementById('btnAbrirCobroModal').addEventListener('click', async () => {
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
@@ -11976,6 +12042,90 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
       <div class="receipt-footer">
         <div>• NOTIFICACIÓN DE COCINA / BARRA •</div>
         <div>Corte automático ejecutado en puerto ESC/POS</div>
+      </div>
+    `;
+  } else if (ticketData.tipo === 'prefactura') {
+    if (txtTitulo) txtTitulo.textContent = `📄 Pre-Factura / Pre-Cuenta - Mesa ${ticketData.mesa}`;
+    if (txtSub) txtSub.textContent = `Orden #${ticketData.numeroOrden || ticketData.ordenId} • Revisión Preliminar 80mm`;
+
+    html = `
+      <div class="receipt-header">
+        <div class="receipt-logo">📄</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-sub">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div class="receipt-sub">Tel: ${ticketData.negocio?.tel || '2222-0000 / 8888-9999'}</div>
+        <div class="receipt-type-badge" style="background:#0284c7; color:#fff; font-weight:800;">*** PRE-CUENTA / PRE-FACTURA ***</div>
+        <div style="font-size:11px; font-weight:700; color:#d97706; margin-top:2px;">[ REVISIÓN DE CONSUMOS EN MESA ]</div>
+        <div style="font-size:10px; color:#64748b; margin-top:1px;">* NO VÁLIDO COMO FACTURA FISCAL *</div>
+        <div class="receipt-sub" style="margin-top:6px; font-weight:700;">MESA: ${ticketData.mesa} | Salonero: ${ticketData.mesero || 'General'}</div>
+        <div class="receipt-sub">Orden #${ticketData.numeroOrden || ticketData.ordenId} • Cliente: ${ticketData.cliente || 'Cliente General'}</div>
+        <div class="receipt-sub">${ticketData.fechaHora}</div>
+      </div>
+
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th style="width:18%;">CANT</th>
+            <th style="width:52%;">DESCRIPCIÓN</th>
+            <th style="width:30%; text-align:right;">PRECIO</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(ticketData.items || []).map(it => `
+            <tr>
+              <td><strong>${it.cantidad}x</strong></td>
+              <td>
+                <span class="receipt-item-title">${escapeHtml(it.nombre)}</span>
+                ${it.notas ? `<div class="receipt-item-note">(${escapeHtml(it.notas)})</div>` : ''}
+              </td>
+              <td style="text-align:right;"><strong>${formatCRCSinDecimales(it.totalLinea || (it.precioUnitario * it.cantidad))}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="receipt-divider"></div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
+          <span>Subtotal (Base Imponible):</span>
+          <strong>${formatCRCSinDecimales(ticketData.subtotal)}</strong>
+        </div>
+        ${ticketData.descuentoHH > 0 ? `
+          <div class="receipt-calc-line" style="color:#d97706; font-weight:700;">
+            <span>Descuento Happy Hour 2x1:</span>
+            <span>-${formatCRCSinDecimales(ticketData.descuentoHH)}</span>
+          </div>
+        ` : ''}
+        <div class="receipt-calc-line">
+          <span>10% Servicio (Ley):</span>
+          <strong>${formatCRCSinDecimales(ticketData.servicio)}</strong>
+        </div>
+        <div class="receipt-calc-line">
+          <span>13% I.V.A.:</span>
+          <strong>${formatCRCSinDecimales(ticketData.iva)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado" style="background:#0284c7; color:#fff;">
+          <span>TOTAL ESTIMADO:</span>
+          <span>${formatCRCSinDecimales(ticketData.total)}</span>
+        </div>
+      </div>
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:11px; font-weight:800; text-align:center; color:#1e293b; margin-bottom:4px;">PROPINA VOLUNTARIA SUGERIDA</div>
+      <div style="display:flex; justify-content:space-around; font-size:11px; padding:4px 0; background:#f8fafc; border-radius:6px; border:1px dashed #cbd5e1;">
+        <div><strong>10%:</strong> ${formatCRCSinDecimales(ticketData.propinaSugerida10 || Math.round(ticketData.subtotal * 0.10))}</div>
+        <div><strong>15%:</strong> ${formatCRCSinDecimales(ticketData.propinaSugerida15 || Math.round(ticketData.subtotal * 0.15))}</div>
+      </div>
+
+      <div style="margin: 18px 0 8px; font-size:10.5px;">
+        <div style="border-bottom:1px dashed #94a3b8; height:20px; margin-bottom:4px;"></div>
+        <div style="text-align:center; color:#64748b;">Firma / Aprobación de Cuenta</div>
+      </div>
+
+      <div class="receipt-footer">
+        <div>Comprobante preliminar para revisión del cliente.</div>
+        <div>Solicite su Factura Electrónica al pagar.</div>
+        <div style="margin-top:4px;">¡Muchas gracias por su preferencia!</div>
       </div>
     `;
   } else if (ticketData.tipo === 'pago_parcial') {

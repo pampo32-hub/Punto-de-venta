@@ -1740,6 +1740,9 @@
             <button class="btn-btn-cmd split" id="btnAbrirSplitBill">
               ✂️ Dividir Cuenta (Split)
             </button>
+            <button class="btn-btn-cmd prefactura" id="btnImprimirPreFactura" title="Generar e imprimir pre-cuenta para revisión del cliente">
+              📄 Pre-Factura
+            </button>
             <button class="btn-btn-cmd cobrar" id="btnAbrirCobroModal">
               💵 Cobrar Cuenta
             </button>
@@ -3217,8 +3220,11 @@
           </div>
         </div>
       </div>
-      <div class="dialog-footer">
-        <button class="btn-sec" id="btnCancelarCobro">Cancelar</button>
+      <div class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div style="display:flex; gap:8px;">
+          <button class="btn-sec" id="btnCancelarCobro">Cancelar</button>
+          <button type="button" class="btn-sec" id="btnImprimirPreFacturaCobro" style="background:#0284c7; color:#fff; border:none; font-weight:700;" title="Imprimir pre-factura sin liquidar">📄 Pre-Factura</button>
+        </div>
         <button class="btn-pri success" id="btnFinalizarCobro">✅ Liquidar, Imprimir & Liberar Mesa</button>
       </div>
     </div>

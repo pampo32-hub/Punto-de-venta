@@ -1596,6 +1596,7 @@ body {
 .btn-btn-cmd.guardado { background: #1e293b !important; color: #10b981 !important; border: 1px solid #059669 !important; cursor: default !important; opacity: 0.9; }
 .btn-btn-cmd:disabled { opacity: 0.65; cursor: not-allowed; }
 .btn-btn-cmd.split { background: #8b5cf6; color: #fff; }
+.btn-btn-cmd.prefactura { background: #0284c7; color: #fff; }
 .btn-btn-cmd.cobrar { background: var(--success); color: #fff; }
 
 

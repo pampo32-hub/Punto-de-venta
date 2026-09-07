@@ -304,6 +304,113 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
 }
 
 /**
+ * Generador de Pre-Factura / Pre-Cuenta (Revisión de Consumos en Mesa - No Válido como Factura Fiscal)
+ */
+function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, subtotal, descuentoHH, servicio, iva, total, items, fechaHora = new Date().toISOString() }) {
+  let fechaStr = fechaHora;
+  if (fechaHora) {
+    const d = new Date(fechaHora);
+    if (!isNaN(d.getTime())) {
+      fechaStr = d.toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+    }
+  }
+  if (!fechaStr || fechaStr === 'Invalid Date') {
+    fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  }
+  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
+  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-0000 / 8888-9999');
+  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+
+  let raw = '';
+  raw += ESCPOS.INIT;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL;
+  raw += `${negSlogan}\n`;
+  raw += `Tel: ${negTel}\n`;
+  raw += `${negDir}\n`;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `*** PRE-CUENTA / PRE-FACTURA ***\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.BOLD_ON + `[ REVISION DE CONSUMOS EN MESA ]\n` + ESCPOS.BOLD_OFF;
+  raw += `* DOCUMENTO NO VALIDO COMO COMPROBANTE FISCAL *\n`;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Orden: #${numeroOrden || ordenId || '001'} | Mesa: ${limpiarTextoTermica(mesaNumero)}\n`;
+  raw += `Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
+  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
+  raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + formatearLinea3Col('CANT', 'DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+
+  (items || []).forEach(it => {
+    const unitPrice = it.precio_unitario || it.precio || 0;
+    const totalLinea = unitPrice * (it.cantidad || 1);
+    const nombreProd = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
+    raw += formatearLinea3Col(`${it.cantidad}x`, nombreProd, formatMontoTermica(totalLinea)) + '\n';
+    if (it.notas) {
+      raw += `   (${limpiarTextoTermica(it.notas)})\n`;
+    }
+  });
+
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.ALIGN_RIGHT;
+  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subtotal)) + '\n';
+  if (descuentoHH > 0) {
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descuentoHH)}`) + '\n' + ESCPOS.BOLD_OFF;
+  }
+  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servicio)) + '\n';
+  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(iva)) + '\n';
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL ESTIMADO:', formatMontoTermica(total)) + '\n' + ESCPOS.NORMAL;
+  raw += '='.repeat(48) + '\n';
+
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += '\n';
+  raw += ESCPOS.BOLD_ON + 'PROPINA VOLUNTARIA SUGERIDA:\n' + ESCPOS.BOLD_OFF;
+  const prop10 = Math.round((subtotal || total * 0.8) * 0.10);
+  const prop15 = Math.round((subtotal || total * 0.8) * 0.15);
+  raw += `10%: ${formatMontoTermica(prop10)}   15%: ${formatMontoTermica(prop15)}\n`;
+  raw += '\n';
+  raw += '------------------------------------------------\n';
+  raw += 'Firma / Aprobacion: ___________________________\n';
+  raw += '\n';
+  raw += 'Comprobante preliminar de consumo para revision.\n';
+  raw += 'Solicite su Factura Electronica al pagar.\n';
+  raw += 'Muchas gracias por su visita!\n';
+  raw += ESCPOS.FEED_LINES(4);
+  raw += ESCPOS.CUT_FULL;
+
+  const ticketVisual = {
+    tipo: 'prefactura',
+    titulo: 'PRE-CUENTA / PRE-FACTURA',
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir },
+    ordenId,
+    numeroOrden: numeroOrden || ordenId,
+    mesa: mesaNumero,
+    mesero,
+    cliente: cliente || 'Cliente General',
+    fechaHora: fechaStr,
+    items: (items || []).map(it => ({
+      cantidad: it.cantidad,
+      nombre: it.nombre_producto || it.nombre,
+      precioUnitario: it.precio_unitario || it.precio || 0,
+      totalLinea: (it.precio_unitario || it.precio || 0) * (it.cantidad || 1),
+      notas: it.notas || ''
+    })),
+    subtotal: Math.round(subtotal || 0),
+    descuentoHH: Math.round(descuentoHH || 0),
+    servicio: Math.round(servicio || 0),
+    iva: Math.round(iva || 0),
+    total: Math.round(total || 0),
+    propinaSugerida10: Math.round((subtotal || total * 0.8) * 0.10),
+    propinaSugerida15: Math.round((subtotal || total * 0.8) * 0.15)
+  };
+
+  return { raw, ticketVisual };
+}
+
+/**
  * Generador de Comprobante de Pago Parcial (Split Bill)
  */
 function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre, mesero, metodoPago, montoCobrado, subtotal, impuestos, itemsPagados, saldoRestanteMesa, fechaHora = new Date().toISOString() }) {
@@ -491,6 +598,7 @@ module.exports = {
   ESCPOS,
   generarTicketComanda,
   generarTicketLiquidacion,
+  generarTicketPreFactura,
   generarTicketPagoParcial,
   enviarAPuertoTCP,
   sendRawToWindowsPrinter,
