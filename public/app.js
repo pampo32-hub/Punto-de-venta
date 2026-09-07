@@ -12356,11 +12356,6 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
   window.ticketTermicoActual = ticketData;
   container.innerHTML = html;
   modal.classList.add('active');
-
-  if (autoImprimir) {
-    // Impresión directa a la impresora térmica USB/Windows sin cuadro de diálogo del navegador
-    ejecutarImpresionDirectaTermica(ticketData);
-  }
 };
 
 window.cerrarModalVisorTicket = function() {
