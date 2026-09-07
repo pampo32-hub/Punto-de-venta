@@ -1629,6 +1629,9 @@
     <div class="comandero-window">
       <!-- PESTAÑAS MÓVILES (SOLO VISIBLES EN SMARTPHONES/TABLETS PORTRAIT) -->
       <div class="comandero-mobile-tabs">
+        <button type="button" class="btn-mob-volver-salon" onclick="cerrarComandero()" title="Volver al Salón y ver todas las mesas">
+          🏠 Salón
+        </button>
         <button type="button" class="com-mob-tab active" id="btnMobTabMenu" onclick="switchComanderoMobileTab('menu')">🍽️ Menú / Catálogo</button>
         <button type="button" class="com-mob-tab" id="btnMobTabTicket" onclick="switchComanderoMobileTab('ticket')">🧾 Ver Comanda (<span id="mobTicketCount">0</span>)</button>
       </div>
@@ -1636,7 +1639,10 @@
       <div class="comandero-catalog" id="comanderoCatalogCol">
         <div class="catalog-topbar">
           <div class="mesa-tag-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-            <div style="display:flex; align-items:center; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn-volver-salon-catalog" onclick="cerrarComandero()" title="Volver al Salón y ver todas las mesas">
+                🏠 Salón
+              </button>
               <span class="mesa-title-tag" id="comMesaNumero">Mesa 1</span>
               <span class="mesa-sub-tag" id="comMesaZona">Salón Principal</span>
               <button class="btn-qr-mesa-client" id="btnVerQrMesaCliente" title="Ver código QR para el cliente">
@@ -1679,9 +1685,12 @@
 
       <div class="comandero-ticket" id="comanderoTicketCol">
         <!-- BOTÓN VOLVER AL MENÚ (TABLETS PORTRAIT & SMARTPHONES) -->
-        <div class="mob-ticket-back-banner">
-          <button type="button" class="btn-mob-back-menu" onclick="switchComanderoMobileTab('menu')">
-            ◀️ Seguir Agregando Productos (Volver al Menú)
+        <div class="mob-ticket-back-banner" style="display:flex; gap:8px;">
+          <button type="button" class="btn-mob-volver-salon" onclick="cerrarComandero()" style="flex:0 0 auto;" title="Volver al Salón y ver todas las mesas">
+            🏠 Salón
+          </button>
+          <button type="button" class="btn-mob-back-menu" onclick="switchComanderoMobileTab('menu')" style="flex:1;">
+            🍽️ Seguir Agregando Productos
           </button>
         </div>
 

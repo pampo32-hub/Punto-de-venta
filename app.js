@@ -5729,10 +5729,18 @@ async function abrirComanderoMesa(mesaId) {
   }
 }
 
-document.getElementById('btnCloseComandero').addEventListener('click', () => {
-  document.getElementById('modalComandero').classList.remove('active');
-  cargarMesasDesdeBackend();
-});
+window.cerrarComandero = function() {
+  const modal = document.getElementById('modalComandero');
+  if (modal) modal.classList.remove('active');
+  if (typeof cargarMesasDesdeBackend === 'function') {
+    cargarMesasDesdeBackend();
+  }
+};
+
+const btnCloseComEl = document.getElementById('btnCloseComandero');
+if (btnCloseComEl) {
+  btnCloseComEl.addEventListener('click', window.cerrarComandero);
+}
 
 window.resetearMesaActualComandero = async function() {
   const mesa = estado.mesaActiva;
