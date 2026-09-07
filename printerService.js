@@ -324,7 +324,7 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
 function enviarAPuertoTCP(ip, puerto, rawData) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
-    socket.setTimeout(5000);
+    socket.setTimeout(1800);
 
     const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
