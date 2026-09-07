@@ -1,3 +1,4 @@
+require('dotenv').config();
 const QRCode = require('qrcode');
 const express = require('express');
 const http = require('http');
@@ -3347,6 +3348,7 @@ async function procesarCobroOrden(ordenId, {
     const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
 
     for (const it of itemsNuevos) {
+      const itNombre = it.nombre_producto || it.nombre || 'Producto';
       const cant = Number(it.cantidad) || 1;
       const subtotal = (Number(it.precio) || 0) * cant;
       const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);

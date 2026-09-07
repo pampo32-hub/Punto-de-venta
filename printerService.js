@@ -1,3 +1,4 @@
+require('dotenv').config();
 const net = require('net');
 
 /**
@@ -7,9 +8,27 @@ const net = require('net');
 
 // Estado en memoria de configuración de impresoras
 let printerConfig = {
-  caja: { nombre: 'Impresora Caja (80mm)', tipo: 'virtual', ip: '127.0.0.1', puerto: 9100, activa: true },
-  cocina: { nombre: 'Impresora Cocina (80mm)', tipo: 'virtual', ip: '127.0.0.1', puerto: 9101, activa: true },
-  barra: { nombre: 'Impresora Barra (80mm)', tipo: 'virtual', ip: '127.0.0.1', puerto: 9102, activa: true },
+  caja: {
+    nombre: process.env.PRINTER_CAJA_NAME || 'Impresora Caja (80mm)',
+    tipo: process.env.PRINTER_CAJA_TYPE || (process.env.PRINTER_CAJA_IP ? 'red' : 'red'),
+    ip: process.env.PRINTER_CAJA_IP || '192.168.1.30',
+    puerto: Number(process.env.PRINTER_CAJA_PORT) || 9100,
+    activa: true
+  },
+  cocina: {
+    nombre: process.env.PRINTER_COCINA_NAME || 'Impresora Cocina (80mm)',
+    tipo: process.env.PRINTER_COCINA_TYPE || (process.env.PRINTER_COCINA_IP ? 'red' : 'red'),
+    ip: process.env.PRINTER_COCINA_IP || '192.168.1.30',
+    puerto: Number(process.env.PRINTER_COCINA_PORT) || 9100,
+    activa: true
+  },
+  barra: {
+    nombre: process.env.PRINTER_BARRA_NAME || 'Impresora Barra (80mm)',
+    tipo: process.env.PRINTER_BARRA_TYPE || (process.env.PRINTER_BARRA_IP ? 'red' : 'red'),
+    ip: process.env.PRINTER_BARRA_IP || '192.168.1.30',
+    puerto: Number(process.env.PRINTER_BARRA_PORT) || 9100,
+    activa: true
+  },
 };
 
 // Historial de impresiones recientes (simulador y auditoría)
@@ -96,7 +115,11 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   items.forEach(it => {
     const cursoLabels = { 1: '[Entrada]', 2: '[Fuerte]', 3: '[Postre]' };
     const curLabel = cursoLabels[it.curso] || '';
-    raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${it.cantidad}x ${it.nombre}\n` + ESCPOS.NORMAL;
+    const prodNombre = it.nombre_producto || it.nombre || 'Producto';
+    raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${it.cantidad}x ${prodNombre}\n` + ESCPOS.NORMAL;
+    if (curLabel) {
+      raw += `   ${curLabel}\n`;
+    }
     if (it.notas) {
       raw += ESCPOS.BOLD_ON + `   ⚠️ NOTA: ${it.notas}\n` + ESCPOS.BOLD_OFF;
     }
@@ -124,7 +147,7 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
     fechaHora: fechaStr,
     items: items.map(it => ({
       cantidad: it.cantidad,
-      nombre: it.nombre,
+      nombre: it.nombre_producto || it.nombre || 'Producto',
       notas: it.notas || '',
       curso: it.curso || 2,
       origenMesa: it.origen_mesa_numero || null
@@ -249,8 +272,10 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   raw += '-'.repeat(48) + '\n';
 
   itemsPagados.forEach(it => {
-    const totalL = it.precio * it.cantidad;
-    raw += formatearLinea3Col(`${it.cantidad}x`, it.nombre, `₡${totalL.toLocaleString('es-CR')}`) + '\n';
+    const unitP = it.precio_unitario || it.precio || 0;
+    const totalL = unitP * it.cantidad;
+    const nomProd = it.nombre_producto || it.nombre || 'Consumo';
+    raw += formatearLinea3Col(`${it.cantidad}x`, nomProd, `₡${totalL.toLocaleString('es-CR')}`) + '\n';
   });
 
   raw += '-'.repeat(48) + '\n';
@@ -279,9 +304,9 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
     fechaHora: fechaStr,
     items: itemsPagados.map(it => ({
       cantidad: it.cantidad,
-      nombre: it.nombre,
-      precioUnitario: it.precio,
-      totalLinea: it.precio * it.cantidad
+      nombre: it.nombre_producto || it.nombre || 'Consumo',
+      precioUnitario: it.precio_unitario || it.precio || 0,
+      totalLinea: (it.precio_unitario || it.precio || 0) * it.cantidad
     })),
     subtotal: Math.round(subtotal),
     impuestos: Math.round(impuestos),
@@ -299,12 +324,17 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
 function enviarAPuertoTCP(ip, puerto, rawData) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
-    socket.setTimeout(2500);
+    socket.setTimeout(5000);
+
+    const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
     socket.connect(puerto, ip, () => {
-      socket.write(rawData, 'binary', () => {
-        socket.end();
-        resolve({ ok: true, mensaje: `Enviados ${Buffer.byteLength(rawData)} bytes a ${ip}:${puerto}` });
+      socket.write(buf, () => {
+        setTimeout(() => {
+          socket.end(() => {
+            resolve({ ok: true, mensaje: `Enviados ${buf.length} bytes a ${ip}:${puerto}` });
+          });
+        }, 150);
       });
     });
 
@@ -321,18 +351,32 @@ function enviarAPuertoTCP(ip, puerto, rawData) {
   });
 }
 
+// Cola de impresión secuencial (FIFO) para evitar colisiones cuando se envían múltiples tickets a la misma IP
+const colasImpresion = new Map();
+
+function encolarEnvioTCP(ip, puerto, rawData) {
+  const clave = `${ip}:${puerto}`;
+  const colaActual = colasImpresion.get(clave) || Promise.resolve();
+
+  const siguiente = colaActual
+    .catch(() => {})
+    .then(async () => {
+      const res = await enviarAPuertoTCP(ip, puerto, rawData);
+      // Breve pausa entre tickets para permitir el corte de papel y vaciado del buffer de la impresora
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return res;
+    });
+
+  colasImpresion.set(clave, siguiente);
+  return siguiente;
+}
+
 /**
  * Función principal para despachar impresión a la impresora configurada
  */
 async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = null }) {
   const cfg = printerConfig[destinoImpresora] || printerConfig.caja;
   const ahora = new Date().toISOString();
-
-  let resTCP = { ok: true, simulado: true, mensaje: 'Simulación virtual' };
-
-  if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
-    resTCP = await enviarAPuertoTCP(cfg.ip, cfg.puerto, ticketInfo.raw);
-  }
 
   const registro = {
     id: Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -343,8 +387,8 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
     titulo: ticketInfo.ticketVisual.titulo,
     mesa: ticketInfo.ticketVisual.mesa,
     bytes: Buffer.byteLength(ticketInfo.raw),
-    estado: resTCP.ok ? 'impreso' : 'simulado',
-    detalleConexion: resTCP.mensaje || 'Enviado correctamente',
+    estado: 'enviando',
+    detalleConexion: `Despachando a ${cfg.ip || 'simulador'}...`,
     ticketVisual: ticketInfo.ticketVisual,
     rawBase64: Buffer.from(ticketInfo.raw, 'binary').toString('base64'),
     rawText: ticketInfo.raw,
@@ -353,6 +397,22 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
 
   historialImpresiones.unshift(registro);
   if (historialImpresiones.length > MAX_HISTORIAL) historialImpresiones.pop();
+
+  // Despacho TCP asíncrono y secuencial para evitar saturación de socket en la impresora térmica
+  if (cfg.tipo === 'red' && cfg.ip && cfg.puerto) {
+    encolarEnvioTCP(cfg.ip, cfg.puerto, ticketInfo.raw).then((resTCP) => {
+      registro.estado = resTCP.ok ? 'impreso' : 'simulado';
+      registro.detalleConexion = resTCP.mensaje || 'Enviado correctamente';
+      if (io) io.emit('ticket_impreso', registro);
+    }).catch((err) => {
+      registro.estado = 'simulado';
+      registro.detalleConexion = 'Error: ' + err.message;
+      if (io) io.emit('ticket_impreso', registro);
+    });
+  } else {
+    registro.estado = 'simulado';
+    registro.detalleConexion = 'Simulación virtual';
+  }
 
   // Emitir evento por Socket.IO en tiempo real a las terminales para feedback instantáneo
   if (io) {

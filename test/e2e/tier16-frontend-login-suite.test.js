@@ -1,4 +1,4 @@
-﻿const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { execSync, spawn } = require('child_process');
 const http = require('http');
@@ -101,7 +101,7 @@ describe('Tier 16: Frontend Syntax Integrity, Auth Security & Full Browser Login
       '--headless=new',
       `--remote-debugging-port=${port}`,
       '--window-size=1440,920',
-      '--user-data-dir=C:\\Users\\Juan\\AppData\\Local\\Temp\\chrome_tier16_' + Date.now(),
+      `--user-data-dir=${path.join(require('os').tmpdir(), 'chrome_tier16_' + Date.now())}`,
       `http://localhost:${server.port}`
     ]);
 
@@ -146,7 +146,19 @@ describe('Tier 16: Frontend Syntax Integrity, Auth Security & Full Browser Login
       await send('Page.enable');
       await send('Network.enable');
 
-      await new Promise(r => setTimeout(r, 1000));
+      let loaded = false;
+      for (let i = 0; i < 50; i++) {
+        const chk = await send('Runtime.evaluate', {
+          expression: 'typeof window.cargarCredencialDemo === "function"',
+          returnByValue: true
+        });
+        if (chk?.result?.value === true) {
+          loaded = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 100));
+      }
+      assert.ok(loaded, 'window.cargarCredencialDemo debe estar disponible en la ventana');
 
       assert.equal(browserErrors.length, 0, `No debe haber errores de sintaxis en el navegador.`);
 
@@ -154,7 +166,10 @@ describe('Tier 16: Frontend Syntax Integrity, Auth Security & Full Browser Login
         expression: `
           (async () => {
             cargarCredencialDemo('admin', 'admin123');
-            await new Promise(r => setTimeout(r, 800));
+            for (let i = 0; i < 40; i++) {
+              if (window.estado && window.estado.usuarioActual && window.estado.usuarioActual.usuario === 'admin') break;
+              await new Promise(r => setTimeout(r, 100));
+            }
             return {
               landingActive: document.getElementById('landingLoginView').classList.contains('active'),
               posMainActive: document.getElementById('posMainView').classList.contains('active'),
@@ -176,9 +191,12 @@ describe('Tier 16: Frontend Syntax Integrity, Auth Security & Full Browser Login
         expression: `
           (async () => {
             cerrarSesion();
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 200));
             cargarCredencialDemo('carlos', 'mesero123');
-            await new Promise(r => setTimeout(r, 800));
+            for (let i = 0; i < 40; i++) {
+              if (window.estado && window.estado.usuarioActual && window.estado.usuarioActual.usuario === 'carlos') break;
+              await new Promise(r => setTimeout(r, 100));
+            }
             return {
               landingActive: document.getElementById('landingLoginView').classList.contains('active'),
               posMainActive: document.getElementById('posMainView').classList.contains('active'),
@@ -200,9 +218,12 @@ describe('Tier 16: Frontend Syntax Integrity, Auth Security & Full Browser Login
         expression: `
           (async () => {
             cerrarSesion();
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 200));
             cargarCredencialDemo('dev', 'dev123');
-            await new Promise(r => setTimeout(r, 800));
+            for (let i = 0; i < 40; i++) {
+              if (window.estado && window.estado.usuarioActual && window.estado.usuarioActual.usuario === 'dev') break;
+              await new Promise(r => setTimeout(r, 100));
+            }
             return {
               landingActive: document.getElementById('landingLoginView').classList.contains('active'),
               devPortalActive: document.getElementById('developerPortalView').classList.contains('active'),
