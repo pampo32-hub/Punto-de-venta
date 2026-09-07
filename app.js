@@ -1999,16 +1999,12 @@ window.cargarUsuariosPublicosLogin = async function() {
 window.cargarCredencialDemo = function(user, pass) {
   const u = document.getElementById('loginUsuario');
   const p = document.getElementById('loginPassword');
-  if (u) u.value = user;
-  if (p) p.value = pass;
-  window.ejecutarLogin();
-  if (p) {
-    p.value = pass || '';
-    if (pass) {
-      window.ejecutarLogin();
-    } else {
-      p.focus();
-    }
+  if (u) u.value = user || '';
+  if (p) p.value = pass || '';
+  if (pass) {
+    window.ejecutarLogin();
+  } else if (p) {
+    p.focus();
   }
 };
 
@@ -6046,6 +6042,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     idempotencyKey
   };
 
+  const itemsCocinaNuevos = estado.mesaActiva.items.filter(it => !it.enviado && it.destino === 'cocina');
+
   const aplicarExitoLocal = () => {
     if (tieneNuevosCocina) {
       sonarCampanaCocina();
@@ -6089,8 +6087,32 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
 
+    // Disparar impresión térmica de Comanda a Cocina si hay alimentos nuevos
+    if (itemsCocinaNuevos && itemsCocinaNuevos.length > 0) {
+      const ticketComanda = {
+        tipo: 'comanda',
+        titulo: 'COMANDA COCINA',
+        destino: 'cocina',
+        mesa: estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id),
+        ordenId: estado.mesaActiva.orden_id || 1,
+        comandaNumero: 1,
+        mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
+        fechaHora: new Date().toLocaleString('es-CR'),
+        items: itemsCocinaNuevos.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre,
+          curso: it.curso || 2,
+          notas: it.notas || '',
+          origenMesa: it.origen_mesa_numero || null
+        }))
+      };
+      if (typeof window.mostrarVisorTicketTermico === 'function') {
+        window.mostrarVisorTicketTermico(ticketComanda, true);
+      }
+    }
+
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina con éxito!' : '💾 ¡Comanda guardada con éxito!', 'success');
+      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina e impresa!' : '💾 ¡Comanda guardada con éxito!', 'success');
     }
   };
 
@@ -7206,7 +7228,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     }
 
     if (esLiquidacionFinal) {
-      alert(`✅ ¡Cuenta de ${mesaNumero} liquidada!\n\n• Registro en Kárdex guardado exitosamente.\n• Mesa liberada.`);
       if (estado.mesaActiva) {
         if (window.PosOfflineDB) {
           window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
@@ -7233,6 +7254,41 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       if (typeof cargarKDSDesdeBackend === 'function') {
         cargarKDSDesdeBackend();
       }
+
+      // Disparar automáticamente la impresión del tiquete final de cliente
+      const ticketFinal = {
+        tipo: 'liquidacion',
+        negocio: {
+          nombre: 'GastroBar Fuego & Brasas',
+          slogan: 'Restaurante, Bar & Lounge',
+          tel: '2222-0000 / 8888-9999'
+        },
+        numeroOrden: ordenId || 'ORD-1',
+        ordenId: ordenId || 'ORD-1',
+        mesa: mesaNumero,
+        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
+        cliente: 'Cliente General',
+        fechaHora: new Date().toLocaleString('es-CR'),
+        items: itemsMesa.map(it => ({
+          cantidad: it.cantidad,
+          nombre: it.nombre,
+          precioUnitario: it.precio,
+          totalLinea: it.precio * it.cantidad,
+          notas: it.notas || ''
+        })),
+        subtotal: Math.round(totalNum / 1.23),
+        servicio: Math.round((totalNum / 1.23) * 0.10),
+        iva: totalNum - Math.round(totalNum / 1.23) - Math.round((totalNum / 1.23) * 0.10),
+        total: totalNum,
+        metodoPago: metodo,
+        recibido: recibido,
+        cambio: cambio
+      };
+      if (typeof window.mostrarVisorTicketTermico === 'function') {
+        window.mostrarVisorTicketTermico(ticketFinal, true);
+      }
+
+      mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada e impresa con éxito!`, 'success');
     } else {
     // Cobro parcial:
     // 1. Descontar los productos pagados de estado.mesaActiva.items
@@ -7278,7 +7334,32 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       renderComanda();
     }
 
-    alert(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado!\n\n• Monto cobrado: ${formatCRCSinDecimales(totalNum)}\n• Tiquete impreso.\n• Mesa permanece abierta con productos pendientes.`);
+    // Disparar tiquete de cobro parcial individual
+    const ticketParcial = {
+      tipo: 'pago_parcial',
+      negocio: { nombre: 'GastroBar Fuego & Brasas' },
+      ordenId: ordenId || 'ORD-1',
+      mesa: mesaNumero,
+      personaNombre: personaCobrada ? personaCobrada.nombre : 'Persona',
+      mesero: estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival',
+      fechaHora: new Date().toLocaleString('es-CR'),
+      items: (personaCobrada?.items || []).map(it => ({
+        cantidad: it.cantidad,
+        nombre: it.nombre,
+        precioUnitario: it.precio,
+        totalLinea: it.precio * it.cantidad
+      })),
+      subtotal: Math.round(totalNum / 1.23),
+      impuestos: totalNum - Math.round(totalNum / 1.23),
+      total: totalNum,
+      metodoPago: metodo,
+      saldoRestanteMesa: estado.mesaActiva ? estado.mesaActiva.items.reduce((a, b) => a + (b.precio * b.cantidad), 0) : 0
+    };
+    if (typeof window.mostrarVisorTicketTermico === 'function') {
+      window.mostrarVisorTicketTermico(ticketParcial, true);
+    }
+
+    mostrarNotificacionCentro(`✅ ¡Cobro parcial de ${personaCobrada ? personaCobrada.nombre : 'Persona'} realizado e impreso!`, 'success');
 
     estado.cobroSplitPersonaIndex = null;
     document.getElementById('modalCobro').classList.remove('active');
@@ -12191,6 +12272,8 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <strong>${escapeHtml(ticketData.cliente || 'Cliente General')}</strong>
         </div>
         <div class="receipt-meta-row">
+      
+... [truncated for diff preview]
           <span>Fecha/Hora:</span>
           <span>${ticketData.fechaHora}</span>
         </div>
@@ -12267,14 +12350,9 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     `;
   }
 
+  window.ticketTermicoActual = ticketData;
   container.innerHTML = html;
   modal.classList.add('active');
-
-  if (autoImprimir) {
-    setTimeout(() => {
-      ejecutarImpresionNativa();
-    }, 300);
-  }
 };
 
 window.cerrarModalVisorTicket = function() {
@@ -12282,47 +12360,34 @@ window.cerrarModalVisorTicket = function() {
   if (modal) modal.classList.remove('active');
 };
 
-window.ejecutarImpresionNativa = function() {
-  window.print();
-};
-
-window.ejecutarImpresionTermicaDirecta = async function() {
-  if (!window.ticketActivoParaImprimir) {
-    alert('No hay tiquete activo para imprimir.');
+window.ejecutarImpresionDirectaTermica = async function(ticketData) {
+  const tData = ticketData || window.ticketTermicoActual;
+  if (!tData) {
+    mostrarNotificacionCentro('⚠️ No hay datos de ticket para imprimir.', 'warning');
     return;
   }
-  const btn = document.getElementById('btnDirectoTermicaVisor');
-  const textoOriginal = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '⏳ Enviando...';
-  }
-
   try {
-    const res = await fetch('/api/impresoras/imprimir-ticket', {
+    const res = await fetch('/api/impresoras/imprimir-directo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ticketData: window.ticketActivoParaImprimir,
-        destino: window.ticketActivoParaImprimir.destino || 'caja'
+        ticketVisual: tData,
+        destino: tData.destino || (tData.tipo === 'comanda' ? 'cocina' : 'caja')
       })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al despachar a la impresora');
-
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🖨️ ¡Tiquete enviado a la impresora térmica con éxito!', 'success');
+    if (res.ok) {
+      mostrarNotificacionCentro('🖨️ Ticket enviado directamente a POS-80-Series', 'success');
     } else {
-      alert('🖨️ ¡Tiquete enviado a la impresora térmica con éxito!');
+      mostrarNotificacionCentro('⚠️ ' + (data.error || 'No se pudo enviar a la impresora'), 'warning');
     }
   } catch (e) {
-    alert('Error al imprimir en térmica: ' + e.message);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = textoOriginal;
-    }
+    console.warn('Error al imprimir directo:', e);
   }
+};
+
+window.ejecutarImpresionNativa = function() {
+  window.print();
 };
 
 /**
