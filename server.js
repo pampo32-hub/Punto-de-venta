@@ -5903,6 +5903,83 @@ app.post('/api/impresoras/test', async (req, res) => {
   }
 });
 
+// Endpoint para despachar cualquier ticket activo directamente a la impresora térmica física ESC/POS
+app.post('/api/impresoras/imprimir-ticket', async (req, res) => {
+  try {
+    const { ticketData, destino } = req.body;
+    if (!ticketData) {
+      return res.status(400).json({ error: 'No se enviaron datos del ticket' });
+    }
+
+    let ticketInfo = null;
+    const destFinal = destino || ticketData.destino || 'caja';
+
+    if (ticketData.tipo === 'comanda') {
+      ticketInfo = printerService.generarTicketComanda({
+        ordenId: ticketData.ordenId,
+        comandaNumero: ticketData.comandaNumero,
+        mesaNumero: ticketData.mesa,
+        mesero: ticketData.mesero,
+        items: (ticketData.items || []).map(it => ({
+          cantidad: it.cantidad,
+          nombre_producto: it.nombre || it.nombre_producto,
+          notas: it.notas || '',
+          curso: it.curso || 2,
+          origen_mesa_numero: it.origenMesa || it.origen_mesa_numero || null
+        })),
+        destino: destFinal,
+        pagada: Boolean(ticketData.pagada),
+        fechaHora: ticketData.fechaHora || new Date().toISOString()
+      });
+    } else if (ticketData.tipo === 'pago_parcial') {
+      ticketInfo = printerService.generarTicketPagoParcial({
+        negocio: ticketData.negocio,
+        ordenId: ticketData.ordenId,
+        mesaNumero: ticketData.mesa,
+        personaNombre: ticketData.personaNombre || 'Cliente',
+        mesero: ticketData.mesero,
+        metodoPago: ticketData.metodoPago,
+        montoCobrado: ticketData.total,
+        subtotal: ticketData.subtotal,
+        impuestos: ticketData.impuestos,
+        itemsPagados: ticketData.items || [],
+        saldoRestanteMesa: ticketData.saldoRestanteMesa || 0,
+        fechaHora: ticketData.fechaHora || new Date().toISOString()
+      });
+    } else {
+      // Factura / Liquidacion completa
+      ticketInfo = printerService.generarTicketLiquidacion({
+        negocio: ticketData.negocio,
+        ordenId: ticketData.ordenId,
+        numeroOrden: ticketData.numeroOrden || ticketData.ordenId,
+        mesaNumero: ticketData.mesa,
+        mesero: ticketData.mesero,
+        cliente: ticketData.cliente,
+        metodoPago: ticketData.metodoPago,
+        subtotal: ticketData.subtotal || 0,
+        descuentoHH: ticketData.descuentoHH || 0,
+        servicio: ticketData.servicio || 0,
+        iva: ticketData.iva || 0,
+        total: ticketData.total || 0,
+        recibido: ticketData.recibido || ticketData.total || 0,
+        cambio: ticketData.cambio || 0,
+        items: ticketData.items || [],
+        fechaHora: ticketData.fechaHora || new Date().toISOString()
+      });
+    }
+
+    const reg = await printerService.procesarImpresion({
+      destinoImpresora: destFinal,
+      ticketInfo,
+      io
+    });
+
+    res.json({ message: 'Ticket despachado a la impresora térmica con éxito', registro: reg });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Emulador Servidor Socket TCP en puerto 9100 (Receptor virtual de datos RAW ESC/POS)
 const net = require('net');
 const tcpPrinterServer = net.createServer((socket) => {

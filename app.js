@@ -12286,6 +12286,45 @@ window.ejecutarImpresionNativa = function() {
   window.print();
 };
 
+window.ejecutarImpresionTermicaDirecta = async function() {
+  if (!window.ticketActivoParaImprimir) {
+    alert('No hay tiquete activo para imprimir.');
+    return;
+  }
+  const btn = document.getElementById('btnDirectoTermicaVisor');
+  const textoOriginal = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Enviando...';
+  }
+
+  try {
+    const res = await fetch('/api/impresoras/imprimir-ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticketData: window.ticketActivoParaImprimir,
+        destino: window.ticketActivoParaImprimir.destino || 'caja'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al despachar a la impresora');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🖨️ ¡Tiquete enviado a la impresora térmica con éxito!', 'success');
+    } else {
+      alert('🖨️ ¡Tiquete enviado a la impresora térmica con éxito!');
+    }
+  } catch (e) {
+    alert('Error al imprimir en térmica: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = textoOriginal;
+    }
+  }
+};
+
 /**
  * Monitor & Configuración de Impresoras Térmicas
  */

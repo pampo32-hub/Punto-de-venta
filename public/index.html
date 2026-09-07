@@ -3682,8 +3682,9 @@
     <div class="modal-dialog visor-ticket-dialog" style="max-width: 420px; background: transparent; box-shadow: none; border: none; padding: 0;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px; background: #0f172a; padding: 10px 16px; border-radius: 12px; border: 1px solid #334155;">
         <h3 style="margin:0; font-size:1rem; color:#f8fafc; display:flex; align-items:center; gap:6px;">🖨️ <span id="txtTituloVisorTicket">Tiquete Térmico (80mm)</span></h3>
-        <div style="display:flex; gap:8px;">
-          <button class="btn-pri" onclick="ejecutarImpresionNativa()" style="padding: 4px 12px; font-size: 0.8rem; background: #0284c7;">🖨️ Imprimir</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-pri" id="btnDirectoTermicaVisor" onclick="ejecutarImpresionTermicaDirecta()" style="padding: 6px 14px; font-size: 0.82rem; font-weight:800; background: linear-gradient(135deg, #10b981, #059669); border:none; border-radius:8px; color:#fff; cursor:pointer; box-shadow: 0 2px 8px rgba(16,185,129,0.35);">⚡ Directo Térmica</button>
+          <button class="btn-pri" onclick="ejecutarImpresionNativa()" style="padding: 6px 12px; font-size: 0.82rem; font-weight:700; background: #0284c7; border:none; border-radius:8px; color:#fff; cursor:pointer;">🖨️ PDF / Ventana</button>
           <button class="btn-icon-close" onclick="cerrarModalVisorTicket()" style="color:#fff; background:#334155; border:none; border-radius:6px; width:28px; height:28px; cursor:pointer;">✕</button>
         </div>
       </div>
