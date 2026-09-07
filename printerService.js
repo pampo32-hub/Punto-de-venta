@@ -121,7 +121,16 @@ function formatearLinea3Col(cant, desc, total, anchoTotal = 48) {
  * Generador de comandos ESC/POS y Formato Visual de Comanda para Cocina / Barra
  */
 function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, items, destino = 'cocina', pagada = false, fechaHora = new Date().toISOString() }) {
-  const fechaStr = new Date(fechaHora).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  let fechaStr = fechaHora;
+  if (fechaHora) {
+    const d = new Date(fechaHora);
+    if (!isNaN(d.getTime())) {
+      fechaStr = d.toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+    }
+  }
+  if (!fechaStr || fechaStr === 'Invalid Date') {
+    fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  }
   let destinoTitulo = destino.toUpperCase() === 'BARRA' ? 'COMANDA BARRA' : 'COMANDA COCINA';
   if (pagada) {
     destinoTitulo += ' (PAGADA / DIRECTO)';
@@ -195,7 +204,16 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
  * Generador de Factura / Ticket de Liquidación Completa
  */
 function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, metodoPago, subtotal, descuentoHH, servicio, iva, total, recibido, cambio, items, fechaHora = new Date().toISOString() }) {
-  const fechaStr = new Date(fechaHora).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  let fechaStr = fechaHora;
+  if (fechaHora) {
+    const d = new Date(fechaHora);
+    if (!isNaN(d.getTime())) {
+      fechaStr = d.toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+    }
+  }
+  if (!fechaStr || fechaStr === 'Invalid Date') {
+    fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  }
   const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
   const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
   const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-0000 / 8888-9999');
