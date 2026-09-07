@@ -356,10 +356,11 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const perfilVisual = `${u.nombre_completo} (${rolEtiqueta})`;
+    const debeCambiarPwd = Number(u.debe_cambiar_password) === 1 || u.debe_cambiar_password === true || u.debe_cambiar_password === '1';
 
     res.json({
       ok: true,
-      debe_cambiar_password: Boolean(u.debe_cambiar_password),
+      debe_cambiar_password: debeCambiarPwd,
       usuario: {
         id: u.id,
         usuario: u.usuario,
@@ -369,7 +370,7 @@ app.post('/api/auth/login', async (req, res) => {
         rolEtiqueta,
         perfilVisual,
         pin: u.pin,
-        debe_cambiar_password: Boolean(u.debe_cambiar_password),
+        debe_cambiar_password: debeCambiarPwd,
         permisos: JSON.parse(u.permisos || '{}'),
         negocio_id: u.negocio_id
       },
@@ -480,7 +481,7 @@ app.post('/api/auth/validar-pin-mesa', async (req, res) => {
         rolEtiqueta,
         perfilVisual,
         pin: u.pin,
-        debe_cambiar_password: Boolean(u.debe_cambiar_password),
+        debe_cambiar_password: Number(u.debe_cambiar_password) === 1 || u.debe_cambiar_password === true || u.debe_cambiar_password === '1',
         permisos: JSON.parse(u.permisos || '{}'),
         negocio_id: u.negocio_id
       }
