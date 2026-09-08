@@ -2483,25 +2483,20 @@ window.obtenerHeadersAuthAdmin = function(extraHeaders = {}) {
   return headers;
 };
 
-window.abrirPanelAdmin = function() {
+window.abrirPanelAdmin = async function() {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para ingresar al panel:');
+    const pin = await window.solicitarPinAdmin({
+      icono: '👑',
+      titulo: 'Panel de Administración',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para ingresar al panel de control:'
+    });
     if (!pin) return;
-    if (pin.trim() === '1234' || pin.trim() === '9999') {
-      window._pinSupervisorActivo = pin.trim();
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
-      }
-      setTimeout(() => {
-        const modal = document.getElementById('modalPanelAdmin');
-        if (modal) modal.classList.add('active');
-      }, 150);
-      return;
-    } else {
-      alert('❌ PIN incorrecto.');
-      return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
     }
   }
   const modal = document.getElementById('modalPanelAdmin');
@@ -2548,20 +2543,20 @@ window.ejecutarAccionAdmin = function(tipo) {
   }
 };
 
-window.abrirModuloAdmin = function(modulo) {
+window.abrirModuloAdmin = async function(modulo) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para acceder:');
+    const pin = await window.solicitarPinAdmin({
+      icono: '🔒',
+      titulo: 'Módulo de Administración',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para acceder a este módulo:'
+    });
     if (!pin) return;
-    if (pin.trim() === '1234' || pin.trim() === '9999') {
-      window._pinSupervisorActivo = pin.trim();
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
-      }
-    } else {
-      alert('❌ PIN incorrecto.');
-      return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
     }
   }
 
@@ -6528,32 +6523,21 @@ window.responderPreguntaCliente = responderPreguntaCliente;
 function abrirModalEditarClienteActivo() {
   if (!estado.mesaActiva) return;
   const actual = (estado.mesaActiva.cliente && estado.mesaActiva.cliente !== 'Cliente General') ? estado.mesaActiva.cliente : '';
-  const nuevoNombre = prompt('Ingrese el nombre del cliente para esta mesa:', actual);
-  if (nuevoNombre === null) return; // cancelado
-
-  const nombreLimpio = nuevoNombre.trim();
-  estado.mesaActiva.cliente = nombreLimpio || null;
-
-  const elClienteNom = document.getElementById('comClienteNombre');
-  if (elClienteNom) {
-    elClienteNom.textContent = nombreLimpio || 'General';
+  
+  window._mesaParaPreguntaCliente = estado.mesaActiva.id;
+  const modal = document.getElementById('modalPreguntaCliente');
+  const txtTitulo = document.getElementById('preguntaClienteMesaTitulo');
+  const inp = document.getElementById('txtNombreClienteMesa');
+  
+  if (txtTitulo) txtTitulo.textContent = `Mesa ${estado.mesaActiva.numero || estado.mesaActiva.id}`;
+  if (inp) {
+    inp.value = actual;
+    setTimeout(() => { inp.focus(); inp.select(); }, 120);
   }
-
-  const mesaEnLista = estado.mesas.find(m => Number(m.id) === Number(estado.mesaActiva.id));
-  if (mesaEnLista) {
-    mesaEnLista.cliente = nombreLimpio || null;
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
   }
-
-  try {
-    const nid = estado.negocioActual?.id || 1;
-    fetch(`/api/mesas/${estado.mesaActiva.id}/cliente`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-      body: JSON.stringify({ cliente: nombreLimpio })
-    }).catch(err => console.warn('Error guardando cliente editado:', err));
-  } catch (e) {}
-
-  renderSalón();
 }
 window.abrirModalEditarClienteActivo = abrirModalEditarClienteActivo;
 
@@ -10256,20 +10240,16 @@ async function initHappyHour() {
     let pinAutorizacion = null;
 
     if (!esAdminODev) {
-      const pin = prompt('🔒 Autorización Requerida:\nSolo Administrador o Cajero pueden activar/desactivar el Happy Hour.\nIngresa el PIN de Administrador (1234):');
+      const pin = await window.solicitarPinAdmin({
+        icono: '🍸',
+        titulo: 'Autorización Happy Hour',
+        subtitulo: 'Solo Administrador o Cajero autorizados',
+        mensaje: 'Solo Administrador o Cajero pueden activar o desactivar el Happy Hour. Ingresa el PIN de Administrador (1234):'
+      });
       if (!pin) return;
-      if (pin.trim() === '1234' || pin.trim() === '9999') {
-        pinAutorizacion = pin.trim();
-        if (typeof mostrarNotificacionCentro === 'function') {
-          mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
-        }
-      } else {
-        if (typeof mostrarNotificacionCentro === 'function') {
-          mostrarNotificacionCentro('🔒 Permiso denegado: PIN de Administrador incorrecto', 'warning');
-        } else {
-          alert('❌ PIN incorrecto. No tienes permiso para modificar el Happy Hour.');
-        }
-        return;
+      pinAutorizacion = pin;
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
       }
     }
 
@@ -10317,17 +10297,20 @@ async function initHappyHour() {
   // 3. Click largo (>600ms) → abrir configurador de horario (Protegido por Rol y PIN)
   let hhLongTimer = null;
   btnHH.addEventListener('mousedown', () => {
-    hhLongTimer = setTimeout(() => {
+    hhLongTimer = setTimeout(async () => {
       const uAct = estado.usuarioActual || estado.usuario;
       const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
       if (esAdminODev) {
         abrirConfigHappyHour();
       } else {
-        const pin = prompt('🔒 Configuración de Happy Hour:\nIngresa el PIN de Administrador (1234):');
-        if (pin && (pin.trim() === '1234' || pin.trim() === '9999')) {
+        const pin = await window.solicitarPinAdmin({
+          icono: '🍸',
+          titulo: 'Configuración Happy Hour',
+          subtitulo: 'Acceso Restringido',
+          mensaje: 'Ingresa el PIN de Administrador (1234) para configurar los horarios y reglas de Happy Hour:'
+        });
+        if (pin) {
           abrirConfigHappyHour();
-        } else if (pin) {
-          alert('❌ PIN incorrecto.');
         }
       }
     }, 600);
@@ -10336,17 +10319,20 @@ async function initHappyHour() {
     btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
   });
   btnHH.addEventListener('touchstart', () => {
-    hhLongTimer = setTimeout(() => {
+    hhLongTimer = setTimeout(async () => {
       const uAct = estado.usuarioActual || estado.usuario;
       const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
       if (esAdminODev) {
         abrirConfigHappyHour();
       } else {
-        const pin = prompt('🔒 Configuración de Happy Hour:\nIngresa el PIN de Administrador (1234):');
-        if (pin && (pin.trim() === '1234' || pin.trim() === '9999')) {
+        const pin = await window.solicitarPinAdmin({
+          icono: '🍸',
+          titulo: 'Configuración Happy Hour',
+          subtitulo: 'Acceso Restringido',
+          mensaje: 'Ingresa el PIN de Administrador (1234) para configurar los horarios y reglas de Happy Hour:'
+        });
+        if (pin) {
           abrirConfigHappyHour();
-        } else if (pin) {
-          alert('❌ PIN incorrecto.');
         }
       }
     }, 600);
@@ -11042,16 +11028,16 @@ window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para realizar movimientos de inventario:');
+    const pin = await window.solicitarPinAdmin({
+      icono: '📦',
+      titulo: 'Movimiento de Inventario',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para realizar movimientos de stock:'
+    });
     if (!pin) return;
-    if (pin.trim() === '1234' || pin.trim() === '9999') {
-      window._pinSupervisorActivo = pin.trim();
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Movimiento de inventario autorizado con PIN', 'success');
-      }
-    } else {
-      alert('❌ PIN incorrecto.');
-      return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Movimiento de inventario autorizado con PIN', 'success');
     }
   }
 
@@ -11268,20 +11254,20 @@ window.actualizarCalculoShotsNuevo = function() {
   if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
 };
 
-window.abrirModalNuevoInsumo = function() {
+window.abrirModalNuevoInsumo = async function() {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para registrar nuevos insumos:');
+    const pin = await window.solicitarPinAdmin({
+      icono: '➕',
+      titulo: 'Registrar Nuevo Insumo',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para registrar nuevos insumos en bodega:'
+    });
     if (!pin) return;
-    if (pin.trim() === '1234' || pin.trim() === '9999') {
-      window._pinSupervisorActivo = pin.trim();
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
-      }
-    } else {
-      alert('❌ PIN incorrecto.');
-      return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
     }
   }
 
@@ -12179,16 +12165,16 @@ window.abrirModalKardex = async function(insumoId) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para consultar el Kárdex:');
+    const pin = await window.solicitarPinAdmin({
+      icono: '📜',
+      titulo: 'Historial Kárdex',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para consultar el Kárdex:'
+    });
     if (!pin) return;
-    if (pin.trim() === '1234' || pin.trim() === '9999') {
-      window._pinSupervisorActivo = pin.trim();
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Consulta de Kárdex autorizada con PIN', 'success');
-      }
-    } else {
-      alert('❌ PIN incorrecto.');
-      return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Consulta de Kárdex autorizada con PIN', 'success');
     }
   }
 
