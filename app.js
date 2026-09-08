@@ -3176,7 +3176,7 @@ window.cargarMonitorDbDev = async function(manual = false) {
     if (lastUp) {
       const d = new Date();
       const horaStr = d.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      lastUp.innerHTML = `Última sincronización en vivo: <strong style="color:#f8fafc;">${horaStr}</strong> • Sincronizado con Render PostgreSQL Cloud`;
+      lastUp.innerHTML = `Última sincronización en vivo: <strong style="color:#f8fafc;">${horaStr}</strong> • Sincronizado con Supabase Cloud`;
     }
 
     if (manual && typeof mostrarNotificacionCentro === 'function') {

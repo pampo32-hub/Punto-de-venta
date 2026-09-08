@@ -29,7 +29,7 @@ if (process.env.DATABASE_URL && !process.env.POS_DB_PATH) {
   });
 
   const isSupabase = (process.env.DATABASE_URL || '').includes('supabase');
-  console.log(`🐘 Conectado a base de datos central en la nube (${isSupabase ? 'Supabase Virginia PostgreSQL' : 'PostgreSQL'}).`);
+  console.log(`🐘 Conectado a base de datos central en la nube (${isSupabase ? 'Supabase PostgreSQL' : 'PostgreSQL'}).`);
 
   function convertSqlToPg(sql) {
     if (!sql || typeof sql !== 'string') return sql;

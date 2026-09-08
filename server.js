@@ -1125,7 +1125,7 @@ app.get('/api/dev/db-monitor', async (req, res) => {
 
     res.json({
       ok: true,
-      engine: isPg ? 'Render PostgreSQL (Cloud DB)' : 'SQLite3 (Local)',
+      engine: isPg ? 'Supabase PostgreSQL (Cloud DB)' : 'SQLite3 (Local)',
       engine_type: isPg ? 'postgres' : 'sqlite',
       status: 'online',
       ping_ms: pingMs,
