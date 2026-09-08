@@ -117,7 +117,7 @@ function formatearLinea3Col(cant, desc, total, anchoTotal = 48) {
 /**
  * Generador de comandos ESC/POS y Formato Visual de Comanda para Cocina / Barra
  */
-function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, items, destino = 'cocina', pagada = false, fechaHora = new Date().toISOString() }) {
+function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mesero, items, destino = 'cocina', pagada = false, fechaHora = new Date().toISOString() }) {
   let fechaStr = fechaHora;
   if (fechaHora) {
     const d = new Date(fechaHora);
@@ -128,16 +128,30 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   if (!fechaStr || fechaStr === 'Invalid Date') {
     fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
   }
+
+  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
+  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
+  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+
   let destinoTitulo = destino.toUpperCase() === 'BARRA' ? 'COMANDA BARRA' : 'COMANDA COCINA';
   if (pagada) {
     destinoTitulo += ' (PAGADA / DIRECTO)';
   }
   
+  const listaItems = Array.isArray(items) ? items : [];
+  const totalItems = listaItems.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0);
+
   // 1. ESC/POS Buffer (para enviar al puerto 9100 / socket / USB)
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.BEEP;
   raw += ESCPOS.ALIGN_CENTER;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += `${negSlogan}\n`;
+  raw += `Tel: ${negTel}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + `*** ${destinoTitulo} ***\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `MESA: ${limpiarTextoTermica(mesaNumero)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   if (pagada) {
@@ -148,17 +162,16 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   raw += `Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
   raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
   raw += '-'.repeat(48) + '\n';
-  raw += ESCPOS.BOLD_ON + formatearLinea3Col('CANT', 'PLATILLO / PRODUCTO', 'CURSO/DEST') + '\n' + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.BOLD_ON + formatearLinea3Col('CANT', 'PLATILLO / PRODUCTO', 'TIEMPO') + '\n' + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
 
-  items.forEach(it => {
+  listaItems.forEach(it => {
     const cursoLabels = { 1: '[Entrada]', 2: '[Fuerte]', 3: '[Postre]' };
-    const curLabel = cursoLabels[it.curso] || '';
+    const curLabel = cursoLabels[it.curso] || '[Fuerte]';
+    const cant = Number(it.cantidad) || 1;
     const prodNombre = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
-    raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${it.cantidad}x ${prodNombre}\n` + ESCPOS.NORMAL;
-    if (curLabel) {
-      raw += `   ${curLabel}\n`;
-    }
+    raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${cant}x  ${prodNombre}\n` + ESCPOS.NORMAL;
+    raw += `   ${curLabel}\n`;
     if (it.notas) {
       raw += ESCPOS.BOLD_ON + `   >> NOTA: ${limpiarTextoTermica(it.notas)}\n` + ESCPOS.BOLD_OFF;
     }
@@ -168,8 +181,14 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
   });
 
   raw += '-'.repeat(48) + '\n';
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ITEMS:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${totalItems}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += '='.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.BOLD_ON + `TOTAL ITEMS: ${items.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0)}\n` + ESCPOS.BOLD_OFF;
+  raw += `• NOTIFICACION DE ${destino.toUpperCase()} •\n`;
+  raw += `Corte automatico ejecutado en puerto ESC/POS\n`;
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_FULL;
 
@@ -178,20 +197,21 @@ function generarTicketComanda({ ordenId, comandaNumero, mesaNumero, mesero, item
     tipo: 'comanda',
     destino,
     titulo: destinoTitulo,
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir },
     mesa: mesaNumero,
     ordenId,
     comandaNumero,
     mesero,
     pagada: Boolean(pagada),
     fechaHora: fechaStr,
-    items: items.map(it => ({
-      cantidad: it.cantidad,
+    items: listaItems.map(it => ({
+      cantidad: Number(it.cantidad) || 1,
       nombre: it.nombre_producto || it.nombre || 'Producto',
       notas: it.notas || '',
       curso: it.curso || 2,
       origenMesa: it.origen_mesa_numero || null
     })),
-    totalItems: items.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0)
+    totalItems: totalItems
   };
 
   return { raw, ticketVisual };
@@ -217,32 +237,58 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
   const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
 
+  const listaItems = Array.isArray(items) ? items : [];
+
+  let subCalculado = 0;
+  const itemsNormalizados = listaItems.map(it => {
+    const cant = Number(it.cantidad) || 1;
+    const unitPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
+    const totalLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
+      ? Number(it.totalLinea)
+      : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
+        ? Number(it.subtotal)
+        : (unitPrice * cant);
+    subCalculado += totalLinea;
+    return {
+      cantidad: cant,
+      nombre: it.nombre_producto || it.nombre || it.descripcion || 'Producto',
+      precioUnitario: unitPrice,
+      totalLinea: totalLinea,
+      notas: it.notas || ''
+    };
+  });
+
+  const subNum = Math.round(Number(subtotal) || subCalculado || 0);
+  const descHHNum = Math.round(Number(descuentoHH) || 0);
+  const baseImponible = Math.max(0, subNum - descHHNum);
+  const servNum = (servicio !== undefined && servicio !== null && Number(servicio) > 0) ? Math.round(Number(servicio)) : Math.round(baseImponible * 0.10);
+  const ivaNum = (iva !== undefined && iva !== null && Number(iva) > 0) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
+  const totNum = (total !== undefined && total !== null && Number(total) > 0) ? Math.round(Number(total)) : (baseImponible + servNum + ivaNum);
+  const montoRecibido = Number(recibido) > 0 ? Math.round(Number(recibido)) : totNum;
+  const vuelto = Number(cambio) >= 0 ? Math.round(Number(cambio)) : Math.max(0, montoRecibido - totNum);
+
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += `${negSlogan}\n`;
   raw += `Tel: ${negTel}\n`;
-  raw += `${negDir}\n`;
-  raw += `Ced. Juridica: ${negCed}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `COMPROBANTE DE PAGO / FACTURA\n` + ESCPOS.BOLD_OFF;
   raw += ESCPOS.ALIGN_LEFT;
   raw += `Factura / Orden: #${numeroOrden || ordenId || '001'}\n`;
   raw += `Mesa: ${limpiarTextoTermica(mesaNumero)} | Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
-  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente Test')}\n`;
+  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
   raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
   raw += '-'.repeat(48) + '\n';
-  raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANTDESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANT  DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
 
-  items.forEach(it => {
-    const unitPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
-    const cant = Number(it.cantidad) || 1;
-    const totalLinea = it.totalLinea !== undefined ? Number(it.totalLinea) : (unitPrice * cant);
-    const nombreProd = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
-    const cantDesc = `${cant}x  ${nombreProd}`;
-    raw += formatearLinea2Col(cantDesc, formatMontoTermica(totalLinea)) + '\n';
+  itemsNormalizados.forEach(it => {
+    const cantDesc = `${it.cantidad}x  ${limpiarTextoTermica(it.nombre)}`;
+    raw += formatearLinea2Col(cantDesc, formatMontoTermica(it.totalLinea)) + '\n';
     if (it.notas) {
       raw += `   (${limpiarTextoTermica(it.notas)})\n`;
     }
@@ -250,22 +296,22 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
 
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subtotal)) + '\n';
-  if (descuentoHH > 0) {
-    raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descuentoHH)}`) + '\n' + ESCPOS.BOLD_OFF;
+  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
+  if (descHHNum > 0) {
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servicio)) + '\n';
-  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(iva)) + '\n';
+  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL;
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(total)}\n` + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
   raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
-  if (metodoPago === 'Efectivo' && recibido > 0) {
-    raw += `Monto Recibido: ${formatMontoTermica(recibido)}\n`;
-    raw += `Vuelto / Cambio: ${formatMontoTermica(cambio)}\n`;
+  if ((metodoPago === 'Efectivo' || !metodoPago) && montoRecibido > 0) {
+    raw += `Monto Recibido: ${formatMontoTermica(montoRecibido)}\n`;
+    raw += `Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
   }
 
   raw += ESCPOS.ALIGN_CENTER;
@@ -284,22 +330,17 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
     numeroOrden: numeroOrden || ordenId,
     mesa: mesaNumero,
     mesero,
-    cliente: cliente || 'Cliente Test',
+    cliente: cliente || 'Cliente General',
     fechaHora: fechaStr,
-    items: items.map(it => ({
-      cantidad: it.cantidad,
-      nombre: it.nombre_producto || it.nombre,
-      precioUnitario: it.precio_unitario || it.precio,
-      totalLinea: (it.precio_unitario || it.precio) * it.cantidad
-    })),
-    subtotal: Math.round(subtotal),
-    descuentoHH: Math.round(descuentoHH || 0),
-    servicio: Math.round(servicio),
-    iva: Math.round(iva),
-    total: Math.round(total),
+    items: itemsNormalizados,
+    subtotal: subNum,
+    descuentoHH: descHHNum,
+    servicio: servNum,
+    iva: ivaNum,
+    total: totNum,
     metodoPago: metodoPago || 'Efectivo',
-    recibido: Math.round(recibido || total),
-    cambio: Math.round(cambio || 0)
+    recibido: montoRecibido,
+    cambio: vuelto
   };
 
   return { raw, ticketVisual };
@@ -367,8 +408,10 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   raw += ESCPOS.BOLD_ON + `*** PRE-CUENTA / PRE-FACTURA ***\n`;
   raw += `[ REVISION DE CONSUMOS EN MESA ]\n` + ESCPOS.BOLD_OFF;
   raw += `* NO VALIDO COMO FACTURA FISCAL *\n`;
-  raw += ESCPOS.BOLD_ON + `MESA: ${limpiarTextoTermica(mesaNumero)} | Salonero: ${limpiarTextoTermica(mesero || 'Don Alberto')}\n` + ESCPOS.BOLD_OFF;
-  raw += `Orden #${numeroOrden || ordenId || '001'} - Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Pre-Factura / Orden: #${numeroOrden || ordenId || '001'}\n`;
+  raw += `Mesa: ${limpiarTextoTermica(mesaNumero)} | Salonero: ${limpiarTextoTermica(mesero || 'Don Alberto')}\n`;
+  raw += `Cliente: ${limpiarTextoTermica(cliente || 'Cliente General')}\n`;
   raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANT  DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
@@ -435,64 +478,261 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
  * Generador de Comprobante de Pago Parcial (Split Bill)
  */
 function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre, mesero, metodoPago, montoCobrado, subtotal, impuestos, itemsPagados, saldoRestanteMesa, fechaHora = new Date().toISOString() }) {
-  const fechaStr = new Date(fechaHora).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  let fechaStr = fechaHora;
+  if (fechaHora) {
+    const d = new Date(fechaHora);
+    if (!isNaN(d.getTime())) {
+      fechaStr = d.toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+    }
+  }
+  if (!fechaStr || fechaStr === 'Invalid Date') {
+    fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+  }
   const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
+  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
+  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+
+  const listaItems = Array.isArray(itemsPagados) ? itemsPagados : [];
+  const itemsNormalizados = listaItems.map(it => {
+    const cant = Number(it.cantidad) || 1;
+    const unitP = Number(it.precio_unitario ?? it.precio ?? 0);
+    const totL = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
+      ? Number(it.totalLinea)
+      : (unitP * cant);
+    return {
+      cantidad: cant,
+      nombre: it.nombre_producto || it.nombre || 'Consumo',
+      precioUnitario: unitP,
+      totalLinea: totL,
+      notas: it.notas || ''
+    };
+  });
+
+  const subNum = Math.round(Number(subtotal) || 0);
+  const impNum = Math.round(Number(impuestos) || 0);
+  const totNum = Math.round(Number(montoCobrado) || (subNum + impNum));
+  const saldoRest = Math.round(Number(saldoRestanteMesa) || 0);
 
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.BOLD_ON + `*** COMPROBANTE DE PAGO PARCIAL ***\n` + ESCPOS.BOLD_OFF;
-  raw += ESCPOS.DOUBLE_HEIGHT + `MESA: ${limpiarTextoTermica(mesaNumero)} - ${limpiarTextoTermica(personaNombre).toUpperCase()}\n` + ESCPOS.NORMAL;
-  raw += `Orden: #${ordenId} | Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
+  raw += `${negSlogan}\n`;
+  raw += `Tel: ${negTel}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `*** COMPROBANTE DE PAGO PARCIAL ***\n`;
+  raw += `[ SPLIT BILL / CUENTA DIVIDIDA ]\n` + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Factura / Orden: #${ordenId || '001'}\n`;
+  raw += `Mesa: ${limpiarTextoTermica(mesaNumero)} - ${limpiarTextoTermica(personaNombre || 'CLIENTE').toUpperCase()}\n`;
+  raw += `Salonero: ${limpiarTextoTermica(mesero || 'General')}\n`;
   raw += `Fecha/Hora: ${limpiarTextoTermica(fechaStr)}\n`;
   raw += '-'.repeat(48) + '\n';
-  raw += ESCPOS.ALIGN_LEFT;
-  raw += ESCPOS.BOLD_ON + formatearLinea3Col('CANT', 'CONSUMO INDIVIDUAL', 'TOTAL') + '\n' + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('CANT  DESCRIPCION', 'PRECIO') + '\n' + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
 
-  itemsPagados.forEach(it => {
-    const unitP = it.precio_unitario || it.precio || 0;
-    const totalL = unitP * it.cantidad;
-    const nomProd = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Consumo');
-    raw += formatearLinea3Col(`${it.cantidad}x`, nomProd, formatMontoTermica(totalL)) + '\n';
+  itemsNormalizados.forEach(it => {
+    const cantDesc = `${it.cantidad}x  ${limpiarTextoTermica(it.nombre)}`;
+    raw += formatearLinea2Col(cantDesc, formatMontoTermica(it.totalLinea)) + '\n';
+    if (it.notas) {
+      raw += `   (${limpiarTextoTermica(it.notas)})\n`;
+    }
   });
 
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal Consumo:', formatMontoTermica(subtotal)) + '\n';
-  raw += formatearLinea2Col('10% Serv + 13% IVA:', formatMontoTermica(impuestos)) + '\n';
+  raw += formatearLinea2Col('Subtotal Consumo:', formatMontoTermica(subNum)) + '\n';
+  raw += formatearLinea2Col('10% Serv + 13% IVA:', formatMontoTermica(impNum)) + '\n';
   raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + formatearLinea2Col('PAGADO:', formatMontoTermica(montoCobrado)) + '\n' + ESCPOS.NORMAL;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL PAGADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
-  raw += ESCPOS.ALIGN_LEFT;
-  raw += `Metodo: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
-  raw += ESCPOS.BOLD_ON + `Saldo Pendiente en Mesa: ${formatMontoTermica(saldoRestanteMesa)}\n` + ESCPOS.BOLD_OFF;
+  raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
+  raw += `Saldo Pendiente en Mesa: ${formatMontoTermica(saldoRest)}\n`;
   raw += `Estado: Mesa permanece ABIERTA con consumos pendientes.\n`;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += '\n';
+  raw += 'Muchas gracias por su preferencia!\n';
+  raw += 'Autorizado mediante resolucion DGT-R-033-2019\n';
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_FULL;
 
   const ticketVisual = {
     tipo: 'pago_parcial',
     titulo: 'PAGO PARCIAL INDIVIDUAL',
-    negocio: { nombre: negNombre },
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
     ordenId,
     mesa: mesaNumero,
     personaNombre,
     mesero,
     fechaHora: fechaStr,
-    items: itemsPagados.map(it => ({
-      cantidad: it.cantidad,
-      nombre: it.nombre_producto || it.nombre || 'Consumo',
-      precioUnitario: it.precio_unitario || it.precio || 0,
-      totalLinea: (it.precio_unitario || it.precio || 0) * it.cantidad
-    })),
-    subtotal: Math.round(subtotal),
-    impuestos: Math.round(impuestos),
-    total: Math.round(montoCobrado),
+    items: itemsNormalizados,
+    subtotal: subNum,
+    impuestos: impNum,
+    total: totNum,
     metodoPago: metodoPago || 'Efectivo',
-    saldoRestanteMesa: Math.round(saldoRestanteMesa)
+    saldoRestanteMesa: saldoRest
+  };
+
+  return { raw, ticketVisual };
+}
+function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_corte, fondo_inicial, ventas = {}, total_entradas, total_salidas, efectivo_esperado, movimientos_detalle = [], tip_pool = [], total_propinas = 0 }) {
+  const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
+  const fCorte = fecha_corte ? new Date(fecha_corte).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+
+  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
+  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
+  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+
+  let raw = '';
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += `${negSlogan}\n`;
+  raw += `Tel: ${negTel}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `*** CORTE X (PARCIAL) ***\n`;
+  raw += `[ AUDITORIA INFORMATIVA DE TURNO ]\n` + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Turno / Caja: #${caja_id || 1} | Cajero: ${limpiarTextoTermica(cajero || 'Cajero')}\n`;
+  raw += `Apertura: ${limpiarTextoTermica(fApertura)}\n`;
+  raw += `Corte: ${limpiarTextoTermica(fCorte)}\n`;
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `DESGLOSE DE VENTAS\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  raw += formatearLinea2Col('Ventas Tarjeta:', formatMontoTermica(ventas.tarjeta || 0)) + '\n';
+  raw += formatearLinea2Col('Ventas SINPE Movil:', formatMontoTermica(ventas.sinpe || 0)) + '\n';
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL VENTAS:', formatMontoTermica(ventas.total || 0)) + '\n' + ESCPOS.BOLD_OFF;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `ARQUEO DE EFECTIVO EN GAVETA\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('(+) Fondo Inicial:', formatMontoTermica(fondo_inicial || 0)) + '\n';
+  raw += formatearLinea2Col('(+) Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  raw += formatearLinea2Col('(+) Entradas Efectivo:', `+${formatMontoTermica(total_entradas || 0)}`) + '\n';
+  raw += formatearLinea2Col('(-) Salidas Menores:', `-${formatMontoTermica(total_salidas || 0)}`) + '\n';
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'EFECTIVO ESPERADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(efectivo_esperado || 0)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += `*** ESTADO: TURNO PERMANECE ABIERTO ***\n`;
+  raw += `Corte informativo sin impacto en cierre contable\n`;
+  raw += ESCPOS.FEED_LINES(4);
+  raw += ESCPOS.CUT_FULL;
+
+  const ticketVisual = {
+    tipo: 'corte_x',
+    titulo: 'CORTE X (PARCIAL)',
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    caja_id,
+    cajero,
+    fecha_apertura,
+    fecha_corte,
+    fondo_inicial,
+    ventas,
+    total_entradas,
+    total_salidas,
+    efectivo_esperado,
+    movimientos_detalle,
+    tip_pool,
+    total_propinas
+  };
+
+  return { raw, ticketVisual };
+}
+
+/**
+ * Generador de Comprobante Cierre Z (Liquidación Definitiva de Turno)
+ */
+function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_cierre, fondo_inicial, ventas = {}, total_entradas, total_salidas, efectivo_esperado, efectivo_real_contado, diferencia, estado_cuadre, notas, tip_pool = [], total_propinas = 0 }) {
+  const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
+  const fCierre = fecha_cierre ? new Date(fecha_cierre).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+
+  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
+  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
+  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+
+  let raw = '';
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += `${negSlogan}\n`;
+  raw += `Tel: ${negTel}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `*** CIERRE Z (FINAL) ***\n`;
+  raw += `[ LIQUIDACION OFICIAL DE TURNO ]\n` + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Turno / Caja: #${caja_id || 1} | Cajero: ${limpiarTextoTermica(cajero || 'Cajero')}\n`;
+  raw += `Apertura: ${limpiarTextoTermica(fApertura)}\n`;
+  raw += `Cierre: ${limpiarTextoTermica(fCierre)}\n`;
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `VENTAS TOTALES DEL TURNO\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  raw += formatearLinea2Col('Ventas Tarjeta:', formatMontoTermica(ventas.tarjeta || 0)) + '\n';
+  raw += formatearLinea2Col('Ventas SINPE Movil:', formatMontoTermica(ventas.sinpe || 0)) + '\n';
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL FACTURADO:', formatMontoTermica(ventas.total || 0)) + '\n' + ESCPOS.BOLD_OFF;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `ARQUEO FISICO Y CUADRE DE CAJA\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('(+) Fondo Inicial:', formatMontoTermica(fondo_inicial || 0)) + '\n';
+  raw += formatearLinea2Col('(+) Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  raw += formatearLinea2Col('(+) Entradas Menores:', `+${formatMontoTermica(total_entradas || 0)}`) + '\n';
+  raw += formatearLinea2Col('(-) Salidas Menores:', `-${formatMontoTermica(total_salidas || 0)}`) + '\n';
+  raw += formatearLinea2Col('EFECTIVO ESPERADO:', formatMontoTermica(efectivo_esperado || 0)) + '\n';
+  raw += formatearLinea2Col('EFECTIVO CONTADO:', formatMontoTermica(efectivo_real_contado || 0)) + '\n';
+  raw += formatearLinea2Col(`DIFERENCIA (${estado_cuadre || 'Cuadre'}):`, `${Number(diferencia) >= 0 ? '+' : ''}${formatMontoTermica(diferencia || 0)}`) + '\n';
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL LIQUIDADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(efectivo_real_contado || 0)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += '-'.repeat(48) + '\n';
+  raw += 'Firma Cajero            Firma Administrador\n';
+  raw += '-'.repeat(48) + '\n';
+  raw += `*** TURNO OFICIALMENTE CERRADO ***\n`;
+  raw += `Registro contable y fiscal guardado\n`;
+  raw += ESCPOS.FEED_LINES(4);
+  raw += ESCPOS.CUT_FULL;
+
+  const ticketVisual = {
+    tipo: 'cierre_z',
+    titulo: 'CIERRE Z (FINAL)',
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    caja_id,
+    cajero,
+    fecha_apertura,
+    fecha_cierre,
+    fondo_inicial,
+    ventas,
+    total_entradas,
+    total_salidas,
+    efectivo_esperado,
+    efectivo_real_contado,
+    diferencia,
+    estado_cuadre,
+    notas,
+    tip_pool,
+    total_propinas
   };
 
   return { raw, ticketVisual };
@@ -619,6 +859,8 @@ module.exports = {
   generarTicketLiquidacion,
   generarTicketPreFactura,
   generarTicketPagoParcial,
+  generarTicketCorteX,
+  generarTicketCierreZ,
   enviarAPuertoTCP,
   sendRawToWindowsPrinter,
   getInstalledPrinters,

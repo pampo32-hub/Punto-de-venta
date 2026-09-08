@@ -7383,8 +7383,9 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
 
     const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
 
+    let cobroResData = null;
     if (window.PosOfflineSync) {
-      await window.PosOfflineSync.ejecutarConRespaldo({
+      cobroResData = await window.PosOfflineSync.ejecutarConRespaldo({
         tipo: 'COBRAR_ORDEN',
         endpoint: endpointCobro,
         metodo: 'POST',
@@ -7393,11 +7394,14 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       });
     } else {
       try {
-        await fetch(endpointCobro, {
+        const res = await fetch(endpointCobro, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadCobro)
         });
+        if (res.ok) {
+          cobroResData = await res.json().catch(() => null);
+        }
       } catch (e) {
         console.error('Error al registrar cobro:', e);
       }
@@ -7433,24 +7437,27 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       }
 
       // Disparar automáticamente la impresión del tiquete final de cliente
-      const ticketFinal = {
-        tipo: 'liquidacion',
+      const ticketFinal = (cobroResData && cobroResData.ticket) ? cobroResData.ticket : {
+        tipo: 'cuenta_total',
+        titulo: 'COMPROBANTE DE PAGO / FACTURA',
         negocio: {
           nombre: 'GastroBar Fuego & Brasas',
           slogan: 'Restaurante, Bar & Lounge',
-          tel: '2222-0000 / 8888-9999'
+          tel: '2222-3344',
+          dir: 'San Jose, Costa Rica',
+          cedula: '3-101-789458'
         },
         numeroOrden: ordenId || 'ORD-1',
         ordenId: ordenId || 'ORD-1',
         mesa: mesaNumero,
-        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
+        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'General'),
         cliente: 'Cliente General',
         fechaHora: formatearFechaHoraCR(new Date()),
         items: itemsMesa.map(it => ({
-          cantidad: it.cantidad,
-          nombre: it.nombre,
-          precioUnitario: it.precio,
-          totalLinea: it.precio * it.cantidad,
+          cantidad: Number(it.cantidad) || 1,
+          nombre: it.nombre || it.nombre_producto || 'Producto',
+          precioUnitario: Number(it.precio || it.precio_unitario) || 0,
+          totalLinea: Number(it.subtotal || it.totalLinea || ((it.precio || it.precio_unitario || 0) * (it.cantidad || 1))),
           notas: it.notas || ''
         })),
         subtotal: Math.round(totalNum / 1.23),
@@ -12105,50 +12112,56 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     if (txtTitulo) txtTitulo.textContent = `🖨️ ${ticketData.titulo || 'Comanda'}`;
     if (txtSub) txtSub.textContent = `Destino: ${ticketData.destino ? ticketData.destino.toUpperCase() : 'COCINA'} • ESC/POS 80mm`;
 
+    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
+    const totalItems = ticketData.totalItems || listaItems.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0);
+
     html = `
-      <div class="receipt-header">
-        <div class="receipt-logo">${ticketData.destino === 'barra' ? '🍸' : '🍳'}</div>
-        <div class="receipt-brand-name">*** ${ticketData.titulo || 'COMANDA'} ***</div>
-        <div class="receipt-type-badge">MESA: ${ticketData.mesa}</div>
-        <div class="receipt-sub">Orden #${ticketData.ordenId || 1} • Comanda #${ticketData.comandaNumero || 1}</div>
-        <div class="receipt-sub">Salonero: ${ticketData.mesero || 'General'}</div>
-        <div class="receipt-sub">${ticketData.fechaHora}</div>
+      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
+        <div style="font-size:1.3rem; margin-bottom:2px;">${ticketData.destino === 'barra' ? '🍸' : '🍳'}</div>
+        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
       </div>
-
-      <table class="receipt-items-table">
-        <thead>
-          <tr>
-            <th style="width:18%;">CANT</th>
-            <th style="width:62%;">PLATILLO / PRODUCTO</th>
-            <th style="width:20%; text-align:right;">TIEMPO</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${(ticketData.items || []).map(it => {
-            const cLabel = it.curso === 1 ? 'Entrada' : it.curso === 3 ? 'Postre' : 'Fuerte';
-            return `
-              <tr>
-                <td><strong>${it.cantidad}x</strong></td>
-                <td>
-                  <span class="receipt-item-title">${escapeHtml(it.nombre)}</span>
-                  ${it.notas ? `<div class="receipt-item-note">⚠️ ${escapeHtml(it.notas)}</div>` : ''}
-                  ${it.origenMesa ? `<div class="receipt-item-note" style="color:#0284c7;">(Orig: Mesa ${it.origenMesa})</div>` : ''}
-                </td>
-                <td style="text-align:right; font-size:10.5px; font-weight:700;">[${cLabel}]</td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-
-      <div class="receipt-divider"></div>
-      <div style="display:flex; justify-content:space-between; font-weight:900; font-size:13px; padding:4px 0;">
-        <span>TOTAL ARTÍCULOS:</span>
-        <span>${ticketData.totalItems || (ticketData.items || []).reduce((a, b) => a + Number(b.cantidad), 0)}</span>
+      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
+      <div style="text-align:center; margin:4px 0; color:#000000;">
+        <div style="font-size:15px; font-weight:900; letter-spacing:0.5px;">*** ${escapeHtml(ticketData.titulo || (ticketData.destino === 'barra' ? 'COMANDA BARRA' : 'COMANDA COCINA'))} ***</div>
+        <div style="font-size:14px; font-weight:900; margin-top:2px;">MESA: ${ticketData.mesa}</div>
+        ${ticketData.pagada ? `<div style="font-size:11px; font-weight:900; color:#000000;">[ ESTADO: COBRADA / DIRECTO ]</div>` : ''}
       </div>
-
-      <div class="receipt-footer">
-        <div>• NOTIFICACIÓN DE COCINA / BARRA •</div>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Orden #${ticketData.ordenId || 1} | Comanda #${ticketData.comandaNumero || 1}</div>
+        <div>Salonero: ${escapeHtml(ticketData.mesero || 'General')}</div>
+        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
+        <span>CANT  PLATILLO / PRODUCTO</span>
+        <span style="text-align:right;">TIEMPO</span>
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-items-list" style="margin:4px 0;">
+        ${listaItems.map(it => {
+          const cLabel = it.curso === 1 ? '[Entrada]' : it.curso === 3 ? '[Postre]' : '[Fuerte]';
+          return `
+            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:13px; font-weight:900; color:#000000; margin-bottom:2px; line-height:1.25;">
+              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${escapeHtml(it.nombre || it.nombre_producto || 'Producto')}</span>
+              <span style="text-align:right; font-weight:900; white-space:nowrap;">${cLabel}</span>
+            </div>
+            ${it.notas ? `<div class="receipt-item-note" style="font-size:11.5px; font-weight:900; color:#000000; padding-left:14px; margin-bottom:2px;">>> NOTA: ${escapeHtml(it.notas)}</div>` : ''}
+            ${it.origenMesa ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(Orig: Mesa ${it.origenMesa})</div>` : ''}
+          `;
+        }).join('')}
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL ITEMS:</span>
+        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${totalItems}</span>
+      </div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
+        <div>• NOTIFICACIÓN DE ${ticketData.destino ? ticketData.destino.toUpperCase() : 'COCINA'} •</div>
         <div>Corte automático ejecutado en puerto ESC/POS</div>
       </div>
     `;
@@ -12200,10 +12213,11 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ REVISIÓN DE CONSUMOS EN MESA ]</div>
         <div style="font-size:10.5px; font-weight:800;">* NO VÁLIDO COMO FACTURA FISCAL *</div>
       </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4; text-align:center;">
-        <div style="font-size:13px; font-weight:900;">MESA: ${ticketData.mesa} | Salonero: ${escapeHtml(ticketData.mesero || 'Don Alberto')}</div>
-        <div>Orden #${ticketData.numeroOrden || ticketData.ordenId} • Cliente: ${escapeHtml(ticketData.cliente || 'Cliente General')}</div>
-        <div>${ticketData.fechaHora}</div>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Pre-Factura / Orden: #${ticketData.numeroOrden || ticketData.ordenId}</div>
+        <div>MESA: ${ticketData.mesa} | Salonero: ${escapeHtml(ticketData.mesero || 'Don Alberto')}</div>
+        <div>Cliente: ${escapeHtml(ticketData.cliente || 'Cliente General')}</div>
+        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
       </div>
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
       <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
@@ -12249,6 +12263,7 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL ESTIMADO:</span>
         <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
       </div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div style="margin:10px 0 6px 0; text-align:center; color:#000000;">
         <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">PROPINA VOLUNTARIA SUGERIDA</div>
         <div style="border:1px dashed #000000; padding:5px 8px; border-radius:4px; display:flex; justify-content:space-around; font-size:12px; font-weight:900;">
@@ -12269,67 +12284,94 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     if (txtTitulo) txtTitulo.textContent = `💵 Pago Parcial - ${ticketData.personaNombre || 'Cliente'}`;
     if (txtSub) txtSub.textContent = `Mesa ${ticketData.mesa} • Comprobante Individual 80mm`;
 
+    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
+    const itemsNormalizados = listaItems.map(it => {
+      const cant = Number(it.cantidad) || 1;
+      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
+      const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
+        ? Number(it.totalLinea)
+        : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
+          ? Number(it.subtotal)
+          : (uPrice * cant);
+      return {
+        cantidad: cant,
+        nombre: it.nombre || it.nombre_producto || it.descripcion || 'Consumo',
+        precioUnitario: uPrice,
+        totalLinea: totLinea,
+        notas: it.notas || ''
+      };
+    });
+
     html = `
-      <div class="receipt-header">
-        <div class="receipt-business-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div>${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div>Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        <div>${ticketData.negocio?.dir || 'San Jose, Costa Rica'}</div>
-        <div>Ced. Juridica: ${ticketData.negocio?.cedula || '3-101-789458'}</div>
+      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
+        <div style="font-size:1.3rem; margin-bottom:2px;">💵</div>
+        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
+        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
       </div>
-      <div class="receipt-double-line">================================================</div>
-      <div class="receipt-title-badge">COMPROBANTE DE PAGO PARCIAL</div>
-      <div class="receipt-meta-grid">
-        <div class="receipt-meta-row"><span>Mesa: ${ticketData.mesa} - ${ticketData.personaNombre ? ticketData.personaNombre.toUpperCase() : 'CLIENTE'}</span></div>
-        <div class="receipt-meta-row"><span>Orden #${ticketData.ordenId} | Salonero: ${ticketData.mesero || 'General'}</span></div>
-        <div class="receipt-meta-row"><span>Fecha/Hora: ${ticketData.fechaHora}</span></div>
+      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
+      <div style="text-align:center; margin:4px 0; color:#000000;">
+        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** COMPROBANTE DE PAGO PARCIAL ***</div>
+        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ SPLIT BILL / CUENTA DIVIDIDA ]</div>
       </div>
-      <div class="receipt-dashed-line">------------------------------------------------</div>
-      <div class="receipt-col-header">
-        <span>CANTDESCRIPCION</span>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Factura / Orden: #${ticketData.ordenId || '001'}</div>
+        <div>MESA: ${ticketData.mesa} - ${(ticketData.personaNombre || 'CLIENTE').toUpperCase()}</div>
+        <div>Salonero: ${escapeHtml(ticketData.mesero || 'General')}</div>
+        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
+        <span>CANT  DESCRIPCIÓN</span>
         <span style="text-align:right;">PRECIO</span>
       </div>
-      <div class="receipt-dashed-line">------------------------------------------------</div>
-      <div class="receipt-items-list">
-        ${(ticketData.items || []).map(it => {
-          const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
-          const cant = Number(it.cantidad) || 1;
-          const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0) ? Number(it.totalLinea) : (uPrice * cant);
-          const nom = escapeHtml(it.nombre || it.nombre_producto || 'Consumo');
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-items-list" style="margin:4px 0;">
+        ${itemsNormalizados.map(it => {
+          const nom = escapeHtml(it.nombre);
           return `
-            <div class="receipt-item-row">
-              <span class="receipt-item-name">${cant}x  ${nom}</span>
-              <span class="receipt-item-price">${formatCRCSinDecimales(totLinea)}</span>
+            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; color:#000000; margin-bottom:3px; line-height:1.25;">
+              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${nom}</span>
+              <span class="receipt-item-price" style="text-align:right; font-weight:900; white-space:nowrap;">${formatCRCSinDecimales(it.totalLinea)}</span>
             </div>
-            ${it.notas ? `<div class="receipt-item-note">(${escapeHtml(it.notas)})</div>` : ''}
+            ${it.notas ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(${escapeHtml(it.notas)})</div>` : ''}
           `;
         }).join('')}
       </div>
-      <div class="receipt-dashed-line">------------------------------------------------</div>
-      <div class="receipt-calculations">
-        <div class="receipt-calc-line">
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Subtotal Consumo:</span>
-          <span>${formatCRCSinDecimales(ticketData.subtotal)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.subtotal)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>10% Serv + 13% IVA:</span>
-          <span>${formatCRCSinDecimales(ticketData.impuestos)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.impuestos)}</span>
         </div>
       </div>
-      <div class="receipt-double-line">================================================</div>
-      <div class="receipt-total-block">
-        <div class="receipt-total-label">TOTAL PAGADO:</div>
-        <div class="receipt-total-amount">${formatCRCSinDecimales(ticketData.total)}</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL PAGADO:</span>
+        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.total)}</span>
       </div>
-      <div class="receipt-double-line">================================================</div>
-      <div class="receipt-payment-info">
-        <div>Metodo de Pago: ${ticketData.metodoPago || 'Efectivo'}</div>
-        <div style="font-weight:700; margin-top:2px;">Saldo Restante Mesa: ${formatCRCSinDecimales(ticketData.saldoRestanteMesa)}</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="margin:6px 0; font-size:12px; font-weight:800; color:#000000; line-height:1.4;">
+        <div style="display:flex; justify-content:space-between;">
+          <span>Método de Pago:</span>
+          <span style="font-weight:900;">${escapeHtml(ticketData.metodoPago || 'Efectivo')}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:2px;">
+          <span>Saldo Restante Mesa:</span>
+          <span style="font-weight:900; color:#000000;">${formatCRCSinDecimales(ticketData.saldoRestanteMesa)}</span>
+        </div>
       </div>
-      <div class="receipt-footer">
-        <div>Muchas gracias por su preferencia!</div>
-        <div>Esperamos servirle de nuevo muy pronto.</div>
-        <div>Autorizado mediante resolucion DGT-R-033-2019</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
+        <div>Estado: Mesa permanece ABIERTA con consumos pendientes.</div>
+        <div style="font-weight:900; margin-top:2px;">¡Muchas gracias por su preferencia!</div>
+        <div style="font-size:10px; margin-top:2px;">Autorizado mediante resolución DGT-R-033-2019</div>
       </div>
     `;
   } else if (ticketData.tipo === 'corte_x') {
@@ -12341,98 +12383,73 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const fCorte = ticketData.fecha_corte ? formatearFechaHoraCR(ticketData.fecha_corte) : formatearFechaHoraCR(new Date());
 
     html = `
-      <div class="receipt-header">
-        <div class="receipt-logo">📑</div>
-        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div class="receipt-sub">REPORTE AUDITORÍA PARCIAL (CORTE X)</div>
-        <div class="receipt-type-badge" style="background:#0284c7; color:#fff;">TURNO #${ticketData.caja_id || 1} - EN CURSO</div>
-        <div class="receipt-sub">Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
-        <div class="receipt-sub">Apertura: ${fApertura}</div>
-        <div class="receipt-sub">Corte: ${fCorte}</div>
+      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
+        <div style="font-size:1.3rem; margin-bottom:2px;">📑</div>
+        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
+        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
       </div>
-
-      <div class="receipt-divider"></div>
-      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💰 DESGLOSE DE VENTAS</div>
-      <div class="receipt-totals-box" style="margin-bottom:8px;">
-        <div class="receipt-calc-line">
+      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
+      <div style="text-align:center; margin:4px 0; color:#000000;">
+        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** CORTE X (PARCIAL) ***</div>
+        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ AUDITORÍA INFORMATIVA DE TURNO ]</div>
+      </div>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Turno / Caja: #${ticketData.caja_id || 1} | Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div>Apertura: ${fApertura}</div>
+        <div>Corte: ${fCorte}</div>
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">DESGLOSE DE VENTAS</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Ventas Efectivo:</span>
-          <strong>${formatCRC(v.efectivo || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Ventas Tarjeta:</span>
-          <strong>${formatCRC(v.tarjeta || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.tarjeta || 0)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Ventas SINPE Móvil:</span>
-          <strong>${formatCRC(v.sinpe || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
         </div>
-        <div class="receipt-calc-line total-destacado">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
           <span>TOTAL VENTAS:</span>
-          <span>${formatCRC(v.total || 0)}</span>
+          <span>${formatCRCSinDecimales(v.total || 0)}</span>
         </div>
       </div>
-
-      <div class="receipt-divider"></div>
-      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💵 ARQUEO DE EFECTIVO EN GAVETA</div>
-      <div class="receipt-totals-box">
-        <div class="receipt-calc-line">
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">ARQUEO DE EFECTIVO EN GAVETA</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Fondo Inicial:</span>
-          <strong>${formatCRC(ticketData.fondo_inicial || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.fondo_inicial || 0)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Ventas Efectivo:</span>
-          <strong>${formatCRC(v.efectivo || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="color:#059669;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Entradas de Efectivo:</span>
-          <strong>+${formatCRC(ticketData.total_entradas || 0)}</strong>
+          <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="color:#dc2626;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(-) Salidas / Gastos Menores:</span>
-          <strong>-${formatCRC(ticketData.total_salidas || 0)}</strong>
-        </div>
-        <div class="receipt-calc-line total-destacado" style="background:#e0f2fe; color:#0369a1;">
-          <span>EFECTIVO ESPERADO:</span>
-          <span>${formatCRC(ticketData.efectivo_esperado || 0)}</span>
+          <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
         </div>
       </div>
-
-      ${ticketData.movimientos_detalle && ticketData.movimientos_detalle.length ? `
-        <div class="receipt-divider"></div>
-        <div style="font-size:11px; font-weight:900; margin-bottom:4px;">DETALLE MOVIMIENTOS MENORES:</div>
-        <table class="receipt-items-table" style="font-size:10px;">
-          <tbody>
-            ${ticketData.movimientos_detalle.map(m => `
-              <tr>
-                <td><strong>${m.tipo === 'entrada' ? '📥 Ent' : '📤 Sal'}</strong></td>
-                <td>${escapeHtml(m.concepto)}</td>
-                <td style="text-align:right;"><strong>${formatCRC(m.monto)}</strong></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      ` : ''}
-
-      ${ticketData.tip_pool && ticketData.tip_pool.length ? `
-        <div class="receipt-divider"></div>
-        <div style="font-size:11px; font-weight:900; margin-bottom:4px;">FONDO PROPINAS (TIP POOL 10%):</div>
-        <table class="receipt-items-table" style="font-size:10px;">
-          <tbody>
-            ${ticketData.tip_pool.map(t => `
-              <tr>
-                <td>${escapeHtml(t.nombre)}</td>
-                <td style="text-align:right;"><strong>${formatCRC(t.propina || 0)}</strong></td>
-              </tr>
-            `).join('')}
-            <tr style="font-weight:900; border-top:1px dashed #cbd5e1;">
-              <td>TOTAL PROPINAS:</td>
-              <td style="text-align:right; color:#059669;">${formatCRC(ticketData.total_propinas || 0)}</td>
-            </tr>
-          </tbody>
-        </table>
-      ` : ''}
-
-      <div class="receipt-footer">
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">EFECTIVO ESPERADO:</span>
+        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
+      </div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
         <div>*** ESTADO: TURNO PERMANECE ABIERTO ***</div>
         <div>Corte informativo sin impacto en cierre contable</div>
       </div>
@@ -12444,178 +12461,216 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const v = ticketData.ventas || {};
     const fApertura = ticketData.fecha_apertura ? formatearFechaHoraCR(ticketData.fecha_apertura) : '-';
     const fCierre = ticketData.fecha_cierre ? formatearFechaHoraCR(ticketData.fecha_cierre) : formatearFechaHoraCR(new Date());
-    const diff = ticketData.diferencia || 0;
-    const cuadreColor = diff === 0 ? '#10b981' : (diff > 0 ? '#0284c7' : '#dc2626');
+    const diff = Number(ticketData.diferencia) || 0;
 
     html = `
-      <div class="receipt-header">
-        <div class="receipt-logo">🔒</div>
-        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div class="receipt-sub">COMPROBANTE CIERRE Z DEFINITIVO</div>
-        <div class="receipt-type-badge" style="background:#1e1b4b; color:#fff;">TURNO #${ticketData.caja_id || 1} - CERRADO</div>
-        <div class="receipt-sub">Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
-        <div class="receipt-sub">Apertura: ${fApertura}</div>
-        <div class="receipt-sub">Cierre: ${fCierre}</div>
+      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
+        <div style="font-size:1.3rem; margin-bottom:2px;">🔒</div>
+        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
+        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
       </div>
-
-      <div class="receipt-divider"></div>
-      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💰 VENTAS TOTALES DEL TURNO</div>
-      <div class="receipt-totals-box" style="margin-bottom:8px;">
-        <div class="receipt-calc-line">
+      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
+      <div style="text-align:center; margin:4px 0; color:#000000;">
+        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** CIERRE Z (FINAL) ***</div>
+        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ LIQUIDACIÓN OFICIAL DE TURNO ]</div>
+      </div>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Turno / Caja: #${ticketData.caja_id || 1} | Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div>Apertura: ${fApertura}</div>
+        <div>Cierre: ${fCierre}</div>
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">VENTAS TOTALES DEL TURNO</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Ventas Efectivo:</span>
-          <strong>${formatCRC(v.efectivo || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Ventas Tarjeta:</span>
-          <strong>${formatCRC(v.tarjeta || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.tarjeta || 0)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Ventas SINPE Móvil:</span>
-          <strong>${formatCRC(v.sinpe || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
         </div>
-        <div class="receipt-calc-line total-destacado">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
           <span>TOTAL FACTURADO:</span>
-          <span>${formatCRC(v.total || 0)}</span>
+          <span>${formatCRCSinDecimales(v.total || 0)}</span>
         </div>
       </div>
-
-      <div class="receipt-divider"></div>
-      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💵 ARQUEO FÍSICO Y CUADRE DE CAJA</div>
-      <div class="receipt-totals-box">
-        <div class="receipt-calc-line">
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">ARQUEO FÍSICO Y CUADRE DE CAJA</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Fondo Inicial:</span>
-          <strong>${formatCRC(ticketData.fondo_inicial || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.fondo_inicial || 0)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Ventas Efectivo:</span>
-          <strong>${formatCRC(v.efectivo || 0)}</strong>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="color:#059669;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Entradas Menores:</span>
-          <strong>+${formatCRC(ticketData.total_entradas || 0)}</strong>
+          <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="color:#dc2626;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(-) Salidas Menores:</span>
-          <strong>-${formatCRC(ticketData.total_salidas || 0)}</strong>
+          <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="border-top:1px solid #cbd5e1; font-weight:700;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; border-top:1px solid #000; padding-top:2px;">
           <span>EFECTIVO ESPERADO:</span>
-          <span>${formatCRC(ticketData.efectivo_esperado || 0)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="font-weight:900; font-size:13px;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>EFECTIVO CONTADO:</span>
-          <span>${formatCRC(ticketData.efectivo_real_contado || 0)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_real_contado || 0)}</span>
         </div>
-        <div class="receipt-calc-line total-destacado" style="background:#f1f5f9; color:${cuadreColor};">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; font-weight:900;">
           <span>DIFERENCIA (${ticketData.estado_cuadre || 'Cuadre'}):</span>
-          <span>${diff >= 0 ? '+' : ''}${formatCRC(diff)}</span>
+          <span>${diff >= 0 ? '+' : ''}${formatCRCSinDecimales(diff)}</span>
         </div>
       </div>
-
-      ${ticketData.notas ? `
-        <div class="receipt-divider"></div>
-        <div style="font-size:10.5px; color:#334155; font-style:italic;">
-          <strong>Notas:</strong> ${escapeHtml(ticketData.notas)}
-        </div>
-      ` : ''}
-
-      <div class="receipt-divider"></div>
-      <div style="margin: 20px 0 10px; display:flex; justify-content:space-between; font-size:10px;">
-        <div style="text-align:center; width:45%;">
-          <div style="border-bottom:1px solid #000; height:30px;"></div>
-          <div style="margin-top:4px;">Firma Cajero</div>
-        </div>
-        <div style="text-align:center; width:45%;">
-          <div style="border-bottom:1px solid #000; height:30px;"></div>
-          <div style="margin-top:4px;">Firma Administrador</div>
-        </div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL LIQUIDADO:</span>
+        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.efectivo_real_contado || 0)}</span>
       </div>
-
-      <div class="receipt-footer">
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:12px 0 2px 0;">------------------------------------------------</div>
+      <div style="display:flex; justify-content:space-between; text-align:center; font-size:11px; font-weight:900; color:#000000; margin:4px 0 12px 0;">
+        <span style="flex:1;">Firma Cajero</span>
+        <span style="flex:1;">Firma Administrador</span>
+      </div>
+      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
         <div>*** TURNO OFICIALMENTE CERRADO ***</div>
         <div>Registro contable y fiscal guardado</div>
       </div>
     `;
   } else {
-    // Ticket de Liquidación / Factura Final
-    if (txtTitulo) txtTitulo.textContent = `🧾 Factura / Ticket - Mesa ${ticketData.mesa}`;
-    if (txtSub) txtSub.textContent = `Orden #${ticketData.numeroOrden || ticketData.ordenId} • Liquidación Final 80mm`;
+    // Factura Final / Comprobante de Pago
+    if (txtTitulo) txtTitulo.textContent = `🧾 Factura / Comprobante - Mesa ${ticketData.mesa}`;
+    if (txtSub) txtSub.textContent = `Factura #${ticketData.numeroOrden || ticketData.ordenId} • Liquidación Final 80mm`;
+
+    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
+    let subCalculado = 0;
+    const itemsNormalizados = listaItems.map(it => {
+      const cant = Number(it.cantidad) || 1;
+      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
+      const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
+        ? Number(it.totalLinea)
+        : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
+          ? Number(it.subtotal)
+          : (uPrice * cant);
+      subCalculado += totLinea;
+      return {
+        cantidad: cant,
+        nombre: it.nombre || it.nombre_producto || it.descripcion || 'Producto',
+        precioUnitario: uPrice,
+        totalLinea: totLinea,
+        notas: it.notas || ''
+      };
+    });
+
+    const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
+    const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
+    const baseImp = Math.max(0, subNum - descHH);
+    const servNum = (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) > 0) ? Math.round(Number(ticketData.servicio)) : Math.round(baseImp * 0.10);
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && Number(ticketData.iva) > 0) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
+    const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;
+    const montoCambio = Number(ticketData.cambio) >= 0 ? Math.round(Number(ticketData.cambio)) : Math.max(0, montoRec - totalNum);
 
     html = `
-      <div class="receipt-header">
-        <div class="receipt-business-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div>${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div>Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        <div>${ticketData.negocio?.dir || 'San Jose, Costa Rica'}</div>
-        <div>Ced. Juridica: ${ticketData.negocio?.cedula || '3-101-789458'}</div>
+      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
+        <div style="font-size:1.3rem; margin-bottom:2px;">🧾</div>
+        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
+        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
       </div>
-      <div class="receipt-double-line">================================================</div>
-      <div class="receipt-title-badge">COMPROBANTE DE PAGO / FACTURA</div>
-      <div class="receipt-meta-grid">
-        <div class="receipt-meta-row"><span>Factura / Orden: #${ticketData.numeroOrden || ticketData.ordenId}</span></div>
-        <div class="receipt-meta-row"><span>Mesa: ${ticketData.mesa} | Salonero: ${ticketData.mesero || 'General'}</span></div>
-        <div class="receipt-meta-row"><span>Cliente: ${escapeHtml(ticketData.cliente || 'Cliente Test')}</span></div>
-        <div class="receipt-meta-row"><span>Fecha/Hora: ${ticketData.fechaHora}</span></div>
+      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
+      <div style="text-align:center; margin:4px 0; color:#000000;">
+        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">COMPROBANTE DE PAGO / FACTURA</div>
       </div>
-      <div class="receipt-dashed-line">------------------------------------------------</div>
-      <div class="receipt-col-header">
-        <span>CANTDESCRIPCION</span>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Factura / Orden: #${ticketData.numeroOrden || ticketData.ordenId || '001'}</div>
+        <div>Mesa: ${ticketData.mesa} | Salonero: ${escapeHtml(ticketData.mesero || 'General')}</div>
+        <div>Cliente: ${escapeHtml(ticketData.cliente || 'Cliente General')}</div>
+        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
+      </div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
+        <span>CANT  DESCRIPCIÓN</span>
         <span style="text-align:right;">PRECIO</span>
       </div>
-      <div class="receipt-dashed-line">------------------------------------------------</div>
-      <div class="receipt-items-list">
-        ${(ticketData.items || []).map(it => {
-          const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
-          const cant = Number(it.cantidad) || 1;
-          const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0) ? Number(it.totalLinea) : (uPrice * cant);
-          const nom = escapeHtml(it.nombre || it.nombre_producto || 'Producto');
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-items-list" style="margin:4px 0;">
+        ${itemsNormalizados.map(it => {
+          const nom = escapeHtml(it.nombre);
           return `
-            <div class="receipt-item-row">
-              <span class="receipt-item-name">${cant}x  ${nom}</span>
-              <span class="receipt-item-price">${formatCRCSinDecimales(totLinea)}</span>
+            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; color:#000000; margin-bottom:3px; line-height:1.25;">
+              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${nom}</span>
+              <span class="receipt-item-price" style="text-align:right; font-weight:900; white-space:nowrap;">${formatCRCSinDecimales(it.totalLinea)}</span>
             </div>
-            ${it.notas ? `<div class="receipt-item-note">(${escapeHtml(it.notas)})</div>` : ''}
+            ${it.notas ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(${escapeHtml(it.notas)})</div>` : ''}
           `;
         }).join('')}
       </div>
-      <div class="receipt-dashed-line">------------------------------------------------</div>
-      <div class="receipt-calculations">
-        <div class="receipt-calc-line">
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Subtotal (Base Imponible):</span>
-          <span>${formatCRCSinDecimales(ticketData.subtotal)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(subNum)}</span>
         </div>
-        ${ticketData.descuentoHH > 0 ? `
-          <div class="receipt-calc-line">
+        ${descHH > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
             <span>Descuento Happy Hour 2x1:</span>
-            <span>-${formatCRCSinDecimales(ticketData.descuentoHH)}</span>
+            <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
           </div>
         ` : ''}
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>10% Servicio (Ley):</span>
-          <span>${formatCRCSinDecimales(ticketData.servicio)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
         </div>
-        <div class="receipt-calc-line">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
-          <span>${formatCRCSinDecimales(ticketData.iva)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
         </div>
       </div>
-      <div class="receipt-double-line">================================================</div>
-      <div class="receipt-total-block">
-        <div class="receipt-total-label">TOTAL A PAGAR:</div>
-        <div class="receipt-total-amount">${formatCRCSinDecimales(ticketData.total)}</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL A PAGAR:</span>
+        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
       </div>
-      <div class="receipt-double-line">================================================</div>
-      <div class="receipt-payment-info">
-        <div>Metodo de Pago: ${ticketData.metodoPago || 'Efectivo'}</div>
-        ${ticketData.metodoPago === 'Efectivo' && ticketData.recibido > 0 ? `
-          <div>Monto Recibido: ${formatCRCSinDecimales(ticketData.recibido)}</div>
-          <div>Vuelto / Cambio: ${formatCRCSinDecimales(ticketData.cambio)}</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="margin:6px 0; font-size:12px; font-weight:800; color:#000000; line-height:1.4;">
+        <div style="display:flex; justify-content:space-between;">
+          <span>Método de Pago:</span>
+          <span style="font-weight:900;">${escapeHtml(ticketData.metodoPago || 'Efectivo')}</span>
+        </div>
+        ${(ticketData.metodoPago === 'Efectivo' || !ticketData.metodoPago) && montoRec > 0 ? `
+          <div style="display:flex; justify-content:space-between;">
+            <span>Monto Recibido:</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(montoRec)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span>Vuelto / Cambio:</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
+          </div>
         ` : ''}
       </div>
-      <div class="receipt-footer">
-        <div>Muchas gracias por su preferencia!</div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
+        <div style="font-weight:900;">¡Muchas gracias por su preferencia!</div>
         <div>Esperamos servirle de nuevo muy pronto.</div>
-        <div>Autorizado mediante resolucion DGT-R-033-2019</div>
+        <div style="font-size:10px; margin-top:2px;">Autorizado mediante resolución DGT-R-033-2019</div>
       </div>
     `;
   }

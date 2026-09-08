@@ -6201,6 +6201,41 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         items: ticketVisual.items || [],
         fechaHora: ticketVisual.fechaHora
       });
+    } else if (ticketVisual.tipo === 'corte_x') {
+      tInfo = printerService.generarTicketCorteX({
+        negocio: ticketVisual.negocio,
+        caja_id: ticketVisual.caja_id,
+        cajero: ticketVisual.cajero,
+        fecha_apertura: ticketVisual.fecha_apertura,
+        fecha_corte: ticketVisual.fecha_corte,
+        fondo_inicial: ticketVisual.fondo_inicial,
+        ventas: ticketVisual.ventas || {},
+        total_entradas: ticketVisual.total_entradas || 0,
+        total_salidas: ticketVisual.total_salidas || 0,
+        efectivo_esperado: ticketVisual.efectivo_esperado || 0,
+        movimientos_detalle: ticketVisual.movimientos_detalle || [],
+        tip_pool: ticketVisual.tip_pool || [],
+        total_propinas: ticketVisual.total_propinas || 0
+      });
+    } else if (ticketVisual.tipo === 'cierre_z') {
+      tInfo = printerService.generarTicketCierreZ({
+        negocio: ticketVisual.negocio,
+        caja_id: ticketVisual.caja_id,
+        cajero: ticketVisual.cajero,
+        fecha_apertura: ticketVisual.fecha_apertura,
+        fecha_cierre: ticketVisual.fecha_cierre,
+        fondo_inicial: ticketVisual.fondo_inicial,
+        ventas: ticketVisual.ventas || {},
+        total_entradas: ticketVisual.total_entradas || 0,
+        total_salidas: ticketVisual.total_salidas || 0,
+        efectivo_esperado: ticketVisual.efectivo_esperado || 0,
+        efectivo_real_contado: ticketVisual.efectivo_real_contado || 0,
+        diferencia: ticketVisual.diferencia || 0,
+        estado_cuadre: ticketVisual.estado_cuadre || 'Cuadre',
+        notas: ticketVisual.notas || '',
+        tip_pool: ticketVisual.tip_pool || [],
+        total_propinas: ticketVisual.total_propinas || 0
+      });
     } else {
       tInfo = printerService.generarTicketLiquidacion({
         negocio: ticketVisual.negocio,
