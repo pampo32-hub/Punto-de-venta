@@ -2473,6 +2473,7 @@ function aplicarEnrutamientoPorRol() {
     }
   }
 }
+window.aplicarEnrutamientoPorRol = aplicarEnrutamientoPorRol;
 
 // Helpers globales para acceso directo a módulos de Admin desde cualquier vista
 window.irAPuntoDeVentaAdmin = function() {
@@ -6624,7 +6625,9 @@ function abrirModalPreguntaCliente(mesaId) {
 
   const modal = document.getElementById('modalPreguntaCliente');
   if (modal) {
+    modal.classList.add('active');
     modal.style.display = 'flex';
+    window._modalActivoId = 'modalPreguntaCliente';
     setTimeout(() => {
       if (inp) {
         inp.focus();
@@ -6637,7 +6640,10 @@ window.abrirModalPreguntaCliente = abrirModalPreguntaCliente;
 
 async function responderPreguntaCliente(conNombre) {
   const modal = document.getElementById('modalPreguntaCliente');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 
   const mesaId = window._mesaParaPreguntaCliente;
   if (!mesaId) return;
@@ -6834,7 +6840,11 @@ async function abrirComanderoMesa(mesaId) {
     btnResetMesa.style.display = tieneCuentaOcupada ? 'inline-flex' : 'none';
   }
 
-  document.getElementById('modalComandero').classList.add('active');
+  const modCom = document.getElementById('modalComandero');
+  if (modCom) {
+    modCom.classList.add('active');
+    modCom.style.display = 'flex';
+  }
   if (typeof aplicarPersonalizacionAlDOM === 'function') {
     aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
   }
@@ -6845,7 +6855,10 @@ async function abrirComanderoMesa(mesaId) {
 
 window.cerrarComandero = function() {
   const modal = document.getElementById('modalComandero');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
   if (typeof cargarMesasDesdeBackend === 'function') {
     cargarMesasDesdeBackend();
   }
@@ -10931,6 +10944,7 @@ async function cargarDashboardMetricas() {
     console.error('Error cargando métricas:', e);
   }
 }
+window.cargarDashboardMetricas = cargarDashboardMetricas;
 
 // 2. CONTROL DE INVENTARIO
 // 2. CONTROL DE INVENTARIO INTELIGENTE & ESCANDALLOS 2026
@@ -11171,6 +11185,10 @@ function filtrarTablaInventario() {
 
   renderTablaInventario(filtrados);
 }
+window.filtrarTablaInventario = filtrarTablaInventario;
+window.abrirModuloInventario = function() {
+  if (typeof window.abrirModuloAdmin === 'function') window.abrirModuloAdmin('inventario');
+};
 
 // Modales de Inventario
 var tipoAjusteActivo = 'entrada';
@@ -11326,6 +11344,7 @@ function actualizarEtiquetaUnidadAjuste() {
     }
   }
 }
+window.actualizarEtiquetaUnidadAjuste = actualizarEtiquetaUnidadAjuste;
 
 document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
 
@@ -13480,6 +13499,9 @@ function filtrarTablaAuditoria() {
 
   renderTablaAuditoria(filtrados);
 }
+window.cargarAuditoriaAdmin = cargarAuditoriaAdmin;
+window.filtrarAuditoriaPorChip = filtrarAuditoriaPorChip;
+window.filtrarTablaAuditoria = filtrarTablaAuditoria;
 
 // ============================================================================
 // 13. MOTOR DE IMPRESIÓN TÉRMICA (80MM), VISOR VIRTUAL & MONITOR DE PUERTOS
@@ -14092,11 +14114,15 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
   window.ticketTermicoActual = ticketData;
   container.innerHTML = html;
   modal.classList.add('active');
+  modal.style.display = 'flex';
 };
 
 window.cerrarModalVisorTicket = function() {
   const modal = document.getElementById('modalVisorTicket');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 };
 
 window.ejecutarImpresionDirectaTermica = async function(ticketData) {

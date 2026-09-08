@@ -3090,7 +3090,21 @@
             </div>
           </div>
 
-          <!-- 5. Fotos del Menú -->
+          <!-- 5. Happy Hour & Promociones -->
+          <div class="admin-panel-card card-happyhour" id="btnAdminHappyHour" onclick="ejecutarAccionAdmin('happyhour')" style="border-left: 4px solid #f59e0b;">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">🍸</div>
+              <span class="admin-card-tag" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);" id="adminCardTagHH">2x1 Promo</span>
+            </div>
+            <h4>Happy Hour & Promociones</h4>
+            <p>Configurar horarios de 2x1, días aplicables, reloj automático y modo de descuento estricto o flexible.</p>
+            <div class="admin-card-action">
+              <span>Configurar Horario</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 6. Fotos del Menú -->
           <div class="admin-panel-card card-fotos" id="btnPersonalizarFotos" onclick="ejecutarAccionAdmin('fotos')">
             <div class="admin-card-header">
               <div class="admin-card-icon">🎨</div>
@@ -3104,7 +3118,7 @@
             </div>
           </div>
 
-          <!-- 6. Actualizaciones -->
+          <!-- 7. Actualizaciones -->
           <div class="admin-panel-card card-actualizaciones" id="btnAbrirModalActualizaciones" onclick="ejecutarAccionAdmin('actualizaciones')">
             <div class="admin-card-header">
               <div class="admin-card-icon">🔄</div>
@@ -3118,13 +3132,13 @@
             </div>
           </div>
 
-          <!-- 7. Diseñador del Salón -->
+          <!-- 8. Diseñador del Salón -->
           <div class="admin-panel-card card-editor" onclick="ejecutarAccionAdmin('editor-plano')">
             <div class="admin-card-header">
               <div class="admin-card-icon">📐</div>
               <span class="admin-card-tag layout">Salón</span>
             </div>
-            <h4>7. Diseñador del Salón</h4>
+            <h4>Diseñador del Salón</h4>
             <p>Editar distribución física de mesas, agregar barras y auto-organizar en cuadrícula limpia.</p>
             <div class="admin-card-action">
               <span>Diseñar Salón</span>
@@ -3132,13 +3146,13 @@
             </div>
           </div>
 
-          <!-- 8. Impresoras Térmicas 80mm & Simulador -->
+          <!-- 9. Impresoras Térmicas 80mm & Simulador -->
           <div class="admin-panel-card card-impresoras" id="btnAdminImpresoras" onclick="ejecutarAccionAdmin('impresoras')">
             <div class="admin-card-header">
               <div class="admin-card-icon">🖨️</div>
               <span class="admin-card-tag live" style="background:rgba(56,189,248,0.2); color:#38bdf8;">80mm • TCP</span>
             </div>
-            <h4>8. Impresoras Térmicas (80mm)</h4>
+            <h4>Impresoras Térmicas (80mm)</h4>
             <p>Control de impresoras de Caja, Cocina y Barra (ESC/POS), simulador TCP 9100 y bitácora de tickets.</p>
             <div class="admin-card-action">
               <span>Gestionar Impresoras</span>
@@ -3152,6 +3166,157 @@
       <div class="dialog-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 22px;">
         <span style="color: var(--text-muted); font-size: 0.8rem;">GastroBar Pro • Panel Central de Administración</span>
         <button class="btn-sec" onclick="cerrarPanelAdmin()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CONFIGURACIÓN DE HAPPY HOUR & PROMOCIONES 2x1 (ADMIN & DEV) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalAdminHappyHour" style="z-index: 100050;">
+    <div class="modal-dialog" style="max-width: 560px; width: 94vw; border-radius: 18px; background: #0f172a; border: 1px solid #f59e0b; box-shadow: 0 25px 50px -12px rgba(245, 158, 11, 0.25); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e1b4b, #0f172a); border-bottom: 1px solid rgba(245, 158, 11, 0.3); padding: 16px 22px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 1.8rem; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">🍸</div>
+          <div>
+            <h3 style="margin: 0; color: #fff; font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+              Configuración de Happy Hour
+            </h3>
+            <small style="color: #fbbf24; font-size: 0.82rem;">Horarios, días y reglas de promoción 2x1</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalAdminHappyHour()" style="background: rgba(255,255,255,0.08); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 20px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; flex: 1;">
+        
+        <!-- BANNER DE ESTADO ACTUAL Y TOGGLE EN VIVO -->
+        <div style="background: #1e293b; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <span style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 2px;">Estado en Tiempo Real:</span>
+            <strong id="lblAdminHHStatusLive" style="font-size: 1.05rem; color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+              <span class="net-dot online" style="background:#f59e0b; box-shadow:0 0 8px #f59e0b;"></span> Activo Ahora
+            </strong>
+          </div>
+          <label class="switch-toggle-box" style="display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="chkAdminHHActivo" style="width: 20px; height: 20px; accent-color: #f59e0b; cursor: pointer;" />
+            <span style="color: #f8fafc; font-weight: 700; font-size: 0.9rem;">Encender Promo 2x1</span>
+          </label>
+        </div>
+
+        <!-- RANGO DE HORARIOS -->
+        <div style="background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 16px;">
+          <h4 style="margin: 0 0 12px; color: #f8fafc; font-size: 0.92rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+            ⏰ Horario de la Promoción (24 Horas)
+          </h4>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="display: block; font-size: 0.8rem; color: #94a3b8; font-weight: 700; margin-bottom: 6px;">Hora de Inicio:</label>
+              <input type="time" id="txtAdminHHHoraInicio" value="16:00" style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px 12px; border-radius: 8px; font-size: 1rem; font-weight: 700; outline: none;" />
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.8rem; color: #94a3b8; font-weight: 700; margin-bottom: 6px;">Hora de Fin:</label>
+              <input type="time" id="txtAdminHHHoraFin" value="19:00" style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px 12px; border-radius: 8px; font-size: 1rem; font-weight: 700; outline: none;" />
+            </div>
+          </div>
+
+          <!-- BOTONES RÁPIDOS PRESET -->
+          <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+            <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">⚡ Horarios Rápidos:</span>
+            <button type="button" class="btn-tool" style="padding: 4px 10px; font-size: 0.75rem; background: #1e293b; border-color: #475569;" onclick="aplicarPresetHorarioHH('16:00', '19:00')">4 PM – 7 PM</button>
+            <button type="button" class="btn-tool" style="padding: 4px 10px; font-size: 0.75rem; background: #1e293b; border-color: #475569;" onclick="aplicarPresetHorarioHH('17:00', '20:00')">5 PM – 8 PM</button>
+            <button type="button" class="btn-tool" style="padding: 4px 10px; font-size: 0.75rem; background: #1e293b; border-color: #475569;" onclick="aplicarPresetHorarioHH('18:00', '21:00')">6 PM – 9 PM</button>
+            <button type="button" class="btn-tool" style="padding: 4px 10px; font-size: 0.75rem; background: #1e293b; border-color: #475569;" onclick="aplicarPresetHorarioHH('12:00', '15:00')">12 MD – 3 PM</button>
+          </div>
+        </div>
+
+        <!-- DÍAS DE LA SEMANA APLICABLES -->
+        <div style="background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <h4 style="margin: 0; color: #f8fafc; font-size: 0.92rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+              📅 Días de la Semana Activos
+            </h4>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" class="btn-tool" style="padding: 2px 8px; font-size: 0.72rem; background: #1e293b;" onclick="seleccionarDiasHH('todos')">Todos</button>
+              <button type="button" class="btn-tool" style="padding: 2px 8px; font-size: 0.72rem; background: #1e293b;" onclick="seleccionarDiasHH('semana')">Lun–Vie</button>
+              <button type="button" class="btn-tool" style="padding: 2px 8px; font-size: 0.72rem; background: #1e293b;" onclick="seleccionarDiasHH('finde')">Sáb–Dom</button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center;">
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="1" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Lun</span>
+            </label>
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="2" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Mar</span>
+            </label>
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="3" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Mié</span>
+            </label>
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="4" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Jue</span>
+            </label>
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="5" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Vie</span>
+            </label>
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="6" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Sáb</span>
+            </label>
+            <label class="chip-dia-hh" style="display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer; font-size: 0.78rem; color: #cbd5e1;">
+              <input type="checkbox" class="chk-dia-hh" value="0" checked style="margin-bottom: 4px; accent-color: #f59e0b;" />
+              <span>Dom</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- AUTOMATIZACIÓN Y REGLAS -->
+        <div style="background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <h4 style="margin: 0; color: #f8fafc; font-size: 0.92rem; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+            ⚙️ Reglas y Automatización
+          </h4>
+
+          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="chkAdminHHAutoActivar" checked style="width: 18px; height: 18px; margin-top: 2px; accent-color: #f59e0b; cursor: pointer;" />
+            <div>
+              <strong style="color: #f8fafc; font-size: 0.88rem; display: block;">Activar automáticamente por reloj del sistema</strong>
+              <small style="color: #94a3b8; font-size: 0.78rem;">El sistema encenderá el 2x1 al llegar la hora de inicio y lo apagará al finalizar en los días marcados.</small>
+            </div>
+          </label>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px;">
+            <label style="display: block; font-size: 0.8rem; color: #94a3b8; font-weight: 700; margin-bottom: 6px;">Modo de Emparejamiento 2x1:</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer;">
+                <input type="radio" name="rdoAdminHHModo" id="rdoModoEstricto" value="estricto" checked style="accent-color: #f59e0b;" />
+                <div>
+                  <strong style="color: #f8fafc; font-size: 0.84rem; display: block;">🛡️ Estricto</strong>
+                  <small style="color: #94a3b8; font-size: 0.72rem;">Mismo producto (2x1 par)</small>
+                </div>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: #1e293b; border: 1px solid #475569; border-radius: 8px; cursor: pointer;">
+                <input type="radio" name="rdoAdminHHModo" id="rdoModoFlexible" value="flexible" style="accent-color: #f59e0b;" />
+                <div>
+                  <strong style="color: #f8fafc; font-size: 0.84rem; display: block;">⚡ Flexible</strong>
+                  <small style="color: #94a3b8; font-size: 0.72rem;">Combina licores / menor valor</small>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="dialog-footer" style="padding: 14px 22px; background: #080d18; border-top: 1px solid #1e293b; display: flex; justify-content: flex-end; gap: 10px; align-items: center;">
+        <button type="button" class="btn-sec" onclick="cerrarModalAdminHappyHour()" style="padding: 10px 18px; font-weight: 600;">Cancelar</button>
+        <button type="button" class="btn-pri" id="btnGuardarAdminHHConfig" onclick="guardarAdminHappyHour()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 800; font-size: 0.95rem; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4); cursor: pointer;">
+          💾 Guardar Configuración
+        </button>
       </div>
     </div>
   </div>
@@ -4618,20 +4783,6 @@
           </button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- MODAL DE CONFIRMACIÓN GLOBAL DE ACCIONES -->
-  <div class="modal-backdrop" id="modalConfirmacionAccion" style="display:none; z-index:100000;">
-    <div class="modal-dialog" style="max-width:440px; width:90vw; background:#111827; border:1px solid #374151; border-radius:16px; padding:24px; text-align:center; box-shadow:0 20px 40px rgba(0,0,0,0.7);">
-      <div id="modalConfirmIcono" style="font-size:3rem; margin-bottom:12px;">⚠️</div>
-      <h3 id="modalConfirmTitulo" style="color:#f8fafc; font-size:1.25rem; font-weight:800; margin-bottom:6px;">¿Confirmar acción?</h3>
-      <p id="modalConfirmSubtitulo" style="color:#94a3b8; font-size:0.85rem; margin-bottom:16px;">Esta acción no se puede deshacer</p>
-      <div id="modalConfirmMensaje" style="color:#e2e8f0; font-size:0.95rem; margin-bottom:20px; line-height:1.5; background:rgba(15,23,42,0.6); padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.06);"></div>
-      <div style="display:flex; gap:10px; justify-content:center;">
-        <button id="modalConfirmBtnNo" onclick="window._confirmarRechazar()" class="btn-sec" style="flex:1; padding:12px; background:#1e293b; border:1px solid #334155; color:#cbd5e1; border-radius:10px; font-weight:700; cursor:pointer;">Cancelar</button>
-        <button id="modalConfirmBtnSi" onclick="window._confirmarAceptar()" class="btn-pri" style="flex:1; padding:12px; background:linear-gradient(135deg,#0284c7,#0369a1); border:none; color:#fff; border-radius:10px; font-weight:700; cursor:pointer;">Confirmar</button>
-      </div>
     </div>
   </div>
 

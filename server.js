@@ -244,10 +244,14 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.socket.io"],
+        scriptSrcAttr: ["'unsafe-inline'"],
+        scriptSrcElem: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.socket.io"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        styleSrcAttr: ["'unsafe-inline'"],
+        styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.supabase.co", "https://*.supabase.com", "https://cdn-icons-png.flaticon.com"],
-        connectSrc: ["'self'", "ws:", "wss:", "http://localhost:*", "https://*.supabase.co", "https://*.supabase.com"],
+        connectSrc: ["'self'", "ws:", "wss:", "http://localhost:*", "http://127.0.0.1:*", "https://*.supabase.co", "https://*.supabase.com"],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"]
       }
