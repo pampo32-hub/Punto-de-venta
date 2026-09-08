@@ -14,5 +14,11 @@
     "check:syntax": "node --check public/app.js && node --check public/sw.js && node --check public/offline-sync.js && node --check public/offline-db.js && node --check server.js",
     "pretest": "npm run check:syntax",
     "test": "node --test --test-concurrency=1 test/e2e/*.test.js"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.10.0"
+  },
+  "allowScripts": {
+    "puppeteer@25.10.0": true
   }
 }

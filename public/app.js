@@ -2534,6 +2534,8 @@ window.ejecutarAccionAdmin = function(tipo) {
   } else if (tipo === 'personal') {
     if (typeof cargarEmpleadosAdmin === 'function') cargarEmpleadosAdmin();
     document.getElementById('modalAdminPersonal')?.classList.add('active');
+  } else if (tipo === 'happyhour') {
+    abrirModalAdminHappyHour();
   } else if (tipo === 'fotos') {
     if (typeof poblarSelectorProductosCustom === 'function') poblarSelectorProductosCustom();
     if (typeof renderGaleriaPresets === 'function') renderGaleriaPresets();
@@ -10289,66 +10291,204 @@ async function initHappyHour() {
 }
 
 function abrirConfigHappyHour() {
-  const btnHH = document.getElementById('btnToggleHappyHour');
-  const horaInicio = btnHH.dataset.horaInicio || '16:00';
-  const horaFin = btnHH.dataset.horaFin || '19:00';
+  abrirModalAdminHappyHour();
+}
 
-  // Crear modal de configuración si no existe
-  let modal = document.getElementById('modalHHConfig');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'modalHHConfig';
-    modal.className = 'modal-overlay active';
-    modal.innerHTML = `
-      <div class="modal-box" style="max-width:360px;padding:28px;">
-        <h3 style="margin:0 0 18px;color:#f59e0b;">🍸 Configurar Happy Hour</h3>
-        <label style="display:block;margin-bottom:10px;font-size:14px;">
-          Hora inicio (HH:MM 24h)
-          <input id="hhInputInicio" type="time" value="${horaInicio}" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f9fafb;font-size:16px;">
-        </label>
-        <label style="display:block;margin-bottom:20px;font-size:14px;">
-          Hora fin (HH:MM 24h) — se auto-desactiva al llegar
-          <input id="hhInputFin" type="time" value="${horaFin}" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f9fafb;font-size:16px;">
-        </label>
-        <div style="display:flex;gap:10px;">
-          <button id="btnGuardarHHConfig" style="flex:1;padding:12px;border-radius:10px;background:#f59e0b;color:#000;border:none;font-weight:700;cursor:pointer;">💾 Guardar</button>
-          <button id="btnCerrarHHConfig" style="flex:1;padding:12px;border-radius:10px;background:#374151;color:#f9fafb;border:none;cursor:pointer;">✕ Cancelar</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
+window.abrirModalAdminHappyHour = async function() {
+  const modal = document.getElementById('modalAdminHappyHour');
+  if (!modal) return;
 
-    document.getElementById('btnCerrarHHConfig').addEventListener('click', () => {
-      modal.classList.remove('active');
+  // 1. Obtener datos actuales del backend
+  try {
+    const res = await fetch('/api/happy-hour');
+    if (res.ok) {
+      const data = await res.json();
+      estado.happyHourData = data;
+      estado.happyHourActivo = Boolean(data.activo);
+
+      // Horarios
+      const txtInicio = document.getElementById('txtAdminHHHoraInicio');
+      const txtFin = document.getElementById('txtAdminHHHoraFin');
+      if (txtInicio) txtInicio.value = data.horaInicio || '16:00';
+      if (txtFin) txtFin.value = data.horaFin || '19:00';
+
+      // Switch activo
+      const chkActivo = document.getElementById('chkAdminHHActivo');
+      if (chkActivo) chkActivo.checked = Boolean(data.activo);
+      actualizarLabelEstadoHHModal(data.activo);
+
+      // Auto activar
+      const chkAuto = document.getElementById('chkAdminHHAutoActivar');
+      if (chkAuto) chkAuto.checked = data.autoActivar !== false;
+
+      // Días
+      const diasArr = String(data.dias || '1,2,3,4,5,6,0').split(',').map(d => d.trim());
+      document.querySelectorAll('.chk-dia-hh').forEach(chk => {
+        chk.checked = diasArr.includes(chk.value);
+        actualizarEstiloChipDiaHH(chk);
+      });
+
+      // Modo
+      const modo = data.modoDefecto || 'estricto';
+      if (modo === 'flexible') {
+        const rFlexible = document.getElementById('rdoModoFlexible');
+        if (rFlexible) rFlexible.checked = true;
+      } else {
+        const rEstricto = document.getElementById('rdoModoEstricto');
+        if (rEstricto) rEstricto.checked = true;
+      }
+    }
+  } catch (err) {
+    console.warn('Error al cargar config Happy Hour:', err);
+  }
+
+  // Listener para el toggle en vivo
+  const chkActivo = document.getElementById('chkAdminHHActivo');
+  if (chkActivo && !chkActivo.dataset.listenerSet) {
+    chkActivo.dataset.listenerSet = 'true';
+    chkActivo.addEventListener('change', (e) => {
+      actualizarLabelEstadoHHModal(e.target.checked);
     });
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('active');
+  }
+
+  // Listeners para los chips de días
+  document.querySelectorAll('.chk-dia-hh').forEach(chk => {
+    if (!chk.dataset.listenerSet) {
+      chk.dataset.listenerSet = 'true';
+      chk.addEventListener('change', () => actualizarEstiloChipDiaHH(chk));
+    }
+    actualizarEstiloChipDiaHH(chk);
+  });
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalAdminHappyHour = function() {
+  const modal = document.getElementById('modalAdminHappyHour');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+window.actualizarLabelEstadoHHModal = function(activo) {
+  const lbl = document.getElementById('lblAdminHHStatusLive');
+  if (!lbl) return;
+  if (activo) {
+    lbl.innerHTML = '<span class="net-dot online" style="background:#f59e0b; box-shadow:0 0 8px #f59e0b;"></span> Activo Ahora';
+    lbl.style.color = '#fbbf24';
+  } else {
+    lbl.innerHTML = '<span class="net-dot" style="background:#64748b; box-shadow:none;"></span> Desactivado';
+    lbl.style.color = '#94a3b8';
+  }
+};
+
+window.actualizarEstiloChipDiaHH = function(chk) {
+  const parent = chk.closest('.chip-dia-hh');
+  if (!parent) return;
+  if (chk.checked) {
+    parent.style.borderColor = '#f59e0b';
+    parent.style.background = 'rgba(245, 158, 11, 0.15)';
+    parent.style.color = '#fbbf24';
+    parent.style.fontWeight = '700';
+  } else {
+    parent.style.borderColor = '#475569';
+    parent.style.background = '#1e293b';
+    parent.style.color = '#64748b';
+    parent.style.fontWeight = 'normal';
+  }
+};
+
+window.aplicarPresetHorarioHH = function(inicio, fin) {
+  const txtInicio = document.getElementById('txtAdminHHHoraInicio');
+  const txtFin = document.getElementById('txtAdminHHHoraFin');
+  if (txtInicio) txtInicio.value = inicio;
+  if (txtFin) txtFin.value = fin;
+};
+
+window.seleccionarDiasHH = function(tipo) {
+  const dias = document.querySelectorAll('.chk-dia-hh');
+  dias.forEach(chk => {
+    const val = chk.value;
+    if (tipo === 'todos') chk.checked = true;
+    else if (tipo === 'semana') chk.checked = ['1','2','3','4','5'].includes(val);
+    else if (tipo === 'finde') chk.checked = ['6','0'].includes(val);
+    actualizarEstiloChipDiaHH(chk);
+  });
+};
+
+window.guardarAdminHappyHour = async function() {
+  const txtInicio = document.getElementById('txtAdminHHHoraInicio');
+  const txtFin = document.getElementById('txtAdminHHHoraFin');
+  const chkActivo = document.getElementById('chkAdminHHActivo');
+  const chkAuto = document.getElementById('chkAdminHHAutoActivar');
+  
+  const horaInicio = txtInicio?.value || '16:00';
+  const horaFin = txtFin?.value || '19:00';
+  const activo = Boolean(chkActivo?.checked);
+  const autoActivar = Boolean(chkAuto?.checked);
+
+  // Días seleccionados
+  const diasSeleccionados = [];
+  document.querySelectorAll('.chk-dia-hh:checked').forEach(chk => {
+    diasSeleccionados.push(chk.value);
+  });
+  const dias = diasSeleccionados.join(',');
+
+  // Modo
+  const rFlexible = document.getElementById('rdoModoFlexible');
+  const modoDefecto = rFlexible && rFlexible.checked ? 'flexible' : 'estricto';
+
+  const btnGuardar = document.getElementById('btnGuardarAdminHHConfig');
+  if (btnGuardar) {
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = '⏳ Guardando...';
+  }
+
+  try {
+    const res = await fetch('/api/happy-hour', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        activo,
+        horaInicio,
+        horaFin,
+        autoActivar,
+        dias,
+        modoDefecto
+      })
     });
 
-    document.getElementById('btnGuardarHHConfig').addEventListener('click', async () => {
-      const ni = document.getElementById('hhInputInicio').value;
-      const nf = document.getElementById('hhInputFin').value;
-      if (!ni || !nf) return alert('Completa ambos horarios.');
-      try {
-        const res = await fetch('/api/happy-hour', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ horaInicio: ni, horaFin: nf, activo: estado.happyHourActivo })
-        });
-        const data = await res.json();
+    if (res.ok) {
+      const data = await res.json();
+      aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
+      
+      const btnHH = document.getElementById('btnToggleHappyHour');
+      if (btnHH) {
         btnHH.dataset.horaInicio = data.horaInicio;
         btnHH.dataset.horaFin = data.horaFin;
-        aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
-        modal.classList.remove('active');
-        alert(`✅ Happy Hour configurado: ${data.horaInicio}–${data.horaFin}`);
-      } catch (e) { alert('Error guardando config.'); }
-    });
-  } else {
-    document.getElementById('hhInputInicio').value = horaInicio;
-    document.getElementById('hhInputFin').value = horaFin;
-    modal.classList.add('active');
+      }
+
+      cerrarModalAdminHappyHour();
+
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`🍸 Happy Hour configurado (${data.horaInicio} – ${data.horaFin})`, 'success');
+      } else {
+        alert(`✅ Happy Hour configurado correctamente:\n${data.horaInicio} – ${data.horaFin} (${data.activo ? 'Activo' : 'Desactivado'})`);
+      }
+    } else {
+      alert('❌ Error al guardar la configuración de Happy Hour.');
+    }
+  } catch (err) {
+    alert('❌ Error de conexión al guardar Happy Hour: ' + err.message);
+  } finally {
+    if (btnGuardar) {
+      btnGuardar.disabled = false;
+      btnGuardar.textContent = '💾 Guardar Configuración';
+    }
   }
-}
+};
 
 
 // Navegación General POS

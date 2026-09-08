@@ -25,6 +25,9 @@ let happyHourEstado = {
   activo: false,
   horaInicio: '16:00', // HH:MM (24h)
   horaFin: '19:00',    // HH:MM (24h)
+  autoActivar: true,
+  dias: '1,2,3,4,5,6,0', // 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab, 0=Dom
+  modoDefecto: 'estricto' // 'estricto' | 'flexible'
 };
 
 // Cargar config HH desde la BD al iniciar
@@ -37,6 +40,9 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_activo', 'false')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_inicio', '16:00')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_fin', '19:00')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_auto_activar', 'true')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_dias', '1,2,3,4,5,6,0')");
+  db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('hh_modo_defecto', 'estricto')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('app_version', '1.0.0')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_last_check', '')");
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_available', 'false')");
@@ -50,8 +56,11 @@ db.serialize(() => {
         if (r.clave === 'hh_activo') happyHourEstado.activo = r.valor === 'true';
         if (r.clave === 'hh_hora_inicio') happyHourEstado.horaInicio = r.valor;
         if (r.clave === 'hh_hora_fin') happyHourEstado.horaFin = r.valor;
+        if (r.clave === 'hh_auto_activar') happyHourEstado.autoActivar = r.valor !== 'false';
+        if (r.clave === 'hh_dias') happyHourEstado.dias = r.valor;
+        if (r.clave === 'hh_modo_defecto') happyHourEstado.modoDefecto = r.valor;
       });
-      console.log(`🍸 Happy Hour cargado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}`);
+      console.log(`🍸 Happy Hour cargado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}, auto=${happyHourEstado.autoActivar}`);
     }
   });
 
@@ -179,25 +188,50 @@ function getInicioFinHoyCR() {
   };
 }
 
-// Auto-desactivar HH cuando llega la hora de fin en Costa Rica (revisa cada minuto)
+// Auto-gestión de Happy Hour según horario y días programados en Costa Rica (revisa cada 30 segundos)
 setInterval(() => {
   if (process.env.NODE_ENV === 'test') return;
-  if (!happyHourEstado.activo) return;
   
-  const ahoraCR = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Costa_Rica', hour12: false, hour: '2-digit', minute: '2-digit' });
-  const [hActual, mActual] = ahoraCR.split(':').map(Number);
+  const ahora = new Date();
+  const optionsCR = { timeZone: 'America/Costa_Rica' };
+  const horaStrCR = ahora.toLocaleTimeString('en-GB', { ...optionsCR, hour12: false, hour: '2-digit', minute: '2-digit' });
+  const [hActual, mActual] = (horaStrCR || '00:00').split(':').map(Number);
   const minutosActuales = (hActual || 0) * 60 + (mActual || 0);
+
+  const [hInicio, mInicio] = (happyHourEstado.horaInicio || '16:00').split(':').map(Number);
+  const minutosInicio = (hInicio || 0) * 60 + (mInicio || 0);
 
   const [hFin, mFin] = (happyHourEstado.horaFin || '19:00').split(':').map(Number);
   const minutosFin = (hFin || 0) * 60 + (mFin || 0);
 
-  if (minutosActuales >= minutosFin) {
+  // Obtener día de la semana en Costa Rica (0=Dom, 1=Lun, ..., 6=Sab)
+  const diaSemana = new Date(ahora.toLocaleString('en-US', optionsCR)).getDay();
+  const diasPermitidos = (happyHourEstado.dias || '1,2,3,4,5,6,0').split(',').map(d => Number(d.trim()));
+  const hoyAplica = diasPermitidos.includes(diaSemana);
+
+  if (happyHourEstado.autoActivar !== false && hoyAplica) {
+    if (minutosActuales >= minutosInicio && minutosActuales < minutosFin) {
+      if (!happyHourEstado.activo) {
+        happyHourEstado.activo = true;
+        db.run("UPDATE ConfigNegocio SET valor = 'true' WHERE clave = 'hh_activo'");
+        console.log(`🍸 Happy Hour AUTO-ACTIVADO por horario programado (${happyHourEstado.horaInicio}–${happyHourEstado.horaFin})`);
+        io.emit('happy_hour_cambio', { ...happyHourEstado });
+      }
+    } else {
+      if (happyHourEstado.activo) {
+        happyHourEstado.activo = false;
+        db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
+        console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado (Costa Rica).');
+        io.emit('happy_hour_cambio', { ...happyHourEstado });
+      }
+    }
+  } else if (happyHourEstado.activo && minutosActuales >= minutosFin) {
     happyHourEstado.activo = false;
     db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
-    console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado (Costa Rica).');
-    io.emit('happy_hour_cambio', { activo: false, horaInicio: happyHourEstado.horaInicio, horaFin: happyHourEstado.horaFin });
+    console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado.');
+    io.emit('happy_hour_cambio', { ...happyHourEstado });
   }
-}, 60 * 1000);
+}, 30 * 1000);
 
 app.use(cors());
 app.use(express.json());
@@ -2872,21 +2906,27 @@ app.get('/api/happy-hour', (req, res) => {
   res.json({ ...happyHourEstado });
 });
 
-// POST: Activar / Desactivar (y opcionalmente cambiar horario)
+// POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas)
 app.post('/api/happy-hour', async (req, res) => {
   happyHourModificadoManualmente = true;
-  const { activo, horaInicio, horaFin } = req.body || {};
+  const { activo, horaInicio, horaFin, autoActivar, dias, modoDefecto } = req.body || {};
 
   if (horaInicio !== undefined) happyHourEstado.horaInicio = horaInicio;
   if (horaFin !== undefined) happyHourEstado.horaFin = horaFin;
   if (activo !== undefined) happyHourEstado.activo = Boolean(activo);
+  if (autoActivar !== undefined) happyHourEstado.autoActivar = Boolean(autoActivar);
+  if (dias !== undefined) happyHourEstado.dias = String(dias);
+  if (modoDefecto !== undefined) happyHourEstado.modoDefecto = String(modoDefecto);
 
   // Persistir en BD
   await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_activo', ?)", [String(happyHourEstado.activo)], r));
   await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_inicio', ?)", [happyHourEstado.horaInicio], r));
   await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_fin', ?)", [happyHourEstado.horaFin], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_auto_activar', ?)", [String(happyHourEstado.autoActivar)], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_dias', ?)", [happyHourEstado.dias], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_modo_defecto', ?)", [happyHourEstado.modoDefecto], r));
 
-  console.log(`🍸 Happy Hour actualizado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}`);
+  console.log(`🍸 Happy Hour actualizado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}, auto=${happyHourEstado.autoActivar}, dias=${happyHourEstado.dias}, modo=${happyHourEstado.modoDefecto}`);
   io.emit('happy_hour_cambio', { ...happyHourEstado });
   res.json({ ...happyHourEstado });
 });
