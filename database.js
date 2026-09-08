@@ -3,7 +3,7 @@ const path = require('path');
 
 let db;
 
-if (process.env.DATABASE_URL) {
+if (process.env.DATABASE_URL && !process.env.POS_DB_PATH) {
   const { Pool, types } = require('pg');
   
   // Mapear tipos numéricos de PostgreSQL a Number en JavaScript
