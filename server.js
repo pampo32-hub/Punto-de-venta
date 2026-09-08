@@ -4,6 +4,9 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const db = require('./database');
 const printerService = require('./printerService');
@@ -15,7 +18,6 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 4000;
-const SUPERVISOR_PIN = process.env.SUPERVISOR_PIN || '1234';
 
 // ============================================================================
 // ESTADO EN MEMORIA: HAPPY HOUR
@@ -233,8 +235,84 @@ setInterval(() => {
   }
 }, 30 * 1000);
 
+// 1. Cabeceras HTTP de Seguridad con Helmet
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.socket.io"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.supabase.co", "https://*.supabase.com", "https://cdn-icons-png.flaticon.com"],
+        connectSrc: ["'self'", "ws:", "wss:", "http://localhost:*", "https://*.supabase.co", "https://*.supabase.com"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  })
+);
+
 app.use(cors());
 app.use(express.json());
+
+// 2. Limitador de tasa contra ataques de fuerza bruta en autenticación
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 30, // 30 intentos por ventana
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de acceso desde esta IP. Por favor espera 15 minutos antes de reintentar.' }
+});
+
+app.use('/api/auth/login', authRateLimiter);
+app.use('/api/auth/validar-pin-mesa', authRateLimiter);
+app.use('/api/auth/cambiar-password-temporal', authRateLimiter);
+app.use('/api/auth/verificar-pin-admin', authRateLimiter);
+app.use('/api/usuarios/cambiar-pin', authRateLimiter);
+
+// 3. Helper Criptográfico para Verificación y Migración Transparente de Contraseñas/PINes
+async function verificarCredencialUsuario(usuario, inputPasswordOrPin) {
+  if (!usuario || !inputPasswordOrPin) return false;
+  const inputStr = String(inputPasswordOrPin).trim();
+
+  // Validar contra password (bcrypt hash o texto plano con lazy migration)
+  if (usuario.password) {
+    const isBcrypt = usuario.password.startsWith('$2a$') || usuario.password.startsWith('$2b$');
+    if (isBcrypt) {
+      try {
+        const match = await bcrypt.compare(inputStr, usuario.password);
+        if (match) return true;
+      } catch (_) {}
+    } else if (usuario.password === inputStr) {
+      // Lazy migration: migrar inmediatamente a bcrypt hash seguro en base de datos
+      try {
+        const newHash = await bcrypt.hash(inputStr, 10);
+        await dbRun('UPDATE Usuarios SET password = ? WHERE id = ?', [newHash, usuario.id]);
+        usuario.password = newHash;
+      } catch (_) {}
+      return true;
+    }
+  }
+
+  // Validar contra PIN
+  if (usuario.pin) {
+    const isBcrypt = String(usuario.pin).startsWith('$2a$') || String(usuario.pin).startsWith('$2b$');
+    if (isBcrypt) {
+      try {
+        const match = await bcrypt.compare(inputStr, String(usuario.pin));
+        if (match) return true;
+      } catch (_) {}
+    } else if (String(usuario.pin) === inputStr) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ruta amigable para escaneo de QR en mesa
@@ -379,25 +457,27 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     let u = null;
-    if (uInput && pInput) {
-      u = await dbGet(`
-        SELECT * FROM Usuarios 
-        WHERE (LOWER(usuario) = LOWER(?) OR pin = ?) 
-          AND (password = ? OR pin = ? OR (LOWER(usuario) = 'dev' AND (? = 'dev123' OR ? = '1234'))) 
-          AND activo = 1
-      `, [uInput, uInput, pInput, pInput, pInput, pInput]);
-    } else if (uInput && !pInput) {
-      // Intento de login por PIN o usuario directo
-      u = await dbGet(`
-        SELECT * FROM Usuarios 
-        WHERE (pin = ? OR LOWER(usuario) = LOWER(?)) AND activo = 1
-      `, [uInput, uInput]);
-    } else if (!uInput && pInput) {
-      // Intento de login por PIN directo
-      u = await dbGet(`
-        SELECT * FROM Usuarios 
-        WHERE (pin = ? OR password = ?) AND activo = 1
-      `, [pInput, pInput]);
+    if (uInput) {
+      const candidatos = await dbAll(
+        'SELECT * FROM Usuarios WHERE (LOWER(usuario) = LOWER(?) OR pin = ?) AND activo = 1',
+        [uInput, uInput]
+      );
+      for (const cand of candidatos) {
+        const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
+        if (passOk) {
+          u = cand;
+          break;
+        }
+      }
+    } else if (pInput) {
+      const candidatos = await dbAll('SELECT * FROM Usuarios WHERE activo = 1');
+      for (const cand of candidatos) {
+        const passOk = await verificarCredencialUsuario(cand, pInput);
+        if (passOk) {
+          u = cand;
+          break;
+        }
+      }
     }
 
     if (!u) {
@@ -475,10 +555,19 @@ app.post('/api/auth/cambiar-password-temporal', async (req, res) => {
       return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 4 caracteres' });
     }
 
-    const u = await dbGet(`
-      SELECT * FROM Usuarios 
-      WHERE LOWER(usuario) = LOWER(?) AND (password = ? OR pin = ?) AND activo = 1
-    `, [uInput, pActual, pActual]);
+    const candidatos = await dbAll(
+      'SELECT * FROM Usuarios WHERE LOWER(usuario) = LOWER(?) AND activo = 1',
+      [uInput]
+    );
+
+    let u = null;
+    for (const cand of candidatos) {
+      const passOk = await verificarCredencialUsuario(cand, pActual);
+      if (passOk) {
+        u = cand;
+        break;
+      }
+    }
 
     if (!u) {
       return res.status(401).json({ error: 'La contraseña temporal o credencial actual es incorrecta' });
@@ -489,9 +578,12 @@ app.post('/api/auth/cambiar-password-temporal', async (req, res) => {
       pinFinal = String(pin_nuevo).trim();
     }
 
+    // Hashear la nueva contraseña con bcrypt
+    const hashedNuevoPassword = await bcrypt.hash(pNuevo, 10);
+
     await dbRun(
       'UPDATE Usuarios SET password = ?, pin = ?, debe_cambiar_password = 0 WHERE id = ?',
-      [pNuevo, pinFinal, u.id]
+      [hashedNuevoPassword, pinFinal, u.id]
     );
 
     await registrarAuditoria({
@@ -973,11 +1065,12 @@ app.post('/api/dev/usuarios', async (req, res) => {
     }
 
     const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos);
+    const hashedPassword = await bcrypt.hash(password.trim(), 10);
 
     const r = await dbRun(
       `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocio_id, usuario.trim(), nombre_completo.trim(), password.trim(), rol, genero, pin, permisosStr]
+      [negocio_id, usuario.trim(), nombre_completo.trim(), hashedPassword, rol, genero, pin, permisosStr]
     );
     res.json({ message: 'Usuario creado exitosamente', id: r.lastID });
   } catch (e) {
@@ -990,11 +1083,12 @@ app.put('/api/dev/usuarios/:id', async (req, res) => {
     const { nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
     const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos || {});
     
-    if (password) {
+    if (password && String(password).trim()) {
+      const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
         `UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
          WHERE id = ?`,
-        [nombre_completo, password, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
+        [nombre_completo, hashedPassword, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
       );
     } else {
       await dbRun(
@@ -1262,11 +1356,12 @@ app.post('/api/admin/empleados', async (req, res) => {
       : '{"salon":true,"kds":true}';
 
     const debeCambiar = (rol !== 'admin' && rol !== 'developer') ? 1 : 0;
+    const hashedPassword = await bcrypt.hash(password.trim(), 10);
 
     const r = await dbRun(
       `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, debe_cambiar_password)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocio_id, usuario.trim(), nombre_completo.trim(), password.trim(), rol, genero, pin, permisos, debeCambiar]
+      [negocio_id, usuario.trim(), nombre_completo.trim(), hashedPassword, rol, genero, pin, permisos, debeCambiar]
     );
 
     res.json({ message: 'Empleado registrado con éxito', id: r.lastID });
@@ -1288,11 +1383,12 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
     const { nombre_completo, password, rol, genero, pin, debe_cambiar_password } = req.body;
     if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
 
-    if (password) {
+    if (password && String(password).trim()) {
       const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((rol !== 'admin' && rol !== 'developer') ? 1 : 0);
+      const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
         'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ? WHERE id = ?',
-        [nombre_completo, password, rol, genero, pin, debeCambiar, req.params.id]
+        [nombre_completo, hashedPassword, rol, genero, pin, debeCambiar, req.params.id]
       );
     } else {
       await dbRun(
@@ -2908,12 +3004,17 @@ app.get('/api/happy-hour', (req, res) => {
 
 // POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas) - Protegido por rol/PIN
 app.post('/api/happy-hour', async (req, res) => {
-  const userRol = req.headers['x-user-rol'] || (req.body && req.body.userRol);
+  const userRol = (req.headers['x-user-rol'] || (req.body && req.body.userRol) || '').toLowerCase();
   const adminPin = req.headers['x-admin-pin'] || (req.body && req.body.pin);
-  const esAutorizado = ['admin', 'developer', 'cajero'].includes(userRol) || adminPin === '1234' || adminPin === '9999';
+  const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || (req.body && req.body.negocio_id) || 1);
 
-  if (userRol && !esAutorizado) {
-    return res.status(403).json({ error: 'Permiso denegado: solo Administrador o Cajero pueden modificar el Happy Hour.' });
+  let esAutorizado = ['admin', 'developer', 'cajero'].includes(userRol);
+  if (!esAutorizado && adminPin) {
+    esAutorizado = await validarPinAdministrador(adminPin, negocioId);
+  }
+
+  if (!esAutorizado) {
+    return res.status(403).json({ error: 'Permiso denegado: solo Administrador o Cajero autorizado pueden modificar el Happy Hour.' });
   }
 
   happyHourModificadoManualmente = true;
@@ -4985,18 +5086,22 @@ async function descontarInventarioPorItems(items = []) {
   }
 }
 
-async function validarPinAdministrador(pin) {
+async function validarPinAdministrador(pin, negocioId = null) {
   if (!pin) return false;
   const pinStr = String(pin).trim();
-  if (pinStr === SUPERVISOR_PIN || pinStr === '1234' || pinStr === '9999') {
-    return true;
-  }
   try {
-    const user = await dbGet(
-      "SELECT id, usuario, nombre_completo, rol, pin FROM Usuarios WHERE (rol IN ('admin', 'developer')) AND pin = ?",
-      [pinStr]
+    const usuariosAdmin = await dbAll(
+      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'developer') AND activo = 1"
     );
-    return Boolean(user);
+    for (const u of usuariosAdmin) {
+      if (negocioId && u.rol !== 'developer' && Number(u.negocio_id) !== Number(negocioId)) {
+        continue;
+      }
+      if (String(u.pin).trim() === pinStr) {
+        return true;
+      }
+    }
+    return false;
   } catch (_) {
     return false;
   }
@@ -5004,8 +5109,8 @@ async function validarPinAdministrador(pin) {
 
 app.post('/api/auth/verificar-pin-admin', async (req, res) => {
   try {
-    const { pin } = req.body;
-    const esValido = await validarPinAdministrador(pin);
+    const { pin, negocio_id } = req.body;
+    const esValido = await validarPinAdministrador(pin, negocio_id || req.headers['x-negocio-id']);
     if (!esValido) {
       return res.status(401).json({ error: 'PIN de Administrador incorrecto o no autorizado.' });
     }
@@ -5015,13 +5120,23 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
   }
 });
 
-function verificarAdmin(req, res, next) {
+async function verificarAdmin(req, res, next) {
   const rol = (req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
-  if (rol === 'admin' || rol === 'developer' || pin === SUPERVISOR_PIN || pin === '9999') {
+  const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || (req.body && req.body.negocio_id) || 1);
+
+  if (rol === 'admin' || rol === 'developer') {
     return next();
   }
-  return res.status(403).json({ error: 'Acceso denegado: Requiere permisos de Administrador' });
+
+  if (pin) {
+    const esValido = await validarPinAdministrador(pin, negocioId);
+    if (esValido) {
+      return next();
+    }
+  }
+
+  return res.status(403).json({ error: 'Acceso denegado: Requiere permisos o PIN de Administrador verificado.' });
 }
 
 // ============================================================================
