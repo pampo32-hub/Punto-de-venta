@@ -1040,12 +1040,136 @@ const CATALOGO_MODULOS = [
     precioCRC: 10000,
     precioUSD: 20,
     esBase: false
+  },
+  {
+    id: 'pedir_pin_liberar_con_saldo',
+    nombre: 'Seguridad: Exigir PIN al Liberar Mesas con Saldo',
+    icono: '🔐',
+    categoria: 'Seguridad',
+    descripcion: 'Mesas con saldo pendiente exigen obligatoriamente el PIN de Administrador/Supervisor para liberar y anular deuda.',
+    precioCRC: 0,
+    precioUSD: 0,
+    esBase: true
+  },
+  {
+    id: 'caja_arqueo_dual_dolares',
+    nombre: 'Caja & Arqueo Dual Multidivisa (USD / CRC)',
+    icono: '💵',
+    categoria: 'Caja',
+    descripcion: 'Desglose de efectivo en colones, dólares y total consolidado en gaveta con arqueo físico dual en Cierre Z.',
+    precioCRC: 0,
+    precioUSD: 0,
+    esBase: true
+  },
+  {
+    id: 'comanda_express_cobro_anticipado',
+    nombre: 'Comanda Express & Cobro Anticipado',
+    icono: '⚡',
+    categoria: 'Operaciones',
+    descripcion: 'Permite cobrar cuentas de inmediato con envío automático a cocina y liberación controlada.',
+    precioCRC: 0,
+    precioUSD: 0,
+    esBase: true
   }
 ];
+
+// Helper global para verificar si un negocio tiene un módulo/feature activo
+async function negocioTieneModulo(negocioId, moduloId) {
+  try {
+    const neg = await dbGet('SELECT modulos_activos FROM Negocios WHERE id = ?', [negocioId || 1]);
+    if (!neg) return true;
+    if (!neg.modulos_activos || neg.modulos_activos === 'all') return true;
+    let mods = neg.modulos_activos;
+    if (typeof mods === 'string') {
+      try { mods = JSON.parse(mods); } catch (_) { return true; }
+    }
+    if (Array.isArray(mods)) return mods.includes(moduloId);
+    if (typeof mods === 'object' && mods !== null) return mods[moduloId] !== false;
+    return true;
+  } catch (e) {
+    return true;
+  }
+}
 
 // Obtener catálogo de módulos
 app.get('/api/dev/modulos/catalogo', (req, res) => {
   res.json(CATALOGO_MODULOS);
+});
+
+// Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario)
+app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
+  try {
+    const origenId = Number(req.params.id);
+    const { nombreNuevo = '', sloganNuevo = '' } = req.body || {};
+    
+    const origen = await dbGet('SELECT * FROM Negocios WHERE id = ?', [origenId]);
+    if (!origen) return res.status(404).json({ error: 'Negocio de origen no encontrado' });
+
+    const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Copia)`;
+    const sloganClon = sloganNuevo.trim() || origen.slogan || 'Copia de restaurante';
+
+    // 1. Insertar nuevo Negocio
+    const rNeg = await dbRun(
+      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [nombreClon, sloganClon, origen.logo_url, origen.moneda || 'CRC', origen.telefono, origen.direccion, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
+    );
+    const nuevoNegocioId = rNeg.lastID;
+
+    // 2. Duplicar Zonas y mapear IDs
+    const zonasOrigen = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ?', [origenId]);
+    const mapaZonas = {};
+    for (const z of zonasOrigen) {
+      const rZ = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, z.nombre]);
+      mapaZonas[z.id] = rZ.lastID;
+    }
+
+    // 3. Duplicar Mesas asociadas a las nuevas zonas
+    const mesasOrigen = await dbAll('SELECT * FROM Mesas WHERE negocio_id = ?', [origenId]);
+    for (const m of mesasOrigen) {
+      const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
+      await dbRun(
+        `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
+         VALUES (?, ?, ?, ?, 'libre', ?, ?, ?, ?, ?, ?)`,
+        [nuevoNegocioId, m.numero, nuevaZonaId, m.capacidad || 4, m.x || 40, m.y || 40, m.ancho || 130, m.alto || 120, m.forma || 'square', m.piso || 1]
+      );
+    }
+
+    // 4. Duplicar Categorías y mapear IDs
+    const catsOrigen = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ?', [origenId]);
+    const mapaCats = {};
+    for (const c of catsOrigen) {
+      const rC = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [nuevoNegocioId, c.nombre, c.icono, c.destino]);
+      mapaCats[c.id] = rC.lastID;
+    }
+
+    // 5. Duplicar Productos asociados a las nuevas categorías
+    const prodsOrigen = await dbAll('SELECT * FROM Productos WHERE negocio_id = ?', [origenId]);
+    for (const p of prodsOrigen) {
+      const nuevaCatId = mapaCats[p.categoria_id] || (Object.values(mapaCats)[0] || 1);
+      await dbRun(
+        `INSERT INTO Productos (negocio_id, categoria_id, codigo, nombre, precio, descripcion, destino, curso, happy_hour, agotado, imagen_url, color_badge, activo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nuevoNegocioId, nuevaCatId, p.codigo, p.nombre, p.precio, p.descripcion, p.destino, p.curso || 2, p.happy_hour || 0, p.agotado || 0, p.imagen_url, p.color_badge, p.activo !== undefined ? p.activo : 1]
+      );
+    }
+
+    // 6. Duplicar Inventario
+    const invOrigen = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [origenId]);
+    for (const i of invOrigen) {
+      await dbRun(
+        `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
+      );
+    }
+
+    const nuevoNegocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [nuevoNegocioId]);
+    io.emit('negocio_creado', nuevoNegocio);
+    res.json({ ok: true, message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`, negocio: nuevoNegocio });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Obtener módulos activos de un negocio
@@ -2183,12 +2307,13 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     }
 
     const ahora = new Date().toISOString();
+    const negocioId = obtenerNegocioIdReq(req);
+    const exigirPin = await negocioTieneModulo(negocioId, 'pedir_pin_liberar_con_saldo');
 
-    // 2. Si hay saldo pendiente por pagar, exigir permisos de Administrador o PIN válido
-    if (totalPendiente > 0) {
+    // 2. Si hay saldo pendiente por pagar, exigir permisos de Administrador o PIN válido (si la feature está activa)
+    if (totalPendiente > 0 && exigirPin) {
       const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
       const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
-      const negocioId = obtenerNegocioIdReq(req);
 
       let autorizado = (rol === 'admin' || rol === 'developer');
       if (!autorizado && pin) {

@@ -3493,6 +3493,9 @@ async function cargarNegociosDev() {
             <button class="btn-open-pos-as" style="flex: 1 1 100%;" onclick="abrirPosComoNegocio(${n.id})">
               👀 Abrir POS como este Local
             </button>
+            <button class="btn-edit-negocio" style="flex: 1; background: #065f46; border-color: #047857; color: #a7f3d0; font-weight: 700;" onclick="duplicarNegocioDev(${n.id}, '${nombreEscapado}')" title="Clonar este restaurante con todas sus zonas, mesas, categorías y menú">
+              🐑 Duplicar
+            </button>
             <button class="btn-edit-negocio" style="flex: 1; background: #312e81; border-color: #4338ca; color: #e0e7ff; font-weight: 700;" onclick="abrirModalModulosNegocio(${n.id})">
               🧩 Licencia & Módulos
             </button>
@@ -3517,6 +3520,38 @@ async function cargarNegociosDev() {
     console.error('Error cargando negocios dev:', e);
   }
 }
+
+window.duplicarNegocioDev = async function(negocioId, nombreActual) {
+  const nombreNuevo = prompt(`¿Qué nombre deseas asignarle a la copia de "${nombreActual}"?`, `${nombreActual} (Copia Sandbox)`);
+  if (nombreNuevo === null) return;
+  if (!nombreNuevo.trim()) {
+    alert('El nombre del restaurante clonado no puede estar vacío.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/dev/negocios/${negocioId}/duplicar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombreNuevo: nombreNuevo.trim() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al duplicar negocio');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ ${data.message || 'Restaurante clonado exitosamente.'}`, 'success');
+    } else {
+      alert(`✅ ${data.message || 'Restaurante clonado exitosamente.'}`);
+    }
+
+    await cargarNegociosDev();
+    if (typeof window.poblarSelectorNegociosDev === 'function') {
+      await window.poblarSelectorNegociosDev();
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+};
 
 // ============================================================================
 // CENTRO DE LICENCIAS Y MÓDULOS SAAS 2026 (DEVELOPER)

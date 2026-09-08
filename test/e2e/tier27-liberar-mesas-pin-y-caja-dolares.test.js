@@ -183,3 +183,4 @@ describe('Tier 27: Liberación Condicional de Mesas con PIN y Desglose de Caja e
     assert.strictEqual(cz.estado_cuadre, 'Cuadrada', 'El estado de cuadre debe ser Cuadrada');
   });
 });
+

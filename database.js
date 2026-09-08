@@ -221,6 +221,8 @@ function initDb() {
       activo INTEGER DEFAULT 1
     )`);
     db.run("ALTER TABLE Negocios ADD COLUMN activo INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
 
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (
@@ -600,12 +602,83 @@ function initDb() {
       }
     });
 
-    // Sembrar Negocio Inicial
-    db.get('SELECT COUNT(*) as count FROM Negocios', (err, row) => {
+    // Sembrar Negocios Iniciales (1: GastroBar, 2: Beta Tester)
+    db.get('SELECT COUNT(*) as count FROM Negocios WHERE id = 1', (err, row) => {
       if (!err && (!row || row.count === 0)) {
-        db.run(`INSERT INTO Negocios (id, nombre, slogan, logo_url, moneda, telefono, direccion) 
-          VALUES (1, 'GastroBar Fuego & Brasas', 'Restaurante, Bar & Lounge', 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80', 'CRC', '2222-3344', 'San José, Costa Rica')`);
-        console.log('🌱 Negocio inicial creado.');
+        db.run(`INSERT INTO Negocios (id, nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos) 
+          VALUES (1, 'GastroBar Fuego & Brasas', 'Restaurante, Bar & Lounge', 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80', 'CRC', '2222-3344', 'San José, Costa Rica', 1, 'Plan Full Tech 2026', 'all')`);
+        console.log('🌱 Negocio 1 (GastroBar) creado.');
+      }
+    });
+
+    db.get('SELECT COUNT(*) as count FROM Negocios WHERE id = 2', (err, row) => {
+      if (!err && (!row || row.count === 0)) {
+        db.run(`INSERT INTO Negocios (id, nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos) 
+          VALUES (2, 'Beta Tester (Sandbox)', 'Laboratorio de Pruebas & Nuevas Funciones', 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80', 'CRC', '8888-9900', 'Entorno Virtual de Pruebas Sandbox', 1, 'Plan Sandbox Developer', 'all')`);
+        console.log('🌱 Negocio 2 (Beta Tester Sandbox) creado.');
+
+        // Sembrar Zonas para Beta Tester
+        const zonasBeta = [
+          { id: 101, nombre: 'Salón Principal' },
+          { id: 102, nombre: 'Barra & Lounge' },
+          { id: 103, nombre: 'Terraza' },
+          { id: 104, nombre: 'VIP' },
+          { id: 105, nombre: 'Segundo Piso' }
+        ];
+        zonasBeta.forEach(z => {
+          db.run('INSERT OR IGNORE INTO Zonas (id, negocio_id, nombre) VALUES (?, 2, ?)', [z.id, z.nombre]);
+        });
+
+        // Sembrar Mesas para Beta Tester
+        const mesasBeta = [
+          { numero: 'Mesa 1', zona_id: 101, capacidad: 4, forma: 'square', x: 25, y: 25, ancho: 135, alto: 115 },
+          { numero: 'Mesa 2', zona_id: 101, capacidad: 4, forma: 'square', x: 185, y: 25, ancho: 135, alto: 115 },
+          { numero: 'Mesa 3', zona_id: 101, capacidad: 4, forma: 'round', x: 345, y: 25, ancho: 135, alto: 115 },
+          { numero: 'Barra 1', zona_id: 102, capacidad: 1, forma: 'silla', x: 530, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Barra 2', zona_id: 102, capacidad: 1, forma: 'silla', x: 635, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Mesa VIP', zona_id: 104, capacidad: 8, forma: 'square', x: 530, y: 165, ancho: 200, alto: 130 },
+          { numero: 'Terraza 1', zona_id: 103, capacidad: 4, forma: 'square', x: 25, y: 325, ancho: 140, alto: 120 }
+        ];
+        mesasBeta.forEach(m => {
+          db.run('INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, forma, x, y, ancho, alto, estado) VALUES (2, ?, ?, ?, ?, ?, ?, ?, ?, "libre")', [m.numero, m.zona_id, m.capacidad, m.forma, m.x, m.y, m.ancho, m.alto]);
+        });
+
+        // Sembrar Categorías para Beta Tester
+        const categoriasBeta = [
+          { id: 101, nombre: 'Comidas Principales', icono: '🍽️', destino: 'cocina' },
+          { id: 102, nombre: 'Entradas y Bocas de Bar', icono: '🍢', destino: 'cocina' },
+          { id: 103, nombre: 'Postres', icono: '🍰', destino: 'cocina' },
+          { id: 104, nombre: 'Cervezas', icono: '🍺', destino: 'barra' },
+          { id: 105, nombre: 'Cocteles y Shots', icono: '🍸', destino: 'barra' },
+          { id: 106, nombre: 'Naturales / Café', icono: '☕', destino: 'barra' }
+        ];
+        categoriasBeta.forEach(c => {
+          db.run('INSERT OR IGNORE INTO Categorias (id, negocio_id, nombre, icono, destino) VALUES (?, 2, ?, ?, ?)', [c.id, c.nombre, c.icono, c.destino]);
+        });
+
+        // Sembrar Productos de prueba para Beta Tester
+        const prodsBeta = [
+          { cat: 101, nombre: 'Casado con carne mechada [Beta]', precio: 4500, destino: 'cocina', curso: 2 },
+          { cat: 101, nombre: 'Hamburguesa de la casa con plátano maduro [Beta]', precio: 4900, destino: 'cocina', curso: 2 },
+          { cat: 101, nombre: 'Chifrijo tradicional [Beta]', precio: 4500, destino: 'cocina', curso: 2 },
+          { cat: 102, nombre: 'Patacones con frijoles molidos [Beta]', precio: 3000, destino: 'cocina', curso: 1 },
+          { cat: 102, nombre: 'Ceviche de pescado blanco [Beta]', precio: 4000, destino: 'cocina', curso: 1 },
+          { cat: 103, nombre: 'Tres leches tradicional [Beta]', precio: 2800, destino: 'cocina', curso: 4 },
+          { cat: 104, nombre: 'Imperial Regular [Beta]', precio: 1800, destino: 'barra', curso: 1 },
+          { cat: 104, nombre: 'Pilsen [Beta]', precio: 1800, destino: 'barra', curso: 1 }
+        ];
+        prodsBeta.forEach(p => {
+          db.run('INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, activo, agotado, happy_hour) VALUES (2, ?, ?, ?, ?, ?, 1, 0, 0)', [p.cat, p.nombre, p.precio, p.destino, p.curso]);
+        });
+
+        // Sembrar Usuarios de prueba para Beta Tester
+        const usersBeta = [
+          { usuario: 'admin_beta', nombre: 'Admin Beta Tester', pass: 'admin123', rol: 'admin', genero: 'M', pin: '1234', perm: '{"salon":true,"kds":true,"caja":true,"facturacion":true,"empleados":true,"catalogo":true}' },
+          { usuario: 'mesero_beta', nombre: 'Carlos Beta Tester', pass: 'mesero123', rol: 'salonero', genero: 'M', pin: '1111', perm: '{"salon":true,"kds":true}' }
+        ];
+        usersBeta.forEach(u => {
+          db.run('INSERT OR IGNORE INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos) VALUES (2, ?, ?, ?, ?, ?, ?, ?)', [u.usuario, u.nombre, u.pass, u.rol, u.genero, u.pin, u.perm]);
+        });
       }
     });
 
