@@ -59,7 +59,6 @@ window.confirmarAccion = function(opciones) {
       const esVerde = opciones.tipo === 'exito' || opciones.tipo === 'success' || opciones.tipo === 'verde' || opciones.tipo === 'primario';
       elBtnSi.style.background = esPeligroso
         ? 'linear-gradient(135deg,#ef4444,#dc2626)'
-        : 'linear-gradient(135deg,#6366f1,#4f46e5)';
         : (esVerde ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#6366f1,#4f46e5)');
       elBtnSi.style.boxShadow = esPeligroso
         ? '0 4px 14px rgba(239,68,68,0.45)'
@@ -2043,21 +2042,51 @@ window.cargarUsuariosPublicosLogin = async function() {
     if (!Array.isArray(usuarios) || !usuarios.length) return;
 
     const demoDefaults = {
-      'dev': 'dev123',
+      'dev': '1234',
       'admin': 'admin123',
       'cajero': 'caja123',
       'carlos': 'mesero123',
-      'sofia': 'mesera123'
+      'sofia': 'mesera123',
+      'admin_terraza': '123',
+      'cajero_terraza': '123',
+      'mesero_terraza': '123',
+      'salonera_terraza': '123'
     };
 
-    container.innerHTML = usuarios.map(u => {
-      const defaultPass = demoDefaults[u.usuario] || '';
-      return `
-        <button type="button" class="chip-account ${escapeHtml(u.rol)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}')" title="Ingresar como ${escapeHtml(u.nombre_completo)}">
-          ${u.avatar || '👤'} ${escapeHtml(u.nombre_completo)} <small style="opacity:0.8; font-size:0.75rem;">(${escapeHtml(u.rolDisplay)})</small>
-        </button>
-      `;
-    }).join('');
+    // Agrupar usuarios por negocio
+    const porNegocio = {};
+    usuarios.forEach(u => {
+      const nId = Number(u.negocio_id) || 1;
+      const nNombre = u.negocio_nombre || (nId === 3 ? 'Bistro & Grill La Terraza' : 'GastroBar Fuego & Brasas');
+      if (!porNegocio[nId]) {
+        porNegocio[nId] = {
+          nombre: nNombre,
+          icono: nId === 3 ? '🌴' : '🍔',
+          color: nId === 3 ? '#38bdf8' : '#f59e0b',
+          usuarios: []
+        };
+      }
+      porNegocio[nId].usuarios.push(u);
+    });
+
+    container.innerHTML = Object.values(porNegocio).map(neg => `
+      <div class="negocio-login-group" style="margin-bottom: 12px;">
+        <div style="font-size: 0.76rem; font-weight: 700; color: ${neg.color}; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <span>${neg.icono}</span> <span>${escapeHtml(neg.nombre)}</span>
+        </div>
+        <div class="demo-chips-grid">
+          ${neg.usuarios.map(u => {
+            const defaultPass = demoDefaults[u.usuario] || (u.pin || '123');
+            const rolClass = u.rol === 'salonero' && u.genero === 'F' ? 'salonera' : u.rol;
+            return `
+              <button type="button" class="chip-account ${escapeHtml(rolClass)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}')" title="Ingresar como ${escapeHtml(u.nombre_completo)} (${escapeHtml(neg.nombre)})">
+                ${u.avatar || '👤'} ${escapeHtml(u.nombre_completo)} <small style="opacity:0.8; font-size:0.75rem;">(${escapeHtml(u.rolDisplay)})</small>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
   } catch (e) {
     console.error('Error cargando usuarios públicos login:', e);
   }
@@ -8043,8 +8072,6 @@ window.ejecutarCierreZ = async function() {
     window.mostrarVisorTicketTermico(ticketData);
     await cargarCajaDesdeBackend();
 
-    setTimeout(() => {
-      if (confirm('🔒 Turno cerrado exitosamente. ¿Deseas realizar la apertura del siguiente turno de caja ahora?')) {
     setTimeout(async () => {
       const abrirSiguiente = await window.confirmarAccion({
         icono: '🔓',
