@@ -1142,15 +1142,15 @@
           <div class="caja-card">
             <h3>💰 Turno Actual de Operación</h3>
             <div class="caja-stat-rows">
-              <div class="stat-row"><span>Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
-              <div class="stat-row"><span>Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000</strong></div>
-              <div class="stat-row"><span>Ventas en Efectivo:</span><strong id="cajaVentasEfectivo">₡ 0</strong></div>
-              <div class="stat-row"><span>Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0</strong></div>
-              <div class="stat-row"><span>Salidas / Gastos Menores (-):</span><strong id="cajaSalidasTotal" style="color:#f87171;">-₡ 0</strong></div>
-              <div class="stat-row"><span>Ventas con Tarjeta (Datáfono):</span><strong id="cajaVentasTarjeta">₡ 0</strong></div>
-              <div class="stat-row"><span>Ventas con SINPE Móvil:</span><strong id="cajaVentasSinpe">₡ 0</strong></div>
-              <div class="stat-row"><span>Ventas en Dólares ($ USD):</span><strong id="cajaVentasDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong></div>
-              <div class="stat-row total"><span>Total Esperado en Efectivo:</span><strong id="cajaTotalEfectivo">₡ 50,000</strong></div>
+              <div class="stat-row"><span id="lblCajeroTurno">Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
+              <div class="stat-row"><span id="lblCajaFondoInicial">Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000</strong></div>
+              <div class="stat-row"><span id="lblCajaVentasEfectivo">Ventas en Efectivo (₡):</span><strong id="cajaVentasEfectivo">₡ 0</strong></div>
+              <div class="stat-row"><span id="lblCajaVentasDolares">Ventas en Dólares ($ USD):</span><strong id="cajaVentasDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong></div>
+              <div class="stat-row"><span id="lblCajaVentasTarjeta">Ventas con Tarjeta (Datáfono):</span><strong id="cajaVentasTarjeta">₡ 0</strong></div>
+              <div class="stat-row"><span id="lblCajaVentasSinpe">Ventas con SINPE Móvil:</span><strong id="cajaVentasSinpe">₡ 0</strong></div>
+              <div class="stat-row"><span id="lblCajaEntradas">Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0</strong></div>
+              <div class="stat-row"><span id="lblCajaSalidas">Salidas / Gastos Menores (-):</span><strong id="cajaSalidasTotal" style="color:#f87171;">-₡ 0</strong></div>
+              <div class="stat-row total"><span id="lblCajaTotalEfectivo">Total Esperado en Gaveta (₡):</span><strong id="cajaTotalEfectivo">₡ 50,000</strong></div>
             </div>
             
             <div class="caja-actions-grid">
@@ -4239,7 +4239,7 @@
           </div>
           <div style="height:1px; background:#374151; margin:8px 0;"></div>
           <div style="display:flex; justify-content:space-between; font-size:1rem; font-weight:800; color:#fbbf24;">
-            <span>Total Esperado en Efectivo (₡):</span>
+            <span id="lblCzTotalEsperado">Total Esperado en Gaveta (₡):</span>
             <strong id="czTotalEsperado">₡ 0</strong>
           </div>
         </div>

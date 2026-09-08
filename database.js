@@ -867,6 +867,28 @@ function initDb() {
         console.log('🌱 Menú inicial sembrado en base de datos vacía.');
       }
     });
+    // Saneamiento de selectores CSS frágiles en ConfigNegocio (custom_page_settings)
+    db.all("SELECT clave, valor FROM ConfigNegocio WHERE clave LIKE 'custom_page_settings%'", (err, rows) => {
+      if (!err && rows && rows.length > 0) {
+        rows.forEach(r => {
+          try {
+            const parsed = JSON.parse(r.valor || '{}');
+            let modificado = false;
+            if (parsed.elementStyles) {
+              for (const sel of Object.keys(parsed.elementStyles)) {
+                if (sel.includes('stat-row') || sel.includes('caja-stat-rows') || sel.includes('#view-caja')) {
+                  delete parsed.elementStyles[sel];
+                  modificado = true;
+                }
+              }
+            }
+            if (modificado) {
+              db.run('UPDATE ConfigNegocio SET valor = ? WHERE clave = ?', [JSON.stringify(parsed), r.clave]);
+            }
+          } catch (e) {}
+        });
+      }
+    });
   });
 }
 

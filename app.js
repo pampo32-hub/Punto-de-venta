@@ -7464,7 +7464,7 @@ function renderKDS() {
                   ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
                 </div>
               </div>
-              <button type="button" class="btn-kds-check-item ${isSelected ? 'selected' : ''}" id="btnKdsCheck_${c.id}" title="Seleccionar platillo" onclick="event.stopPropagation(); toggleSeleccionItemKDS('${key}', ${c.id})">
+              <button type="button" class="btn-kds-check-item kds-item-checkbox ${isSelected ? 'selected' : ''}" id="btnKdsCheck_${c.id}" title="Seleccionar platillo" onclick="event.stopPropagation(); toggleSeleccionItemKDS('${key}', ${c.id})">
                 ${isSelected ? '✓' : ''}
               </button>
             </div>
@@ -7515,6 +7515,42 @@ window.toggleSeleccionItemKDS = function(key, itemId) {
     btn.innerHTML = isSelected ? '✓' : '';
   }
   
+  window.actualizarBotonesAccionKDS(key);
+};
+
+window.toggleSeleccionarTodosKDS = function(key) {
+  if (!window._kdsSeleccionadosMap) window._kdsSeleccionadosMap = {};
+  if (!window._kdsSeleccionadosMap[key]) window._kdsSeleccionadosMap[key] = new Set();
+  const set = window._kdsSeleccionadosMap[key];
+  const card = document.querySelector(`.kds-card[data-kds-key="${key}"]`);
+  if (!card) return;
+  const allRows = card.querySelectorAll('.kds-item-row');
+  const allSelected = set.size === allRows.length && allRows.length > 0;
+  if (allSelected) {
+    set.clear();
+  } else {
+    allRows.forEach(row => {
+      const id = Number(row.dataset.itemId);
+      if (id) set.add(id);
+    });
+  }
+  allRows.forEach(row => {
+    const id = Number(row.dataset.itemId);
+    const isSel = set.has(id);
+    row.classList.toggle('selected', isSel);
+    const btn = row.querySelector('.kds-check-item');
+    if (btn) {
+      btn.classList.toggle('selected', isSel);
+      btn.innerHTML = isSel ? '✓' : '';
+    }
+  });
+  window.actualizarBotonesAccionKDS(key);
+  if (typeof window.actualizarContadorSeleccionKDS === 'function') {
+    window.actualizarContadorSeleccionKDS(key);
+  }
+};
+
+window.actualizarContadorSeleccionKDS = function(key) {
   window.actualizarBotonesAccionKDS(key);
 };
 
@@ -8476,7 +8512,7 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
   const btnCobrar = document.getElementById('btnFinalizarCobro');
   if (btnCobrar) {
     if (estado.enviarCocinaEnCobro) {
-      btnCobrar.textContent = '🔥 Enviar a Cocina, Liquidar & Liberar Mesa';
+      btnCobrar.textContent = '🔥 Enviar a Cocina, Liquidar & Mantener Ocupada';
       btnCobrar.className = 'btn-pri warning';
     } else {
       btnCobrar.textContent = '✅ Liquidar, Imprimir & Liberar Mesa';
@@ -15079,6 +15115,9 @@ window.aplicarPersonalizacionAlDOM = function(config) {
   if (config.elementStyles) {
     Object.entries(config.elementStyles).forEach(([selector, styles]) => {
       try {
+        if (selector && (selector.includes('stat-row') || selector.includes('caja-stat-rows'))) {
+          return;
+        }
         const els = document.querySelectorAll(selector);
         if (els.length > 0 && styles) {
           els.forEach(el => {
