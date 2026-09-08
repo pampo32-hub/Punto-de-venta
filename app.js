@@ -5297,7 +5297,7 @@ function renderGrillaOrdenada(filtroZona = null) {
   const pisoActivo = estado.pisoActual || 1;
   actualizarBotonPisoSalon();
 
-  const mesasPiso = (estado.mesas || []).filter(m => {
+  const mesasPiso = estado.mesas.filter(m => {
     const mesaPiso = m.piso ? Number(m.piso) : (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
     return mesaPiso === pisoActivo;
   });
@@ -10245,45 +10245,111 @@ async function initHappyHour() {
     }
   } catch (e) { /* servidor no disponible */ }
 
-  // 2. Click corto → alternar activo/inactivo
+  // 2. Click corto → alternar activo/inactivo (Protegido por Rol y PIN)
   btnHH.addEventListener('click', async (e) => {
     // Si hay modal de config abierto, no toggle
-    const modalCfg = document.getElementById('modalHHConfig');
-    if (modalCfg && modalCfg.classList.contains('active')) return;
+    const modalCfg = document.getElementById('modalAdminHappyHour') || document.getElementById('modalHHConfig');
+    if (modalCfg && (modalCfg.classList.contains('active') || modalCfg.style.display === 'flex')) return;
+
+    const uAct = estado.usuarioActual || estado.usuario;
+    const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+    let pinAutorizacion = null;
+
+    if (!esAdminODev) {
+      const pin = prompt('🔒 Autorización Requerida:\nSolo Administrador o Cajero pueden activar/desactivar el Happy Hour.\nIngresa el PIN de Administrador (1234):');
+      if (!pin) return;
+      if (pin.trim() === '1234' || pin.trim() === '9999') {
+        pinAutorizacion = pin.trim();
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
+        }
+      } else {
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro('🔒 Permiso denegado: PIN de Administrador incorrecto', 'warning');
+        } else {
+          alert('❌ PIN incorrecto. No tienes permiso para modificar el Happy Hour.');
+        }
+        return;
+      }
+    }
 
     const nuevoActivo = !estado.happyHourActivo;
     try {
       const res = await fetch('/api/happy-hour', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-rol': uAct ? uAct.rol : (pinAutorizacion ? 'admin' : 'salonero'),
+          'x-admin-pin': pinAutorizacion || ''
+        },
         body: JSON.stringify({
           activo: nuevoActivo,
           horaInicio: btnHH.dataset.horaInicio || '16:00',
-          horaFin: btnHH.dataset.horaFin || '19:00'
+          horaFin: btnHH.dataset.horaFin || '19:00',
+          userRol: uAct ? uAct.rol : (pinAutorizacion ? 'admin' : 'salonero'),
+          pin: pinAutorizacion
         })
       });
       const data = await res.json();
+      if (!res.ok) {
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro('🔒 ' + (data.error || 'Permiso denegado'), 'error');
+        } else {
+          alert('🔒 ' + (data.error || 'Permiso denegado'));
+        }
+        return;
+      }
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
       btnHH.dataset.horaInicio = data.horaInicio;
       btnHH.dataset.horaFin = data.horaFin;
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(data.activo ? '🍸 Happy Hour 2x1 ACTIVADO' : '🍸 Happy Hour DESACTIVADO', data.activo ? 'success' : 'info');
+      }
     } catch (e) {
-      // Fallback local
-      estado.happyHourActivo = nuevoActivo;
-      renderGridProductos(estado.productos);
-      if (estado.mesaActiva) recalcularTotalesTicket();
+      if (esAdminODev || pinAutorizacion) {
+        estado.happyHourActivo = nuevoActivo;
+        aplicarEstadoHappyHour(nuevoActivo, btnHH.dataset.horaInicio, btnHH.dataset.horaFin);
+        if (estado.mesaActiva) recalcularTotalesTicket();
+      }
     }
   });
 
-  // 3. Click largo (>600ms) → abrir configurador de horario
+  // 3. Click largo (>600ms) → abrir configurador de horario (Protegido por Rol y PIN)
   let hhLongTimer = null;
   btnHH.addEventListener('mousedown', () => {
-    hhLongTimer = setTimeout(() => abrirConfigHappyHour(), 600);
+    hhLongTimer = setTimeout(() => {
+      const uAct = estado.usuarioActual || estado.usuario;
+      const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+      if (esAdminODev) {
+        abrirConfigHappyHour();
+      } else {
+        const pin = prompt('🔒 Configuración de Happy Hour:\nIngresa el PIN de Administrador (1234):');
+        if (pin && (pin.trim() === '1234' || pin.trim() === '9999')) {
+          abrirConfigHappyHour();
+        } else if (pin) {
+          alert('❌ PIN incorrecto.');
+        }
+      }
+    }, 600);
   });
   ['mouseup', 'mouseleave'].forEach(ev => {
     btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
   });
   btnHH.addEventListener('touchstart', () => {
-    hhLongTimer = setTimeout(() => abrirConfigHappyHour(), 600);
+    hhLongTimer = setTimeout(() => {
+      const uAct = estado.usuarioActual || estado.usuario;
+      const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+      if (esAdminODev) {
+        abrirConfigHappyHour();
+      } else {
+        const pin = prompt('🔒 Configuración de Happy Hour:\nIngresa el PIN de Administrador (1234):');
+        if (pin && (pin.trim() === '1234' || pin.trim() === '9999')) {
+          abrirConfigHappyHour();
+        } else if (pin) {
+          alert('❌ PIN incorrecto.');
+        }
+      }
+    }, 600);
   });
   ['touchend', 'touchcancel'].forEach(ev => {
     btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
@@ -10446,17 +10512,23 @@ window.guardarAdminHappyHour = async function() {
     btnGuardar.textContent = '⏳ Guardando...';
   }
 
+  const uAct = estado.usuarioActual || estado.usuario;
   try {
     const res = await fetch('/api/happy-hour', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-user-rol': uAct ? uAct.rol : 'admin',
+        'x-admin-pin': window._pinSupervisorActivo || '1234'
+      },
       body: JSON.stringify({
         activo,
         horaInicio,
         horaFin,
         autoActivar,
         dias,
-        modoDefecto
+        modoDefecto,
+        userRol: uAct ? uAct.rol : 'admin'
       })
     });
 

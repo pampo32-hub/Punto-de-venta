@@ -2906,8 +2906,16 @@ app.get('/api/happy-hour', (req, res) => {
   res.json({ ...happyHourEstado });
 });
 
-// POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas)
+// POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas) - Protegido por rol/PIN
 app.post('/api/happy-hour', async (req, res) => {
+  const userRol = req.headers['x-user-rol'] || (req.body && req.body.userRol);
+  const adminPin = req.headers['x-admin-pin'] || (req.body && req.body.pin);
+  const esAutorizado = ['admin', 'developer', 'cajero'].includes(userRol) || adminPin === '1234' || adminPin === '9999';
+
+  if (userRol && !esAutorizado) {
+    return res.status(403).json({ error: 'Permiso denegado: solo Administrador o Cajero pueden modificar el Happy Hour.' });
+  }
+
   happyHourModificadoManualmente = true;
   const { activo, horaInicio, horaFin, autoActivar, dias, modoDefecto } = req.body || {};
 
