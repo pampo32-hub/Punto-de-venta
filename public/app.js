@@ -6298,30 +6298,25 @@ function renderKDS() {
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="kds-stopwatch">⏱️ ${t.horaPedido ? t.horaPedido.slice(11, 16) : 'Ahora'}</span>
-          <label style="display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; color:#94a3b8; cursor:pointer;" title="Seleccionar todos los platillos de esta comanda">
-            <input type="checkbox" class="kds-select-all-check" onchange="toggleSeleccionarTodosKDS('${key}', this.checked)" style="cursor:pointer;" />
-            <span>Todos</span>
-          </label>
         </div>
       </div>
 
-      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
         ${t.items.map(c => {
           const originTag = (c.origen_mesa_numero && String(c.origen_mesa_numero) !== String(t.mesaNumero))
             ? `<span class="mesa-origin-badge" style="font-size:0.72rem; margin-right:4px;" title="Pedido originalmente en ${escapeHtml(c.origen_mesa_numero)}">[${escapeHtml(c.origen_mesa_numero)}]</span>`
             : '';
           const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c-fuerte'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
           return `
-            <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
-              <div style="display:flex; align-items:center; gap:8px; flex:1;">
-                <input type="checkbox" class="kds-item-checkbox" data-item-id="${c.id}" data-kds-key="${key}" onchange="actualizarContadorSeleccionKDS('${key}')" style="cursor:pointer; width:18px; height:18px; accent-color:#10b981;" />
-                <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); line-height:1.25; flex:1;">
+            <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
+              <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+                <div style="font-size:0.92rem; font-weight:700; color:var(--text-main); line-height:1.3; flex:1; min-width:0;">
                   <span style="color:#f59e0b; font-weight:800; margin-right:4px;">${c.cantidad}x</span>
                   ${originTag}${escapeHtml(c.nombre_producto || c.platillo)} ${badge}
                   ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
                 </div>
               </div>
-              <button class="btn-kds-item-ready" title="Marcar este platillo listo" style="background:transparent; border:1px solid rgba(16,185,129,0.4); color:#34d399; border-radius:6px; padding:3px 8px; font-size:0.75rem; cursor:pointer; font-weight:800; margin-left:8px;" onclick="despacharKDSBackend(${c.id})">
+              <button class="btn-kds-item-ready" title="Marcar este platillo como listo" onclick="despacharKDSBackend(${c.id})">
                 ✓
               </button>
             </div>
@@ -6330,10 +6325,7 @@ function renderKDS() {
       </div>
 
       <div style="display:flex; gap:6px;">
-        <button class="btn-kds-ready btn-kds-despachar-sel" id="btnDespacharSel_${key}" style="display:none; background:linear-gradient(135deg,#059669,#047857); flex:1;" onclick="despacharSeleccionadosKDS('${key}')">
-          🍽️ Servir Seleccionados (<span class="kds-sel-count">0</span>)
-        </button>
-        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1;" onclick='despacharComandaCompletaBackend(${itemIdsJson})'>
+        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1; width:100%;" onclick='despacharComandaCompletaBackend(${itemIdsJson})'>
           ✅ Servir Todos (${t.items.length})
         </button>
       </div>
