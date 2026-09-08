@@ -7,6 +7,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const path = require('path');
 const db = require('./database');
 const printerService = require('./printerService');
@@ -18,6 +19,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.JWT_SECRET || 'gamma_pos_jwt_secret_key_prod_2026_secured';
 
 // ============================================================================
 // ESTADO EN MEMORIA: HAPPY HOUR
@@ -309,10 +311,61 @@ async function verificarCredencialUsuario(usuario, inputPasswordOrPin) {
       return true;
     }
   }
-
   return false;
 }
 
+// 4. Emisión y Verificación de Tokens JWT
+function generarTokenUsuario(usuario, negocioId = null) {
+  const nId = negocioId || usuario.negocio_id || 1;
+  return jwt.sign(
+    {
+      id: usuario.id,
+      usuario: usuario.usuario,
+      nombre: usuario.nombre_completo,
+      rol: usuario.rol,
+      genero: usuario.genero,
+      negocio_id: Number(nId)
+    },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+}
+
+function extraerUsuarioJWT(req, res, next) {
+  const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+  let token = null;
+  if (authHeader) {
+    if (String(authHeader).startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim();
+    } else {
+      token = String(authHeader).trim();
+    }
+  }
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.usuario = decoded;
+      req.negocioId = Number(decoded.negocio_id);
+      req.userRol = decoded.rol;
+    } catch (_) {
+      req.usuario = null;
+    }
+  }
+  next();
+}
+
+function obtenerNegocioIdReq(req, idFallback = 1) {
+  if (req.usuario && req.usuario.rol !== 'developer') {
+    return Number(req.usuario.negocio_id) || idFallback;
+  }
+  const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
+  if (explicitId) return Number(explicitId);
+  if (req.negocioId) return Number(req.negocioId);
+  return idFallback;
+}
+
+app.use(extraerUsuarioJWT);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ruta amigable para escaneo de QR en mesa
@@ -510,9 +563,18 @@ app.post('/api/auth/login', async (req, res) => {
 
     const perfilVisual = `${u.nombre_completo} (${rolEtiqueta})`;
     const debeCambiarPwd = Number(u.debe_cambiar_password) === 1 || u.debe_cambiar_password === true || u.debe_cambiar_password === '1';
+    const negocioObj = negocio || {
+      id: 1,
+      nombre: 'GastroBar Fuego & Brasas',
+      slogan: 'Restaurante, Bar & Lounge',
+      logo_url: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80'
+    };
+
+    const token = generarTokenUsuario(u, negocioObj.id);
 
     res.json({
       ok: true,
+      token,
       debe_cambiar_password: debeCambiarPwd,
       usuario: {
         id: u.id,
@@ -527,12 +589,7 @@ app.post('/api/auth/login', async (req, res) => {
         permisos: JSON.parse(u.permisos || '{}'),
         negocio_id: u.negocio_id
       },
-      negocio: negocio || {
-        id: 1,
-        nombre: 'GastroBar Fuego & Brasas',
-        slogan: 'Restaurante, Bar & Lounge',
-        logo_url: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80'
-      }
+      negocio: negocioObj
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -612,11 +669,19 @@ app.post('/api/auth/validar-pin-mesa', async (req, res) => {
       return res.status(400).json({ error: 'Debes ingresar un PIN de 4 dígitos.' });
     }
 
-    const u = await dbGet(`
-      SELECT * FROM Usuarios 
-      WHERE pin = ? AND activo = 1 AND (negocio_id = ? OR rol = 'developer')
-      LIMIT 1
-    `, [pinInput, negocio_id]);
+    const candidatos = await dbAll(
+      'SELECT * FROM Usuarios WHERE activo = 1 AND (negocio_id = ? OR rol = \'developer\')',
+      [negocio_id]
+    );
+
+    let u = null;
+    for (const cand of candidatos) {
+      const pinOk = await verificarCredencialUsuario(cand, pinInput);
+      if (pinOk) {
+        u = cand;
+        break;
+      }
+    }
 
     if (!u) {
       return res.status(401).json({ error: 'PIN incorrecto. Verifica con tu usuario o administrador.' });
@@ -642,9 +707,11 @@ app.post('/api/auth/validar-pin-mesa', async (req, res) => {
     }
 
     const perfilVisual = `${u.nombre_completo} (${rolEtiqueta})`;
+    const token = generarTokenUsuario(u, negocio?.id || u.negocio_id || negocio_id);
 
     res.json({
       ok: true,
+      token,
       usuario: {
         id: u.id,
         usuario: u.usuario,
@@ -1318,14 +1385,14 @@ app.get('/api/dev/db-ping', async (req, res) => {
 // ============================================================================
 app.get('/api/admin/empleados', async (req, res) => {
   try {
-    const negocioId = req.query.negocio_id || 1;
+    const negocioId = obtenerNegocioIdReq(req);
     // REGLA CRÍTICA: Nunca mostrar a usuarios con rol 'developer'
     const empleados = await dbAll(`
       SELECT id, negocio_id, usuario, nombre_completo, rol, genero, pin, activo
       FROM Usuarios
-      WHERE negocio_id = ? AND rol != 'developer'
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND rol != 'developer'
       ORDER BY id ASC
-    `, [negocioId]);
+    `, [negocioId, negocioId]);
 
     // Mapear etiquetas con género
     const listado = empleados.map(e => {
@@ -1344,7 +1411,8 @@ app.get('/api/admin/empleados', async (req, res) => {
 
 app.post('/api/admin/empleados', async (req, res) => {
   try {
-    const { negocio_id = 1, usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234' } = req.body;
+    const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
+    const { usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234' } = req.body;
     
     // Bloqueo estricto: el admin NO puede crear roles developer
     if (rol === 'developer') {
@@ -1361,7 +1429,7 @@ app.post('/api/admin/empleados', async (req, res) => {
     const r = await dbRun(
       `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, debe_cambiar_password)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocio_id, usuario.trim(), nombre_completo.trim(), hashedPassword, rol, genero, pin, permisos, debeCambiar]
+      [negocioId, usuario.trim(), nombre_completo.trim(), hashedPassword, rol, genero, pin, permisos, debeCambiar]
     );
 
     res.json({ message: 'Empleado registrado con éxito', id: r.lastID });
@@ -1378,6 +1446,12 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
     // Bloqueo estricto: Jamás permitir que un admin modifique a un developer
     if (target.rol === 'developer') {
       return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil' });
+    }
+
+    if (req.usuario && req.usuario.rol !== 'developer') {
+      if (Number(target.negocio_id) !== Number(req.usuario.negocio_id)) {
+        return res.status(403).json({ error: 'Acceso denegado: No tienes permisos para modificar empleados de otro comercio.' });
+      }
     }
 
     const { nombre_completo, password, rol, genero, pin, debe_cambiar_password } = req.body;
@@ -1408,6 +1482,12 @@ app.delete('/api/admin/empleados/:id', async (req, res) => {
     const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
     if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
     if (target.rol === 'developer') return res.status(403).json({ error: 'Acción prohibida' });
+
+    if (req.usuario && req.usuario.rol !== 'developer') {
+      if (Number(target.negocio_id) !== Number(req.usuario.negocio_id)) {
+        return res.status(403).json({ error: 'Acceso denegado: No tienes permisos para eliminar empleados de otro comercio.' });
+      }
+    }
 
     await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
     res.json({ message: 'Empleado eliminado' });
@@ -1442,7 +1522,7 @@ app.put('/api/productos/:id/visual', async (req, res) => {
 // ============================================================================
 app.get('/api/mesas', async (req, res) => {
   try {
-    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const negocioId = obtenerNegocioIdReq(req);
     const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR negocio_id IS NULL OR ? = 1) ORDER BY id ASC', [negocioId, negocioId]);
     const mesas = await dbAll(`
       SELECT m.*, z.nombre as zonaNombre,
@@ -1873,18 +1953,18 @@ app.delete('/api/mesas/:id', async (req, res) => {
     const esAdmin = rol === 'admin' || rol === 'developer';
 
     // Verificar si la mesa tiene orden activa con consumos
-    const ordenActiva = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [mesaId]);
+    const ordenActiva = await dbGet("SELECT * FROM Ordenes WHERE (mesa_id = ? OR mesa_id = ?) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaId, Number(mesaId) || mesaId]);
     if (ordenActiva) {
       if (forzar && esAdmin) {
         // Forzar cancelación de órdenes antes de eliminar
         const ahora = new Date().toISOString();
         await dbRun(
-          "UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Cancelada por eliminación forzada de mesa]' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-          [ahora, mesaId]
+          "UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Cancelada por eliminación forzada de mesa]' WHERE (mesa_id = ? OR mesa_id = ?) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+          [ahora, mesaId, Number(mesaId) || mesaId]
         );
         await dbRun(
-          "UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE mesa_id = ? AND estado = 'cancelada') AND estado_comanda != 'pagado'",
-          [mesaId]
+          "UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE (mesa_id = ? OR mesa_id = ?) AND estado = 'cancelada') AND estado_comanda != 'pagado'",
+          [mesaId, Number(mesaId) || mesaId]
         );
       } else {
         return res.status(400).json({
@@ -2980,7 +3060,7 @@ app.post('/api/productos/:id/toggle-86', async (req, res) => {
 app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
   try {
     const mesaId = req.params.mesaId;
-    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const negocioId = obtenerNegocioIdReq(req);
     const orden = await dbGet(
       "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
       [mesaId, negocioId, negocioId]
@@ -3004,9 +3084,9 @@ app.get('/api/happy-hour', (req, res) => {
 
 // POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas) - Protegido por rol/PIN
 app.post('/api/happy-hour', async (req, res) => {
-  const userRol = (req.headers['x-user-rol'] || (req.body && req.body.userRol) || '').toLowerCase();
+  const userRol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.body && req.body.userRol) || '').toLowerCase();
   const adminPin = req.headers['x-admin-pin'] || (req.body && req.body.pin);
-  const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || (req.body && req.body.negocio_id) || 1);
+  const negocioId = obtenerNegocioIdReq(req);
 
   let esAutorizado = ['admin', 'developer', 'cajero'].includes(userRol);
   if (!esAutorizado && adminPin) {
@@ -3113,11 +3193,16 @@ async function recalcularTotalesOrden(ordenId) {
   return { subtotal, descuentoHH, servicio, iva, total, modoHH };
 }
 
-async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null }) {
+async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null, negocioId = null, usuarioRol = null }) {
   const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
   if (!mesa) {
     const err = new Error('Mesa no encontrada');
     err.status = 404;
+    throw err;
+  }
+  if (negocioId && usuarioRol && usuarioRol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(negocioId)) {
+    const err = new Error('Acceso denegado: La mesa pertenece a otro comercio.');
+    err.status = 403;
     throw err;
   }
   const mesaNumero = mesa.nombre || mesa.numero || `Mesa ${mesaId}`;
@@ -3212,12 +3297,12 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
   // 3. Evaluar si algún nuevo item va a cocina
   const tieneNuevosCocina = itemsProcesados.some(it => it.destino === 'cocina');
-  const negocioId = Number(mesa.negocio_id || req.headers['x-negocio-id'] || req.body.negocio_id || 1);
+  const negocioIdFinal = Number(negocioId || mesa.negocio_id || 1);
 
   // 4. Buscar orden activa o crear una nueva
   let orden = await dbGet(
     "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-    [mesaId, negocioId, negocioId]
+    [mesaId, negocioIdFinal, negocioIdFinal]
   );
   const ahora = new Date().toISOString();
   let ordenId;
@@ -3228,7 +3313,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     const r = await dbRun(
       `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, subtotal, total, servicio_10, iva_13, descuento_happy_hour)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0)`,
-      [negocioId, numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
+      [negocioIdFinal, numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
     );
     ordenId = r.lastID;
   } else {
@@ -3370,7 +3455,17 @@ app.post('/api/comandas/enviar', async (req, res) => {
       }
     }
 
-    const resultado = await ejecutarComanda({ mesaId, mesero, cliente, items, happyHourActivo, idempotencyKey });
+    const negocioId = obtenerNegocioIdReq(req);
+    const resultado = await ejecutarComanda({
+      mesaId,
+      mesero,
+      cliente,
+      items,
+      happyHourActivo,
+      idempotencyKey,
+      negocioId,
+      usuarioRol: req.usuario?.rol
+    });
 
     if (idempotencyKey) {
       await dbRun('INSERT OR IGNORE INTO IdempotencyLog (idempotency_key, accion, creado_en) VALUES (?, ?, ?)', [
@@ -3547,7 +3642,7 @@ app.post('/api/comandas/anular-item', async (req, res) => {
 app.get('/api/kds', async (req, res) => {
   try {
     const destino = req.query.destino || 'cocina';
-    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const negocioId = obtenerNegocioIdReq(req);
     let query = `
       SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
       FROM DetalleOrden d
@@ -3573,7 +3668,7 @@ app.get('/api/kds', async (req, res) => {
 
 app.get('/api/comandas/activas', async (req, res) => {
   try {
-    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const negocioId = obtenerNegocioIdReq(req);
     const comandas = await dbAll(`
       SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
       FROM DetalleOrden d
@@ -3798,7 +3893,9 @@ async function procesarCobroOrden(ordenId, {
   happyHourActivo = false,
   enviar_cocina = false,
   enviarCocina = false,
-  idempotencyKey = null
+  idempotencyKey = null,
+  reqNegocioId = null,
+  usuarioRol = null
 } = {}) {
   const mutexKey = idempotencyKey || (mesaId ? `mesa_${mesaId}` : (ordenId && ordenId !== 'directo' ? `orden_${ordenId}` : null));
   if (mutexKey && cobrosEnProceso.has(mutexKey)) {
@@ -3825,16 +3922,26 @@ async function procesarCobroOrden(ordenId, {
     if (!orden && mesaId) {
       const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
       if (!mesaRow) throw new Error('Mesa no encontrada');
+      if (reqNegocioId && usuarioRol && usuarioRol !== 'developer' && mesaRow.negocio_id && Number(mesaRow.negocio_id) !== Number(reqNegocioId)) {
+        const err = new Error('Acceso denegado: La mesa pertenece a otro comercio.');
+        err.status = 403;
+        throw err;
+      }
       const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
       const r = await dbRun(
         `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
          VALUES (?, ?, ?, ?, ?, ?, 'abierta')`,
-        [mesaRow.negocio_id || 1, numOrden, mesaId, 'Cliente', mesero, ahora]
+        [mesaRow.negocio_id || reqNegocioId || 1, numOrden, mesaId, 'Cliente', mesero, ahora]
       );
       orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
     }
 
     if (!orden) throw new Error('Orden no encontrada');
+    if (reqNegocioId && usuarioRol && usuarioRol !== 'developer' && orden.negocio_id && Number(orden.negocio_id) !== Number(reqNegocioId)) {
+      const err = new Error('Acceso denegado: La orden pertenece a otro comercio.');
+      err.status = 403;
+      throw err;
+    }
     ordenId = orden.id;
 
   // Manejar items nuevos de la comanda no enviados previamente (para que queden en DetalleOrden y se descuenten de Kárdex)
@@ -4198,10 +4305,16 @@ async function procesarCobroOrden(ordenId, {
 app.post(['/api/ordenes/:id/cobrar', '/api/ordenes/directo/cobrar'], async (req, res) => {
   try {
     const ordenId = req.params.id || req.body.ordenId || 'directo';
-    const resultado = await procesarCobroOrden(ordenId, req.body);
+    const reqNegocioId = obtenerNegocioIdReq(req);
+    const resultado = await procesarCobroOrden(ordenId, {
+      ...req.body,
+      reqNegocioId,
+      usuarioRol: req.usuario?.rol
+    });
     res.json(resultado);
   } catch (e) {
-    res.status(e.message === 'Orden no encontrada' ? 404 : 500).json({ error: e.message });
+    const status = e.status || (e.message === 'Orden no encontrada' ? 404 : 500);
+    res.status(status).json({ error: e.message });
   }
 });
 
@@ -4213,6 +4326,11 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
     const ordenId = req.params.id;
     let orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    const reqNegocioId = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && orden.negocio_id && Number(orden.negocio_id) !== Number(reqNegocioId)) {
+      return res.status(403).json({ error: 'Acceso denegado: La orden pertenece a otro comercio.' });
+    }
 
     // Recalcular totales para asegurar que Happy Hour, IVA y servicio estén 100% al día
     if (typeof recalcularTotalesOrden === 'function') {
@@ -4284,8 +4402,13 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
 app.post('/api/mesas/:id/prefactura', async (req, res) => {
   try {
     const mesaId = req.params.id;
+    const reqNegocioId = obtenerNegocioIdReq(req);
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNegocioId)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
 
     let orden = await dbGet(
       "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada', 'cuenta') ORDER BY id DESC LIMIT 1",
@@ -4407,7 +4530,7 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
 
 app.get('/api/caja/actual', async (req, res) => {
   try {
-    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const negocioId = obtenerNegocioIdReq(req);
     const caja = await dbGet(
       "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
       [negocioId, negocioId]
@@ -4443,8 +4566,8 @@ app.get('/api/caja/actual', async (req, res) => {
 // Registrar entrada o salida menor de efectivo
 app.post('/api/caja/movimiento', async (req, res) => {
   try {
-    const { tipo, monto, concepto, usuarioNombre = 'Cajero', negocio_id } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const { tipo, monto, concepto, usuarioNombre = 'Cajero' } = req.body;
+    const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const montoNum = parseFloat(monto);
     if (!tipo || !['entrada', 'salida'].includes(tipo) || isNaN(montoNum) || montoNum <= 0) {
       return res.status(400).json({ error: 'Tipo ("entrada" o "salida") y monto válido mayor a 0 son requeridos' });
@@ -4497,7 +4620,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
       }
     }
 
-    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const negocioId = obtenerNegocioIdReq(req);
     const caja = await dbGet(
       "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
       [negocioId, negocioId]
@@ -4578,7 +4701,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
 // Cierre Z definitivo del turno con arqueo físico de caja
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
-    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero', adminPin, pin, negocio_id } = req.body;
+    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero', adminPin, pin } = req.body;
     const pinVerificar = adminPin || pin || req.headers['x-supervisor-pin'];
     if (pinVerificar) {
       const esValido = await validarPinAdministrador(pinVerificar);
@@ -4592,7 +4715,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       return res.status(400).json({ error: 'Por favor ingresa un monto válido de efectivo contado en gaveta' });
     }
 
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const caja = await dbGet(
       "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
       [negocioId, negocioId]
@@ -5121,9 +5244,9 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
 });
 
 async function verificarAdmin(req, res, next) {
-  const rol = (req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+  const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
-  const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || (req.body && req.body.negocio_id) || 1);
+  const negocioId = obtenerNegocioIdReq(req);
 
   if (rol === 'admin' || rol === 'developer') {
     return next();
@@ -5136,7 +5259,7 @@ async function verificarAdmin(req, res, next) {
     }
   }
 
-  return res.status(403).json({ error: 'Acceso denegado: Requiere permisos o PIN de Administrador verificado.' });
+  return res.status(403).json({ error: 'Acceso denegado: Requiere permisos de Administrador o PIN verificado.' });
 }
 
 // ============================================================================

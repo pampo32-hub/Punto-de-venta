@@ -1,5 +1,38 @@
 
 // ============================================================================
+// INTERCEPTOR GLOBAL FETCH CON TOKEN JWT DE SESIÓN
+// ============================================================================
+(function() {
+  const _origFetch = window.fetch;
+  window.fetch = async function(resource, init = {}) {
+    const token = sessionStorage.getItem('pos_token');
+    if (token && (typeof resource === 'string' || (typeof URL !== 'undefined' && resource instanceof URL))) {
+      const urlStr = typeof resource === 'string' ? resource : resource.toString();
+      if (urlStr.startsWith('/api/') || urlStr.includes('/api/')) {
+        init = init ? { ...init } : {};
+        if (!init.headers) {
+          init.headers = { 'Authorization': 'Bearer ' + token };
+        } else if (typeof Headers !== 'undefined' && init.headers instanceof Headers) {
+          if (!init.headers.has('Authorization')) {
+            init.headers.set('Authorization', 'Bearer ' + token);
+          }
+        } else if (Array.isArray(init.headers)) {
+          const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
+          if (!hasAuth) {
+            init.headers.push(['Authorization', 'Bearer ' + token]);
+          }
+        } else {
+          if (!init.headers['Authorization'] && !init.headers['authorization']) {
+            init.headers['Authorization'] = 'Bearer ' + token;
+          }
+        }
+      }
+    }
+    return _origFetch.call(this, resource, init);
+  };
+})();
+
+// ============================================================================
 // MODAL MANAGER CENTRALIZADO (CONTROL DE ESTADO ÚNICO Y EXCLUSIVIDAD DE MODALES)
 // ============================================================================
 window._modalActivoId = null;
@@ -2161,6 +2194,9 @@ window.ejecutarLogin = async function() {
     estado.negocioActual = data.negocio;
 
     // Guardar en sesión
+    if (data.token) {
+      sessionStorage.setItem('pos_token', data.token);
+    }
     sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
     sessionStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
 
@@ -2305,6 +2341,7 @@ window.cerrarSesion = function() {
   if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
   estado.usuarioActual = null;
   sessionStorage.removeItem('pos_usuario');
+  sessionStorage.removeItem('pos_token');
   const devTop = document.getElementById('devTopControls');
   if (devTop) devTop.style.display = 'none';
   document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
@@ -2481,10 +2518,14 @@ window._pinSupervisorActivo = null;
 
 window.obtenerHeadersAuthAdmin = function(extraHeaders = {}) {
   const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  const token = sessionStorage.getItem('pos_token');
   const headers = {
     'x-user-rol': rol,
     ...extraHeaders
   };
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token;
+  }
   if (window._pinSupervisorActivo) {
     headers['x-supervisor-pin'] = window._pinSupervisorActivo;
   }
@@ -6543,6 +6584,9 @@ window.validarPinMesaIngresado = async function() {
 
     // Actualizar usuario activo con el usuario del PIN
     estado.usuarioActual = data.usuario;
+    if (data.token) {
+      sessionStorage.setItem('pos_token', data.token);
+    }
     sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
 
     const perfilBadge = document.getElementById('userProfileBadge');
