@@ -5330,6 +5330,7 @@ function renderGrillaOrdenada(filtroZona = null) {
     mapaZonas.get(zNom).push(m);
   });
 
+  // Renderizar cada zona que tenga mesas
   // Renderizar cada zona registrada o con mesas
   mapaZonas.forEach((mesasList, zNombre) => {
     const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -5339,7 +5340,7 @@ function renderGrillaOrdenada(filtroZona = null) {
     const esBarraZona = zNomNorm.includes('barra') || zNomNorm.includes('bar');
 
     const col = document.createElement('div');
-    col.className = `zone-grid-column ${mesasList.length > 6 ? 'wide-column' : ''}`;
+    col.className = `zone-grid-column ${mesasList && mesasList.length > 6 ? 'wide-column' : ''}`;
     col.dataset.zonaNombre = zNomNorm;
     col.id = `zone-col-${zNomNorm}`;
 
@@ -5352,105 +5353,108 @@ function renderGrillaOrdenada(filtroZona = null) {
       }
     }
 
+    const countMesas = mesasList ? mesasList.length : 0;
     const header = document.createElement('div');
     header.className = 'zone-grid-header';
     header.innerHTML = `
       <h4 class="zone-grid-title">${escapeHtml(zNombre.toUpperCase())}</h4>
-      <span class="zone-grid-count">${mesasList.length} ${mesasList.length === 1 ? 'mesa' : 'mesas'}</span>
+      <span class="zone-grid-count">${countMesas} ${countMesas === 1 ? 'mesa' : 'mesas'}</span>
     `;
     col.appendChild(header);
 
     const cardsContainer = document.createElement('div');
     cardsContainer.className = `zone-grid-cards ${esBarraZona ? 'barra-list' : ''}`;
 
-    if (mesasList.length === 0) {
+    if (!mesasList || mesasList.length === 0) {
       const emptyBox = document.createElement('div');
       emptyBox.style.cssText = 'color: #64748b; font-size: 0.78rem; font-style: italic; text-align: center; padding: 20px 10px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; margin-top: 6px;';
       emptyBox.textContent = '📍 Zona activa (Sin mesas asignadas)';
       cardsContainer.appendChild(emptyBox);
     } else {
       mesasList.forEach(m => {
-      const card = document.createElement('div');
-      const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
-      const esCuenta = m.estado === 'cuenta';
-      card.className = `mesa-render-card ${m.estado} ${esCuenta ? 'cuenta-qr' : ''} ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
-      card.style.left = m.x + 'px';
-      card.style.top = m.y + 'px';
-      card.style.width = (m.ancho || (esSilla ? 95 : 130)) + 'px';
-      card.style.height = (m.alto || (esSilla ? 105 : 120)) + 'px';
+        const card = document.createElement('div');
+        const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+        const esCuenta = m.estado === 'cuenta';
+        const estadoClass = esCuenta ? 'cuenta-qr' : m.estado;
 
-      const estadoEtiqueta = {
-        libre: 'Libre',
-        ocupada: 'Ocupada',
-        abierta: 'Abierta',
-        esperando: 'Esperando',
-        esperando_parcial: 'Esperando Parcial',
-        activa: 'Activa',
-        cuenta: 'Cuenta Pedida',
-        unida: 'Unida'
-      }[m.estado] || 'Libre';
+        const estadoEtiqueta = {
+          libre: 'Libre',
+          ocupada: 'Ocupada',
+          abierta: 'Abierta',
+          esperando: 'Esperando',
+          esperando_parcial: 'Esperando',
+          activa: 'Activa',
+          cuenta: 'Cuenta Pedida',
+          unida: 'Unida'
+        }[m.estado] || 'Libre';
 
-      if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
-        clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
-      }
+        const badgeClass = (m.estado === 'libre')
+          ? 'badge-libre'
+          : (esCuenta ? 'badge-cuenta' : 'badge-ocupada');
 
-      const cap = m.capacidad ? `${m.capacidad}p` : (esSilla ? '1p' : '4p');
-
-      card.className = `mesa-grid-card ${estadoClass} ${esBarraZona ? 'barra-row' : ''}`;
-      card.dataset.mesaId = m.id;
-
-      let mergedBadgeHtml = '';
-      const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
-      if (!esLibre) {
-        const origenes = [];
-        if (m.transferida_de) origenes.push(m.transferida_de);
-        if (m.mesas_unidas && m.mesas_unidas.length > 0) {
-          m.mesas_unidas.forEach(u => { if (!origenes.includes(u)) origenes.push(u); });
-        } else if (m.unida_con && !origenes.includes(m.unida_con)) {
-          origenes.push(m.unida_con);
+        const clienteMesa = m.cliente || m.mesa_cliente;
+        let clienteHtml = '';
+        if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
+          clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
         }
-        if (origenes.length > 0) {
-          const otros = origenes.map(n => n.toString().trim().replace(/^\+/, '')).join(' + ');
-          mergedBadgeHtml = `<small class="m-merged-badge" style="margin-left:4px;" title="Recibió orden de ${otros}">+${otros}</small>`;
+
+        const cap = m.capacidad ? `${m.capacidad}p` : (esSilla ? '1p' : '4p');
+
+        card.className = `mesa-grid-card ${estadoClass} ${esBarraZona ? 'barra-row' : ''}`;
+        card.dataset.mesaId = m.id;
+
+        let mergedBadgeHtml = '';
+        const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
+        if (!esLibre) {
+          const origenes = [];
+          if (m.transferida_de) origenes.push(m.transferida_de);
+          if (m.mesas_unidas && m.mesas_unidas.length > 0) {
+            m.mesas_unidas.forEach(u => { if (!origenes.includes(u)) origenes.push(u); });
+          } else if (m.unida_con && !origenes.includes(m.unida_con)) {
+            origenes.push(m.unida_con);
+          }
+          if (origenes.length > 0) {
+            const otros = origenes.map(n => n.toString().trim().replace(/^\+/, '')).join(' + ');
+            mergedBadgeHtml = `<small class="m-merged-badge" style="margin-left:4px;" title="Recibió orden de ${otros}">+${otros}</small>`;
+          }
         }
-      }
 
-      if (esBarraZona) {
-        card.innerHTML = `
-          <div class="m-grid-header">
-            <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
-            <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
-          </div>
-          ${clienteHtml}
-          <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
-        `;
-      } else {
-        card.innerHTML = `
-          <div class="m-grid-header">
-            <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
-            <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
-          </div>
-          ${clienteHtml}
-          <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
-          <div class="m-grid-footer">
-            <span class="m-grid-cap">👥 ${cap}</span>
-            <span class="m-grid-zona" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
-          </div>
-        `;
-      }
-
-      // Manejador de clic
-      card.addEventListener('click', () => {
-        const esMesaSinCliente = m.estado === 'libre' || ((!m.cliente || m.cliente === 'Cliente General') && !m.orden_activa_id);
-        if (esMesaSinCliente) {
-          abrirModalPreguntaCliente(m.id);
+        if (esBarraZona) {
+          card.innerHTML = `
+            <div class="m-grid-header">
+              <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
+              <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
+            </div>
+            ${clienteHtml}
+            <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
+          `;
         } else {
-          abrirComanderoMesa(m.id);
+          card.innerHTML = `
+            <div class="m-grid-header">
+              <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
+              <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
+            </div>
+            ${clienteHtml}
+            <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
+            <div class="m-grid-footer">
+              <span class="m-grid-cap">👥 ${cap}</span>
+              <span class="m-grid-zona" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
+            </div>
+          `;
         }
-      });
 
-      cardsContainer.appendChild(card);
-    });
+        // Manejador de clic
+        card.addEventListener('click', () => {
+          const esMesaSinCliente = m.estado === 'libre' || ((!m.cliente || m.cliente === 'Cliente General') && !m.orden_activa_id);
+          if (esMesaSinCliente) {
+            abrirModalPreguntaCliente(m.id);
+          } else {
+            abrirComanderoMesa(m.id);
+          }
+        });
+
+        cardsContainer.appendChild(card);
+      });
     }
 
     col.appendChild(cardsContainer);
