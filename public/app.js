@@ -52,12 +52,14 @@ window.confirmarAccion = function(opciones) {
     if (elSubtit)  elSubtit.textContent  = opciones.subtitulo || 'Esta acción no se puede deshacer';
     if (elMensaje) elMensaje.textContent = opciones.mensaje || '';
 
+    // Color del botón confirmar según peligro
     // Color del botón confirmar según tipo
     if (elBtnSi) {
       const esPeligroso = opciones.tipo === 'peligro' || opciones.tipo === 'danger';
       const esVerde = opciones.tipo === 'exito' || opciones.tipo === 'success' || opciones.tipo === 'verde' || opciones.tipo === 'primario';
       elBtnSi.style.background = esPeligroso
         ? 'linear-gradient(135deg,#ef4444,#dc2626)'
+        : 'linear-gradient(135deg,#6366f1,#4f46e5)';
         : (esVerde ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#6366f1,#4f46e5)');
       elBtnSi.style.boxShadow = esPeligroso
         ? '0 4px 14px rgba(239,68,68,0.45)'
@@ -7604,11 +7606,13 @@ window.guardarMovimientoCaja = async function() {
   const concepto = (txtConcepto ? txtConcepto.value : '').trim();
 
   if (isNaN(monto) || monto <= 0) {
+    alert('Por favor ingresa un monto válido mayor a 0');
     mostrarNotificacionCentro('⚠️ Por favor ingresa un monto válido mayor a 0', 'warning');
     if (txtMonto) txtMonto.focus();
     return;
   }
   if (!concepto) {
+    alert('Por favor ingresa el motivo o concepto del movimiento');
     mostrarNotificacionCentro('⚠️ Por favor ingresa el motivo o concepto del movimiento', 'warning');
     if (txtConcepto) txtConcepto.focus();
     return;
@@ -7625,6 +7629,7 @@ window.guardarMovimientoCaja = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo registrar el movimiento'));
       mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo registrar el movimiento'), 'error');
       return;
     }
@@ -7633,6 +7638,7 @@ window.guardarMovimientoCaja = async function() {
     mostrarNotificacionCentro(`✅ ${tipo === 'entrada' ? 'Entrada' : 'Salida'} de ${formatCRC(monto)} registrada con éxito`, 'success');
     await cargarCajaDesdeBackend();
   } catch (e) {
+    alert('❌ Error de conexión: ' + e.message);
     mostrarNotificacionCentro('❌ Error de conexión: ' + e.message, 'error');
   }
 };
@@ -7953,6 +7959,7 @@ window.ejecutarCierreZ = async function() {
 
   const realVal = txtReal ? txtReal.value : '';
   if (realVal === '') {
+    alert('Por favor ingresa el monto de efectivo real contado en la gaveta.');
     mostrarNotificacionCentro('⚠️ Por favor ingresa el monto de efectivo real contado en la gaveta.', 'warning');
     if (txtReal) txtReal.focus();
     return;
@@ -7960,6 +7967,7 @@ window.ejecutarCierreZ = async function() {
 
   const efectivo_real_contado = parseFloat(realVal);
   if (isNaN(efectivo_real_contado) || efectivo_real_contado < 0) {
+    alert('Por favor ingresa un monto válido.');
     mostrarNotificacionCentro('⚠️ Por favor ingresa un monto válido.', 'warning');
     if (txtReal) txtReal.focus();
     return;
@@ -7968,6 +7976,9 @@ window.ejecutarCierreZ = async function() {
   const notas = txtNotas ? txtNotas.value.trim() : '';
   const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
 
+  if (!confirm('⚠️ ¿Estás seguro de realizar el CIERRE Z DEFINITIVO del turno? Esta acción cerrará la caja en el sistema e imprimirá el reporte oficial final.')) {
+    return;
+  }
   const confirmarCierre = await window.confirmarAccion({
     icono: '🔒',
     titulo: '¿Ejecutar Cierre Z Definitivo?',
@@ -7994,6 +8005,7 @@ window.ejecutarCierreZ = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo ejecutar el cierre Z'));
       mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo ejecutar el cierre Z'), 'error');
       return;
     }
@@ -8031,6 +8043,8 @@ window.ejecutarCierreZ = async function() {
     window.mostrarVisorTicketTermico(ticketData);
     await cargarCajaDesdeBackend();
 
+    setTimeout(() => {
+      if (confirm('🔒 Turno cerrado exitosamente. ¿Deseas realizar la apertura del siguiente turno de caja ahora?')) {
     setTimeout(async () => {
       const abrirSiguiente = await window.confirmarAccion({
         icono: '🔓',
@@ -8047,6 +8061,7 @@ window.ejecutarCierreZ = async function() {
     }, 1200);
 
   } catch (e) {
+    alert('❌ Error ejecutando Cierre Z: ' + e.message);
     mostrarNotificacionCentro('❌ Error ejecutando Cierre Z: ' + e.message, 'error');
   }
 };
@@ -8082,6 +8097,7 @@ window.ejecutarAperturaCaja = async function() {
   const monto_inicial = parseFloat(txtMonto ? txtMonto.value : 0);
 
   if (isNaN(monto_inicial) || monto_inicial < 0) {
+    alert('Por favor ingresa un fondo inicial válido.');
     mostrarNotificacionCentro('⚠️ Por favor ingresa un fondo inicial válido.', 'warning');
     if (txtMonto) txtMonto.focus();
     return;
@@ -8096,6 +8112,7 @@ window.ejecutarAperturaCaja = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo abrir la caja'));
       mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo abrir la caja'), 'error');
       return;
     }
@@ -8104,6 +8121,7 @@ window.ejecutarAperturaCaja = async function() {
     mostrarNotificacionCentro(`🔓 Turno de caja abierto con éxito (Fondo: ${formatCRC(monto_inicial)})`, 'success');
     await cargarCajaDesdeBackend();
   } catch (e) {
+    alert('❌ Error abriendo caja: ' + e.message);
     mostrarNotificacionCentro('❌ Error abriendo caja: ' + e.message, 'error');
   }
 };
@@ -12305,6 +12323,8 @@ window.renderizarTablaUltimasVentas = function(ultimasVentas = []) {
       <td>
         <div style="display:flex; flex-wrap:wrap; gap:4px; max-width:450px;">
           ${itemsHtml}
+      
+... [truncated for diff preview]
         </div>
       </td>
       <td style="text-align:center; white-space:nowrap;">
