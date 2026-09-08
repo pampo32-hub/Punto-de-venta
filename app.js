@@ -8481,13 +8481,31 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
     }
   }
 
-  inicializarPanelesCobroModal(totalTxt);
+    inicializarPanelesCobroModal(totalTxt);
   document.getElementById('modalCobro').classList.add('active');
 });
 
 function inicializarPanelesCobroModal(totalTxt) {
-  const totalNum = parseCRC(totalTxt || document.getElementById('cobroTotalDisplay')?.textContent || '0');
-  
+  let totalNum = parseCRC(totalTxt || document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  if (totalNum <= 0 && estado.mesaActiva) {
+    totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+  }
+
+  // Activar pestaña por defecto (Efectivo)
+  document.querySelectorAll('.pay-method-tab').forEach(b => b.classList.remove('active'));
+  const tabEf = document.querySelector('.pay-method-tab[data-method="Efectivo"]');
+  if (tabEf) tabEf.classList.add('active');
+
+  document.querySelectorAll('.pay-panel').forEach(p => p.classList.remove('active'));
+  const pnlEf = document.getElementById('cobroEfectivoPanel');
+  if (pnlEf) pnlEf.classList.add('active');
+
+  // Panel Efectivo
+  const txtEf = document.getElementById('txtEfectivoRecibido');
+  if (txtEf) txtEf.value = '';
+  const elVuelto = document.getElementById('cobroVueltoDisplay');
+  if (elVuelto) elVuelto.textContent = '₡ 0';
+
   // Panel Tarjeta
   const elTarj = document.getElementById('cobroTarjetaMontoDisplay');
   if (elTarj) elTarj.textContent = formatCRC(totalNum);
@@ -8677,7 +8695,10 @@ window.limpiarCamposMixto = function() {
 };
 
 window.splitMixto5050 = function(tipo1, tipo2) {
-  const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  let totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  if (totalCRC <= 0 && estado.mesaActiva) {
+    totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+  }
   if (totalCRC <= 0) return;
   limpiarCamposMixto();
   const mitad1 = Math.ceil(totalCRC / 2);
@@ -8685,20 +8706,32 @@ window.splitMixto5050 = function(tipo1, tipo2) {
 
   if (tipo1 === 'efectivo') {
     const el = document.getElementById('txtMixtoEfectivo');
-    if (el) el.value = mitad1;
+    if (el) {
+      el.value = mitad1;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
   if (tipo2 === 'tarjeta') {
     const el = document.getElementById('txtMixtoTarjeta');
-    if (el) el.value = mitad2;
+    if (el) {
+      el.value = mitad2;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   } else if (tipo2 === 'sinpe') {
     const el = document.getElementById('txtMixtoSinpe');
-    if (el) el.value = mitad2;
+    if (el) {
+      el.value = mitad2;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
   calcularPagoMixto();
 };
 
 function calcularPagoMixto() {
-  const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  let totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  if (totalCRC <= 0 && estado.mesaActiva) {
+    totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+  }
   const txtTC = document.getElementById('txtTipoCambioUSD');
   const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
 
@@ -8770,7 +8803,10 @@ function calcularPagoMixto() {
 });
 
 window.autoAsignarRestanteMixto = function(tipo) {
-  const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  let totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  if (totalCRC <= 0 && estado.mesaActiva) {
+    totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+  }
   const txtTC = document.getElementById('txtTipoCambioUSD');
   const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
 
@@ -8784,20 +8820,61 @@ window.autoAsignarRestanteMixto = function(tipo) {
 
   if (tipo === 'efectivo') {
     const el = document.getElementById('txtMixtoEfectivo');
-    if (el) el.value = faltante > 0 ? faltante : '';
+    if (el) {
+      el.value = faltante > 0 ? faltante : (totalCRC > 0 && yaAsignadoSinEste === 0 ? totalCRC : '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   } else if (tipo === 'tarjeta') {
     const el = document.getElementById('txtMixtoTarjeta');
-    if (el) el.value = faltante > 0 ? faltante : '';
+    if (el) {
+      el.value = faltante > 0 ? faltante : (totalCRC > 0 && yaAsignadoSinEste === 0 ? totalCRC : '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   } else if (tipo === 'sinpe') {
     const el = document.getElementById('txtMixtoSinpe');
-    if (el) el.value = faltante > 0 ? faltante : '';
+    if (el) {
+      el.value = faltante > 0 ? faltante : (totalCRC > 0 && yaAsignadoSinEste === 0 ? totalCRC : '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   } else if (tipo === 'usd') {
     const el = document.getElementById('txtMixtoUSD');
-    if (el) el.value = faltante > 0 ? (faltante / tc).toFixed(2) : '';
+    if (el) {
+      el.value = faltante > 0 ? +(faltante / tc).toFixed(2) : (totalCRC > 0 && yaAsignadoSinEste === 0 ? +(totalCRC / tc).toFixed(2) : '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
 
   calcularPagoMixto();
 };
+
+// Listeners directos para botones de Pago Mixto
+document.querySelectorAll('.mixto-btn-restante').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const tipo = btn.dataset.cubrir || (btn.getAttribute('onclick') || '').match(/'([^']+)'/)?.[1];
+    if (tipo) {
+      window.autoAsignarRestanteMixto(tipo);
+    }
+  });
+});
+document.querySelectorAll('[data-action="split-efec-tarj"]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.splitMixto5050('efectivo', 'tarjeta');
+  });
+});
+document.querySelectorAll('[data-action="split-efec-sinpe"]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.splitMixto5050('efectivo', 'sinpe');
+  });
+});
+document.querySelectorAll('[data-action="limpiar-mixto"]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.limpiarCamposMixto();
+  });
+});
 
 document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
   const btnFinalizar = document.getElementById('btnFinalizarCobro');
@@ -8807,7 +8884,10 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   btnFinalizar.innerHTML = '⏳ Procesando Cobro...';
 
   try {
-    const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
+    let totalNum = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+    if (totalNum <= 0 && estado.mesaActiva) {
+      totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+    }
     const metodoActivo = document.querySelector('.pay-method-tab.active');
     const metodoKey = metodoActivo ? (metodoActivo.dataset.method || 'Efectivo') : 'Efectivo';
     
@@ -8928,7 +9008,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         endpoint: endpointCobro,
         metodo: 'POST',
         payload: payloadCobro,
-        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
+        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodoFinal})`
       });
     } else {
       try {
@@ -9015,7 +9095,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         servicio: Math.round((totalNum / 1.23) * 0.10),
         iva: totalNum - Math.round(totalNum / 1.23) - Math.round((totalNum / 1.23) * 0.10),
         total: totalNum,
-        metodoPago: metodo,
+        metodoPago: metodoFinal,
         recibido: recibido,
         cambio: cambio
       };
@@ -9048,19 +9128,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       });
       if (window.PosOfflineDB) {
         const remTot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-        const remSub = Math.round(remTot / 1.23);
-        const remServ = Math.round(remSub * 0.10);
-        const remIva = remTot - remSub - remServ;
-        window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, {
-          id: estado.mesaActiva.orden_id,
-          numero_orden: estado.mesaActiva.numero,
-          mesa_id: estado.mesaActiva.id,
-          subtotal: remSub,
-          servicio_10: remServ,
-          iva_13: remIva,
-          total: remTot,
-          estado: 'esperando'
-        }, estado.mesaActiva.items).catch(() => {});
+        window.PosOfflineDB.guardarItemsMesa(estado.mesaActiva.id, estado.mesaActiva.items, remTot).catch(() => {});
       }
     }
 
@@ -9088,7 +9156,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       subtotal: Math.round(totalNum / 1.23),
       impuestos: totalNum - Math.round(totalNum / 1.23),
       total: totalNum,
-      metodoPago: metodo,
+      metodoPago: metodoFinal,
       saldoRestanteMesa: estado.mesaActiva ? estado.mesaActiva.items.reduce((a, b) => a + (b.precio * b.cantidad), 0) : 0
     };
     if (typeof window.mostrarVisorTicketTermico === 'function') {
