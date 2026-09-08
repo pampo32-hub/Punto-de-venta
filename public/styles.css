@@ -3185,10 +3185,18 @@ textarea:focus, select:focus, input:focus {
    ============================================================================ */
 .dev-portal-container {
   display: none;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   background: #090d16;
   color: #fff;
   flex-direction: column;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
 }
 
 .dev-portal-container.active {
@@ -3203,6 +3211,7 @@ textarea:focus, select:focus, input:focus {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
+  flex-shrink: 0;
 }
 
 .dev-badge {
@@ -3253,6 +3262,10 @@ textarea:focus, select:focus, input:focus {
 .dev-body-layout {
   display: flex;
   flex: 1;
+  min-height: 0;
+  height: calc(100vh - 60px);
+  max-height: calc(100vh - 60px);
+  overflow: hidden;
 }
 
 .dev-sidebar {
@@ -3263,6 +3276,9 @@ textarea:focus, select:focus, input:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+  flex-shrink: 0;
 }
 
 .dev-nav-btn {
@@ -3286,8 +3302,38 @@ textarea:focus, select:focus, input:focus {
 
 .dev-main-content {
   flex: 1;
-  padding: 24px;
+  min-height: 0;
+  height: 100%;
+  padding: 24px 28px 80px 28px;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dev-main-content::-webkit-scrollbar,
+.dev-sidebar::-webkit-scrollbar,
+.db-table-responsive::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dev-main-content::-webkit-scrollbar-track,
+.dev-sidebar::-webkit-scrollbar-track,
+.db-table-responsive::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+.dev-main-content::-webkit-scrollbar-thumb,
+.dev-sidebar::-webkit-scrollbar-thumb,
+.db-table-responsive::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.dev-main-content::-webkit-scrollbar-thumb:hover,
+.dev-sidebar::-webkit-scrollbar-thumb:hover,
+.db-table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #0284c7;
 }
 
 .dev-tab-panel {
@@ -3837,6 +3883,7 @@ textarea:focus, select:focus, input:focus {
   border: 1px solid #1e293b;
   border-radius: 14px;
   padding: 22px;
+  margin-bottom: 40px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
 }
 
