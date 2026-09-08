@@ -7462,9 +7462,11 @@ async function cargarCajaDesdeBackend() {
     if (data.caja) {
       let efect = 0, tarj = 0, sinpe = 0;
       (data.ventas || []).forEach(v => {
-        if (v.metodo === 'Efectivo') efect = v.total;
-        if (v.metodo === 'Tarjeta') tarj = v.total;
-        if (v.metodo === 'SINPE') sinpe = v.total;
+        const m = (v.metodo || '').toLowerCase();
+        const tot = Number(v.total) || 0;
+        if (m.includes('efectivo')) efect += tot;
+        else if (m.includes('tarjeta')) tarj += tot;
+        else if (m.includes('sinpe') || m.includes('transfer')) sinpe += tot;
       });
 
       document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
@@ -8086,6 +8088,7 @@ window.ejecutarAperturaCaja = async function() {
 };
 
 // Listeners para botones de caja
+document.getElementById('btnAbrirCaja')?.addEventListener('click', () => window.abrirModalAperturaCaja());
 document.getElementById('btnEntradaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('entrada'));
 document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('salida'));
 document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());

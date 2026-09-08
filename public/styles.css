@@ -3064,6 +3064,18 @@ textarea:focus, select:focus, input:focus {
   cursor: pointer;
 }
 
+.btn-caja-op.abrir-caja {
+  background: linear-gradient(135deg, #065f46, #047857);
+  border-color: #10b981;
+  color: #ecfdf5;
+}
+
+.btn-caja-op.abrir-caja:hover {
+  background: linear-gradient(135deg, #047857, #059669);
+  border-color: #34d399;
+  transform: translateY(-1px);
+}
+
 .btn-caja-op.corte-z {
   background: #7f1d1d;
   border-color: #ef4444;

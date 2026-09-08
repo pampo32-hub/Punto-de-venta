@@ -1126,6 +1126,9 @@
             </div>
             
             <div class="caja-actions-grid">
+              <button class="btn-caja-op abrir-caja" id="btnAbrirCaja" onclick="abrirModalAperturaCaja()" style="grid-column: span 2; background: linear-gradient(135deg, #065f46, #047857); border-color: #10b981; color: #ecfdf5; font-size: 0.92rem; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span>🔓</span> <strong>Abrir Turno de Caja</strong>
+              </button>
               <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
               <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()">📑 Corte X (Parcial)</button>
