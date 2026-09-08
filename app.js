@@ -12361,8 +12361,6 @@ window.renderizarTablaUltimasVentas = function(ultimasVentas = []) {
       <td>
         <div style="display:flex; flex-wrap:wrap; gap:4px; max-width:450px;">
           ${itemsHtml}
-      
-... [truncated for diff preview]
         </div>
       </td>
       <td style="text-align:center; white-space:nowrap;">
