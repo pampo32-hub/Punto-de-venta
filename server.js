@@ -4636,7 +4636,7 @@ app.get('/api/caja/actual', async (req, res) => {
     if (!caja) return res.json({ caja: null });
 
     const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       WHERE p.caja_id = ?
       GROUP BY p.metodo
@@ -4726,18 +4726,19 @@ app.get('/api/caja/corte-x', async (req, res) => {
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
     const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       WHERE p.caja_id = ?
       GROUP BY p.metodo
     `, [caja.id]);
 
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasTransferencia = 0, ventasOtros = 0;
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
 
     ventas.forEach(v => {
       const m = (v.metodo || '').toLowerCase();
       const tot = Number(v.total) || 0;
+      const totUSD = Number(v.total_usd) || 0;
       desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
 
       if (m.includes('efectivo') || m.includes('cash')) {
@@ -4748,7 +4749,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
         ventasSinpe += tot;
       } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
         ventasDolares += tot;
-        ventasEfectivo += tot;
+        ventasDolaresUSD += totUSD;
       } else if (m.includes('transfer')) {
         ventasTransferencia += tot;
         ventasSinpe += tot;
@@ -4798,6 +4799,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
         tarjeta: ventasTarjeta,
         sinpe: ventasSinpe,
         dolares: ventasDolares,
+        dolares_usd: ventasDolaresUSD,
         transferencia: ventasTransferencia,
         otros: ventasOtros,
         desglose_por_metodo: desgloseMetodos,
@@ -4841,18 +4843,19 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
 
     const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       WHERE p.caja_id = ?
       GROUP BY p.metodo
     `, [caja.id]);
 
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasTransferencia = 0, ventasOtros = 0;
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
 
     ventas.forEach(v => {
       const m = (v.metodo || '').toLowerCase();
       const tot = Number(v.total) || 0;
+      const totUSD = Number(v.total_usd) || 0;
       desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
 
       if (m.includes('efectivo') || m.includes('cash')) {
@@ -4863,7 +4866,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         ventasSinpe += tot;
       } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
         ventasDolares += tot;
-        ventasEfectivo += tot;
+        ventasDolaresUSD += totUSD;
       } else if (m.includes('transfer')) {
         ventasTransferencia += tot;
         ventasSinpe += tot;
@@ -4936,6 +4939,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         tarjeta: ventasTarjeta,
         sinpe: ventasSinpe,
         dolares: ventasDolares,
+        dolares_usd: ventasDolaresUSD,
         transferencia: ventasTransferencia,
         otros: ventasOtros,
         desglose_por_metodo: desgloseMetodos,

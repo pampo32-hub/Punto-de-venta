@@ -310,9 +310,15 @@ function initDb() {
       total_ventas_efectivo REAL DEFAULT 0,
       total_ventas_tarjeta REAL DEFAULT 0,
       total_ventas_sinpe REAL DEFAULT 0,
+      total_ventas_dolares REAL DEFAULT 0,
+      total_ventas_usd REAL DEFAULT 0,
+      total_ventas_transferencia REAL DEFAULT 0,
       estado TEXT DEFAULT 'abierta'
     )`);
     db.run("ALTER TABLE Cajas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_dolares REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
 
     // 6. Movimientos de Caja
     db.run(`CREATE TABLE IF NOT EXISTS MovimientosCaja (

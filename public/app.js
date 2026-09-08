@@ -7655,18 +7655,27 @@ async function cargarCajaDesdeBackend() {
     });
     const data = await res.json();
     if (data.caja) {
-      let efect = 0, tarj = 0, sinpe = 0;
+      let efect = 0, tarj = 0, sinpe = 0, dolaresCRC = 0, dolaresUSD = 0;
       (data.ventas || []).forEach(v => {
         const m = (v.metodo || '').toLowerCase();
         const tot = Number(v.total) || 0;
+        const totUSD = Number(v.total_usd) || 0;
         if (m.includes('efectivo')) efect += tot;
         else if (m.includes('tarjeta')) tarj += tot;
         else if (m.includes('sinpe') || m.includes('transfer')) sinpe += tot;
+        else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+          dolaresCRC += tot;
+          dolaresUSD += totUSD;
+        }
       });
 
       document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
       document.getElementById('cajaVentasTarjeta').textContent = formatCRC(tarj);
       document.getElementById('cajaVentasSinpe').textContent = formatCRC(sinpe);
+      const elDolares = document.getElementById('cajaVentasDolares');
+      if (elDolares) {
+        elDolares.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
+      }
       document.getElementById('cajaTotalEfectivo').textContent = formatCRC((data.caja.monto_inicial || 50000) + efect);
       document.getElementById('cajeroTurnoNombre').textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
       let entradas = 0, salidas = 0;
@@ -7708,6 +7717,8 @@ async function cargarCajaDesdeBackend() {
         ventasEfectivo: efect,
         ventasTarjeta: tarj,
         ventasSinpe: sinpe,
+        ventasDolares: dolaresCRC,
+        ventasDolaresUSD: dolaresUSD,
         totalEntradas: entradas,
         totalSalidas: salidas,
         totalEsperado,
@@ -7724,6 +7735,8 @@ async function cargarCajaDesdeBackend() {
       if (elTarj) elTarj.textContent = '₡ 0.00';
       const elSinpe = document.getElementById('cajaVentasSinpe');
       if (elSinpe) elSinpe.textContent = '₡ 0.00';
+      const elDolares = document.getElementById('cajaVentasDolares');
+      if (elDolares) elDolares.textContent = '$ 0.00 (₡ 0)';
       const elEntradas = document.getElementById('cajaEntradasTotal');
       if (elEntradas) elEntradas.textContent = '+₡ 0.00';
       const elSalidas = document.getElementById('cajaSalidasTotal');
@@ -8073,6 +8086,19 @@ window.abrirModalCierreZ = async function() {
 
     const elVentas = document.getElementById('czVentasEfectivo') || document.getElementById('cierreZVentasTotal');
     if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo !== undefined ? data.ventas.efectivo : (data.ventas?.total || 0))}`;
+
+    const elVentasDolares = document.getElementById('czVentasDolares');
+    if (elVentasDolares) {
+      const dUSD = Number(data.ventas?.dolares_usd) || (Number(data.ventas?.dolares) ? Number(data.ventas.dolares) / 520 : 0);
+      const dCRC = Number(data.ventas?.dolares) || 0;
+      elVentasDolares.textContent = `$ ${dUSD.toFixed(2)} (${formatCRC(dCRC)})`;
+    }
+
+    const elVentasTarj = document.getElementById('czVentasTarjeta');
+    if (elVentasTarj) elVentasTarj.textContent = formatCRC(data.ventas?.tarjeta || 0);
+
+    const elVentasSinpe = document.getElementById('czVentasSinpe');
+    if (elVentasSinpe) elVentasSinpe.textContent = formatCRC(data.ventas?.sinpe || 0);
 
     const elEntradas = document.getElementById('czTotalEntradas') || document.getElementById('cierreZEntradas');
     if (elEntradas) elEntradas.textContent = `+${formatCRC(data.total_entradas || 0)}`;
@@ -14305,6 +14331,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>Ventas SINPE Móvil:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
           <span>TOTAL VENTAS:</span>
           <span>${formatCRCSinDecimales(v.total || 0)}</span>
@@ -14386,6 +14418,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>Ventas SINPE Móvil:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
           <span>TOTAL FACTURADO:</span>
           <span>${formatCRCSinDecimales(v.total || 0)}</span>
