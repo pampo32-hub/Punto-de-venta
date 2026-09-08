@@ -28,7 +28,8 @@ if (process.env.DATABASE_URL && !process.env.POS_DB_PATH) {
     console.error('⚠️ Error inesperado en el pool de PostgreSQL:', err.message);
   });
 
-  console.log('🐘 Conectado a base de datos central en la nube (Render PostgreSQL).');
+  const isSupabase = (process.env.DATABASE_URL || '').includes('supabase');
+  console.log(`🐘 Conectado a base de datos central en la nube (${isSupabase ? 'Supabase Virginia PostgreSQL' : 'PostgreSQL'}).`);
 
   function convertSqlToPg(sql) {
     if (!sql || typeof sql !== 'string') return sql;
