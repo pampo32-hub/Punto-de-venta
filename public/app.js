@@ -1650,6 +1650,9 @@ try {
       if (estado.negocioActual && Number(estado.negocioActual.id) === Number(d.negocioId)) {
         estado.negocioActual.modulos_activos = d.modulos_activos;
         estado.negocioActual.plan_nombre = d.plan_nombre;
+        try {
+          sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+        } catch (_) {}
         if (typeof aplicarRestriccionesModulos === 'function') {
           aplicarRestriccionesModulos();
         }
@@ -2406,8 +2409,13 @@ function aplicarEnrutamientoPorRol() {
 
   // Restaurar vista y zona activa guardada en sesión tras recarga (F5)
   const savedView = sessionStorage.getItem('pos_active_view') || 'salon';
-  const esVistaAdmin = ['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(savedView);
-  const viewToRestore = (esVistaAdmin && !esAdmin) ? 'salon' : savedView;
+  let viewToRestore = savedView;
+  if (viewToRestore === 'kds' && !tieneModulo('kds_cocina')) viewToRestore = 'salon';
+  if (viewToRestore === 'facturacion' && !tieneModulo('facturacion_electronica')) viewToRestore = 'salon';
+  if (['inventario', 'recetas', 'kardex'].includes(viewToRestore) && !tieneModulo('inventario_recetas')) viewToRestore = 'salon';
+
+  const esVistaAdmin = ['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(viewToRestore);
+  if (esVistaAdmin && !esAdmin) viewToRestore = 'salon';
 
   if (esVistaAdmin && esAdmin) {
     abrirModuloAdmin(viewToRestore);
@@ -2524,6 +2532,19 @@ window.togglePanelAdmin = function() {
 
 window.ejecutarAccionAdmin = function(tipo) {
   cerrarPanelAdmin();
+  if (['inventario', 'recetas', 'kardex'].includes(tipo) && !tieneModulo('inventario_recetas')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ El módulo de Inventario y Recetas no está activo para este comercio.', 'warning');
+    }
+    return;
+  }
+  if (tipo === 'happyhour' && !tieneModulo('mesas_promos')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ El módulo de Mesas Avanzadas y Happy Hour no está activo para este comercio.', 'warning');
+    }
+    return;
+  }
+
   if (tipo === 'metricas' || tipo === 'inventario' || tipo === 'recetas' || tipo === 'kardex' || tipo === 'auditoria' || tipo === 'editor-plano') {
     abrirModuloAdmin(tipo);
   } else if (tipo === 'personal') {
@@ -2544,6 +2565,25 @@ window.ejecutarAccionAdmin = function(tipo) {
 };
 
 window.abrirModuloAdmin = async function(modulo) {
+  if (['inventario', 'recetas', 'kardex'].includes(modulo) && !tieneModulo('inventario_recetas')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ El módulo de Inventario y Recetas no está contratado.', 'warning');
+    }
+    return;
+  }
+  if (modulo === 'facturacion' && !tieneModulo('facturacion_electronica')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ El módulo de Facturación Electrónica no está contratado.', 'warning');
+    }
+    return;
+  }
+  if (modulo === 'kds' && !tieneModulo('kds_cocina')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ El módulo KDS Cocina no está contratado.', 'warning');
+    }
+    return;
+  }
+
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
@@ -3675,47 +3715,51 @@ window.aplicarRestriccionesModulos = function() {
   const tieneQR = tieneModulo('menu_qr');
   const tieneAutoPago = tieneModulo('auto_pago_qr');
   const tieneOffline = tieneModulo('offline_first');
+  const tieneWhatsApp = tieneModulo('notificaciones_whatsapp');
+  const tieneIA = tieneModulo('inteligencia_artificial');
+  const tieneFacturacion = tieneModulo('facturacion_electronica');
 
   // 1. KDS Cocina & Barra
   document.querySelectorAll('.nav-pill[data-view="kds"], .nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds').forEach(el => {
     el.style.display = tieneKDS ? '' : 'none';
   });
-
-  // 2. Split Bill (Dividir Cuentas)
-  const btnSplit = document.getElementById('btnAbrirSplitBill');
-  if (btnSplit) {
-    btnSplit.style.display = tieneSplit ? '' : 'none';
-  }
-  document.querySelectorAll('.btn-btn-cmd.split, .btn-split-trigger').forEach(el => {
-    el.style.display = tieneSplit ? '' : 'none';
-  });
-
-  // 3. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
-  const btnMoverUnir = document.getElementById('btnAbrirMoverUnirModal');
-  if (btnMoverUnir) {
-    btnMoverUnir.style.display = tieneMesasPromos ? '' : 'none';
-  }
-  const hhSwitch = document.getElementById('hhSwitchInput');
-  if (hhSwitch) {
-    if (!tieneMesasPromos) {
-      hhSwitch.disabled = true;
-      const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
-      if (hhBar) {
-        hhBar.style.opacity = '0.5';
-        hhBar.title = 'Módulo Mesas Avanzadas & Happy Hour no contratado';
-      }
-    } else {
-      hhSwitch.disabled = false;
-      const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
-      if (hhBar) {
-        hhBar.style.opacity = '1';
-        hhBar.title = '';
-      }
+  if (!tieneKDS) {
+    const activePill = document.querySelector('.nav-pill.active');
+    if (activePill && activePill.dataset.view === 'kds') {
+      document.querySelector('.nav-pill[data-view="salon"]')?.click();
+    }
+    const viewKDS = document.getElementById('view-kds');
+    if (viewKDS && viewKDS.classList.contains('active')) {
+      viewKDS.classList.remove('active');
+      document.getElementById('view-salon')?.classList.add('active');
+      document.querySelector('.nav-pill[data-view="salon"]')?.classList.add('active');
     }
   }
 
-  // 4. Inventario & Escandallos & Kárdex
-  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-panel-card.card-kardex, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], .admin-view-tab[data-view="kardex"]').forEach(el => {
+  // 2. Facturación Electrónica Legal & Express
+  document.querySelectorAll('.nav-pill[data-view="facturacion"], .nav-btn[data-view="facturacion"], #tabNavFacturacion, [data-view="facturacion"]').forEach(el => {
+    el.style.display = tieneFacturacion ? '' : 'none';
+  });
+  const subtabFact = document.getElementById('subtabBtn_facturacion');
+  if (subtabFact) subtabFact.style.display = tieneFacturacion ? '' : 'none';
+  const subtabContentFact = document.getElementById('subtabContent_facturacion');
+  if (subtabContentFact && !tieneFacturacion) subtabContentFact.style.display = 'none';
+
+  if (!tieneFacturacion) {
+    const activePill = document.querySelector('.nav-pill.active');
+    if (activePill && activePill.dataset.view === 'facturacion') {
+      document.querySelector('.nav-pill[data-view="salon"]')?.click();
+    }
+    const viewFact = document.getElementById('view-facturacion');
+    if (viewFact && viewFact.classList.contains('active')) {
+      viewFact.classList.remove('active');
+      document.getElementById('view-salon')?.classList.add('active');
+      document.querySelector('.nav-pill[data-view="salon"]')?.classList.add('active');
+    }
+  }
+
+  // 3. Inventario & Escandallos & Kárdex
+  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-panel-card.card-kardex, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], .admin-view-tab[data-view="kardex"], #tabNavInventario').forEach(el => {
     el.style.display = tieneInventario ? '' : 'none';
   });
   const btnSubRecetas = document.getElementById('tabBtnInvRecetas');
@@ -3725,18 +3769,77 @@ window.aplicarRestriccionesModulos = function() {
   if (btnSubKardex) btnSubKardex.style.display = tieneInventario ? '' : 'none';
   if (btnSubCompras) btnSubCompras.style.display = tieneInventario ? '' : 'none';
 
-  // 5. Menú QR & Auto-Pago
+  if (!tieneInventario) {
+    const activePill = document.querySelector('.nav-pill.active');
+    if (activePill && ['inventario', 'recetas', 'kardex'].includes(activePill.dataset.view)) {
+      document.querySelector('.nav-pill[data-view="salon"]')?.click();
+    }
+    const viewInv = document.getElementById('view-inventario');
+    if (viewInv && viewInv.classList.contains('active')) {
+      viewInv.classList.remove('active');
+      document.getElementById('view-salon')?.classList.add('active');
+      document.querySelector('.nav-pill[data-view="salon"]')?.classList.add('active');
+    }
+  }
+
+  // 4. Split Bill (Dividir Cuentas)
+  const btnSplit = document.getElementById('btnAbrirSplitBill');
+  if (btnSplit) {
+    btnSplit.style.display = tieneSplit ? '' : 'none';
+  }
+  document.querySelectorAll('.btn-btn-cmd.split, .btn-split-trigger, .btn-cmd.split, .btn-split').forEach(el => {
+    el.style.display = tieneSplit ? '' : 'none';
+  });
+  if (!tieneSplit) {
+    document.getElementById('modalSplitBill')?.classList.remove('active');
+  }
+
+  // 5. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
+  document.querySelectorAll('#btnAbrirMoverUnirModal, .btn-mover-unir, .btn-unir-mesas, .btn-mover-mesa').forEach(el => {
+    el.style.display = tieneMesasPromos ? '' : 'none';
+  });
+  document.querySelectorAll('.admin-panel-card.card-happyhour, #btnAdminHappyHour, #btnToggleHappyHour, .hh-status-bar, #btnHappyHourTop, .btn-happyhour-top').forEach(el => {
+    el.style.display = tieneMesasPromos ? '' : 'none';
+  });
+  if (!tieneMesasPromos) {
+    document.getElementById('modalAdminHappyHour')?.classList.remove('active');
+    document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
+  }
+
+  // 6. Menú QR & Auto-Pago
   const btnVerQRs = document.getElementById('btnVerTodosQRs');
   if (btnVerQRs) btnVerQRs.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
 
   const btnQrMesa = document.getElementById('btnVerQrMesaCliente');
   if (btnQrMesa) btnQrMesa.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
 
-  // 6. Offline-First
+  document.querySelectorAll('.btn-qr-mesa, .card-qr, .qr-card, #btnGenerarQR').forEach(el => {
+    el.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
+  });
+
+  // 7. Auto-Pago QR & SINPE Móvil
+  document.querySelectorAll('.btn-autopago-qr, .seccion-autopago-qr, #btnAutoPagoSinpe, .btn-sinpe-qr').forEach(el => {
+    el.style.display = tieneAutoPago ? '' : 'none';
+  });
+
+  // 8. Offline-First
   const netBadge = document.getElementById('netStatusBadge');
   if (netBadge) {
     netBadge.style.display = tieneOffline ? '' : 'none';
   }
+  document.querySelectorAll('.offline-indicator, #btnSyncOffline').forEach(el => {
+    el.style.display = tieneOffline ? '' : 'none';
+  });
+
+  // 9. Notificaciones WhatsApp & Bot
+  document.querySelectorAll('.btn-whatsapp, .btn-share-wa, #btnAdminWhatsApp, .card-whatsapp, .btn-notif-whatsapp, .whatsapp-section').forEach(el => {
+    el.style.display = tieneWhatsApp ? '' : 'none';
+  });
+
+  // 10. Inteligencia Artificial Gastronómica (Voice POS & Upselling)
+  document.querySelectorAll('#btnVoicePOS, #btnDictarComanda, .btn-voice-pos, #btnSugerenciasIA, .card-ia, .ai-badge, .btn-ia-suggest, .seccion-ia').forEach(el => {
+    el.style.display = tieneIA ? '' : 'none';
+  });
 };
 
 window.abrirPosComoNegocio = async function(negocioId) {
@@ -10554,6 +10657,10 @@ function initNavegacion() {
   document.querySelectorAll('.nav-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       const view = btn.dataset.view;
+      if (view === 'kds' && !tieneModulo('kds_cocina')) return;
+      if (view === 'facturacion' && !tieneModulo('facturacion_electronica')) return;
+      if (['recetas', 'kardex', 'inventario'].includes(view) && !tieneModulo('inventario_recetas')) return;
+
       if (['recetas', 'kardex', 'inventario', 'metricas', 'auditoria', 'editor-plano'].includes(view)) {
         abrirModuloAdmin(view);
         return;
