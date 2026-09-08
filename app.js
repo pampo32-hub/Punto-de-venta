@@ -4541,16 +4541,11 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
           ${btnEditLargeHtml}
           <div class="prod-card-large-media">
             ${imgLargeHtml}
-            <span class="prod-card-large-badge">${catBadge}</span>
             <span class="prod-card-large-price">${formatCRC(p.precio)}</span>
             ${isPromo ? '<span class="prod-card-large-promo">🍸 2x1</span>' : ''}
           </div>
           <div class="prod-card-large-info">
             <h4 class="prod-card-large-name">${escapeHtml(p.nombre)}</h4>
-            <div class="prod-card-large-meta">
-              <span style="color: ${isAgotado ? '#f87171' : '#34d399'}; font-weight: 700;">${isAgotado ? '✕ Agotado' : '● Disponible'}</span>
-              <span>${p.codigo || (p.destino === 'barra' ? '🍸 Barra' : '🍳 Cocina')}</span>
-            </div>
           </div>
         </div>
       `;

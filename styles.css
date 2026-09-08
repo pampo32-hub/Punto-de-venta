@@ -1776,7 +1776,7 @@ body {
 
 .prod-card-large-media {
   width: 100%;
-  height: 120px;
+  height: 150px;
   position: relative;
   background: #0f172a;
   overflow: hidden;
@@ -1797,7 +1797,7 @@ body {
 }
 
 .prod-card-large-no-img {
-  font-size: 3rem;
+  font-size: 3.5rem;
   opacity: 0.7;
   display: flex;
   align-items: center;
@@ -1811,38 +1811,21 @@ body {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(52, 211, 153, 0.7);
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(52, 211, 153, 0.75);
   color: #34d399;
   font-weight: 800;
-  font-size: 0.88rem;
-  padding: 3px 8px;
+  font-size: 0.92rem;
+  padding: 4px 10px;
   border-radius: 8px;
   backdrop-filter: blur(6px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-}
-
-.prod-card-large-badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #f8fafc;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 6px;
-  backdrop-filter: blur(4px);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 .prod-card-large-promo {
   position: absolute;
   top: 8px;
-  right: 8px;
+  left: 8px;
   background: linear-gradient(135deg, #ec4899, #f43f5e);
   color: #fff;
   font-size: 0.72rem;
@@ -1856,9 +1839,10 @@ body {
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  flex: 1;
-  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  text-align: center;
 }
 
 .prod-card-large-name {
@@ -1867,21 +1851,11 @@ body {
   color: #f8fafc;
   line-height: 1.25;
   margin: 0;
+  text-align: center;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.prod-card-large-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.75rem;
-  color: #94a3b8;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 6px;
-  margin-top: 2px;
 }
 
 .prod-card-large-edit {
