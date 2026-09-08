@@ -3103,9 +3103,15 @@ textarea:focus, select:focus, input:focus {
 
 .pay-methods-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   margin-bottom: 14px;
+}
+
+@media (max-width: 680px) {
+  .pay-methods-tabs {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .pay-method-tab {
@@ -3114,15 +3120,143 @@ textarea:focus, select:focus, input:focus {
   color: var(--text-muted);
   padding: 10px 4px;
   border-radius: 8px;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   font-weight: 800;
   cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.pay-method-tab:hover {
+  background: #374151;
+  color: #fff;
 }
 
 .pay-method-tab.active {
   background: var(--primary);
   border-color: var(--primary-glow);
   color: white;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.pay-panel {
+  display: none;
+}
+
+.pay-panel.active {
+  display: block;
+}
+
+.pay-info-banner {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pay-info-banner .pay-info-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.mixto-matrix-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.mixto-row-item {
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.mixto-row-item .mixto-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  min-width: 100px;
+}
+
+.mixto-row-item .mixto-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.mixto-row-item input {
+  padding: 6px 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 6px;
+  background: #1f2937;
+  border: 1px solid #4b5563;
+  color: #fff;
+  width: 100%;
+}
+
+.mixto-btn-restante {
+  background: #0284c7;
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.mixto-btn-restante:hover {
+  background: #0369a1;
+}
+
+.mixto-balance-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+  background: #090d16;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.mixto-balance-summary .bal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mixto-balance-summary .bal-lbl {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.mixto-balance-summary .bal-val {
+  font-size: 1.05rem;
+  font-weight: 800;
 }
 
 .cash-input-wrapper {

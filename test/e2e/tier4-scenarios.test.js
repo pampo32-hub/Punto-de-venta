@@ -329,6 +329,11 @@ describe('Tier 4: Real-World Workload Scenarios', () => {
   // ==========================================================================
   it('T4.6: Scenario 6 — Multi-Course Dining with Drink Refills and Split Tip', async () => {
     const mesaId = 10;
+    await server.request('/api/happy-hour', {
+      method: 'POST',
+      headers: { 'x-user-rol': 'admin' },
+      body: { activo: false, pin: '1234' }
+    });
 
     // Course 1: Appetizer + Drinks
     const course1 = [

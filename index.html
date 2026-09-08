@@ -3672,13 +3672,17 @@
         <label class="section-label">Selecciona el Método de Pago:</label>
         <div class="pay-methods-tabs">
           <button class="pay-method-tab active" data-method="Efectivo">💵 Efectivo</button>
-          <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta / Datáfono</button>
-          <button class="pay-method-tab" data-method="SINPE">📱 SINPE Móvil</button>
-          <button class="pay-method-tab" data-method="Mixto">🔀 Pago Mixto</button>
+          <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta</button>
+          <button class="pay-method-tab" data-method="SINPE">📱 SINPE</button>
+          <button class="pay-method-tab" data-method="Dolares">💵 Dólares ($)</button>
+          <button class="pay-method-tab" data-method="Transferencia">🏦 Transfer</button>
+          <button class="pay-method-tab" data-method="Mixto">🔀 Mixto</button>
         </div>
+
+        <!-- PANEL 1: EFECTIVO -->
         <div id="cobroEfectivoPanel" class="pay-panel active">
           <div class="field-row">
-            <label>Efectivo Recibido del Cliente:</label>
+            <label>Efectivo Recibido en Colones (₡):</label>
             <div class="cash-input-wrapper">
               <span class="currency-prefix">₡</span>
               <input type="text" id="txtEfectivoRecibido" placeholder="0" />
@@ -3694,6 +3698,150 @@
           <div class="vuelto-box">
             <span>Cambio / Vuelto a Entregar:</span>
             <strong id="cobroVueltoDisplay">₡ 0</strong>
+          </div>
+        </div>
+
+        <!-- PANEL 2: TARJETA / DATÁFONO -->
+        <div id="cobroTarjetaPanel" class="pay-panel">
+          <div class="pay-info-banner">
+            <span>Monto a cobrar en Datáfono:</span>
+            <span class="pay-info-val" id="cobroTarjetaMontoDisplay">₡ 0</span>
+          </div>
+          <div class="field-row" style="margin-bottom:8px;">
+            <label>Referencia / Voucher / Autorización (Opcional):</label>
+            <input type="text" id="txtTarjetaReferencia" placeholder="Ej: 4892 o Visa Credomatic" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff; font-size:0.95rem;" />
+          </div>
+          <div style="font-size:0.8rem; color:#9ca3af; display:flex; gap:6px; align-items:center;">
+            <span>💳 Acepta Visa, Mastercard, AMEX y Débito directo.</span>
+          </div>
+        </div>
+
+        <!-- PANEL 3: SINPE MÓVIL -->
+        <div id="cobroSinpePanel" class="pay-panel">
+          <div class="pay-info-banner">
+            <span>Monto a transferir por SINPE:</span>
+            <span class="pay-info-val" id="cobroSinpeMontoDisplay">₡ 0</span>
+          </div>
+          <div class="field-row" style="margin-bottom:8px;">
+            <label>Comprobante / Teléfono Emisor (Opcional):</label>
+            <input type="text" id="txtSinpeReferencia" placeholder="Ej: Comprobante #104928 o 8888-8888" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff; font-size:0.95rem;" />
+          </div>
+          <div style="background:rgba(16,185,129,0.1); border:1px solid #10b981; border-radius:8px; padding:8px 12px; font-size:0.82rem; color:#34d399;">
+            📱 Verificar recepción del mensaje o notificación bancaria antes de liquidar.
+          </div>
+        </div>
+
+        <!-- PANEL 4: DÓLARES (USD $) -->
+        <div id="cobroDolaresPanel" class="pay-panel">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+            <div style="background:#111827; border:1px solid #374151; border-radius:8px; padding:8px 10px;">
+              <small style="color:#9ca3af; display:block; font-size:0.75rem;">Total en USD ($):</small>
+              <strong id="cobroTotalUSDDisplay" style="font-size:1.25rem; color:#38bdf8;">$ 0.00</strong>
+            </div>
+            <div style="background:#111827; border:1px solid #374151; border-radius:8px; padding:8px 10px;">
+              <small style="color:#9ca3af; display:block; font-size:0.75rem;">Tipo de Cambio (₡ / $):</small>
+              <input type="number" id="txtTipoCambioUSD" value="520" step="1" style="width:100%; background:transparent; border:none; color:#fbbf24; font-size:1.15rem; font-weight:800; padding:0; outline:none;" />
+            </div>
+          </div>
+          <div class="field-row">
+            <label>Dólares Recibidos del Cliente ($ USD):</label>
+            <div class="cash-input-wrapper">
+              <span class="currency-prefix">$</span>
+              <input type="number" id="txtDolaresRecibidos" placeholder="0.00" step="1" />
+            </div>
+          </div>
+          <div class="quick-cash-chips">
+            <button class="cash-chip chip-usd" data-usd="10">$ 10</button>
+            <button class="cash-chip chip-usd" data-usd="20">$ 20</button>
+            <button class="cash-chip chip-usd" data-usd="50">$ 50</button>
+            <button class="cash-chip chip-usd" data-usd="100">$ 100</button>
+            <button class="cash-chip exact" id="btnPagoExactoUSD">Exacto USD</button>
+          </div>
+          <div class="vuelto-box">
+            <div>
+              <span style="font-size:0.8rem; color:#9ca3af; display:block;">Vuelto a Entregar en Colones:</span>
+              <strong id="cobroVueltoUSDEnColones" style="font-size:1.25rem; color:#34d399;">₡ 0</strong>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:0.75rem; color:#9ca3af; display:block;">Equivalente en USD:</span>
+              <span id="cobroVueltoUSDDisplay" style="font-size:1rem; font-weight:700; color:#cbd5e1;">$ 0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANEL 5: TRANSFERENCIA BANCARIA -->
+        <div id="cobroTransferenciaPanel" class="pay-panel">
+          <div class="pay-info-banner">
+            <span>Monto a Transferir:</span>
+            <span class="pay-info-val" id="cobroTransferMontoDisplay">₡ 0</span>
+          </div>
+          <div class="field-row" style="margin-bottom:8px;">
+            <label>Banco Emisor y Referencia de Transferencia:</label>
+            <input type="text" id="txtTransferReferencia" placeholder="Ej: BAC San José - Transf #8493021" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff; font-size:0.95rem;" />
+          </div>
+          <div style="font-size:0.8rem; color:#9ca3af;">
+            🏦 Transferencias directas por IBAN o cuentas locales del negocio.
+          </div>
+        </div>
+
+        <!-- PANEL 6: PAGO MIXTO / COMBINADO -->
+        <div id="cobroMixtoPanel" class="pay-panel">
+          <div class="mixto-matrix-grid">
+            <!-- Efectivo -->
+            <div class="mixto-row-item">
+              <span class="mixto-label">💵 Efectivo:</span>
+              <div class="mixto-input-wrap">
+                <input type="number" id="txtMixtoEfectivo" placeholder="0" class="mixto-calc-trigger" />
+                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('efectivo')">Cubrir</button>
+              </div>
+            </div>
+            <!-- Tarjeta -->
+            <div class="mixto-row-item">
+              <span class="mixto-label">💳 Tarjeta:</span>
+              <div class="mixto-input-wrap">
+                <input type="number" id="txtMixtoTarjeta" placeholder="0" class="mixto-calc-trigger" />
+                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('tarjeta')">Cubrir</button>
+              </div>
+            </div>
+            <!-- SINPE -->
+            <div class="mixto-row-item">
+              <span class="mixto-label">📱 SINPE:</span>
+              <div class="mixto-input-wrap">
+                <input type="number" id="txtMixtoSinpe" placeholder="0" class="mixto-calc-trigger" />
+                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('sinpe')">Cubrir</button>
+              </div>
+            </div>
+            <!-- Dólares -->
+            <div class="mixto-row-item">
+              <span class="mixto-label">💵 USD ($):</span>
+              <div class="mixto-input-wrap">
+                <input type="number" id="txtMixtoUSD" placeholder="$ 0.00" step="1" class="mixto-calc-trigger" />
+                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('usd')">Cubrir</button>
+              </div>
+            </div>
+            <!-- Transferencia -->
+            <div class="mixto-row-item">
+              <span class="mixto-label">🏦 Transfer:</span>
+              <div class="mixto-input-wrap">
+                <input type="number" id="txtMixtoTransfer" placeholder="0" class="mixto-calc-trigger" />
+                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('transfer')">Cubrir</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mixto-balance-summary">
+            <div class="bal-item">
+              <span class="bal-lbl">Total Asignado</span>
+              <span class="bal-val" id="cobroMixtoAsignadoDisplay" style="color:#38bdf8;">₡ 0</span>
+            </div>
+            <div class="bal-item">
+              <span class="bal-lbl">Falta por Cubrir</span>
+              <span class="bal-val" id="cobroMixtoRestanteDisplay" style="color:#f87171;">₡ 0</span>
+            </div>
+            <div class="bal-item">
+              <span class="bal-lbl">Estado</span>
+              <span class="bal-val" id="cobroMixtoEstadoBadge" style="font-size:0.85rem; color:#fbbf24;">Pendiente</span>
+            </div>
           </div>
         </div>
       </div>

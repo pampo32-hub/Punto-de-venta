@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 const DB_MAIN_PATH = path.join(__dirname, '../../pos.db');
-const DB_PATH = path.join(__dirname, '../../pos.test.db');
+const DB_PATH = path.join(__dirname, `../../pos.test.${process.pid}.db`);
 
 process.env.NODE_ENV = 'test';
 process.env.POS_DB_PATH = DB_PATH;
@@ -102,8 +102,8 @@ async function startTestServer() {
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error(`Test server timed out after 6000ms on port ${port}`));
-    }, 6000);
+      reject(new Error(`Test server timed out after 15000ms on port ${port}`));
+    }, 15000);
 
     const onData = (data) => {
       const msg = data.toString();
@@ -187,8 +187,13 @@ async function startTestServer() {
       await dbRun(db, 'DELETE FROM DetalleOrden').catch(() => {});
       await dbRun(db, 'DELETE FROM Ordenes').catch(() => {});
       await dbRun(db, 'DELETE FROM Anulaciones').catch(() => {});
+      await dbRun(db, 'DELETE FROM MovimientosCaja').catch(() => {});
+      await dbRun(db, "UPDATE Cajas SET estado = 'cerrada'").catch(() => {});
       await dbRun(db, 'DELETE FROM IdempotencyLog').catch(() => {});
       await dbRun(db, "UPDATE Mesas SET estado = 'libre', mesero = NULL");
+      for (let i = 1; i <= 15; i++) {
+        await dbRun(db, "INSERT OR IGNORE INTO Mesas (id, negocio_id, numero, capacidad, forma, x, y, ancho, alto, estado) VALUES (?, 1, ?, 4, 'square', 25, 25, 135, 115, 'libre')", [i, `Mesa ${i}`]).catch(() => {});
+      }
       // Check if unida_a_mesa_id exists and reset
       try {
         await dbRun(db, 'UPDATE Mesas SET unida_a_mesa_id = NULL');

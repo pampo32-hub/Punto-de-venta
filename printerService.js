@@ -220,7 +220,7 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
 /**
  * Generador de Factura / Ticket de Liquidación Completa
  */
-function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, metodoPago, subtotal, descuentoHH, servicio, iva, total, recibido, cambio, items, fechaHora = new Date().toISOString() }) {
+function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, metodoPago, subtotal, descuentoHH, servicio, iva, total, recibido, cambio, items, pagos = [], fechaHora = new Date().toISOString() }) {
   let fechaStr = fechaHora;
   if (fechaHora) {
     const d = new Date(fechaHora);
@@ -308,10 +308,22 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
-  raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
-  if ((metodoPago === 'Efectivo' || !metodoPago) && montoRecibido > 0) {
-    raw += `Monto Recibido: ${formatMontoTermica(montoRecibido)}\n`;
-    raw += `Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
+  if (Array.isArray(pagos) && pagos.length > 1) {
+    raw += `Metodo de Pago: PAGO MIXTO / COMBINADO\n`;
+    pagos.forEach(p => {
+      const nomP = limpiarTextoTermica(p.metodo || 'Pago');
+      const mtoP = formatMontoTermica(p.monto);
+      raw += `  * ${nomP}: ${mtoP}${p.referencia ? ` (Ref: ${limpiarTextoTermica(p.referencia)})` : ''}\n`;
+    });
+    if (vuelto > 0) {
+      raw += `  * Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
+    }
+  } else {
+    raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
+    if ((metodoPago === 'Efectivo' || !metodoPago) && montoRecibido > 0) {
+      raw += `Monto Recibido: ${formatMontoTermica(montoRecibido)}\n`;
+      raw += `Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
+    }
   }
 
   raw += ESCPOS.ALIGN_CENTER;

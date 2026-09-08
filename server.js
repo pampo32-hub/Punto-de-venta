@@ -93,6 +93,11 @@ db.serialize(() => {
   db.run("ALTER TABLE Inventario ADD COLUMN medida_shot_ml REAL DEFAULT 30", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN rendimiento_shots REAL DEFAULT 25", () => {});
   db.run("UPDATE Inventario SET es_licor = 1, capacidad_ml = 750, medida_shot_ml = 30, rendimiento_shots = 25 WHERE es_licor = 0 AND (categoria LIKE '%licor%' OR LOWER(nombre) LIKE '%ron %' OR LOWER(nombre) LIKE '%tequila%' OR LOWER(nombre) LIKE '%gin %' OR LOWER(nombre) LIKE '%whisky%' OR LOWER(nombre) LIKE '%vodka%')", () => {});
+  db.run("ALTER TABLE Pagos ADD COLUMN referencia TEXT", () => {});
+  db.run("ALTER TABLE Pagos ADD COLUMN tipo_cambio REAL DEFAULT 1", () => {});
+  db.run("ALTER TABLE Pagos ADD COLUMN monto_usd REAL DEFAULT 0", () => {});
+  db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_dolares REAL DEFAULT 0", () => {});
+  db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
   db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     negocio_id INTEGER DEFAULT 1,
@@ -887,14 +892,18 @@ app.delete('/api/dev/negocios/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID de comercio inválido.' });
     }
 
-    const totalNegociosRow = await dbGet('SELECT COUNT(*) as total FROM Negocios');
-    if (totalNegociosRow && totalNegociosRow.total <= 1) {
-      return res.status(400).json({ error: 'No es posible eliminar el único comercio restante del sistema.' });
+    if (negocioId === 1) {
+      return res.status(400).json({ error: 'No se puede eliminar el comercio principal por defecto (ID: 1).' });
     }
 
     const target = await dbGet('SELECT * FROM Negocios WHERE id = ?', [negocioId]);
     if (!target) {
       return res.status(404).json({ error: 'Comercio no encontrado.' });
+    }
+
+    const totalNegociosRow = await dbGet('SELECT COUNT(*) as total FROM Negocios');
+    if (totalNegociosRow && totalNegociosRow.total <= 1) {
+      return res.status(400).json({ error: 'No es posible eliminar el único comercio restante del sistema.' });
     }
 
     // Limpieza de datos dependientes asociados a este negocio
@@ -3891,6 +3900,11 @@ async function procesarCobroOrden(ordenId, {
   propina = 0,
   cambio = 0,
   mesero = 'Juan Jival',
+  referencia = null,
+  tipo_cambio = 1,
+  monto_usd = 0,
+  pagos = [],
+  desglose = null,
   liquidar_total = true,
   items_pagados = [],
   persona_nombre = 'Cliente',
@@ -4122,14 +4136,95 @@ async function procesarCobroOrden(ordenId, {
 
 
   const negocioIdFinal = orden.negocio_id || 1;
-  const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
+  let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
+  if (!caja) {
+    const ahoraApertura = new Date().toISOString();
+    const rCaja = await dbRun(`
+      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
+      VALUES (?, ?, ?, 50000, 'abierta')
+    `, [negocioIdFinal, mesero || 'Cajero Turno', ahoraApertura]);
+    caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [rCaja.lastID]);
+  }
   const cajaId = caja ? caja.id : null;
   const montoFinal = (monto !== undefined && monto !== null) ? Number(monto) : (Number(orden.total) || 0);
 
-  await dbRun(
-    'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [ordenId, cajaId, mesero, metodoFinal, montoFinal, propina, cambio, ahora]
-  );
+  // Normalizar lista de pagos a registrar en la tabla Pagos (unitaria o multi-método)
+  let listaPagos = [];
+  if (Array.isArray(pagos) && pagos.length > 0) {
+    listaPagos = pagos.filter(p => p && Number(p.monto) > 0);
+  } else if (desglose && typeof desglose === 'object') {
+    if (Number(desglose.efectivo) > 0) {
+      listaPagos.push({
+        metodo: 'Efectivo',
+        monto: Number(desglose.efectivo),
+        recibido: Number(desglose.recibido_efectivo) || Number(desglose.efectivo),
+        cambio: Number(desglose.cambio_efectivo) || Number(desglose.cambio) || 0
+      });
+    }
+    if (Number(desglose.tarjeta) > 0) {
+      listaPagos.push({
+        metodo: 'Tarjeta',
+        monto: Number(desglose.tarjeta),
+        referencia: desglose.referencia_tarjeta || desglose.referencia || null
+      });
+    }
+    if (Number(desglose.sinpe) > 0) {
+      listaPagos.push({
+        metodo: 'SINPE',
+        monto: Number(desglose.sinpe),
+        referencia: desglose.referencia_sinpe || desglose.referencia || null
+      });
+    }
+    if (Number(desglose.dolares) > 0 || Number(desglose.usd) > 0) {
+      const tc = Number(desglose.tipo_cambio) || Number(tipo_cambio) || 520;
+      const mUsd = Number(desglose.monto_usd) || (Number(desglose.dolares || desglose.usd) / tc);
+      listaPagos.push({
+        metodo: 'Dólares',
+        monto: Number(desglose.dolares || desglose.usd),
+        monto_usd: mUsd,
+        tipo_cambio: tc,
+        recibido: Number(desglose.recibido_usd) ? Number(desglose.recibido_usd) * tc : undefined,
+        cambio: Number(desglose.cambio_dolares) || 0
+      });
+    }
+    if (Number(desglose.transferencia) > 0) {
+      listaPagos.push({
+        metodo: 'Transferencia',
+        monto: Number(desglose.transferencia),
+        referencia: desglose.referencia_transferencia || desglose.referencia || null
+      });
+    }
+  }
+
+  if (listaPagos.length === 0) {
+    listaPagos.push({
+      metodo: metodoFinal,
+      monto: montoFinal,
+      propina: Number(propina) || 0,
+      cambio: Number(cambio) || 0,
+      referencia: referencia || null,
+      tipo_cambio: Number(tipo_cambio) || 1,
+      monto_usd: Number(monto_usd) || 0
+    });
+  }
+
+  const totalPagadoAcum = listaPagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+  for (const p of listaPagos) {
+    const metPago = p.metodo || 'Efectivo';
+    const mtoPago = Number(p.monto) || 0;
+    const propPago = p.propina !== undefined ? Number(p.propina) : (listaPagos.length === 1 ? (Number(propina) || 0) : Math.round((Number(propina) || 0) * (mtoPago / (totalPagadoAcum || 1))));
+    const camPago = Number(p.cambio) || (listaPagos.length === 1 ? (Number(cambio) || 0) : 0);
+    const refPago = p.referencia || (listaPagos.length === 1 ? (referencia || null) : null);
+    const tcPago = Number(p.tipo_cambio) || (listaPagos.length === 1 ? (Number(tipo_cambio) || 1) : 1);
+    const usdPago = Number(p.monto_usd) || (listaPagos.length === 1 ? (Number(monto_usd) || 0) : 0);
+
+    await dbRun(
+      'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, referencia, tipo_cambio, monto_usd, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [ordenId, cajaId, mesero, metPago, mtoPago, propPago, camPago, refPago, tcPago, usdPago, ahora]
+    );
+  }
+
+  const metodoFinalTicket = listaPagos.length > 1 ? 'Pago Mixto' : (listaPagos[0]?.metodo || metodoFinal);
 
   // Obtener información del negocio y mesa para el tiquete impreso
   const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
@@ -4151,15 +4246,16 @@ async function procesarCobroOrden(ordenId, {
       mesaNumero,
       mesero,
       cliente: orden.cliente,
-      metodoPago: metodo,
+      metodoPago: metodoFinalTicket,
       subtotal: orden.subtotal,
       descuentoHH: orden.descuento_happy_hour,
       servicio: orden.servicio_10,
       iva: orden.iva_13,
       total: orden.total,
-      recibido: monto,
+      recibido: monto || totalPagadoAcum,
       cambio,
       items: itemsOrden,
+      pagos: listaPagos,
       fechaHora: ahora
     });
 
@@ -4299,9 +4395,7 @@ async function procesarCobroOrden(ordenId, {
     return await cobroPromise;
   } finally {
     if (mutexKey) {
-      setTimeout(() => {
-        cobrosEnProceso.delete(mutexKey);
-      }, 3000);
+      cobrosEnProceso.delete(mutexKey);
     }
   }
 }
@@ -4638,15 +4732,31 @@ app.get('/api/caja/corte-x', async (req, res) => {
       GROUP BY p.metodo
     `, [caja.id]);
 
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0;
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasTransferencia = 0, ventasOtros = 0;
+    const desgloseMetodos = {};
+
     ventas.forEach(v => {
       const m = (v.metodo || '').toLowerCase();
       const tot = Number(v.total) || 0;
-      if (m.includes('efectivo')) ventasEfectivo += tot;
-      else if (m.includes('tarjeta')) ventasTarjeta += tot;
-      else if (m.includes('sinpe') || m.includes('transfer')) ventasSinpe += tot;
+      desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
+
+      if (m.includes('efectivo') || m.includes('cash')) {
+        ventasEfectivo += tot;
+      } else if (m.includes('tarjeta') || m.includes('datafono') || m.includes('datáfono') || m.includes('card') || m.includes('credito') || m.includes('crédito') || m.includes('debito') || m.includes('débito')) {
+        ventasTarjeta += tot;
+      } else if (m.includes('sinpe')) {
+        ventasSinpe += tot;
+      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+        ventasDolares += tot;
+        ventasEfectivo += tot;
+      } else if (m.includes('transfer')) {
+        ventasTransferencia += tot;
+        ventasSinpe += tot;
+      } else {
+        ventasOtros += tot;
+      }
     });
-    const totalVentas = ventasEfectivo + ventasTarjeta + ventasSinpe;
+    const totalVentas = ventas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
     let totalEntradas = 0, totalSalidas = 0;
@@ -4687,6 +4797,10 @@ app.get('/api/caja/corte-x', async (req, res) => {
         efectivo: ventasEfectivo,
         tarjeta: ventasTarjeta,
         sinpe: ventasSinpe,
+        dolares: ventasDolares,
+        transferencia: ventasTransferencia,
+        otros: ventasOtros,
+        desglose_por_metodo: desgloseMetodos,
         total: totalVentas,
         ordenes: ordenesCobros?.total_ordenes || 0
       },
@@ -4733,15 +4847,31 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       GROUP BY p.metodo
     `, [caja.id]);
 
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0;
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasTransferencia = 0, ventasOtros = 0;
+    const desgloseMetodos = {};
+
     ventas.forEach(v => {
       const m = (v.metodo || '').toLowerCase();
       const tot = Number(v.total) || 0;
-      if (m.includes('efectivo')) ventasEfectivo += tot;
-      else if (m.includes('tarjeta')) ventasTarjeta += tot;
-      else if (m.includes('sinpe') || m.includes('transfer')) ventasSinpe += tot;
+      desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
+
+      if (m.includes('efectivo') || m.includes('cash')) {
+        ventasEfectivo += tot;
+      } else if (m.includes('tarjeta') || m.includes('datafono') || m.includes('datáfono') || m.includes('card') || m.includes('credito') || m.includes('crédito') || m.includes('debito') || m.includes('débito')) {
+        ventasTarjeta += tot;
+      } else if (m.includes('sinpe')) {
+        ventasSinpe += tot;
+      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+        ventasDolares += tot;
+        ventasEfectivo += tot;
+      } else if (m.includes('transfer')) {
+        ventasTransferencia += tot;
+        ventasSinpe += tot;
+      } else {
+        ventasOtros += tot;
+      }
     });
-    const totalVentas = ventasEfectivo + ventasTarjeta + ventasSinpe;
+    const totalVentas = ventas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
     let totalEntradas = 0, totalSalidas = 0;
@@ -4777,9 +4907,11 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         total_ventas_efectivo = ?,
         total_ventas_tarjeta = ?,
         total_ventas_sinpe = ?,
+        total_ventas_dolares = ?,
+        total_ventas_transferencia = ?,
         estado = 'cerrada'
       WHERE id = ?
-    `, [ahora, efectivoReal, ventasEfectivo, ventasTarjeta, ventasSinpe, caja.id]);
+    `, [ahora, efectivoReal, ventasEfectivo, ventasTarjeta, ventasSinpe, ventasDolares, ventasTransferencia, caja.id]);
 
     await registrarAuditoria({
       usuarioNombre,
@@ -4803,6 +4935,10 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         efectivo: ventasEfectivo,
         tarjeta: ventasTarjeta,
         sinpe: ventasSinpe,
+        dolares: ventasDolares,
+        transferencia: ventasTransferencia,
+        otros: ventasOtros,
+        desglose_por_metodo: desgloseMetodos,
         total: totalVentas
       },
       movimientos_detalle: movimientos,
@@ -6461,7 +6597,10 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
     let totalEfectivo = 0;
     let totalTarjeta = 0;
     let totalSinpe = 0;
+    let totalDolares = 0;
+    let totalTransferencia = 0;
     let totalPropinas = 0;
+    const desgloseMetodosHoy = {};
 
     const pagosHoy = await dbAll(`
       SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(p.propina) AS total_propina
@@ -6469,7 +6608,7 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       GROUP BY p.metodo
-    `, [hoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId, negocioId]);
 
     pagosHoy.forEach(pg => {
       const mto = Number(pg.total_monto) || 0;
@@ -6477,9 +6616,21 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       totalVentas += mto;
       totalPropinas += prop;
       const met = (pg.metodo || '').toLowerCase();
-      if (met.includes('efectivo')) totalEfectivo += mto;
-      else if (met.includes('tarjeta') || met.includes('datafono')) totalTarjeta += mto;
-      else if (met.includes('sinpe')) totalSinpe += mto;
+      desgloseMetodosHoy[pg.metodo || 'Otro'] = (desgloseMetodosHoy[pg.metodo || 'Otro'] || 0) + mto;
+
+      if (met.includes('efectivo') || met.includes('cash')) {
+        totalEfectivo += mto;
+      } else if (met.includes('tarjeta') || met.includes('datafono') || met.includes('datáfono') || met.includes('card')) {
+        totalTarjeta += mto;
+      } else if (met.includes('sinpe')) {
+        totalSinpe += mto;
+      } else if (met.includes('dolar') || met.includes('dólar') || met.includes('usd')) {
+        totalDolares += mto;
+        totalEfectivo += mto;
+      } else if (met.includes('transfer')) {
+        totalTransferencia += mto;
+        totalSinpe += mto;
+      }
     });
 
     res.json({
@@ -6490,7 +6641,10 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       pagosPorMetodo: {
         efectivo: totalEfectivo,
         tarjeta: totalTarjeta,
-        sinpe: totalSinpe
+        sinpe: totalSinpe,
+        dolares: totalDolares,
+        transferencia: totalTransferencia,
+        por_metodo: desgloseMetodosHoy
       },
       resumen: {
         totalCuentas: ordenesConItems.length,
@@ -6498,6 +6652,8 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         totalEfectivo,
         totalTarjeta,
         totalSinpe,
+        totalDolares,
+        totalTransferencia,
         totalPropinas
       },
       ordenes: ordenesConItems
