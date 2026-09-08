@@ -3675,7 +3675,6 @@
           <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta</button>
           <button class="pay-method-tab" data-method="SINPE">📱 SINPE</button>
           <button class="pay-method-tab" data-method="Dolares">💵 Dólares ($)</button>
-          <button class="pay-method-tab" data-method="Transferencia">🏦 Transfer</button>
           <button class="pay-method-tab" data-method="Mixto">🔀 Mixto</button>
         </div>
 
@@ -3769,62 +3768,55 @@
           </div>
         </div>
 
-        <!-- PANEL 5: TRANSFERENCIA BANCARIA -->
-        <div id="cobroTransferenciaPanel" class="pay-panel">
-          <div class="pay-info-banner">
-            <span>Monto a Transferir:</span>
-            <span class="pay-info-val" id="cobroTransferMontoDisplay">₡ 0</span>
-          </div>
-          <div class="field-row" style="margin-bottom:8px;">
-            <label>Banco Emisor y Referencia de Transferencia:</label>
-            <input type="text" id="txtTransferReferencia" placeholder="Ej: BAC San José - Transf #8493021" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff; font-size:0.95rem;" />
-          </div>
-          <div style="font-size:0.8rem; color:#9ca3af;">
-            🏦 Transferencias directas por IBAN o cuentas locales del negocio.
-          </div>
-        </div>
-
-        <!-- PANEL 6: PAGO MIXTO / COMBINADO -->
+        <!-- PANEL 5: PAGO MIXTO / COMBINADO -->
         <div id="cobroMixtoPanel" class="pay-panel">
+          <!-- Accesos rápidos / atajos mixto -->
+          <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
+            <button type="button" class="btn-sec" onclick="splitMixto5050('efectivo', 'tarjeta')" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; background:#1e293b; color:#93c5fd; border:1px solid #3b82f6;">⚡ 50% Efec / 50% Tarj</button>
+            <button type="button" class="btn-sec" onclick="splitMixto5050('efectivo', 'sinpe')" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; background:#1e293b; color:#6ee7b7; border:1px solid #10b981;">⚡ 50% Efec / 50% SINPE</button>
+            <button type="button" class="btn-sec" onclick="limpiarCamposMixto()" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; background:#1e293b; color:#fca5a5; border:1px solid #ef4444; margin-left:auto;">🧹 Limpiar</button>
+          </div>
+
           <div class="mixto-matrix-grid">
             <!-- Efectivo -->
             <div class="mixto-row-item">
-              <span class="mixto-label">💵 Efectivo:</span>
+              <span class="mixto-label">💵 Efectivo (₡):</span>
               <div class="mixto-input-wrap">
                 <input type="number" id="txtMixtoEfectivo" placeholder="0" class="mixto-calc-trigger" />
                 <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('efectivo')">Cubrir</button>
               </div>
             </div>
             <!-- Tarjeta -->
-            <div class="mixto-row-item">
-              <span class="mixto-label">💳 Tarjeta:</span>
-              <div class="mixto-input-wrap">
-                <input type="number" id="txtMixtoTarjeta" placeholder="0" class="mixto-calc-trigger" />
-                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('tarjeta')">Cubrir</button>
+            <div class="mixto-row-item" style="flex-direction:column; align-items:stretch; gap:6px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <span class="mixto-label">💳 Tarjeta (₡):</span>
+                <div class="mixto-input-wrap">
+                  <input type="number" id="txtMixtoTarjeta" placeholder="0" class="mixto-calc-trigger" />
+                  <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('tarjeta')">Cubrir</button>
+                </div>
               </div>
+              <input type="text" id="txtMixtoTarjetaRef" placeholder="Ref/Voucher Tarjeta (Opcional)" style="padding:4px 8px; font-size:0.8rem; background:#1e293b; border:1px solid #374151; border-radius:4px; color:#cbd5e1;" />
             </div>
             <!-- SINPE -->
-            <div class="mixto-row-item">
-              <span class="mixto-label">📱 SINPE:</span>
-              <div class="mixto-input-wrap">
-                <input type="number" id="txtMixtoSinpe" placeholder="0" class="mixto-calc-trigger" />
-                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('sinpe')">Cubrir</button>
+            <div class="mixto-row-item" style="flex-direction:column; align-items:stretch; gap:6px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <span class="mixto-label">📱 SINPE (₡):</span>
+                <div class="mixto-input-wrap">
+                  <input type="number" id="txtMixtoSinpe" placeholder="0" class="mixto-calc-trigger" />
+                  <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('sinpe')">Cubrir</button>
+                </div>
               </div>
+              <input type="text" id="txtMixtoSinpeRef" placeholder="Comprobante / Tel SINPE (Opcional)" style="padding:4px 8px; font-size:0.8rem; background:#1e293b; border:1px solid #374151; border-radius:4px; color:#cbd5e1;" />
             </div>
             <!-- Dólares -->
             <div class="mixto-row-item">
-              <span class="mixto-label">💵 USD ($):</span>
+              <div style="display:flex; flex-direction:column;">
+                <span class="mixto-label">💵 USD ($):</span>
+                <small id="txtMixtoUSDEquiv" style="font-size:0.7rem; color:#38bdf8;">₡ 0</small>
+              </div>
               <div class="mixto-input-wrap">
                 <input type="number" id="txtMixtoUSD" placeholder="$ 0.00" step="1" class="mixto-calc-trigger" />
                 <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('usd')">Cubrir</button>
-              </div>
-            </div>
-            <!-- Transferencia -->
-            <div class="mixto-row-item">
-              <span class="mixto-label">🏦 Transfer:</span>
-              <div class="mixto-input-wrap">
-                <input type="number" id="txtMixtoTransfer" placeholder="0" class="mixto-calc-trigger" />
-                <button type="button" class="mixto-btn-restante" onclick="autoAsignarRestanteMixto('transfer')">Cubrir</button>
               </div>
             </div>
           </div>
@@ -3835,7 +3827,7 @@
               <span class="bal-val" id="cobroMixtoAsignadoDisplay" style="color:#38bdf8;">₡ 0</span>
             </div>
             <div class="bal-item">
-              <span class="bal-lbl">Falta por Cubrir</span>
+              <span class="bal-lbl" id="cobroMixtoRestanteLabel">Falta por Cubrir</span>
               <span class="bal-val" id="cobroMixtoRestanteDisplay" style="color:#f87171;">₡ 0</span>
             </div>
             <div class="bal-item">

@@ -2,7 +2,7 @@ const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { startTestServer } = require('../helpers/test-server');
 
-describe('Tier 25: Registro Completo de Todas las Formas de Pago y Cierre de Caja', () => {
+describe('Tier 25: Registro Completo de Formas de Pago Oficiales y Cierre de Caja', () => {
   let server;
 
   before(async () => {
@@ -102,47 +102,33 @@ describe('Tier 25: Registro Completo de Todas las Formas de Pago y Cierre de Caj
     assert.ok(rHist.body.pagosPorMetodo.efectivo >= 5200);
   });
 
-  it('T25.5: Registro de pago con Transferencia Bancaria', async () => {
-    const rCobro = await req('/api/ordenes/directo/cobrar', 'POST', {
-      mesaId: 5,
-      mesero: 'juan',
-      metodo: 'Transferencia',
-      monto: 12500,
-      referencia: 'BAC Transf #847291',
-      items: [
-        { id: 11, nombre: 'Corte Rib Eye', precio: 12500, cantidad: 1, destino: 'cocina' }
-      ]
-    });
-    assert.equal(rCobro.status, 200);
-
-    const rHist = await req('/api/admin/ventas/historial-hoy');
-    assert.equal(rHist.body.pagosPorMetodo.transferencia, 12500);
-  });
-
-  it('T25.6: Registro de Pago Mixto desglosado en múltiples métodos (Efectivo + Tarjeta + SINPE)', async () => {
+  it('T25.5: Registro de Pago Mixto desglosado en múltiples métodos (Efectivo + Tarjeta + SINPE + Dólares)', async () => {
     const rCobro = await req('/api/ordenes/directo/cobrar', 'POST', {
       mesaId: 6,
       mesero: 'carlos',
       metodo: 'Mixto',
-      monto: 10000,
+      monto: 15200,
       pagos: [
         { metodo: 'Efectivo', monto: 5000 },
         { metodo: 'Tarjeta', monto: 3000, referencia: 'Auth #1234' },
-        { metodo: 'SINPE', monto: 2000, referencia: 'SINPE #8888-8888' }
+        { metodo: 'SINPE', monto: 2000, referencia: 'SINPE #8888-8888' },
+        { metodo: 'Dólares', monto: 5200, monto_usd: 10, tipo_cambio: 520 }
       ],
       items: [
-        { id: 25, nombre: 'Arroz con pollo', precio: 5000, cantidad: 2, destino: 'cocina' }
+        { id: 25, nombre: 'Arroz con pollo', precio: 5000, cantidad: 2, destino: 'cocina' },
+        { id: 4, nombre: 'Michelada', precio: 2600, cantidad: 2, destino: 'barra' }
       ]
     });
     assert.equal(rCobro.status, 200);
 
     const rHist = await req('/api/admin/ventas/historial-hoy');
-    assert.equal(rHist.body.pagosPorMetodo.efectivo, 5000);
+    assert.equal(rHist.body.pagosPorMetodo.efectivo, 10200); // 5000 colones + 5200 dolares
     assert.equal(rHist.body.pagosPorMetodo.tarjeta, 3000);
     assert.equal(rHist.body.pagosPorMetodo.sinpe, 2000);
+    assert.equal(rHist.body.pagosPorMetodo.dolares, 5200);
   });
 
-  it('T25.7: Cierre Z y Corte X cuadran con todos los métodos de pago registrados', async () => {
+  it('T25.6: Cierre Z y Corte X cuadran con todos los métodos de pago registrados', async () => {
     await req('/api/caja/abrir', 'POST', { cajero: 'Cajero Principal', monto_inicial: 50000 });
 
     await req('/api/ordenes/directo/cobrar', 'POST', {
@@ -151,7 +137,7 @@ describe('Tier 25: Registro Completo de Todas las Formas de Pago y Cierre de Caj
       monto: 10000,
       pagos: [
         { metodo: 'Efectivo', monto: 6000 },
-        { metodo: 'Tarjeta', monto: 4000 }
+        { metodo: 'Tarjeta', monto: 4000, referencia: 'Voucher 9901' }
       ],
       items: [
         { id: 25, nombre: 'Arroz con pollo', precio: 5000, cantidad: 2, destino: 'cocina' }
@@ -162,6 +148,7 @@ describe('Tier 25: Registro Completo de Todas las Formas de Pago y Cierre de Caj
       mesaId: 2,
       metodo: 'SINPE',
       monto: 3600,
+      referencia: 'SINPE 5555-5555',
       items: [
         { id: 1, nombre: 'Imperial Regular', precio: 1800, cantidad: 2, destino: 'barra' }
       ]

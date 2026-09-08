@@ -1824,7 +1824,10 @@ function formatCRC(num) {
 
 // Inverso de formatCRC: '₡ 1.800' → 1800 (el punto es separador de miles, NO decimal)
 function parseCRC(text) {
-  return parseInt(String(text).replace(/[₡\s\.]/g, ''), 10) || 0;
+  if (typeof text === 'number') return Math.round(text);
+  if (!text) return 0;
+  const digitsOnly = String(text).replace(/[₡\s,\.]/g, '');
+  return parseInt(digitsOnly, 10) || 0;
 }
 
 
@@ -8497,12 +8500,6 @@ function inicializarPanelesCobroModal(totalTxt) {
   const refSinpe = document.getElementById('txtSinpeReferencia');
   if (refSinpe) refSinpe.value = '';
 
-  // Panel Transferencia
-  const elTrans = document.getElementById('cobroTransferMontoDisplay');
-  if (elTrans) elTrans.textContent = formatCRC(totalNum);
-  const refTrans = document.getElementById('txtTransferReferencia');
-  if (refTrans) refTrans.value = '';
-
   // Panel Dólares
   const txtTC = document.getElementById('txtTipoCambioUSD');
   const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
@@ -8513,8 +8510,8 @@ function inicializarPanelesCobroModal(totalTxt) {
   if (txtRecUSD) txtRecUSD.value = '';
   calcularCobroDolares();
 
-  // Panel Mixto
-  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTransfer'].forEach(id => {
+  // Panel Mixto - Limpiar al abrir modal
+  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -8552,7 +8549,6 @@ document.querySelectorAll('.pay-method-tab').forEach(btn => {
       'Tarjeta': 'cobroTarjetaPanel',
       'SINPE': 'cobroSinpePanel',
       'Dolares': 'cobroDolaresPanel',
-      'Transferencia': 'cobroTransferenciaPanel',
       'Mixto': 'cobroMixtoPanel'
     };
 
@@ -8562,8 +8558,22 @@ document.querySelectorAll('.pay-method-tab').forEach(btn => {
       targetPanel.classList.add('active');
     }
 
+    // Actualizar montos de la pestaña activa sin reiniciar entradas del usuario
     const totalTxt = document.getElementById('cobroTotalDisplay')?.textContent || '0';
-    inicializarPanelesCobroModal(totalTxt);
+    const totalNum = parseCRC(totalTxt);
+    if (method === 'Tarjeta') {
+      const elTarj = document.getElementById('cobroTarjetaMontoDisplay');
+      if (elTarj) elTarj.textContent = formatCRC(totalNum);
+    } else if (method === 'SINPE') {
+      const elSinpe = document.getElementById('cobroSinpeMontoDisplay');
+      if (elSinpe) elSinpe.textContent = formatCRC(totalNum);
+    } else if (method === 'Dolares') {
+      calcularCobroDolares();
+    } else if (method === 'Mixto') {
+      calcularPagoMixto();
+    } else if (method === 'Efectivo') {
+      calcularVueltoCobro();
+    }
   });
 });
 
@@ -8651,10 +8661,42 @@ if (txtDolaresRecibidosEl) {
 }
 const txtTipoCambioUSDEl = document.getElementById('txtTipoCambioUSD');
 if (txtTipoCambioUSDEl) {
-  txtTipoCambioUSDEl.addEventListener('input', calcularCobroDolares);
+  txtTipoCambioUSDEl.addEventListener('input', () => {
+    calcularCobroDolares();
+    calcularPagoMixto();
+  });
 }
 
-// Cálculo dinámico para Pago Mixto
+// Funciones para Pago Mixto
+window.limpiarCamposMixto = function() {
+  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  calcularPagoMixto();
+};
+
+window.splitMixto5050 = function(tipo1, tipo2) {
+  const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  if (totalCRC <= 0) return;
+  limpiarCamposMixto();
+  const mitad1 = Math.ceil(totalCRC / 2);
+  const mitad2 = totalCRC - mitad1;
+
+  if (tipo1 === 'efectivo') {
+    const el = document.getElementById('txtMixtoEfectivo');
+    if (el) el.value = mitad1;
+  }
+  if (tipo2 === 'tarjeta') {
+    const el = document.getElementById('txtMixtoTarjeta');
+    if (el) el.value = mitad2;
+  } else if (tipo2 === 'sinpe') {
+    const el = document.getElementById('txtMixtoSinpe');
+    if (el) el.value = mitad2;
+  }
+  calcularPagoMixto();
+};
+
 function calcularPagoMixto() {
   const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
   const txtTC = document.getElementById('txtTipoCambioUSD');
@@ -8664,35 +8706,67 @@ function calcularPagoMixto() {
   const mTarjeta = parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0;
   const mSinpe = parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0;
   const mUSD = parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0;
-  const mTransfer = parseFloat(document.getElementById('txtMixtoTransfer')?.value) || 0;
 
   const mUSDEnCRC = Math.round(mUSD * tc);
-  const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC + mTransfer;
-  const restante = Math.max(0, totalCRC - totalAsignado);
+  const elUSDEquiv = document.getElementById('txtMixtoUSDEquiv');
+  if (elUSDEquiv) {
+    elUSDEquiv.textContent = mUSD > 0 ? `Equiv: ${formatCRC(mUSDEnCRC)}` : '₡ 0';
+  }
 
+  const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
   const elAsig = document.getElementById('cobroMixtoAsignadoDisplay');
   if (elAsig) elAsig.textContent = formatCRC(totalAsignado);
 
-  const elRest = document.getElementById('cobroMixtoRestanteDisplay');
-  if (elRest) elRest.textContent = formatCRC(restante);
-
+  const elRestLbl = document.getElementById('cobroMixtoRestanteLabel');
+  const elRestVal = document.getElementById('cobroMixtoRestanteDisplay');
   const badge = document.getElementById('cobroMixtoEstadoBadge');
-  if (badge) {
-    if (totalAsignado >= totalCRC && totalCRC > 0) {
-      badge.textContent = '✅ Completo';
-      badge.style.color = '#34d399';
-    } else if (totalAsignado > 0) {
-      badge.textContent = `⚠️ Falta ${formatCRC(restante)}`;
-      badge.style.color = '#f87171';
+
+  if (totalAsignado >= totalCRC && totalCRC > 0) {
+    const vuelto = totalAsignado - totalCRC;
+    if (vuelto > 0) {
+      if (elRestLbl) elRestLbl.textContent = 'Vuelto / Cambio';
+      if (elRestVal) {
+        elRestVal.textContent = formatCRC(vuelto);
+        elRestVal.style.color = '#34d399';
+      }
+      if (badge) {
+        badge.textContent = `✅ Cubierto (Vuelto: ${formatCRC(vuelto)})`;
+        badge.style.color = '#34d399';
+      }
     } else {
-      badge.textContent = 'Pendiente';
-      badge.style.color = '#fbbf24';
+      if (elRestLbl) elRestLbl.textContent = 'Restante';
+      if (elRestVal) {
+        elRestVal.textContent = '₡ 0';
+        elRestVal.style.color = '#34d399';
+      }
+      if (badge) {
+        badge.textContent = '✅ Total Cubierto';
+        badge.style.color = '#34d399';
+      }
+    }
+  } else {
+    const faltante = Math.max(0, totalCRC - totalAsignado);
+    if (elRestLbl) elRestLbl.textContent = 'Falta por Cubrir';
+    if (elRestVal) {
+      elRestVal.textContent = formatCRC(faltante);
+      elRestVal.style.color = totalAsignado > 0 ? '#f87171' : '#9ca3af';
+    }
+    if (badge) {
+      if (totalAsignado > 0) {
+        badge.textContent = `⚠️ Falta ${formatCRC(faltante)}`;
+        badge.style.color = '#f87171';
+      } else {
+        badge.textContent = 'Pendiente';
+        badge.style.color = '#fbbf24';
+      }
     }
   }
 }
 
-document.querySelectorAll('.mixto-calc-trigger').forEach(inp => {
-  inp.addEventListener('input', calcularPagoMixto);
+['input', 'change', 'keyup'].forEach(ev => {
+  document.querySelectorAll('.mixto-calc-trigger').forEach(inp => {
+    inp.addEventListener(ev, calcularPagoMixto);
+  });
 });
 
 window.autoAsignarRestanteMixto = function(tipo) {
@@ -8704,9 +8778,8 @@ window.autoAsignarRestanteMixto = function(tipo) {
   const mTarjeta = tipo === 'tarjeta' ? 0 : (parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0);
   const mSinpe = tipo === 'sinpe' ? 0 : (parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0);
   const mUSD = tipo === 'usd' ? 0 : (parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0);
-  const mTransfer = tipo === 'transfer' ? 0 : (parseFloat(document.getElementById('txtMixtoTransfer')?.value) || 0);
 
-  const yaAsignadoSinEste = mEfectivo + mTarjeta + mSinpe + Math.round(mUSD * tc) + mTransfer;
+  const yaAsignadoSinEste = mEfectivo + mTarjeta + mSinpe + Math.round(mUSD * tc);
   const faltante = Math.max(0, totalCRC - yaAsignadoSinEste);
 
   if (tipo === 'efectivo') {
@@ -8721,9 +8794,6 @@ window.autoAsignarRestanteMixto = function(tipo) {
   } else if (tipo === 'usd') {
     const el = document.getElementById('txtMixtoUSD');
     if (el) el.value = faltante > 0 ? (faltante / tc).toFixed(2) : '';
-  } else if (tipo === 'transfer') {
-    const el = document.getElementById('txtMixtoTransfer');
-    if (el) el.value = faltante > 0 ? faltante : '';
   }
 
   calcularPagoMixto();
@@ -8773,21 +8843,17 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       const recUSD = parseFloat(document.getElementById('txtDolaresRecibidos')?.value) || monto_usd;
       recibido = Math.round(recUSD * tcActual);
       cambio = Math.max(0, recibido - totalNum);
-    } else if (metodoKey === 'Transferencia') {
-      metodoFinal = 'Transferencia';
-      referencia = document.getElementById('txtTransferReferencia')?.value.trim() || null;
-      recibido = totalNum;
-      cambio = 0;
     } else if (metodoKey === 'Mixto') {
       metodoFinal = 'Mixto';
       const mEfectivo = parseFloat(document.getElementById('txtMixtoEfectivo')?.value) || 0;
       const mTarjeta = parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0;
       const mSinpe = parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0;
       const mUSD = parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0;
-      const mTransfer = parseFloat(document.getElementById('txtMixtoTransfer')?.value) || 0;
+      const refTarjeta = document.getElementById('txtMixtoTarjetaRef')?.value.trim() || null;
+      const refSinpe = document.getElementById('txtMixtoSinpeRef')?.value.trim() || null;
 
       const mUSDEnCRC = Math.round(mUSD * tcActual);
-      const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC + mTransfer;
+      const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
 
       if (totalAsignado < totalNum && (totalNum - totalAsignado) > 1) {
         alert(`⚠️ El monto asignado (${formatCRC(totalAsignado)}) no cubre el total de la cuenta (${formatCRC(totalNum)}).\n\nFaltan por cubrir: ${formatCRC(totalNum - totalAsignado)}`);
@@ -8797,10 +8863,9 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       }
 
       if (mEfectivo > 0) pagosArray.push({ metodo: 'Efectivo', monto: mEfectivo });
-      if (mTarjeta > 0) pagosArray.push({ metodo: 'Tarjeta', monto: mTarjeta });
-      if (mSinpe > 0) pagosArray.push({ metodo: 'SINPE', monto: mSinpe });
+      if (mTarjeta > 0) pagosArray.push({ metodo: 'Tarjeta', monto: mTarjeta, referencia: refTarjeta });
+      if (mSinpe > 0) pagosArray.push({ metodo: 'SINPE', monto: mSinpe, referencia: refSinpe });
       if (mUSD > 0) pagosArray.push({ metodo: 'Dólares', monto: mUSDEnCRC, monto_usd: mUSD, tipo_cambio: tcActual });
-      if (mTransfer > 0) pagosArray.push({ metodo: 'Transferencia', monto: mTransfer });
 
       if (pagosArray.length === 0) {
         pagosArray.push({ metodo: 'Efectivo', monto: totalNum });
@@ -9944,6 +10009,7 @@ window.cobrarPersonaSplit = function(personaIndex) {
   document.getElementById('cobroTotalDisplay').textContent = formatCRCSinDecimales(p.total);
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0';
+  inicializarPanelesCobroModal(p.total);
   document.getElementById('modalCobro').classList.add('active');
 };
 

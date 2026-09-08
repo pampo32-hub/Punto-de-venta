@@ -352,7 +352,8 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
     total: totNum,
     metodoPago: metodoPago || 'Efectivo',
     recibido: montoRecibido,
-    cambio: vuelto
+    cambio: vuelto,
+    pagos: Array.isArray(pagos) ? pagos : []
   };
 
   return { raw, ticketVisual };
