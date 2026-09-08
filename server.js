@@ -1699,7 +1699,7 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
     // 3. Restaurar mesa a libre total
     await dbRun(
       `UPDATE Mesas 
-       SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL 
+       SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL 
        WHERE id = ?`,
       [mesaId]
     );
@@ -1708,6 +1708,7 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
     io.emit('mesa_actualizada', {
       mesaId: Number(mesaId),
       estado: 'libre',
+      cliente: null,
       total: 0,
       mesero: null,
       transferida_de: null,
@@ -1926,7 +1927,7 @@ app.post('/api/mesas/mover', async (req, res) => {
 
     // 3. Table A is emptied and returns to a normal empty state with no residual labels
     await dbRun(
-      "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+      "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [origenMesaId]
     );
 
@@ -1937,7 +1938,7 @@ app.post('/api/mesas/mover', async (req, res) => {
     );
 
     io.emit('mesa_transferida', { origenMesaId, destinoMesaId, ordenId: orden.id, transferida_de: origenLabel });
-    io.emit('mesa_actualizada', { mesaId: origenMesaId, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+    io.emit('mesa_actualizada', { mesaId: origenMesaId, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
     io.emit('mesa_actualizada', { mesaId: destinoMesaId, estado: mesaOrig.estado, total: orden.total || 0, transferida_de: origenLabel, mesas_unidas: [origenLabel] });
 
     res.json({ message: `Orden transferida con éxito de ${mesaOrig.numero} a ${mesaDest.numero}`, transferida_de: origenLabel });
@@ -3908,14 +3909,14 @@ async function procesarCobroOrden(ordenId, {
         [ahora, orden.mesa_id]
       );
       await dbRun(
-        "UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+        "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
         [orden.mesa_id]
       );
       await dbRun(
         'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
         [orden.mesa_id, orden.mesa_id]
       );
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', total: 0, transferida_de: null, mesas_unidas: [] });
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
     }
 
     io.emit('inventario_actualizado');

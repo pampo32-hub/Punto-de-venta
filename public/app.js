@@ -1579,7 +1579,21 @@ try {
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
     });
-    socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
+    socket.on('mesa_actualizada', (d) => {
+      if (d && d.mesaId) {
+        const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(d.mesaId));
+        if (mesa) {
+          if (d.estado === 'libre' || d.cliente === null) {
+            mesa.cliente = null;
+            mesa.mesa_cliente = null;
+          } else if (d.cliente !== undefined) {
+            mesa.cliente = d.cliente;
+            mesa.mesa_cliente = d.cliente;
+          }
+        }
+      }
+      cargarMesasDesdeBackend();
+    });
     socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
     socket.on('mesa_renombrada', () => cargarMesasDesdeBackend());
     socket.on('producto_creado', () => cargarMenuDesdeBackend());
@@ -5339,7 +5353,7 @@ function renderGrillaOrdenada(filtroZona = null) {
 
       const clienteMesa = m.cliente || m.mesa_cliente;
       let clienteHtml = '';
-      if (clienteMesa && clienteMesa !== 'Cliente General') {
+      if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
         clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
       }
 
@@ -5578,7 +5592,7 @@ function renderSalón(filtroZona = null) {
 
     let clienteHtml = '';
     const clienteMesa = m.cliente || m.mesa_cliente;
-    if (clienteMesa && clienteMesa !== 'Cliente General') {
+    if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
       clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
     }
 
@@ -6701,6 +6715,8 @@ window.resetearMesaActualComandero = async function() {
     }
 
     mesa.estado = 'libre';
+    mesa.cliente = null;
+    mesa.mesa_cliente = null;
     mesa.items = [];
     mesa.orden_id = null;
     mesa.orden_activa_id = null;
@@ -6713,6 +6729,8 @@ window.resetearMesaActualComandero = async function() {
     const mesaEnEstado = (estado.mesas || []).find(m => Number(m.id) === Number(mesa.id));
     if (mesaEnEstado) {
       mesaEnEstado.estado = 'libre';
+      mesaEnEstado.cliente = null;
+      mesaEnEstado.mesa_cliente = null;
       mesaEnEstado.orden_total = 0;
       mesaEnEstado.orden_activa_id = null;
       mesaEnEstado.items = [];
@@ -8361,6 +8379,8 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
         }
         estado.mesaActiva.estado = 'libre';
+        estado.mesaActiva.cliente = null;
+        estado.mesaActiva.mesa_cliente = null;
         estado.mesaActiva.items = [];
         estado.mesaActiva.orden_id = null;
         estado.mesaActiva.orden_activa_id = null;
@@ -8368,6 +8388,17 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         estado.mesaActiva.pidio_cuenta_qr = 0;
         estado.mesaActiva.cuenta_pedida = false;
       }
+      const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
+      if (mesaEnLista) {
+        mesaEnLista.cliente = null;
+        mesaEnLista.mesa_cliente = null;
+        mesaEnLista.estado = 'libre';
+        mesaEnLista.orden_total = 0;
+        mesaEnLista.orden_activa_id = null;
+        mesaEnLista.items = [];
+      }
+      const elNom = document.getElementById('comClienteNombre');
+      if (elNom) elNom.textContent = 'General';
       estado.cobroSplitPersonaIndex = null;
       document.getElementById('modalCobro').classList.remove('active');
       document.getElementById('modalComandero').classList.remove('active');
