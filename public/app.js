@@ -7856,7 +7856,7 @@ window.abrirModalCierreZ = async function() {
     const modal = document.getElementById('modalCierreZ');
     if (!modal) return;
 
-    const txtEsperado = document.getElementById('txtCierreZEsperado');
+    const txtEsperado = document.getElementById('czTotalEsperado') || document.getElementById('txtCierreZEsperado');
     const txtReal = document.getElementById('txtCierreZEfectivoReal');
     const txtNotas = document.getElementById('txtCierreZNotas');
 
@@ -7867,22 +7867,25 @@ window.abrirModalCierreZ = async function() {
     }
     if (txtNotas) txtNotas.value = '';
 
-    const elFondo = document.getElementById('cierreZFondoInicial');
+    const elFondo = document.getElementById('czFondoInicial') || document.getElementById('cierreZFondoInicial');
     if (elFondo) elFondo.textContent = formatCRC(data.fondo_inicial || 0);
 
-    const elVentas = document.getElementById('cierreZVentasTotal');
-    if (elVentas) elVentas.textContent = formatCRC(data.ventas?.total || 0);
+    const elVentas = document.getElementById('czVentasEfectivo') || document.getElementById('cierreZVentasTotal');
+    if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo !== undefined ? data.ventas.efectivo : (data.ventas?.total || 0))}`;
 
-    const elEntradas = document.getElementById('cierreZEntradas');
+    const elEntradas = document.getElementById('czTotalEntradas') || document.getElementById('cierreZEntradas');
     if (elEntradas) elEntradas.textContent = `+${formatCRC(data.total_entradas || 0)}`;
 
-    const elSalidas = document.getElementById('cierreZSalidas');
+    const elSalidas = document.getElementById('czTotalSalidas') || document.getElementById('cierreZSalidas');
     if (elSalidas) elSalidas.textContent = `-${formatCRC(data.total_salidas || 0)}`;
 
-    const elDiferencia = document.getElementById('cierreZDiferenciaBox');
+    const elDiferencia = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
     if (elDiferencia) {
-      elDiferencia.style.display = 'none';
-      elDiferencia.textContent = '';
+      elDiferencia.style.display = 'block';
+      elDiferencia.style.background = 'rgba(30,41,59,0.5)';
+      elDiferencia.style.borderColor = '#334155';
+      elDiferencia.style.color = '#94a3b8';
+      elDiferencia.innerHTML = '⚖️ Ingresa el monto contado para calcular la diferencia de arqueo.';
     }
 
     modal.classList.add('active');
@@ -7900,37 +7903,41 @@ window.cerrarModalCierreZ = function() {
   window._datosCierreZPrecargados = null;
 };
 
-window.calcularDiferenciaArqueoCierreZ = function() {
+window.calcularDiferenciaCierreZ = window.calcularDiferenciaArqueoCierreZ = function() {
   if (!window._datosCierreZPrecargados) return;
   const txtReal = document.getElementById('txtCierreZEfectivoReal');
-  const box = document.getElementById('cierreZDiferenciaBox');
+  const box = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
   if (!txtReal || !box) return;
 
   const realVal = parseFloat(txtReal.value);
   if (isNaN(realVal)) {
-    box.style.display = 'none';
+    box.style.display = 'block';
+    box.style.background = 'rgba(30,41,59,0.5)';
+    box.style.borderColor = '#334155';
+    box.style.color = '#94a3b8';
+    box.innerHTML = '⚖️ Ingresa el monto contado para calcular la diferencia de arqueo.';
     return;
   }
 
-  const esperado = window._datosCierreZPrecargados.efectivo_esperado || 0;
+  const esperado = Number(window._datosCierreZPrecargados.efectivo_esperado) || 0;
   const diff = Math.round((realVal - esperado) * 100) / 100;
 
   box.style.display = 'block';
   if (diff === 0) {
-    box.style.background = 'rgba(16, 185, 129, 0.15)';
+    box.style.background = 'rgba(16, 185, 129, 0.2)';
     box.style.borderColor = '#10b981';
     box.style.color = '#6ee7b7';
     box.innerHTML = '✨ <strong>¡Caja Cuadrada Exacta!</strong> (Diferencia: ₡0.00)';
   } else if (diff > 0) {
-    box.style.background = 'rgba(59, 130, 246, 0.15)';
+    box.style.background = 'rgba(59, 130, 246, 0.2)';
     box.style.borderColor = '#3b82f6';
     box.style.color = '#93c5fd';
-    box.innerHTML = `🟢 <strong>Sobrante en Caja:</strong> +${formatCRC(diff)}`;
+    box.innerHTML = `🟢 <strong>Sobrante en Caja:</strong> +${formatCRC(diff)} (El cajero tiene más dinero del esperado)`;
   } else {
-    box.style.background = 'rgba(239, 68, 68, 0.15)';
+    box.style.background = 'rgba(239, 68, 68, 0.2)';
     box.style.borderColor = '#dc2626';
     box.style.color = '#f87171';
-    box.innerHTML = `🔴 <strong>Faltante en Caja:</strong> -${formatCRC(Math.abs(diff))}`;
+    box.innerHTML = `🔴 <strong>Faltante en Caja:</strong> -${formatCRC(Math.abs(diff))} (Falta dinero según las ventas registradas)`;
   }
 };
 

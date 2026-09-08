@@ -4358,20 +4358,23 @@ app.get('/api/caja/corte-x', async (req, res) => {
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0;
     ventas.forEach(v => {
-      if (v.metodo === 'Efectivo') ventasEfectivo = v.total;
-      if (v.metodo === 'Tarjeta') ventasTarjeta = v.total;
-      if (v.metodo === 'SINPE') ventasSinpe = v.total;
+      const m = (v.metodo || '').toLowerCase();
+      const tot = Number(v.total) || 0;
+      if (m.includes('efectivo')) ventasEfectivo += tot;
+      else if (m.includes('tarjeta')) ventasTarjeta += tot;
+      else if (m.includes('sinpe') || m.includes('transfer')) ventasSinpe += tot;
     });
     const totalVentas = ventasEfectivo + ventasTarjeta + ventasSinpe;
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
     let totalEntradas = 0, totalSalidas = 0;
     movimientos.forEach(m => {
-      if (m.tipo === 'entrada') totalEntradas += m.monto;
-      if (m.tipo === 'salida') totalSalidas += m.monto;
+      const mont = Number(m.monto) || 0;
+      if (m.tipo === 'entrada') totalEntradas += mont;
+      if (m.tipo === 'salida') totalSalidas += mont;
     });
 
-    const fondoInicial = caja.monto_inicial || 0;
+    const fondoInicial = Number(caja.monto_inicial) || 0;
     const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
 
     const tipPool = await dbAll(`
@@ -4450,20 +4453,23 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0;
     ventas.forEach(v => {
-      if (v.metodo === 'Efectivo') ventasEfectivo = v.total;
-      if (v.metodo === 'Tarjeta') ventasTarjeta = v.total;
-      if (v.metodo === 'SINPE') ventasSinpe = v.total;
+      const m = (v.metodo || '').toLowerCase();
+      const tot = Number(v.total) || 0;
+      if (m.includes('efectivo')) ventasEfectivo += tot;
+      else if (m.includes('tarjeta')) ventasTarjeta += tot;
+      else if (m.includes('sinpe') || m.includes('transfer')) ventasSinpe += tot;
     });
     const totalVentas = ventasEfectivo + ventasTarjeta + ventasSinpe;
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
     let totalEntradas = 0, totalSalidas = 0;
     movimientos.forEach(m => {
-      if (m.tipo === 'entrada') totalEntradas += m.monto;
-      if (m.tipo === 'salida') totalSalidas += m.monto;
+      const mont = Number(m.monto) || 0;
+      if (m.tipo === 'entrada') totalEntradas += mont;
+      if (m.tipo === 'salida') totalSalidas += mont;
     });
 
-    const fondoInicial = caja.monto_inicial || 0;
+    const fondoInicial = Number(caja.monto_inicial) || 0;
     const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
     const diferencia = Math.round((efectivoReal - efectivoEsperado) * 100) / 100;
     const estadoCuadre = diferencia === 0 ? 'Cuadrada' : (diferencia > 0 ? 'Sobrante' : 'Faltante');
