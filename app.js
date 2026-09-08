@@ -5112,6 +5112,9 @@ function aplicarEscalaTextoMesa(el, w, h, esSilla) {
 
   const totalEl = el.querySelector('.m-total');
   if (totalEl) totalEl.style.fontSize = totalFontSize;
+
+  const clienteTag = el.querySelector('.m-cliente-tag');
+  if (clienteTag) clienteTag.style.fontSize = subFontSize;
 }
 
 function renderSalón(filtroZona = null) {
@@ -5251,11 +5254,18 @@ function renderSalón(filtroZona = null) {
       `;
     }
 
+    let clienteHtml = '';
+    const clienteMesa = m.cliente || m.mesa_cliente;
+    if (clienteMesa && clienteMesa !== 'Cliente General') {
+      clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
+    }
+
     card.innerHTML = `
       <div class="m-header">
         <span class="m-num">${m.numero} ${mergedBadgeHtml}</span>
         <span class="m-badge">${estadoEtiqueta}</span>
       </div>
+      ${clienteHtml}
       <div class="m-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
       ${cuentaQrHtml}
       ${waitChipHtml}
@@ -5579,7 +5589,12 @@ function agregarDragMesa(card, mesaData, canvas) {
     if (!wasDragging) {
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
       if (dist <= 12) {
-        abrirComanderoMesa(mesaData.id);
+        const esMesaSinCliente = mesaData.estado === 'libre' || ((!mesaData.cliente || mesaData.cliente === 'Cliente General') && !mesaData.orden_activa_id);
+        if (esMesaSinCliente) {
+          abrirModalPreguntaCliente(mesaData.id);
+        } else {
+          abrirComanderoMesa(mesaData.id);
+        }
       }
     }
   });
@@ -6064,6 +6079,100 @@ window.validarPinMesaIngresado = async function() {
   }
 };
 
+window._mesaParaPreguntaCliente = null;
+
+function abrirModalPreguntaCliente(mesaId) {
+  const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
+  if (!mesa) {
+    abrirComanderoMesa(mesaId);
+    return;
+  }
+  window._mesaParaPreguntaCliente = mesaId;
+  const titEl = document.getElementById('preguntaClienteMesaTitulo') || document.getElementById('modalPreguntaClienteTitulo');
+  if (titEl) titEl.textContent = `Mesa ${mesa.numero || mesaId}`;
+
+  const inp = document.getElementById('txtNombreClienteMesa');
+  if (inp) {
+    inp.value = (mesa.cliente && mesa.cliente !== 'Cliente General') ? mesa.cliente : '';
+  }
+
+  const modal = document.getElementById('modalPreguntaCliente');
+  if (modal) {
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    }, 100);
+  }
+}
+window.abrirModalPreguntaCliente = abrirModalPreguntaCliente;
+
+async function responderPreguntaCliente(conNombre) {
+  const modal = document.getElementById('modalPreguntaCliente');
+  if (modal) modal.style.display = 'none';
+
+  const mesaId = window._mesaParaPreguntaCliente;
+  if (!mesaId) return;
+
+  const inp = document.getElementById('txtNombreClienteMesa');
+  const nombre = inp ? inp.value.trim() : '';
+
+  if (conNombre && nombre) {
+    const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
+    if (mesa) {
+      mesa.cliente = nombre;
+    }
+    try {
+      const nid = estado.negocioActual?.id || 1;
+      fetch(`/api/mesas/${mesaId}/cliente`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+        body: JSON.stringify({ cliente: nombre })
+      }).catch(err => console.warn('Error guardando cliente de mesa:', err));
+    } catch (e) {
+      console.warn('Error en fetch cliente:', e);
+    }
+    renderSalón();
+  }
+
+  abrirComanderoMesa(mesaId);
+}
+window.responderPreguntaCliente = responderPreguntaCliente;
+
+function abrirModalEditarClienteActivo() {
+  if (!estado.mesaActiva) return;
+  const actual = (estado.mesaActiva.cliente && estado.mesaActiva.cliente !== 'Cliente General') ? estado.mesaActiva.cliente : '';
+  const nuevoNombre = prompt('Ingrese el nombre del cliente para esta mesa:', actual);
+  if (nuevoNombre === null) return; // cancelado
+
+  const nombreLimpio = nuevoNombre.trim();
+  estado.mesaActiva.cliente = nombreLimpio || null;
+
+  const elClienteNom = document.getElementById('comClienteNombre');
+  if (elClienteNom) {
+    elClienteNom.textContent = nombreLimpio || 'General';
+  }
+
+  const mesaEnLista = estado.mesas.find(m => Number(m.id) === Number(estado.mesaActiva.id));
+  if (mesaEnLista) {
+    mesaEnLista.cliente = nombreLimpio || null;
+  }
+
+  try {
+    const nid = estado.negocioActual?.id || 1;
+    fetch(`/api/mesas/${estado.mesaActiva.id}/cliente`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+      body: JSON.stringify({ cliente: nombreLimpio })
+    }).catch(err => console.warn('Error guardando cliente editado:', err));
+  } catch (e) {}
+
+  renderSalón();
+}
+window.abrirModalEditarClienteActivo = abrirModalEditarClienteActivo;
+
 window.abrirComanderoMesa = abrirComanderoMesa;
 async function abrirComanderoMesa(mesaId) {
   const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId)) || { id: Number(mesaId), numero: mesaId, items: [] };
@@ -6187,6 +6296,14 @@ async function abrirComanderoMesa(mesaId) {
     }
   } catch (e) {
     console.warn('[Comandero] Error procesando comanda:', e);
+  }
+
+  const nomCliente = (data && data.orden && data.orden.cliente && data.orden.cliente !== 'Cliente General')
+    ? data.orden.cliente
+    : ((mesa.cliente && mesa.cliente !== 'Cliente General') ? mesa.cliente : 'General');
+  const elClienteNom = document.getElementById('comClienteNombre');
+  if (elClienteNom) {
+    elClienteNom.textContent = nomCliente;
   }
 
   renderTicketItems();
@@ -6573,9 +6690,14 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
   const idempotencyKey = 'cmd_' + (estado.mesaActiva.id || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
 
   const nidComanda = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const clienteActivoComanda = (estado.mesaActiva && estado.mesaActiva.cliente && estado.mesaActiva.cliente !== 'Cliente General')
+    ? estado.mesaActiva.cliente
+    : (document.getElementById('comClienteNombre')?.textContent !== 'General' ? (document.getElementById('comClienteNombre')?.textContent || 'Cliente General') : 'Cliente General');
+
   const payloadComanda = {
     mesaId: estado.mesaActiva.id,
     mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
+    cliente: clienteActivoComanda,
     items: estado.mesaActiva.items,
     happyHourActivo: estado.happyHourActivo,
     negocio_id: nidComanda,

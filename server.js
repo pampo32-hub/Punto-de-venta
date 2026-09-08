@@ -66,6 +66,7 @@ db.serialize(() => {
   db.run("ALTER TABLE Mesas ADD COLUMN piso INTEGER DEFAULT 1", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN hora_pidio_cuenta TEXT", () => {});
+  db.run("ALTER TABLE Mesas ADD COLUMN cliente TEXT", () => {});
   db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
   db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
   db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
@@ -1310,7 +1311,9 @@ app.get('/api/mesas', async (req, res) => {
     const mesas = await dbAll(`
       SELECT m.*, z.nombre as zonaNombre,
              o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
-             o.servicio_10, o.iva_13, o.total as orden_total, o.mesero as orden_mesero, o.cliente,
+             o.servicio_10, o.iva_13, o.total as orden_total, o.mesero as orden_mesero, 
+             COALESCE(NULLIF(o.cliente, ''), NULLIF(m.cliente, ''), 'Cliente General') as cliente,
+             m.cliente as mesa_cliente,
              o.transferida_de as orden_transferida_de
       FROM Mesas m
       LEFT JOIN Zonas z ON m.zona_id = z.id
@@ -1378,6 +1381,7 @@ app.get('/api/mesas', async (req, res) => {
       );
 
       // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos o montos pegados
+      const clientePreservado = m.mesa_cliente || m.cliente || null;
       if (m.estado === 'libre') {
         m.orden_total = 0;
         m.orden_activa_id = null;
@@ -1390,6 +1394,7 @@ app.get('/api/mesas', async (req, res) => {
         m.es_mesa_unida = false;
         m.pidio_cuenta_qr = 0;
         m.hora_pidio_cuenta = null;
+        m.cliente = clientePreservado;
         // Si habían órdenes activas huérfanas en una mesa que está libre, cancelarlas para consistencia total
         if (m.orden_activa_id) {
           dbRun("UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [new Date().toISOString(), m.id]).catch(() => {});
@@ -1405,6 +1410,7 @@ app.get('/api/mesas', async (req, res) => {
         m.estado = 'libre';
         m.pidio_cuenta_qr = 0;
         m.hora_pidio_cuenta = null;
+        m.cliente = clientePreservado;
         dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
         m.transferida_de = null;
         m.unida_con = null;
@@ -1881,6 +1887,20 @@ const handleRenombrarMesa = async (req, res) => {
 
 app.put('/api/mesas/:id', handleRenombrarMesa);
 app.post('/api/mesas/:id/renombrar', handleRenombrarMesa);
+
+app.post('/api/mesas/:id/cliente', async (req, res) => {
+  try {
+    const mesaId = req.params.id;
+    const { cliente = '' } = req.body;
+    const clienteLimpio = String(cliente || '').trim();
+    await dbRun('UPDATE Mesas SET cliente = ? WHERE id = ?', [clienteLimpio || null, mesaId]);
+    await dbRun("UPDATE Ordenes SET cliente = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [clienteLimpio || 'Cliente General', mesaId]);
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), cliente: clienteLimpio || null });
+    res.json({ ok: true, cliente: clienteLimpio });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.post('/api/mesas/mover', async (req, res) => {
   try {
@@ -3060,6 +3080,9 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     if (tieneNuevosCocina) {
       await dbRun("UPDATE Ordenes SET estado = 'esperando' WHERE id = ?", [ordenId]);
     }
+    if (cliente && cliente !== 'Cliente General' && (!orden.cliente || orden.cliente === 'Cliente General')) {
+      await dbRun("UPDATE Ordenes SET cliente = ? WHERE id = ?", [cliente, ordenId]);
+    }
   }
 
   // 5. Determinar nuevo estado de mesa
@@ -3070,7 +3093,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     nuevoEstadoMesa = (mesa.estado === 'libre') ? 'abierta' : mesa.estado;
   }
 
-  await dbRun("UPDATE Mesas SET estado = ?, mesero = ? WHERE id = ?", [nuevoEstadoMesa, mesero, mesaId]);
+  const clienteMesaActual = (cliente && cliente !== 'Cliente General') ? cliente : (mesa.cliente || null);
+  await dbRun("UPDATE Mesas SET estado = ?, mesero = ?, cliente = ? WHERE id = ?", [nuevoEstadoMesa, mesero, clienteMesaActual, mesaId]);
 
   // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
   const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
