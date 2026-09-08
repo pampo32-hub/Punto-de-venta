@@ -5295,7 +5295,7 @@ function renderGrillaOrdenada(filtroZona = null) {
   const pisoActivo = estado.pisoActual || 1;
   actualizarBotonPisoSalon();
 
-  const mesasPiso = estado.mesas.filter(m => {
+  const mesasPiso = (estado.mesas || []).filter(m => {
     const mesaPiso = m.piso ? Number(m.piso) : (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
     return mesaPiso === pisoActivo;
   });
@@ -5309,28 +5309,33 @@ function renderGrillaOrdenada(filtroZona = null) {
     return;
   }
 
-  // Agrupar mesas por zonas conocidas y registradas
+  // Agrupar mesas por zonas registradas correspondientes a este piso
   const mapaZonas = new Map();
 
-  // Agregar zonas de estado.zonas si existen para mantener orden
+  // 1. Inicializar zonas maestras que correspondan al piso activo
   if (Array.isArray(estado.zonas) && estado.zonas.length > 0) {
     estado.zonas.forEach(z => {
       const zNom = (z.nombre || '').trim();
-      if (zNom && !mapaZonas.has(zNom)) {
-        mapaZonas.set(zNom, []);
+      if (!zNom) return;
+      const esZonaPiso2 = z.id === 5 || zNom.toLowerCase().includes('segundo');
+      if (pisoActivo === 2 && esZonaPiso2) {
+        if (!mapaZonas.has(zNom)) mapaZonas.set(zNom, []);
+      } else if (pisoActivo === 1 && !esZonaPiso2) {
+        if (!mapaZonas.has(zNom)) mapaZonas.set(zNom, []);
       }
     });
   }
 
+  // 2. Colocar las mesas del piso activo en su respectiva zona
   mesasPiso.forEach(m => {
-    let zNom = (m.zonaNombre || m.zona || 'Salón Principal').trim();
+    let zNom = (m.zonaNombre || m.zona || (pisoActivo === 2 ? 'Segundo Piso' : 'Salón Principal')).trim();
     if (!mapaZonas.has(zNom)) {
       mapaZonas.set(zNom, []);
     }
     mapaZonas.get(zNom).push(m);
   });
 
-  // Renderizar cada zona registrada o con mesas
+  // 3. Renderizar cada columna de zona del piso activo
   mapaZonas.forEach((mesasList, zNombre) => {
     const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const zNomNorm = normalizar(zNombre);
