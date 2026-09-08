@@ -4268,14 +4268,42 @@ async function cargarMenuDesdeBackend() {
 
 window.categoriaActivaComandero = null; // null = Vista de Categorías Principal
 
+function obtenerModoVistaMenuActual() {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const guardado = localStorage.getItem('pos_vista_menu_' + nid);
+  if (guardado) return guardado;
+  // Bistro y Grill La Terraza (negocio_id === 2) inicia en vista con fotos grandes ('large')
+  return (Number(nid) === 2) ? 'large' : 'clasica';
+}
+window.obtenerModoVistaMenuActual = obtenerModoVistaMenuActual;
+
+function cambiarModoVistaMenuComandero(modo) {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  localStorage.setItem('pos_vista_menu_' + nid, modo);
+
+  const btnFotos = document.getElementById('btnMenuVistaFotos');
+  const btnClasica = document.getElementById('btnMenuVistaClasica');
+  if (btnFotos) btnFotos.classList.toggle('active', modo === 'large');
+  if (btnClasica) btnClasica.classList.toggle('active', modo === 'clasica');
+
+  filtrarProductosComandero();
+}
+window.cambiarModoVistaMenuComandero = cambiarModoVistaMenuComandero;
+
 function renderCatalogoComandero() {
   const chipsContainer = document.getElementById('comCategoryChips');
   if (chipsContainer) {
     chipsContainer.innerHTML = `
-      <button class="cat-chip ${window.categoriaActivaComandero === null ? 'active' : ''}" onclick="volverACategoriasComandero(this)">📂 Categorías</button>
+      <button class="cat-chip ${window.categoriaActivaComandero === null ? 'active' : ''}" onclick="volverACategoriasComandero(this)">📂 Todas</button>
       ${(estado.categorias || []).map(c => `<button class="cat-chip ${window.categoriaActivaComandero === c.id ? 'active' : ''}" onclick="seleccionarCategoriaComandero(${c.id}, this)">${c.icono || '🍽️'} ${c.nombre}</button>`).join('')}
     `;
   }
+
+  const modoVista = obtenerModoVistaMenuActual();
+  const btnFotos = document.getElementById('btnMenuVistaFotos');
+  const btnClasica = document.getElementById('btnMenuVistaClasica');
+  if (btnFotos) btnFotos.classList.toggle('active', modoVista === 'large');
+  if (btnClasica) btnClasica.classList.toggle('active', modoVista === 'clasica');
 
   const txtSearch = document.getElementById('txtBuscarProductoComandero');
   if (txtSearch) txtSearch.value = '';
@@ -4327,6 +4355,8 @@ window.filtrarProductosComandero = function() {
   const btnClear = document.getElementById('btnClearSearchComandero');
   if (btnClear) btnClear.style.display = query ? 'inline-block' : 'none';
 
+  const modoVista = (typeof obtenerModoVistaMenuActual === 'function') ? obtenerModoVistaMenuActual() : 'clasica';
+
   // 1. Si hay búsqueda por texto libre: filtra sobre todo el menú
   if (query) {
     const palabras = query.split(/\s+/);
@@ -4338,8 +4368,14 @@ window.filtrarProductosComandero = function() {
     return;
   }
 
-  // 2. Si no hay búsqueda y no hay categoría seleccionada -> Vista de Categorías
+  // 2. Si no hay búsqueda y no hay categoría seleccionada
   if (window.categoriaActivaComandero === null || window.categoriaActivaComandero === 'categorias') {
+    if (modoVista === 'large') {
+      // En vista de fotos grandes, mostrar todos los productos directamente con categorías arriba
+      const prods = (estado.productos || []).slice().sort((a, b) => (Number(b.total_vendidos) || 0) - (Number(a.total_vendidos) || 0));
+      renderGridProductos(prods, false, null);
+      return;
+    }
     renderGridCategorias();
     return;
   }
@@ -4364,6 +4400,7 @@ window.limpiarBuscadorComandero = function() {
 function renderGridCategorias() {
   const grid = document.getElementById('comProductsGrid');
   if (!grid) return;
+  grid.classList.remove('grid-view-large');
   grid.classList.add('categories-view');
 
   const cats = estado.categorias || [];
@@ -4401,6 +4438,13 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
   if (!grid) return;
   grid.classList.remove('categories-view');
 
+  const modoVista = (typeof obtenerModoVistaMenuActual === 'function') ? obtenerModoVistaMenuActual() : 'clasica';
+  if (modoVista === 'large') {
+    grid.classList.add('grid-view-large');
+  } else {
+    grid.classList.remove('grid-view-large');
+  }
+
   let headerNavHtml = '';
   if (!isSearchMode && catId) {
     const cat = (estado.categorias || []).find(c => c.id === catId);
@@ -4408,9 +4452,9 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     headerNavHtml = `
       <div class="com-cat-nav-bar" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 10px 14px; border-radius: 12px; margin-bottom: 6px; border: 1px solid #334155;">
         <button class="btn-volver-categorias" onclick="volverACategoriasComandero()">
-          ⬅️ Volver a Categorías
+          ⬅️ Ver Todas las Categorías
         </button>
-        <strong style="color: #f8fafc; font-size: 0.95rem;">${catNombre}</strong>
+        <strong style="color: #f8fafc; font-size: 0.95rem;">${catNombre} (${prods.length} productos)</strong>
       </div>
     `;
   } else if (isSearchMode) {
@@ -4473,9 +4517,49 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     const isAgotado = Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1';
     const esCerveza = Boolean(Number(p.happyHour) === 1 || p.happyHour === true || Number(p.happy_hour) === 1 || p.happy_hour === true || p.catId === 4 || p.categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(p.nombre || ''));
     const isPromo = estado.happyHourActivo && esCerveza;
+
+    const cat = (estado.categorias || []).find(c => c.id === (p.catId || p.categoria_id));
+    const catBadge = cat ? `${cat.icono || '🍽️'} ${cat.nombre}` : (p.categoria || 'Menú');
+
+    let imgUrl = p.imagen_url;
+    if (!imgUrl && estado.presetsFotos) {
+      const matchPreset = estado.presetsFotos.find(pr => (p.nombre || '').toLowerCase().includes(pr.cat.toLowerCase()));
+      if (matchPreset) imgUrl = matchPreset.url;
+    }
+
+    if (modoVista === 'large') {
+      const imgLargeHtml = imgUrl 
+        ? `<img class="prod-card-large-img" src="${imgUrl}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
+        : `<div class="prod-card-large-no-img">${cat?.icono || '🍽️'}</div>`;
+
+      const btnEditLargeHtml = esAdminODev
+        ? `<button class="prod-card-large-edit" onclick="event.stopPropagation(); abrirModalEditarProducto(${p.id});" title="Editar producto y vincular al Kárdex">✏️</button>`
+        : '';
+
+      return `
+        <div class="prod-card-large ${isAgotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" title="${escapeHtml(p.nombre)} - ${formatCRC(p.precio)}">
+          ${btnEditLargeHtml}
+          <div class="prod-card-large-media">
+            ${imgLargeHtml}
+            <span class="prod-card-large-badge">${catBadge}</span>
+            <span class="prod-card-large-price">${formatCRC(p.precio)}</span>
+            ${isPromo ? '<span class="prod-card-large-promo">🍸 2x1</span>' : ''}
+          </div>
+          <div class="prod-card-large-info">
+            <h4 class="prod-card-large-name">${escapeHtml(p.nombre)}</h4>
+            <div class="prod-card-large-meta">
+              <span style="color: ${isAgotado ? '#f87171' : '#34d399'}; font-weight: 700;">${isAgotado ? '✕ Agotado' : '● Disponible'}</span>
+              <span>${p.codigo || (p.destino === 'barra' ? '🍸 Barra' : '🍳 Cocina')}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Modo clásico estándar
     const imgHtml = p.imagen_url 
-      ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />`
-      : `<div class="prod-card-no-thumb">🍽️</div>`;
+      ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
+      : `<div class="prod-card-no-thumb">${cat?.icono || '🍽️'}</div>`;
 
     const btnEditHtml = esAdminODev
       ? `<button class="btn-card-edit-prod" onclick="event.stopPropagation(); abrirModalEditarProducto(${p.id});" title="Editar producto y vincular al Kárdex">✏️</button>`
@@ -4487,20 +4571,30 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
         ${imgHtml}
         ${isPromo ? '<span class="prod-badge-promo">🍸 2x1</span>' : ''}
         <div class="prod-card-content">
-          <span class="prod-card-name">${p.nombre}</span>
+          <span class="prod-card-name">${escapeHtml(p.nombre)}</span>
           <span class="prod-card-price">${formatCRC(p.precio)}</span>
         </div>
       </div>
     `;
   }).join('');
 
-  const btnAddHtml = esAdminODev ? `
-    <div class="prod-card-one-tap" onclick="abrirModalNuevoProducto()" style="border: 2px dashed rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 100px; border-radius: 12px; transition: all 0.2s ease;" title="Agregar nuevo producto y precio">
-      <span style="font-size: 1.6rem; margin-bottom: 4px;">➕</span>
-      <span style="font-weight: 700; font-size: 0.85rem; color: #10b981; text-align: center;">+ Producto</span>
-      <small style="color: #94a3b8; font-size: 0.72rem;">Nuevo precio</small>
-    </div>
-  ` : '';
+  const btnAddHtml = esAdminODev ? (
+    modoVista === 'large'
+      ? `
+        <div class="prod-card-large-add" onclick="abrirModalNuevoProducto()" title="Crear nuevo producto y precio">
+          <span style="font-size: 2.5rem; color: #10b981; margin-bottom: 8px;">➕</span>
+          <strong style="color: #f8fafc; font-size: 1.05rem;">Crear Producto</strong>
+          <small style="color: #94a3b8; margin-top: 4px;">Nuevo ítem y precio</small>
+        </div>
+      `
+      : `
+        <div class="prod-card-one-tap" onclick="abrirModalNuevoProducto()" style="border: 2px dashed rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 100px; border-radius: 12px; transition: all 0.2s ease;" title="Agregar nuevo producto y precio">
+          <span style="font-size: 1.6rem; margin-bottom: 4px;">➕</span>
+          <span style="font-weight: 700; font-size: 0.85rem; color: #10b981; text-align: center;">+ Producto</span>
+          <small style="color: #94a3b8; font-size: 0.72rem;">Nuevo precio</small>
+        </div>
+      `
+  ) : '';
 
   grid.innerHTML = headerNavHtml + specialCardsHtml + prodsHtml + btnAddHtml;
 }
