@@ -3333,8 +3333,8 @@ async function cargarNegociosDev() {
       const esDev = (estado.usuarioActual?.rol || '').toLowerCase() === 'developer';
       const esAdmin = ['developer', 'admin', 'administrador'].includes((estado.usuarioActual?.rol || '').toLowerCase());
       const esActivo = n.activo !== 0 && n.activo !== '0';
-      const puedeEliminar = esDev && Number(n.id) !== 1;
-      const puedeDesactivar = esAdmin && Number(n.id) !== 1;
+      const puedeEliminar = esDev;
+      const puedeDesactivar = esAdmin;
       const nombreEscapado = (n.nombre || '').replace(/'/g, "\\'");
 
       return `
@@ -3736,6 +3736,11 @@ window.abrirPosComoNegocio = async function(negocioId) {
       // Iniciar en modo normal (apagado pero disponible con un clic)
       if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
       if (typeof marcarCambiosPendientes === 'function') marcarCambiosPendientes(false);
+
+      // Resetear estado local activo para evitar mezclar datos del comercio previo
+      estado.mesaActiva = null;
+      estado.comandasKDS = [];
+      estado.mesas = [];
 
       // Cargar personalización y piso únicos para este comercio específico
       cargarPersonalizacionPagina(neg.id);
@@ -4981,7 +4986,10 @@ window.agregarAlTicketOneTap = async function(prodId) {
 // ============================================================================
 async function cargarMesasDesdeBackend() {
   try {
-    const res = await fetch('/api/mesas');
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/mesas?negocio_id=${nid}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
     const data = await res.json();
     estado.zonas = data.zonas || [];
     estado.mesas = (data.mesas || []).map(m => {
@@ -6564,11 +6572,13 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
 
   const idempotencyKey = 'cmd_' + (estado.mesaActiva.id || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
 
+  const nidComanda = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const payloadComanda = {
     mesaId: estado.mesaActiva.id,
     mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
     items: estado.mesaActiva.items,
     happyHourActivo: estado.happyHourActivo,
+    negocio_id: nidComanda,
     idempotencyKey
   };
 
@@ -6673,7 +6683,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     // Fallback directo
     const res = await fetch('/api/comandas/enviar', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
       body: JSON.stringify(payloadComanda)
     });
     if (!res.ok) {
@@ -6712,10 +6722,14 @@ async function cargarKDSDesdeBackend() {
   try {
     const activeTab = document.querySelector('.kds-tab.active');
     const dest = activeTab ? activeTab.dataset.kdsDest : 'cocina';
-    const res = await fetch('/api/kds?destino=' + dest);
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/kds?destino=${dest}&negocio_id=${nid}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
     estado.comandasKDS = await res.json();
     renderKDS();
-    document.getElementById('kdsCounter').textContent = estado.comandasKDS.length;
+    const counter = document.getElementById('kdsCounter');
+    if (counter) counter.textContent = Array.isArray(estado.comandasKDS) ? estado.comandasKDS.length : 0;
   } catch (e) {}
 }
 
@@ -6978,7 +6992,10 @@ document.querySelectorAll('.kds-tab').forEach(tab => {
 // ============================================================================
 async function cargarCajaDesdeBackend() {
   try {
-    const res = await fetch('/api/caja/actual');
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/caja/actual?negocio_id=${nid}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
     const data = await res.json();
     if (data.caja) {
       let efect = 0, tarj = 0, sinpe = 0;
@@ -7042,18 +7059,20 @@ async function cargarCajaDesdeBackend() {
       if (elFondo) elFondo.textContent = 'CERRADA';
       const elTotEf = document.getElementById('cajaTotalEfectivo');
       if (elTotEf) elTotEf.textContent = '₡ 0.00';
+      const elVentasEf = document.getElementById('cajaVentasEfectivo');
+      if (elVentasEf) elVentasEf.textContent = '₡ 0.00';
+      const elTarj = document.getElementById('cajaVentasTarjeta');
+      if (elTarj) elTarj.textContent = '₡ 0.00';
+      const elSinpe = document.getElementById('cajaVentasSinpe');
+      if (elSinpe) elSinpe.textContent = '₡ 0.00';
+      const elEntradas = document.getElementById('cajaEntradasTotal');
+      if (elEntradas) elEntradas.textContent = '+₡ 0.00';
+      const elSalidas = document.getElementById('cajaSalidasTotal');
+      if (elSalidas) elSalidas.textContent = '-₡ 0.00';
       window._cajaActivaData = null;
     }
 
-    if (data.tipPool && data.tipPool.length) {
-      estado.meserosReporte = data.tipPool;
-    } else {
-      estado.meserosReporte = [
-        { nombre: 'Carlos Solano (Salonero)', mesas: 14, ventas: 115000, propina: 11500 },
-        { nombre: 'Sofía Morales (Salonera)', mesas: 12, ventas: 98000, propina: 9800 },
-        { nombre: 'Roberto Caja (Cajero)', mesas: 6, ventas: 45000, propina: 4500 }
-      ];
-    }
+    estado.meserosReporte = data.tipPool || [];
     renderTipPoolTable();
   } catch (e) {
     console.warn('Error cargando caja:', e);
@@ -7128,12 +7147,13 @@ window.guardarMovimientoCaja = async function() {
   }
 
   const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
     const res = await fetch('/api/caja/movimiento', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo, monto, concepto, usuarioNombre })
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+      body: JSON.stringify({ tipo, monto, concepto, usuarioNombre, negocio_id: nid })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -7310,8 +7330,9 @@ window.generarCorteX = async function() {
 
   try {
     mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
-    const res = await fetch('/api/caja/corte-x', {
-      headers: { 'x-supervisor-pin': pinAutorizado }
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}`, {
+      headers: { 'x-supervisor-pin': pinAutorizado, 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
     if (!res.ok) {
@@ -7323,9 +7344,9 @@ window.generarCorteX = async function() {
       tipo: 'corte_x',
       titulo: 'CORTE X (PARCIAL)',
       negocio: {
-        nombre: 'GastroBar Fuego & Brasas',
-        slogan: 'Sistema de Punto de Venta & Bar',
-        tel: '2222-0000 / 8888-9999'
+        nombre: estado.negocioActual?.nombre || 'GastroBar Fuego & Brasas',
+        slogan: estado.negocioActual?.slogan || 'Sistema de Punto de Venta & Bar',
+        tel: estado.negocioActual?.telefono || '2222-0000 / 8888-9999'
       },
       caja_id: data.caja_id,
       cajero: data.cajero || 'Cajero de Turno',
@@ -7358,8 +7379,9 @@ window.abrirModalCierreZ = async function() {
   window._adminPinCierreZ = pinAutorizado;
 
   try {
-    const res = await fetch('/api/caja/corte-x', {
-      headers: { 'x-supervisor-pin': pinAutorizado }
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}`, {
+      headers: { 'x-supervisor-pin': pinAutorizado, 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
     if (!res.ok) {
@@ -7367,73 +7389,80 @@ window.abrirModalCierreZ = async function() {
       return;
     }
 
-    window._datosCierreZ = data;
-
-    const elFondo = document.getElementById('czFondoInicial');
-    if (elFondo) elFondo.textContent = formatCRC(data.fondo_inicial);
-    const elVentas = document.getElementById('czVentasEfectivo');
-    if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo || 0)}`;
-    const elEnt = document.getElementById('czTotalEntradas');
-    if (elEnt) elEnt.textContent = `+${formatCRC(data.total_entradas || 0)}`;
-    const elSal = document.getElementById('czTotalSalidas');
-    if (elSal) elSal.textContent = `-${formatCRC(data.total_salidas || 0)}`;
-    const elEsp = document.getElementById('czTotalEsperado');
-    if (elEsp) elEsp.textContent = formatCRC(data.efectivo_esperado || 0);
-
-    const txtReal = document.getElementById('txtCierreZEfectivoReal');
-    if (txtReal) txtReal.value = '';
-    const txtNotas = document.getElementById('txtCierreZNotas');
-    if (txtNotas) txtNotas.value = '';
-
-    window.calcularDiferenciaCierreZ();
+    window._datosCierreZPrecargados = data;
 
     const modal = document.getElementById('modalCierreZ');
-    if (modal) modal.classList.add('active');
+    if (!modal) return;
+
+    const txtEsperado = document.getElementById('txtCierreZEsperado');
+    const txtReal = document.getElementById('txtCierreZEfectivoReal');
+    const txtNotas = document.getElementById('txtCierreZNotas');
+
+    if (txtEsperado) txtEsperado.textContent = formatCRC(data.efectivo_esperado || 0);
+    if (txtReal) {
+      txtReal.value = '';
+      txtReal.placeholder = '0.00';
+    }
+    if (txtNotas) txtNotas.value = '';
+
+    const elFondo = document.getElementById('cierreZFondoInicial');
+    if (elFondo) elFondo.textContent = formatCRC(data.fondo_inicial || 0);
+
+    const elVentas = document.getElementById('cierreZVentasTotal');
+    if (elVentas) elVentas.textContent = formatCRC(data.ventas?.total || 0);
+
+    const elEntradas = document.getElementById('cierreZEntradas');
+    if (elEntradas) elEntradas.textContent = `+${formatCRC(data.total_entradas || 0)}`;
+
+    const elSalidas = document.getElementById('cierreZSalidas');
+    if (elSalidas) elSalidas.textContent = `-${formatCRC(data.total_salidas || 0)}`;
+
+    const elDiferencia = document.getElementById('cierreZDiferenciaBox');
+    if (elDiferencia) {
+      elDiferencia.style.display = 'none';
+      elDiferencia.textContent = '';
+    }
+
+    modal.classList.add('active');
     setTimeout(() => {
       if (txtReal) txtReal.focus();
     }, 100);
   } catch (e) {
-    alert('❌ Error abriendo cierre Z: ' + e.message);
+    alert('❌ Error al preparar Cierre Z: ' + e.message);
   }
 };
 
 window.cerrarModalCierreZ = function() {
   const modal = document.getElementById('modalCierreZ');
   if (modal) modal.classList.remove('active');
+  window._datosCierreZPrecargados = null;
 };
 
-window.calcularDiferenciaCierreZ = function() {
-  const box = document.getElementById('boxDiferenciaCierreZ');
+window.calcularDiferenciaArqueoCierreZ = function() {
+  if (!window._datosCierreZPrecargados) return;
   const txtReal = document.getElementById('txtCierreZEfectivoReal');
-  if (!box) return;
+  const box = document.getElementById('cierreZDiferenciaBox');
+  if (!txtReal || !box) return;
 
-  const esperado = window._datosCierreZ?.efectivo_esperado || 0;
-  const realVal = txtReal ? txtReal.value : '';
-
-  if (realVal === '') {
-    box.style.background = 'rgba(30,41,59,0.5)';
-    box.style.borderColor = '#334155';
-    box.style.color = '#94a3b8';
-    box.innerHTML = `⚖️ Esperado en gaveta: <strong>${formatCRC(esperado)}</strong>. Digita el monto contado.`;
+  const realVal = parseFloat(txtReal.value);
+  if (isNaN(realVal)) {
+    box.style.display = 'none';
     return;
   }
 
-  const real = parseFloat(realVal);
-  if (isNaN(real)) {
-    box.innerHTML = '⚠️ Ingrese un valor numérico válido.';
-    return;
-  }
+  const esperado = window._datosCierreZPrecargados.efectivo_esperado || 0;
+  const diff = Math.round((realVal - esperado) * 100) / 100;
 
-  const diff = Math.round((real - esperado) * 100) / 100;
+  box.style.display = 'block';
   if (diff === 0) {
     box.style.background = 'rgba(16, 185, 129, 0.15)';
     box.style.borderColor = '#10b981';
-    box.style.color = '#34d399';
-    box.innerHTML = `✅ <strong>Caja Cuadrada Perfecta</strong> (Diferencia: ₡0)`;
+    box.style.color = '#6ee7b7';
+    box.innerHTML = '✨ <strong>¡Caja Cuadrada Exacta!</strong> (Diferencia: ₡0.00)';
   } else if (diff > 0) {
-    box.style.background = 'rgba(56, 189, 248, 0.15)';
-    box.style.borderColor = '#0284c7';
-    box.style.color = '#38bdf8';
+    box.style.background = 'rgba(59, 130, 246, 0.15)';
+    box.style.borderColor = '#3b82f6';
+    box.style.color = '#93c5fd';
     box.innerHTML = `🟢 <strong>Sobrante en Caja:</strong> +${formatCRC(diff)}`;
   } else {
     box.style.background = 'rgba(239, 68, 68, 0.15)';
@@ -7468,14 +7497,16 @@ window.ejecutarCierreZ = async function() {
   }
 
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const res = await fetch('/api/caja/cierre-z', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
       body: JSON.stringify({
         efectivo_real_contado,
         notas,
         usuarioNombre,
-        adminPin: window._adminPinCierreZ || '1234'
+        adminPin: window._adminPinCierreZ || '1234',
+        negocio_id: nid
       })
     });
     const data = await res.json();
@@ -7492,9 +7523,9 @@ window.ejecutarCierreZ = async function() {
       tipo: 'cierre_z',
       titulo: 'CIERRE Z (FINAL DEFINITIVO)',
       negocio: {
-        nombre: 'GastroBar Fuego & Brasas',
-        slogan: 'Sistema de Punto de Venta & Bar',
-        tel: '2222-0000 / 8888-9999'
+        nombre: estado.negocioActual?.nombre || 'GastroBar Fuego & Brasas',
+        slogan: estado.negocioActual?.slogan || 'Sistema de Punto de Venta & Bar',
+        tel: estado.negocioActual?.telefono || '2222-0000 / 8888-9999'
       },
       caja_id: data.caja_id,
       cajero: data.cajero || 'Cajero de Turno',
@@ -7565,10 +7596,11 @@ window.ejecutarAperturaCaja = async function() {
   }
 
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const res = await fetch('/api/caja/abrir', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cajero, monto_inicial })
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+      body: JSON.stringify({ cajero, monto_inicial, negocio_id: nid })
     });
     const data = await res.json();
     if (!res.ok) {

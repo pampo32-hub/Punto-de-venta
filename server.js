@@ -683,8 +683,9 @@ app.delete('/api/dev/negocios/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID de comercio inválido.' });
     }
 
-    if (negocioId === 1) {
-      return res.status(400).json({ error: 'No es posible eliminar el comercio principal por defecto del sistema (ID 1).' });
+    const totalNegociosRow = await dbGet('SELECT COUNT(*) as total FROM Negocios');
+    if (totalNegociosRow && totalNegociosRow.total <= 1) {
+      return res.status(400).json({ error: 'No es posible eliminar el único comercio restante del sistema.' });
     }
 
     const target = await dbGet('SELECT * FROM Negocios WHERE id = ?', [negocioId]);
@@ -1304,7 +1305,8 @@ app.put('/api/productos/:id/visual', async (req, res) => {
 // ============================================================================
 app.get('/api/mesas', async (req, res) => {
   try {
-    const zonas = await dbAll('SELECT * FROM Zonas ORDER BY id ASC');
+    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR negocio_id IS NULL OR ? = 1) ORDER BY id ASC', [negocioId, negocioId]);
     const mesas = await dbAll(`
       SELECT m.*, z.nombre as zonaNombre,
              o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
@@ -1312,26 +1314,33 @@ app.get('/api/mesas', async (req, res) => {
              o.transferida_de as orden_transferida_de
       FROM Mesas m
       LEFT JOIN Zonas z ON m.zona_id = z.id
-      LEFT JOIN Ordenes o ON m.id = o.mesa_id AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+      LEFT JOIN Ordenes o ON m.id = o.mesa_id AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1)) AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+      WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
       ORDER BY m.id ASC
-    `);
+    `, [negocioId, negocioId, negocioId, negocioId]);
 
     // Sincronizar siempre con la distribución física maestra del admin guardada en ConfigNegocio
     try {
-      const cfg = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'distribucion_mesas_admin'");
-      if (cfg && cfg.valor) {
-        const mapAdmin = JSON.parse(cfg.valor);
-        const posById = Object.fromEntries(mapAdmin.map(p => [p.id, p]));
-        for (const m of mesas) {
-          if (posById[m.id]) {
-            m.x = posById[m.id].x;
-            m.y = posById[m.id].y;
-            if (posById[m.id].ancho != null) m.ancho = posById[m.id].ancho;
-            if (posById[m.id].alto != null) m.alto = posById[m.id].alto;
-            if (posById[m.id].forma) m.forma = posById[m.id].forma;
-            if (posById[m.id].piso != null) m.piso = posById[m.id].piso;
+      if (negocioId === 1) {
+        const cfg = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'distribucion_mesas_admin'");
+        if (cfg && cfg.valor) {
+          const mapAdmin = JSON.parse(cfg.valor);
+          const posById = Object.fromEntries(mapAdmin.map(p => [p.id, p]));
+          for (const m of mesas) {
+            if (posById[m.id]) {
+              m.x = posById[m.id].x;
+              m.y = posById[m.id].y;
+              if (posById[m.id].ancho != null) m.ancho = posById[m.id].ancho;
+              if (posById[m.id].alto != null) m.alto = posById[m.id].alto;
+              if (posById[m.id].forma) m.forma = posById[m.id].forma;
+              if (posById[m.id].piso != null) m.piso = posById[m.id].piso;
+            }
+            m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
           }
-          m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+        } else {
+          for (const m of mesas) {
+            m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+          }
         }
       } else {
         for (const m of mesas) {
@@ -1782,15 +1791,16 @@ app.get('/api/mesas/:id/qr', async (req, res) => {
 
 app.post('/api/mesas/crear', async (req, res) => {
   try {
-    const { numero, zona_id, capacidad = 4, forma = 'square', x = 100, y = 100, piso = 1, ancho, alto } = req.body;
+    const { numero, zona_id, capacidad = 4, forma = 'square', x = 100, y = 100, piso = 1, ancho, alto, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const numPiso = Number(piso) || 1;
     const resolvedZonaId = zona_id || (numPiso === 2 ? 5 : 1);
     const resolvedW = ancho || (forma === 'silla' ? 85 : 135);
     const resolvedH = alto || (forma === 'silla' ? 95 : 115);
 
     const r = await dbRun(
-      'INSERT INTO Mesas (numero, zona_id, capacidad, forma, x, y, piso, ancho, alto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [numero, resolvedZonaId, capacidad, forma, x, y, numPiso, resolvedW, resolvedH]
+      'INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, forma, x, y, piso, ancho, alto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [negocioId, numero, resolvedZonaId, capacidad, forma, x, y, numPiso, resolvedW, resolvedH]
     );
     const nuevaMesa = await dbGet(`
       SELECT m.*, z.nombre as zonaNombre 
@@ -2813,7 +2823,11 @@ app.post('/api/productos/:id/toggle-86', async (req, res) => {
 app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
   try {
     const mesaId = req.params.mesaId;
-    const orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [mesaId]);
+    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const orden = await dbGet(
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      [mesaId, negocioId, negocioId]
+    );
     if (!orden) return res.json({ orden: null, items: [] });
 
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
@@ -3022,11 +3036,12 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
   // 3. Evaluar si algún nuevo item va a cocina
   const tieneNuevosCocina = itemsProcesados.some(it => it.destino === 'cocina');
+  const negocioId = Number(mesa.negocio_id || req.headers['x-negocio-id'] || req.body.negocio_id || 1);
 
   // 4. Buscar orden activa o crear una nueva
   let orden = await dbGet(
-    "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-    [mesaId]
+    "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+    [mesaId, negocioId, negocioId]
   );
   const ahora = new Date().toISOString();
   let ordenId;
@@ -3036,8 +3051,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     const estadoInicialOrden = tieneNuevosCocina ? 'esperando' : 'abierta';
     const r = await dbRun(
       `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, subtotal, total, servicio_10, iva_13, descuento_happy_hour)
-       VALUES (1, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0)`,
-      [numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0)`,
+      [negocioId, numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
     );
     ordenId = r.lastID;
   } else {
@@ -3352,14 +3367,16 @@ app.post('/api/comandas/anular-item', async (req, res) => {
 app.get('/api/kds', async (req, res) => {
   try {
     const destino = req.query.destino || 'cocina';
+    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
     let query = `
       SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
+        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
     `;
-    const params = [];
+    const params = [negocioId, negocioId];
     if (destino === 'barra') {
       query += " AND d.destino = 'barra'";
     } else {
@@ -3376,14 +3393,16 @@ app.get('/api/kds', async (req, res) => {
 
 app.get('/api/comandas/activas', async (req, res) => {
   try {
+    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
     const comandas = await dbAll(`
       SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
+        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC
-    `);
+    `, [negocioId, negocioId]);
     res.json(comandas);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3628,9 +3647,9 @@ async function procesarCobroOrden(ordenId, {
       if (!mesaRow) throw new Error('Mesa no encontrada');
       const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
       const r = await dbRun(
-        `INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
-         VALUES (?, ?, ?, ?, ?, 'abierta')`,
-        [numOrden, mesaId, 'Cliente', mesero, ahora]
+        `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
+         VALUES (?, ?, ?, ?, ?, ?, 'abierta')`,
+        [mesaRow.negocio_id || 1, numOrden, mesaId, 'Cliente', mesero, ahora]
       );
       orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
     }
@@ -3811,7 +3830,8 @@ async function procesarCobroOrden(ordenId, {
   }
 
 
-  const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+  const negocioIdFinal = orden.negocio_id || 1;
+  const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
   const cajaId = caja ? caja.id : null;
   const montoFinal = (monto !== undefined && monto !== null) ? Number(monto) : (Number(orden.total) || 0);
 
@@ -4207,7 +4227,11 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
 
 app.get('/api/caja/actual', async (req, res) => {
   try {
-    const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const caja = await dbGet(
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
+    );
     if (!caja) return res.json({ caja: null });
 
     const ventas = await dbAll(`
@@ -4239,19 +4263,23 @@ app.get('/api/caja/actual', async (req, res) => {
 // Registrar entrada o salida menor de efectivo
 app.post('/api/caja/movimiento', async (req, res) => {
   try {
-    const { tipo, monto, concepto, usuarioNombre = 'Cajero' } = req.body;
+    const { tipo, monto, concepto, usuarioNombre = 'Cajero', negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const montoNum = parseFloat(monto);
     if (!tipo || !['entrada', 'salida'].includes(tipo) || isNaN(montoNum) || montoNum <= 0) {
       return res.status(400).json({ error: 'Tipo ("entrada" o "salida") y monto válido mayor a 0 son requeridos' });
     }
 
-    let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    let caja = await dbGet(
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
+    );
     if (!caja) {
       const ahoraApertura = new Date().toISOString();
       const r = await dbRun(`
-        INSERT INTO Cajas (cajero, fecha_apertura, monto_inicial, estado)
-        VALUES (?, ?, 50000, 'abierta')
-      `, [usuarioNombre, ahoraApertura]);
+        INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
+        VALUES (?, ?, ?, 50000, 'abierta')
+      `, [negocioId, usuarioNombre, ahoraApertura]);
       caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [r.lastID]);
     }
 
@@ -4289,7 +4317,11 @@ app.get('/api/caja/corte-x', async (req, res) => {
       }
     }
 
-    const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    const negocioId = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
+    const caja = await dbGet(
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
+    );
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
     const ventas = await dbAll(`
@@ -4363,7 +4395,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
 // Cierre Z definitivo del turno con arqueo físico de caja
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
-    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero', adminPin, pin } = req.body;
+    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero', adminPin, pin, negocio_id } = req.body;
     const pinVerificar = adminPin || pin || req.headers['x-supervisor-pin'];
     if (pinVerificar) {
       const esValido = await validarPinAdministrador(pinVerificar);
@@ -4377,7 +4409,11 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       return res.status(400).json({ error: 'Por favor ingresa un monto válido de efectivo contado en gaveta' });
     }
 
-    const caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const caja = await dbGet(
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
+    );
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
 
     const ventas = await dbAll(`
@@ -4475,22 +4511,26 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 // Apertura de nuevo turno de caja
 app.post('/api/caja/abrir', async (req, res) => {
   try {
-    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id = 1 } = req.body;
+    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const montoNum = parseFloat(monto_inicial);
     if (isNaN(montoNum) || montoNum < 0) {
       return res.status(400).json({ error: 'Monto inicial de apertura inválido' });
     }
 
-    const activa = await dbGet("SELECT id FROM Cajas WHERE estado = 'abierta' ORDER BY id DESC LIMIT 1");
+    const activa = await dbGet(
+      "SELECT id FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
+    );
     if (activa) {
-      return res.json({ ok: true, message: 'Ya existe una caja abierta', caja_id: activa.id });
+      return res.json({ ok: true, message: 'Ya existe una caja abierta para este comercio', caja_id: activa.id });
     }
 
     const ahoraApertura = new Date().toISOString();
     const r = await dbRun(`
       INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
       VALUES (?, ?, ?, ?, 'abierta')
-    `, [negocio_id, cajero, ahoraApertura, montoNum]);
+    `, [negocioId, cajero, ahoraApertura, montoNum]);
 
     io.emit('caja_actualizada');
     res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
