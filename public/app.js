@@ -6282,13 +6282,18 @@ function renderKDS() {
   const cursoLabels = { 1: 'Bebida', 2: 'Entrada', 3: 'Plato Fuerte', 4: 'Postre', 5: 'Café', 6: 'Otros' };
   const cursoClasses = { 1: 'c-bebida', 2: 'c-entrada', 3: 'c-fuerte', 4: 'c-postre', 5: 'c-cafe', 6: 'c-otros' };
 
+  window._kdsSeleccionadosMap = window._kdsSeleccionadosMap || {};
+
   ticketsOrder.forEach((key) => {
     const t = ticketsMap[key];
     const card = document.createElement('div');
     card.className = 'kds-card';
     card.dataset.kdsKey = key;
 
-    const itemIdsJson = JSON.stringify(t.items.map(i => i.id));
+    const itemIds = t.items.map(i => i.id);
+    const itemIdsJson = JSON.stringify(itemIds);
+    const selectedSet = window._kdsSeleccionadosMap[key] || new Set();
+    const selectedCount = Array.from(selectedSet).filter(id => itemIds.includes(id)).length;
 
     card.innerHTML = `
       <div class="kds-top">
@@ -6307,8 +6312,9 @@ function renderKDS() {
             ? `<span class="mesa-origin-badge" style="font-size:0.72rem; margin-right:4px;" title="Pedido originalmente en ${escapeHtml(c.origen_mesa_numero)}">[${escapeHtml(c.origen_mesa_numero)}]</span>`
             : '';
           const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c-fuerte'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
+          const isSelected = selectedSet.has(c.id);
           return `
-            <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
+            <div class="kds-item-row ${isSelected ? 'selected' : ''}" id="kdsItemRow_${c.id}" data-item-id="${c.id}" onclick="toggleSeleccionItemKDS('${key}', ${c.id})">
               <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
                 <div style="font-size:0.92rem; font-weight:700; color:var(--text-main); line-height:1.3; flex:1; min-width:0;">
                   <span style="color:#f59e0b; font-weight:800; margin-right:4px;">${c.cantidad}x</span>
@@ -6316,17 +6322,20 @@ function renderKDS() {
                   ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
                 </div>
               </div>
-              <button class="btn-kds-item-ready" title="Marcar este platillo como listo" onclick="despacharKDSBackend(${c.id})">
-                ✓
+              <button type="button" class="btn-kds-check-item ${isSelected ? 'selected' : ''}" id="btnKdsCheck_${c.id}" title="Seleccionar platillo" onclick="event.stopPropagation(); toggleSeleccionItemKDS('${key}', ${c.id})">
+                ${isSelected ? '✓' : ''}
               </button>
             </div>
           `;
         }).join('')}
       </div>
 
-      <div style="display:flex; gap:6px;">
-        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1; width:100%;" onclick='despacharComandaCompletaBackend(${itemIdsJson})'>
-          ✅ Servir Todos (${t.items.length})
+      <div class="kds-actions-bar" id="kdsActionsBar_${key}" style="display:flex; gap:8px;">
+        <button class="btn-kds-ready btn-kds-despachar-sel" id="btnDespacharSel_${key}" style="flex:1.2; display:${selectedCount > 0 && selectedCount < t.items.length ? 'flex' : 'none'}; justify-content:center; align-items:center; background: linear-gradient(135deg, #10b981 0%, #059669 100%); font-weight:700; box-shadow: 0 4px 12px rgba(16,185,129,0.35);" onclick="despacharSeleccionadosKDS('${key}')">
+          🍽️ Servir Seleccionadas (<span class="kds-sel-count">${selectedCount}</span>)
+        </button>
+        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1; width:100%; display:flex; justify-content:center; align-items:center;" onclick='despacharComandaCompletaBackend(${itemIdsJson}, "${key}")'>
+          ✅ Servir Todas (${t.items.length})
         </button>
       </div>
     `;
@@ -6341,40 +6350,75 @@ function renderKDS() {
   }
 }
 
-window.toggleSeleccionarTodosKDS = function(key, checked) {
-  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]`);
-  checkboxes.forEach(cb => { cb.checked = checked; });
-  actualizarContadorSeleccionKDS(key);
+window.toggleSeleccionItemKDS = function(key, itemId) {
+  if (!window._kdsSeleccionadosMap) window._kdsSeleccionadosMap = {};
+  if (!window._kdsSeleccionadosMap[key]) window._kdsSeleccionadosMap[key] = new Set();
+  
+  const set = window._kdsSeleccionadosMap[key];
+  if (set.has(itemId)) {
+    set.delete(itemId);
+  } else {
+    set.add(itemId);
+  }
+  
+  const isSelected = set.has(itemId);
+  const row = document.getElementById(`kdsItemRow_${itemId}`);
+  const btn = document.getElementById(`btnKdsCheck_${itemId}`);
+  
+  if (row) {
+    row.classList.toggle('selected', isSelected);
+  }
+  if (btn) {
+    btn.classList.toggle('selected', isSelected);
+    btn.innerHTML = isSelected ? '✓' : '';
+  }
+  
+  window.actualizarBotonesAccionKDS(key);
 };
 
-window.actualizarContadorSeleccionKDS = function(key) {
-  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]:checked`);
-  const totalChecks = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]`);
-  const selectAll = document.querySelector(`.kds-card[data-kds-key="${key}"] .kds-select-all-check`);
-  if (selectAll) {
-    selectAll.checked = checkboxes.length === totalChecks.length && totalChecks.length > 0;
-  }
+window.actualizarBotonesAccionKDS = function(key) {
+  const card = document.querySelector(`.kds-card[data-kds-key="${key}"]`);
+  if (!card) return;
+  
+  const allRows = card.querySelectorAll('.kds-item-row');
+  const totalCount = allRows.length;
+  const set = window._kdsSeleccionadosMap ? window._kdsSeleccionadosMap[key] : null;
+  const selectedCount = set ? set.size : 0;
+  
   const btnSel = document.getElementById(`btnDespacharSel_${key}`);
   const btnTodo = document.getElementById(`btnDespacharTodo_${key}`);
-  if (btnSel && btnTodo) {
-    const count = checkboxes.length;
-    if (count > 0) {
-      btnSel.style.display = 'block';
-      const countEl = btnSel.querySelector('.kds-sel-count');
-      if (countEl) countEl.textContent = count;
-      btnTodo.style.display = count === totalChecks.length ? 'none' : 'block';
-    } else {
-      btnSel.style.display = 'none';
-      btnTodo.style.display = 'block';
+  
+  if (!btnTodo) return;
+  
+  if (selectedCount === 0) {
+    if (btnSel) btnSel.style.display = 'none';
+    btnTodo.style.display = 'flex';
+    btnTodo.style.flex = '1';
+    btnTodo.style.width = '100%';
+    btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
+  } else if (selectedCount > 0 && selectedCount < totalCount) {
+    if (btnSel) {
+      btnSel.style.display = 'flex';
+      btnSel.innerHTML = `🍽️ Servir Seleccionadas (${selectedCount})`;
     }
+    btnTodo.style.display = 'flex';
+    btnTodo.style.flex = '1';
+    btnTodo.style.width = 'auto';
+    btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
+  } else if (selectedCount >= totalCount) {
+    if (btnSel) btnSel.style.display = 'none';
+    btnTodo.style.display = 'flex';
+    btnTodo.style.flex = '1';
+    btnTodo.style.width = '100%';
+    btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
   }
 };
 
 window.despacharSeleccionadosKDS = async function(key) {
-  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]:checked`);
-  const itemIds = Array.from(checkboxes).map(cb => Number(cb.dataset.itemId)).filter(Boolean);
+  const set = window._kdsSeleccionadosMap ? window._kdsSeleccionadosMap[key] : null;
+  const itemIds = set ? Array.from(set).map(Number).filter(Boolean) : [];
   if (!itemIds.length) {
-    alert('Por favor selecciona al menos un platillo para servir.');
+    mostrarNotificacionCentro('Por favor selecciona al menos un platillo.', 'warning');
     return;
   }
   try {
@@ -6391,6 +6435,9 @@ window.despacharSeleccionadosKDS = async function(key) {
           body: JSON.stringify({ estado: 'listo' })
         });
       }
+    }
+    if (window._kdsSeleccionadosMap) {
+      delete window._kdsSeleccionadosMap[key];
     }
     sonarCampanaCocina();
     mostrarNotificacionCentro(`🍽️ ${itemIds.length} platillo(s) marcado(s) como listo(s) y servido(s).`, 'success');
@@ -6418,14 +6465,24 @@ window.despacharKDSBackend = async function(detalleId) {
   }
 };
 
-window.despacharComandaCompletaBackend = async function(itemIds) {
+window.despacharComandaCompletaBackend = async function(itemIds, key) {
   try {
-    for (const id of itemIds) {
-      await fetch(`/api/kds/${id}/estado`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: 'listo' })
-      });
+    const res = await fetch('/api/kds/despachar-lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemIds, estado: 'listo' })
+    });
+    if (!res.ok) {
+      for (const id of itemIds) {
+        await fetch(`/api/kds/${id}/estado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estado: 'listo' })
+        });
+      }
+    }
+    if (key && window._kdsSeleccionadosMap) {
+      delete window._kdsSeleccionadosMap[key];
     }
     sonarCampanaCocina();
     mostrarNotificacionCentro('🍽️ Comanda marcada como lista y servida.', 'success');
@@ -6433,6 +6490,7 @@ window.despacharComandaCompletaBackend = async function(itemIds) {
     cargarMesasDesdeBackend();
   } catch (e) {
     sonarCampanaCocina();
+    cargarKDSDesdeBackend();
   }
 };
 
