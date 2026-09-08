@@ -364,7 +364,15 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
 
-    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
+    const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
+
+    // Bloquear acceso a comercios desactivados para cualquier usuario (excepto Developer)
+    if (u.rol !== 'developer' && negocio && Number(negocio.activo) === 0) {
+      return res.status(403).json({
+        error: 'Comercio desactivado, contacte con su proveedor!',
+        comercio_desactivado: true
+      });
+    }
 
 
     // Adaptación dinámica de género para el rol
@@ -479,6 +487,14 @@ app.post('/api/auth/validar-pin-mesa', async (req, res) => {
 
     if (!u) {
       return res.status(401).json({ error: 'PIN incorrecto. Verifica con tu usuario o administrador.' });
+    }
+
+    const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || negocio_id || 1]);
+    if (u.rol !== 'developer' && negocio && Number(negocio.activo) === 0) {
+      return res.status(403).json({
+        error: 'Comercio desactivado, contacte con su proveedor!',
+        comercio_desactivado: true
+      });
     }
 
     let rolEtiqueta = u.rol.toUpperCase();
@@ -603,10 +619,7 @@ app.put('/api/dev/negocios/:id', async (req, res) => {
     const { nombre, slogan, logo_url, moneda, telefono, direccion, activo } = req.body;
     const negocioId = Number(req.params.id);
 
-    let valActivo = activo !== undefined ? (Number(activo) === 0 ? 0 : 1) : 1;
-    if (negocioId === 1 && valActivo === 0) {
-      valActivo = 1; // Proteger el negocio principal ID 1
-    }
+    let valActivo = (activo !== undefined && activo !== null) ? (Number(activo) === 0 ? 0 : 1) : 1;
 
     await dbRun(
       'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ?, activo = ? WHERE id = ?',
@@ -638,14 +651,10 @@ app.put('/api/dev/negocios/:id/toggle-activo', async (req, res) => {
     }
 
     let nuevoEstado;
-    if (req.body && req.body.activo !== undefined) {
+    if (req.body && req.body.activo !== undefined && req.body.activo !== null) {
       nuevoEstado = Number(req.body.activo) === 1 ? 1 : 0;
     } else {
-      nuevoEstado = target.activo === 1 ? 0 : 1;
-    }
-
-    if (negocioId === 1 && nuevoEstado === 0) {
-      return res.status(400).json({ error: 'No es posible desactivar el comercio principal por defecto del sistema (ID 1).' });
+      nuevoEstado = Number(target.activo) === 1 ? 0 : 1;
     }
 
     await dbRun('UPDATE Negocios SET activo = ? WHERE id = ?', [nuevoEstado, negocioId]);

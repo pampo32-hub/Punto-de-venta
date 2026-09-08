@@ -2079,7 +2079,13 @@ window.ejecutarLogin = async function() {
       body: JSON.stringify({ usuario, password })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error de autenticación');
+    if (!res.ok) {
+      if (data.comercio_desactivado || (data.error && data.error.toLowerCase().includes('comercio desactivado'))) {
+        alert('⛔ Comercio desactivado, contacte con su proveedor!');
+        return;
+      }
+      throw new Error(data.error || 'Error de autenticación');
+    }
 
     if (data.debe_cambiar_password) {
       document.getElementById('txtObligatorioUsuario').value = data.usuario.usuario;
@@ -2271,6 +2277,15 @@ function aplicarEnrutamientoPorRol() {
   }
 
   document.getElementById('landingLoginView').classList.remove('active');
+
+  // CASO 0: SI EL COMERCIO ESTÁ DESACTIVADO Y NO ES DEVELOPER, BLOQUEAR ACCESO INMEDIATAMENTE
+  if (u.rol !== 'developer') {
+    if (estado.negocioActual && Number(estado.negocioActual.activo) === 0) {
+      alert('⛔ Comercio desactivado, contacte con su proveedor!');
+      if (typeof cerrarSesion === 'function') cerrarSesion();
+      return;
+    }
+  }
 
   // CASO 1: DEVELOPER ➔ PORTAL DISTINTO DE DESARROLLADOR
   if (u.rol === 'developer') {
@@ -3385,10 +3400,6 @@ window.editarNegocioDev = async function(negocioId) {
 
 window.toggleActivarNegocioDev = async function(negocioId, nuevoEstado, nombre, pedirConfirmacion = true) {
   const idNum = Number(negocioId);
-  if (idNum === 1 && nuevoEstado === 0) {
-    alert('No es posible desactivar el comercio principal por defecto del sistema (ID 1).');
-    return;
-  }
   const accion = nuevoEstado === 1 ? 'activar' : 'desactivar';
   if (pedirConfirmacion) {
     const confirmado = confirm(`¿Estás seguro de que deseas ${accion} el comercio "${nombre || ('ID ' + idNum)}"?`);
@@ -3412,6 +3423,10 @@ window.toggleActivarNegocioDev = async function(negocioId, nuevoEstado, nombre, 
     }
     cargarNegociosDev();
     if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
+    if (estado.negocioActual && Number(estado.negocioActual.id) === idNum) {
+      estado.negocioActual.activo = nuevoEstado;
+      sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+    }
   } catch (e) {
     alert('Error: ' + e.message);
   }
@@ -5624,10 +5639,16 @@ window.validarPinMesaIngresado = async function() {
     const res = await fetch('/api/auth/validar-pin-mesa', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin, mesaId })
+      body: JSON.stringify({ pin, mesaId, negocio_id: estado.negocioActual?.id || 1 })
     });
     const data = await res.json();
     if (!res.ok) {
+      if (data.comercio_desactivado || (data.error && data.error.toLowerCase().includes('comercio desactivado'))) {
+        alert('⛔ Comercio desactivado, contacte con su proveedor!');
+        cerrarModalPinMesa();
+        if (typeof cerrarSesion === 'function') cerrarSesion();
+        return;
+      }
       throw new Error(data.error || 'PIN incorrecto');
     }
 
