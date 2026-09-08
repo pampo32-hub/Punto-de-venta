@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>PUNTO DE VENTA | Restaurantes & Bares</title>
+  <title>GAMMA POS | Punto de Venta Inteligente</title>
+  <link rel="icon" type="image/png" href="/img/gamma_pos_logo.png" />
+  <link rel="apple-touch-icon" href="/img/gamma_pos_logo.png" />
   <link rel="stylesheet" href="styles.css?v=2.9.2" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
@@ -56,16 +58,21 @@
     
     <div class="landing-content">
       <div class="landing-header">
-        <div class="landing-brand-badge">🔥 GastroBar Pro Cloud</div>
+        <div class="landing-brand-badge" style="display:inline-flex; align-items:center; gap:8px;">
+          <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" style="width:22px; height:22px; border-radius:5px; object-fit:cover;" />
+          GAMMA POS Cloud
+        </div>
         <h1>PUNTO DE VENTA INTELIGENTE</h1>
         <p>Software de comandas, control de salón, KDS en cocina, división de cuentas y facturación express para restaurantes y bares modernos.</p>
       </div>
 
       <div class="landing-login-box">
         <div class="login-card-header">
-          <div class="login-logo-circle">🍸</div>
+          <div class="login-logo-circle" style="width:72px; height:72px; border-radius:18px; padding:0; overflow:hidden; border:2px solid rgba(255,255,255,0.2); box-shadow:0 8px 25px rgba(0,0,0,0.6); margin: 0 auto 12px;">
+            <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" style="width:100%; height:100%; object-fit:cover;" />
+          </div>
           <h3>Iniciar Sesión</h3>
-          <p>Ingresa tus credenciales para acceder al sistema</p>
+          <p>Ingresa tus credenciales para acceder a <strong>GAMMA POS</strong></p>
         </div>
 
         <form id="formLogin" onsubmit="event.preventDefault(); ejecutarLogin();">
@@ -115,9 +122,12 @@
   <!-- ===================================================================== -->
   <div id="developerPortalView" class="dev-portal-container">
     <header class="dev-header">
-      <div class="dev-brand">
-        <span class="dev-badge">🛠️ CONSOLA DE DESARROLLADOR</span>
-        <h2>Plataforma Multi-Comercio SaaS</h2>
+      <div class="dev-brand" style="display:flex; align-items:center; gap:12px;">
+        <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" style="width:42px; height:42px; border-radius:10px; object-fit:cover; border:1px solid rgba(255,255,255,0.2); box-shadow:0 4px 12px rgba(0,0,0,0.4);" />
+        <div>
+          <span class="dev-badge">🛠️ CONSOLA DE DESARROLLADOR</span>
+          <h2>GAMMA POS • Plataforma Multi-Comercio SaaS</h2>
+        </div>
       </div>
 
       <div class="dev-user-panel">
@@ -213,15 +223,212 @@
           </div>
         </section>
 
-        <!-- TAB 3: MONITOR DB -->
+        <!-- TAB 3: MONITOR DB (VISUAL EN TIEMPO REAL CON DATOS EN MEGAS Y RENDIMIENTO) -->
         <section id="devTabDb" class="dev-tab-panel">
-          <h3>💾 Estado de la Base de Datos SQLite</h3>
-          <p>Archivo: <code>pos.db</code> • Motor: SQLite3</p>
-          <div class="db-stats-grid">
-            <div class="db-stat-box"><span id="dbMesasCount">11</span><small>Mesas Registradas</small></div>
-            <div class="db-stat-box"><span id="dbProductosCount">17</span><small>Productos en Menú</small></div>
-            <div class="db-stat-box"><span id="dbUsuariosCount">5</span><small>Usuarios Registrados</small></div>
-            <div class="db-stat-box"><span>100%</span><small>Persistencia Activa</small></div>
+          <div class="db-monitor-header">
+            <div class="db-header-info">
+              <div class="db-title-row">
+                <span class="db-icon-pulse">💾</span>
+                <div>
+                  <h3 class="db-title-text">Monitor de Base de Datos en Tiempo Real</h3>
+                  <p class="db-subtitle-text">Telemetría en vivo, almacenamiento en MB/KB, rendimiento de consultas y estado de tablas.</p>
+                </div>
+              </div>
+            </div>
+            <div class="db-header-actions">
+              <div class="db-live-badge" id="dbLiveStatusBadge">
+                <span class="db-live-dot"></span>
+                <span id="dbLiveStatusText">EN LÍNEA</span>
+              </div>
+              <div class="db-refresh-group">
+                <label for="dbAutoRefreshSelect" class="db-select-label">⏱️ Auto:</label>
+                <select id="dbAutoRefreshSelect" class="db-select-control" onchange="cambiarIntervaloDbDev(this.value)">
+                  <option value="5000" selected>5 seg</option>
+                  <option value="15000">15 seg</option>
+                  <option value="30000">30 seg</option>
+                  <option value="0">Manual</option>
+                </select>
+              </div>
+              <button class="btn-db-action btn-db-ping" onclick="probarPingDbDev()" title="Medir latencia en milisegundos">
+                ⚡ Probar Ping
+              </button>
+              <button class="btn-db-action btn-db-optimize" onclick="optimizarDbDev()" title="Optimizar índices y estadísticas">
+                🧹 Optimizar DB
+              </button>
+              <button class="btn-db-action btn-db-refresh" onclick="cargarMonitorDbDev(true)" title="Refrescar datos de la base de datos">
+                🔄 Refrescar
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI METRICS GRID -->
+          <div class="db-kpi-grid">
+            <!-- KPI 1: TAMAÑO TOTAL MB -->
+            <div class="db-kpi-card highlight-blue">
+              <div class="db-kpi-top">
+                <span class="db-kpi-icon">📦</span>
+                <span class="db-kpi-tag" id="dbKpiEngineTag">CLOUD DB</span>
+              </div>
+              <div class="db-kpi-label">Tamaño Total Base de Datos</div>
+              <div class="db-kpi-value" id="dbKpiTotalMb">-- MB</div>
+              <div class="db-kpi-sub" id="dbKpiTotalKb">Calculando peso total...</div>
+            </div>
+
+            <!-- KPI 2: LATENCIA PING MS -->
+            <div class="db-kpi-card highlight-emerald">
+              <div class="db-kpi-top">
+                <span class="db-kpi-icon">⚡</span>
+                <span class="db-kpi-tag ping-tag" id="dbKpiPingBadge">LATENCIA</span>
+              </div>
+              <div class="db-kpi-label">Tiempo de Respuesta (Ping)</div>
+              <div class="db-kpi-value" id="dbKpiPingMs">-- ms</div>
+              <div class="db-kpi-sub" id="dbKpiPingSub">🟢 Excelente rendimiento</div>
+            </div>
+
+            <!-- KPI 3: MOTOR & SERVIDOR -->
+            <div class="db-kpi-card highlight-indigo">
+              <div class="db-kpi-top">
+                <span class="db-kpi-icon">🐘</span>
+                <span class="db-kpi-tag">MOTOR</span>
+              </div>
+              <div class="db-kpi-label">Motor de Base de Datos</div>
+              <div class="db-kpi-value text-sm" id="dbKpiEngineName">PostgreSQL Cloud</div>
+              <div class="db-kpi-sub" id="dbKpiEngineVersion">Render High-Availability</div>
+            </div>
+
+            <!-- KPI 4: TOTAL DE REGISTROS -->
+            <div class="db-kpi-card highlight-purple">
+              <div class="db-kpi-top">
+                <span class="db-kpi-icon">📊</span>
+                <span class="db-kpi-tag" id="dbKpiTablasTag">20 TABLAS</span>
+              </div>
+              <div class="db-kpi-label">Total de Registros / Filas</div>
+              <div class="db-kpi-value" id="dbKpiTotalRows">--</div>
+              <div class="db-kpi-sub" id="dbKpiTotalRowsSub">Filas activas persistidas</div>
+            </div>
+
+            <!-- KPI 5: CONEXIONES ACTIVAS -->
+            <div class="db-kpi-card highlight-amber">
+              <div class="db-kpi-top">
+                <span class="db-kpi-icon">🔒</span>
+                <span class="db-kpi-tag">POOL</span>
+              </div>
+              <div class="db-kpi-label">Conexiones Activas</div>
+              <div class="db-kpi-value" id="dbKpiConnections">--</div>
+              <div class="db-kpi-sub" id="dbKpiUptime">Servidor en línea</div>
+            </div>
+          </div>
+
+          <!-- STORAGE DISTRIBUTION PROGRESS BAR -->
+          <div class="db-storage-card">
+            <div class="db-storage-header">
+              <div>
+                <h4 class="db-storage-title">📊 Distribución de Almacenamiento por Módulo</h4>
+                <p class="db-storage-subtitle">Proporción de espacio consumido por órdenes, catálogo, inventario, auditoría y sistema.</p>
+              </div>
+              <div class="db-storage-total" id="dbStorageBarTotal">Total: -- MB</div>
+            </div>
+            <div class="db-storage-bar" id="dbStorageDistributionBar">
+              <!-- Segmentos visuales dinámicos -->
+              <div class="db-bar-segment seg-ventas" style="width: 40%;" title="Ventas: 40%"></div>
+              <div class="db-bar-segment seg-catalogo" style="width: 25%;" title="Catálogo: 25%"></div>
+              <div class="db-bar-segment seg-inventario" style="width: 20%;" title="Inventario: 20%"></div>
+              <div class="db-bar-segment seg-seguridad" style="width: 10%;" title="Seguridad: 10%"></div>
+              <div class="db-bar-segment seg-otros" style="width: 5%;" title="Otros: 5%"></div>
+            </div>
+            <div class="db-storage-legend" id="dbStorageLegend">
+              <!-- Leyenda con pesos en MB/KB generada dinámicamente -->
+            </div>
+          </div>
+
+          <!-- OPERATIONAL SUMMARY ROW -->
+          <div class="db-summary-grid">
+            <div class="db-summary-item">
+              <span class="db-summary-icon">🧾</span>
+              <div class="db-summary-text">
+                <span class="db-summary-label">Órdenes Procesadas</span>
+                <strong class="db-summary-val" id="dbSumOrdenes">--</strong>
+              </div>
+            </div>
+            <div class="db-summary-item">
+              <span class="db-summary-icon">🍔</span>
+              <div class="db-summary-text">
+                <span class="db-summary-label">Platillos / Productos</span>
+                <strong class="db-summary-val" id="dbSumProductos">--</strong>
+              </div>
+            </div>
+            <div class="db-summary-item">
+              <span class="db-summary-icon">📦</span>
+              <div class="db-summary-text">
+                <span class="db-summary-label">Insumos & Movimientos</span>
+                <strong class="db-summary-val" id="dbSumInsumos">--</strong>
+              </div>
+            </div>
+            <div class="db-summary-item">
+              <span class="db-summary-icon">⏱️</span>
+              <div class="db-summary-text">
+                <span class="db-summary-label">Última Operación</span>
+                <strong class="db-summary-val" id="dbSumUltima">--</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- DETAILED TABLES BREAKDOWN -->
+          <div class="db-tables-card">
+            <div class="db-tables-toolbar">
+              <div class="db-tables-toolbar-left">
+                <h4 class="db-tables-heading">📋 Desglose Detallado por Tabla de Base de Datos</h4>
+                <span class="db-tables-badge" id="dbTablesCountBadge">20 tablas</span>
+              </div>
+              <div class="db-tables-toolbar-right">
+                <div class="db-search-box">
+                  <span class="db-search-icon">🔍</span>
+                  <input type="text" id="dbSearchTableInput" placeholder="Filtrar por tabla o categoría..." oninput="filtrarTablasDbDev(this.value)" />
+                </div>
+                <div class="db-filter-pills" id="dbFilterPills">
+                  <button class="db-pill active" onclick="filtrarCategoriaDbDev('todos', this)">Todas</button>
+                  <button class="db-pill" onclick="filtrarCategoriaDbDev('Ventas', this)">Ventas</button>
+                  <button class="db-pill" onclick="filtrarCategoriaDbDev('Catálogo', this)">Catálogo</button>
+                  <button class="db-pill" onclick="filtrarCategoriaDbDev('Inventario', this)">Inventario</button>
+                  <button class="db-pill" onclick="filtrarCategoriaDbDev('Salón', this)">Salón</button>
+                  <button class="db-pill" onclick="filtrarCategoriaDbDev('Seguridad', this)">Seguridad</button>
+                  <button class="db-pill" onclick="filtrarCategoriaDbDev('Sistema', this)">Sistema</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="db-table-responsive">
+              <table class="db-modern-table" id="dbTablesGrid">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Tabla / Entidad</th>
+                    <th>Categoría</th>
+                    <th style="text-align:right;">Registros (Filas)</th>
+                    <th style="text-align:right;">Tamaño Total (MB)</th>
+                    <th style="text-align:right;">Datos (KB)</th>
+                    <th style="text-align:right;">Índices (KB)</th>
+                    <th>% Espacio</th>
+                    <th style="text-align:center;">Salud</th>
+                  </tr>
+                </thead>
+                <tbody id="dbTablesTableBody">
+                  <tr>
+                    <td colspan="9" style="text-align:center; padding:30px; color:#94a3b8;">
+                      <div class="db-loading-spinner"></div>
+                      Cargando telemetría en tiempo real de la base de datos...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="db-tables-footer">
+              <div id="dbLastUpdatedText">Última actualización: --</div>
+              <div class="db-legend-small">
+                <span>🟢 <strong>Salud Óptima</strong>: Índices sincronizados y latencia baja</span>
+              </div>
+            </div>
           </div>
         </section>
 

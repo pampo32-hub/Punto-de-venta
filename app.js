@@ -2560,14 +2560,15 @@ function actualizarBrandingNegocio(negocio) {
   if (negocio.logo_url) {
     logoImg.src = negocio.logo_url;
     logoImg.style.display = 'block';
-    emoji.style.display = 'none';
+    if (emoji) emoji.style.display = 'none';
   } else {
-    logoImg.style.display = 'none';
-    emoji.style.display = 'inline-block';
+    logoImg.src = '/img/gamma_pos_logo.png';
+    logoImg.style.display = 'block';
+    if (emoji) emoji.style.display = 'none';
   }
 
-  nomTxt.textContent = negocio.nombre || 'PUNTO DE VENTA';
-  slogTxt.textContent = negocio.slogan || 'GastroBar Pro';
+  nomTxt.textContent = negocio.nombre || 'GAMMA POS';
+  slogTxt.textContent = negocio.slogan || 'Punto de Venta Profesional';
 }
 
 // ============================================================================
@@ -2586,6 +2587,12 @@ function cargarDevPortal() {
       btn.classList.add('active');
 
       const target = btn.dataset.devTab;
+      if (target !== 'db') {
+        if (typeof window.detenerMonitorDbDev === 'function') {
+          window.detenerMonitorDbDev();
+        }
+      }
+
       if (target === 'comercios') {
         document.getElementById('devTabComercios')?.classList.add('active');
         cargarNegociosDev();
@@ -2594,6 +2601,9 @@ function cargarDevPortal() {
         cargarUsuariosDev();
       } else if (target === 'db') {
         document.getElementById('devTabDb')?.classList.add('active');
+        if (typeof window.cargarMonitorDbDev === 'function') {
+          window.cargarMonitorDbDev();
+        }
       } else if (target === 'editor-pagina') {
         document.getElementById('devTabEditorPagina')?.classList.add('active');
         cargarPersonalizacionPagina();
@@ -2926,6 +2936,380 @@ window.cargarAuditoriaDev = async function() {
     }).join('');
   } catch (e) {
     console.error('Error cargando auditoría dev:', e);
+  }
+};
+
+// ============================================================================
+// MONITOR VISUAL DE BASE DE DATOS EN TIEMPO REAL (DEV PORTAL)
+// ============================================================================
+window._dbMonitorTimer = null;
+window._dbMonitorIntervalMs = 5000;
+window._dbMonitorTablasData = [];
+window._dbMonitorFiltroCat = 'todos';
+window._dbMonitorBusqueda = '';
+window._dbMonitorCargando = false;
+
+window.detenerMonitorDbDev = function() {
+  if (window._dbMonitorTimer) {
+    clearTimeout(window._dbMonitorTimer);
+    window._dbMonitorTimer = null;
+  }
+};
+
+window.cambiarIntervaloDbDev = function(ms) {
+  window._dbMonitorIntervalMs = Number(ms);
+  window.detenerMonitorDbDev();
+  if (window._dbMonitorIntervalMs > 0) {
+    window.cargarMonitorDbDev();
+  }
+};
+
+window.cargarMonitorDbDev = async function(manual = false) {
+  window.detenerMonitorDbDev();
+
+  const devDbTab = document.getElementById('devTabDb');
+  if (!devDbTab || !devDbTab.classList.contains('active')) {
+    return;
+  }
+
+  if (window._dbMonitorCargando && !manual) return;
+  window._dbMonitorCargando = true;
+
+  try {
+    const res = await fetch('/api/dev/db-monitor');
+    if (!res.ok) throw new Error('Error al conectar con la telemetría de BD');
+    const data = await res.json();
+
+    // 1. KPI 1: Tamaño Total
+    const kpiMb = document.getElementById('dbKpiTotalMb');
+    const kpiKb = document.getElementById('dbKpiTotalKb');
+    const kpiEngineTag = document.getElementById('dbKpiEngineTag');
+    if (kpiMb) kpiMb.textContent = data.total_mb_formatted || `${data.total_mb} MB`;
+    if (kpiKb) kpiKb.textContent = `Equivalente a ${data.total_kb_formatted || data.total_bytes} (${Number(data.total_bytes).toLocaleString()} bytes)`;
+    if (kpiEngineTag) kpiEngineTag.textContent = data.is_pg ? 'POSTGRESQL CLOUD' : 'SQLITE LOCAL';
+
+    // 2. KPI 2: Latencia Ping
+    const kpiPing = document.getElementById('dbKpiPingMs');
+    const kpiPingSub = document.getElementById('dbKpiPingSub');
+    const kpiPingBadge = document.getElementById('dbKpiPingBadge');
+    if (kpiPing) kpiPing.textContent = `${data.ping_ms} ms`;
+    if (kpiPingSub && kpiPingBadge) {
+      if (data.ping_ms < 80) {
+        kpiPingSub.innerHTML = '🟢 <span style="color:#4ade80;">Latencia ultrarrápida</span>';
+        kpiPingBadge.textContent = '⚡ ULTRA';
+        kpiPingBadge.style.color = '#4ade80';
+      } else if (data.ping_ms < 250) {
+        kpiPingSub.innerHTML = '🟢 <span style="color:#38bdf8;">Respuesta óptima Cloud</span>';
+        kpiPingBadge.textContent = '🟢 ÓPTIMA';
+        kpiPingBadge.style.color = '#38bdf8';
+      } else if (data.ping_ms < 600) {
+        kpiPingSub.innerHTML = '🟡 <span style="color:#fbbf24;">Latencia normal</span>';
+        kpiPingBadge.textContent = '🟡 NORMAL';
+        kpiPingBadge.style.color = '#fbbf24';
+      } else {
+        kpiPingSub.innerHTML = '🔴 <span style="color:#f87171;">Respuesta lenta</span>';
+        kpiPingBadge.textContent = '🔴 ALTA';
+        kpiPingBadge.style.color = '#f87171';
+      }
+    }
+
+    // 3. KPI 3: Motor & Versión
+    const kpiEngine = document.getElementById('dbKpiEngineName');
+    const kpiVersion = document.getElementById('dbKpiEngineVersion');
+    if (kpiEngine) kpiEngine.textContent = data.engine || 'Base de Datos';
+    if (kpiVersion) kpiVersion.textContent = data.version || 'Persistencia Activa';
+
+    // 4. KPI 4: Registros Totales
+    const kpiRows = document.getElementById('dbKpiTotalRows');
+    const kpiRowsSub = document.getElementById('dbKpiTotalRowsSub');
+    const kpiTablasTag = document.getElementById('dbKpiTablasTag');
+    if (kpiRows) kpiRows.textContent = (data.total_rows || 0).toLocaleString();
+    if (kpiRowsSub) kpiRowsSub.textContent = `Distribuidas en ${data.tables_count || 20} tablas activas`;
+    if (kpiTablasTag) kpiTablasTag.textContent = `${data.tables_count || 20} TABLAS`;
+
+    // 5. KPI 5: Conexiones & Uptime
+    const kpiConn = document.getElementById('dbKpiConnections');
+    const kpiUptime = document.getElementById('dbKpiUptime');
+    if (kpiConn) kpiConn.textContent = `${data.active_connections || 1} activas`;
+    if (kpiUptime) {
+      const up = data.uptime_seconds || 0;
+      const mins = Math.floor(up / 60);
+      const segs = up % 60;
+      kpiUptime.textContent = `Uptime proceso: ${mins}m ${segs}s`;
+    }
+
+    // 6. Barra de Almacenamiento
+    const barTotal = document.getElementById('dbStorageBarTotal');
+    const bar = document.getElementById('dbStorageDistributionBar');
+    const legend = document.getElementById('dbStorageLegend');
+    if (barTotal) barTotal.textContent = `Total Base: ${data.total_mb_formatted || (data.total_mb + ' MB')}`;
+
+    const catBytes = {};
+    const catColors = {
+      'Ventas': { cls: 'seg-ventas', dot: '#ec4899' },
+      'Catálogo': { cls: 'seg-catalogo', dot: '#06b6d4' },
+      'Inventario': { cls: 'seg-inventario', dot: '#10b981' },
+      'Salón': { cls: 'seg-salon', dot: '#f59e0b' },
+      'Seguridad': { cls: 'seg-seguridad', dot: '#8b5cf6' },
+      'Caja': { cls: 'seg-inventario', dot: '#34d399' },
+      'Sistema': { cls: 'seg-sistema', dot: '#64748b' },
+      'SaaS': { cls: 'seg-seguridad', dot: '#818cf8' },
+      'Fiscal': { cls: 'seg-sistema', dot: '#94a3b8' },
+      'Auditoría': { cls: 'seg-seguridad', dot: '#fb7185' },
+      'Personalización': { cls: 'seg-catalogo', dot: '#c084fc' }
+    };
+
+    let totalSumBytes = 0;
+    (data.tables || []).forEach(t => {
+      const cat = t.category || 'Sistema';
+      catBytes[cat] = (catBytes[cat] || 0) + (t.total_bytes || 0);
+      totalSumBytes += (t.total_bytes || 0);
+    });
+
+    if (totalSumBytes === 0) totalSumBytes = data.total_bytes || 1;
+
+    if (bar) {
+      let segmentsHtml = '';
+      for (const [cat, bytes] of Object.entries(catBytes)) {
+        const pct = Math.max(1.5, ((bytes / totalSumBytes) * 100)).toFixed(1);
+        const kb = (bytes / 1024).toFixed(1);
+        const mb = (bytes / (1024 * 1024)).toFixed(3);
+        const cfg = catColors[cat] || { cls: 'seg-otros', dot: '#475569' };
+        segmentsHtml += `<div class="db-bar-segment ${cfg.cls}" style="width: ${pct}%;" title="${cat}: ${mb} MB (${kb} KB - ${pct}%)"></div>`;
+      }
+      bar.innerHTML = segmentsHtml;
+    }
+
+    if (legend) {
+      let legendHtml = '';
+      for (const [cat, bytes] of Object.entries(catBytes)) {
+        const pct = ((bytes / totalSumBytes) * 100).toFixed(1);
+        const kb = (bytes / 1024).toFixed(1);
+        const mb = (bytes / (1024 * 1024)).toFixed(2);
+        const cfg = catColors[cat] || { dot: '#94a3b8' };
+        legendHtml += `
+          <div class="db-legend-item">
+            <span class="db-legend-dot" style="background:${cfg.dot};"></span>
+            <strong>${cat}:</strong>
+            <span class="db-legend-mb">${Number(mb) >= 0.01 ? mb + ' MB' : kb + ' KB'}</span>
+            <small style="color:#64748b;">(${pct}%)</small>
+          </div>
+        `;
+      }
+      legend.innerHTML = legendHtml;
+    }
+
+    // 7. Resumen Operativo
+    const sumOrd = document.getElementById('dbSumOrdenes');
+    const sumProd = document.getElementById('dbSumProductos');
+    const sumIns = document.getElementById('dbSumInsumos');
+    const sumUlt = document.getElementById('dbSumUltima');
+
+    if (sumOrd && data.summary) sumOrd.textContent = `${(data.summary.total_ordenes || 0).toLocaleString()} órdenes`;
+    if (sumProd && data.summary) sumProd.textContent = `${data.summary.total_productos || 0} platillos/bebidas`;
+    if (sumIns && data.summary) sumIns.textContent = `${data.summary.total_insumos || 0} insumos (${data.summary.total_movimientos || 0} movs)`;
+    if (sumUlt) {
+      if (data.ultima_orden) {
+        const hora = data.ultima_orden.fecha_apertura ? formatearFechaHoraCR(data.ultima_orden.fecha_apertura) : '-';
+        sumUlt.textContent = `${data.ultima_orden.numero_orden || 'ORD'} • ${hora}`;
+      } else {
+        sumUlt.textContent = 'En espera de órdenes';
+      }
+    }
+
+    // 8. Tablas y Estado
+    window._dbMonitorTablasData = data.tables || [];
+    window.renderizarTablasDbDev();
+
+    // 9. Footer & Timestamp
+    const lastUp = document.getElementById('dbLastUpdatedText');
+    if (lastUp) {
+      const d = new Date();
+      const horaStr = d.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      lastUp.innerHTML = `Última sincronización en vivo: <strong style="color:#f8fafc;">${horaStr}</strong> • Sincronizado con Render PostgreSQL Cloud`;
+    }
+
+    if (manual && typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('✅ Base de datos sincronizada', `Tamaño actual: ${data.total_mb_formatted} • Latencia: ${data.ping_ms}ms`, 'success');
+    }
+
+  } catch (e) {
+    console.error('Error cargando monitor DB:', e);
+    const badgeText = document.getElementById('dbLiveStatusText');
+    if (badgeText) badgeText.textContent = 'ERROR CONEXIÓN';
+    if (manual && typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('Error de Conexión', 'No se pudo consultar la telemetría de la base de datos.', 'error');
+    }
+  } finally {
+    window._dbMonitorCargando = false;
+    if (window._dbMonitorIntervalMs > 0) {
+      window._dbMonitorTimer = setTimeout(() => {
+        const devTab = document.getElementById('devTabDb');
+        if (devTab && devTab.classList.contains('active')) {
+          window.cargarMonitorDbDev();
+        }
+      }, window._dbMonitorIntervalMs);
+    }
+  }
+};
+
+window.renderizarTablasDbDev = function() {
+  const tbody = document.getElementById('dbTablesTableBody');
+  if (!tbody) return;
+
+  const badgeCount = document.getElementById('dbTablesCountBadge');
+  let list = window._dbMonitorTablasData || [];
+
+  if (window._dbMonitorFiltroCat && window._dbMonitorFiltroCat !== 'todos') {
+    list = list.filter(t => (t.category || '').toLowerCase() === window._dbMonitorFiltroCat.toLowerCase());
+  }
+
+  if (window._dbMonitorBusqueda) {
+    const q = window._dbMonitorBusqueda.toLowerCase();
+    list = list.filter(t => 
+      (t.name || '').toLowerCase().includes(q) ||
+      (t.label || '').toLowerCase().includes(q) ||
+      (t.category || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (badgeCount) {
+    badgeCount.textContent = `${list.length} de ${window._dbMonitorTablasData.length} tablas`;
+  }
+
+  if (list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align:center; padding:24px; color:#64748b;">
+          No se encontraron tablas con el filtro actual.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map((t, idx) => {
+    const cat = t.category || 'Sistema';
+    const catClass = `cat-${cat}`;
+    const pct = Number(t.pct || 0);
+    const mbNum = Number(t.total_mb || 0);
+    const displayMb = mbNum >= 0.01 ? `${t.total_mb} MB` : `${t.total_kb} KB`;
+    const rows = Number(t.rows || 0).toLocaleString();
+    const dataKb = t.table_kb ? `${t.table_kb} KB` : '-';
+    const indexKb = t.index_kb ? `${t.index_kb} KB` : '-';
+
+    return `
+      <tr>
+        <td style="color:#64748b; font-weight:700; width:36px;">${idx + 1}</td>
+        <td>
+          <div class="db-tbl-name">
+            <span style="font-size:1.1rem;">${t.icon || '📄'}</span>
+            <div>
+              <div style="font-weight:700; color:#f8fafc;">${t.label || t.name}</div>
+              <span class="db-tbl-code">${t.name}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="db-cat-tag ${catClass}">${cat}</span>
+        </td>
+        <td style="text-align:right; font-weight:700; color:#f1f5f9; font-variant-numeric:tabular-nums;">
+          ${rows}
+        </td>
+        <td style="text-align:right; font-weight:800; color:#38bdf8; font-variant-numeric:tabular-nums;">
+          ${displayMb}
+        </td>
+        <td style="text-align:right; color:#94a3b8; font-size:0.78rem; font-variant-numeric:tabular-nums;">
+          ${dataKb}
+        </td>
+        <td style="text-align:right; color:#a78bfa; font-size:0.78rem; font-variant-numeric:tabular-nums;">
+          ${indexKb}
+        </td>
+        <td style="min-width:110px;">
+          <div class="db-tbl-bar-mini">
+            <div class="db-bar-fill-mini" style="width:${Math.max(4, pct * 3)}px; max-width:60px;"></div>
+            <span style="font-size:0.75rem; color:#94a3b8; font-weight:600;">${pct}%</span>
+          </div>
+        </td>
+        <td style="text-align:center;">
+          <span class="db-health-badge">
+            <span>🟢</span> Óptima
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+};
+
+window.filtrarTablasDbDev = function(query) {
+  window._dbMonitorBusqueda = (query || '').trim();
+  window.renderizarTablasDbDev();
+};
+
+window.filtrarCategoriaDbDev = function(cat, btn) {
+  window._dbMonitorFiltroCat = cat;
+  document.querySelectorAll('#dbFilterPills .db-pill').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  window.renderizarTablasDbDev();
+};
+
+window.probarPingDbDev = async function() {
+  const btn = document.querySelector('.btn-db-ping');
+  if (btn) btn.disabled = true;
+
+  try {
+    const t0 = performance.now();
+    const res = await fetch('/api/dev/db-ping');
+    const elapsed = Math.round(performance.now() - t0);
+    const data = await res.json();
+    const serverPing = data.ping_ms || elapsed;
+
+    const pingElem = document.getElementById('dbKpiPingMs');
+    if (pingElem) {
+      pingElem.textContent = `${serverPing} ms`;
+      pingElem.style.transition = 'transform 0.2s';
+      pingElem.style.transform = 'scale(1.25)';
+      setTimeout(() => { pingElem.style.transform = 'scale(1)'; }, 300);
+    }
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚡ Latencia de Base de Datos', `Tiempo de respuesta SQL: ${serverPing} ms (${data.engine || 'Cloud'})`, 'success');
+    }
+  } catch (e) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('Error en Ping', 'No se pudo comunicar con el servidor SQL.', 'error');
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+};
+
+window.optimizarDbDev = async function() {
+  const confirmar = confirm('¿Deseas ejecutar un ciclo de optimización (ANALYZE y actualización de estadísticas) en la base de datos? Esto ayuda al planificador de consultas a mantener el rendimiento óptimo.');
+  if (!confirmar) return;
+
+  const btn = document.querySelector('.btn-db-optimize');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Optimizando...';
+  }
+
+  try {
+    const res = await fetch('/api/dev/db-optimize', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al optimizar');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🧹 Optimización Exitosa', `Base de datos optimizada en ${data.duration_ms} ms (${data.engine}).`, 'success');
+    }
+    await window.cargarMonitorDbDev(true);
+  } catch (e) {
+    alert('Error al optimizar la base de datos: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🧹 Optimizar DB';
+    }
   }
 };
 

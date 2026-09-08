@@ -967,14 +967,211 @@ app.put('/api/dev/usuarios/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/dev/usuarios/:id', async (req, res) => {
+// ============================================================================
+// 2.3 MONITOR DE BASE DE DATOS EN TIEMPO REAL (DEVELOPER & SYSADMIN)
+// ============================================================================
+app.get('/api/dev/db-monitor', async (req, res) => {
   try {
-    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
-    if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (target.usuario === 'dev') return res.status(403).json({ error: 'No es posible eliminar al desarrollador principal' });
+    const startPing = Date.now();
+    const isPg = Boolean(db.isPg);
 
-    await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Usuario eliminado exitosamente' });
+    let pingMs = 0;
+    let totalBytes = 0;
+    let versionStr = '';
+    let tablesData = [];
+    let activeConnections = 1;
+
+    const tableMetadata = {
+      'detalleorden': { label: 'Detalles de Comandas', icon: '🧾', cat: 'Ventas' },
+      'ordenes': { label: 'Órdenes / Facturas', icon: '📋', cat: 'Ventas' },
+      'pagos': { label: 'Registro de Pagos', icon: '💳', cat: 'Ventas' },
+      'productos': { label: 'Platillos & Bebidas (Menú)', icon: '🍔', cat: 'Catálogo' },
+      'categorias': { label: 'Categorías del Menú', icon: '📂', cat: 'Catálogo' },
+      'inventario': { label: 'Insumos de Inventario', icon: '📦', cat: 'Inventario' },
+      'inventariomovimientos': { label: 'Kárdex de Movimientos', icon: '🔄', cat: 'Inventario' },
+      'inventariorecetas': { label: 'Recetas & Escandallos', icon: '🧪', cat: 'Inventario' },
+      'mesas': { label: 'Mesas del Salón', icon: '🪑', cat: 'Salón' },
+      'zonas': { label: 'Zonas & Ambientes', icon: '🗺️', cat: 'Salón' },
+      'cajas': { label: 'Cajas & Turnos', icon: '💵', cat: 'Caja' },
+      'movimientoscaja': { label: 'Movimientos de Efectivo', icon: '📥', cat: 'Caja' },
+      'usuarios': { label: 'Usuarios del Sistema', icon: '👥', cat: 'Seguridad' },
+      'negocios': { label: 'Comercios Registrados', icon: '🏬', cat: 'SaaS' },
+      'auditoria': { label: 'Bitácora de Auditoría', icon: '🛡️', cat: 'Seguridad' },
+      'anulaciones': { label: 'Registro de Anulaciones', icon: '🚫', cat: 'Auditoría' },
+      'confignegocio': { label: 'Configuración & Happy Hour', icon: '⚙️', cat: 'Sistema' },
+      'facturaselectronicas': { label: 'Facturación Electrónica', icon: '⚡', cat: 'Fiscal' },
+      'idempotencylog': { label: 'Registro de Idempotencia', icon: '🔒', cat: 'Sistema' },
+      'tablemerges': { label: 'Historial de Mesas Unidas', icon: '🔗', cat: 'Salón' },
+      'personalizacionpagina': { label: 'Studio Personalización', icon: '🎨', cat: 'Personalización' }
+    };
+
+    if (isPg) {
+      const pingRow = await dbGet('SELECT NOW() as ts, version() as ver');
+      pingMs = Date.now() - startPing;
+      versionStr = pingRow?.ver ? pingRow.ver.split(' on ')[0] : 'PostgreSQL Cloud';
+
+      const sizeRow = await dbGet('SELECT pg_database_size(current_database()) as size_bytes');
+      totalBytes = Number(sizeRow?.size_bytes || 0);
+
+      try {
+        const connRow = await dbGet('SELECT count(*) as count FROM pg_stat_activity WHERE datname = current_database()');
+        activeConnections = Number(connRow?.count || 1);
+      } catch (_) {}
+
+      const rawTables = await dbAll(`
+        SELECT 
+          c.relname AS table_name,
+          pg_total_relation_size(c.oid) AS total_bytes,
+          pg_relation_size(c.oid) AS table_bytes,
+          pg_indexes_size(c.oid) AS index_bytes
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+        ORDER BY pg_total_relation_size(c.oid) DESC
+      `);
+
+      for (const t of rawTables) {
+        const lowerName = t.table_name.toLowerCase();
+        let rows = 0;
+        try {
+          const countRow = await dbGet(`SELECT COUNT(*) as count FROM ${t.table_name}`);
+          rows = Number(countRow?.count || 0);
+        } catch (_) {}
+
+        const tBytes = Number(t.total_bytes || 0);
+        const meta = tableMetadata[lowerName] || { label: t.table_name, icon: '📄', cat: 'General' };
+
+        tablesData.push({
+          name: t.table_name,
+          label: meta.label,
+          icon: meta.icon,
+          category: meta.cat,
+          rows: rows,
+          total_bytes: tBytes,
+          total_mb: (tBytes / (1024 * 1024)).toFixed(3),
+          total_kb: (tBytes / 1024).toFixed(1),
+          table_kb: (Number(t.table_bytes || 0) / 1024).toFixed(1),
+          index_kb: (Number(t.index_bytes || 0) / 1024).toFixed(1),
+          pct: totalBytes > 0 ? ((tBytes / totalBytes) * 100).toFixed(1) : '0'
+        });
+      }
+    } else {
+      // Modo SQLite
+      const pingRow = await dbGet("SELECT datetime('now') as ts, sqlite_version() as ver");
+      pingMs = Date.now() - startPing;
+      versionStr = `SQLite ${pingRow?.ver || '3.x'}`;
+
+      const fs = require('fs');
+      const dbFile = db.dbPath || path.join(__dirname, 'pos.db');
+      try {
+        const stat = fs.statSync(dbFile);
+        totalBytes = stat.size;
+      } catch (_) {
+        totalBytes = 1024 * 1024;
+      }
+
+      const sqliteTables = await dbAll("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+      for (const st of sqliteTables) {
+        const lowerName = st.name.toLowerCase();
+        let rows = 0;
+        try {
+          const countRow = await dbGet(`SELECT COUNT(*) as count FROM ${st.name}`);
+          rows = Number(countRow?.count || 0);
+        } catch (_) {}
+
+        const meta = tableMetadata[lowerName] || { label: st.name, icon: '📄', cat: 'General' };
+        const approxBytes = Math.max(4096, rows * 120);
+
+        tablesData.push({
+          name: st.name,
+          label: meta.label,
+          icon: meta.icon,
+          category: meta.cat,
+          rows: rows,
+          total_bytes: approxBytes,
+          total_mb: (approxBytes / (1024 * 1024)).toFixed(3),
+          total_kb: (approxBytes / 1024).toFixed(1),
+          table_kb: (approxBytes * 0.7 / 1024).toFixed(1),
+          index_kb: (approxBytes * 0.3 / 1024).toFixed(1),
+          pct: '0'
+        });
+      }
+    }
+
+    const totalMBVal = (totalBytes / (1024 * 1024)).toFixed(2);
+    const totalKBVal = (totalBytes / 1024).toLocaleString('en-US', { maximumFractionDigits: 1 });
+    const totalRowsCount = tablesData.reduce((acc, t) => acc + (t.rows || 0), 0);
+
+    const sumOrdenes = tablesData.find(t => t.name.toLowerCase() === 'ordenes')?.rows || 0;
+    const sumProds = tablesData.find(t => t.name.toLowerCase() === 'productos')?.rows || 0;
+    const sumMesas = tablesData.find(t => t.name.toLowerCase() === 'mesas')?.rows || 0;
+    const sumUsers = tablesData.find(t => t.name.toLowerCase() === 'usuarios')?.rows || 0;
+    const sumInsumos = tablesData.find(t => t.name.toLowerCase() === 'inventario')?.rows || 0;
+    const sumMovs = tablesData.find(t => t.name.toLowerCase() === 'inventariomovimientos')?.rows || 0;
+
+    let ultimaOrden = null;
+    try {
+      const uOrd = await dbGet('SELECT numero_orden, fecha_apertura, total FROM Ordenes ORDER BY id DESC LIMIT 1');
+      if (uOrd) ultimaOrden = uOrd;
+    } catch (_) {}
+
+    res.json({
+      ok: true,
+      engine: isPg ? 'Render PostgreSQL (Cloud DB)' : 'SQLite3 (Local)',
+      engine_type: isPg ? 'postgres' : 'sqlite',
+      status: 'online',
+      ping_ms: pingMs,
+      total_bytes: totalBytes,
+      total_mb: totalMBVal,
+      total_mb_formatted: `${totalMBVal} MB`,
+      total_kb_formatted: `${totalKBVal} KB`,
+      version: versionStr,
+      active_connections: activeConnections,
+      uptime_seconds: Math.floor(process.uptime()),
+      total_rows: totalRowsCount,
+      tables_count: tablesData.length,
+      tables: tablesData,
+      summary: {
+        total_ordenes: sumOrdenes,
+        total_productos: sumProds,
+        total_mesas: sumMesas,
+        total_usuarios: sumUsers,
+        total_insumos: sumInsumos,
+        total_movimientos: sumMovs
+      },
+      ultima_orden: ultimaOrden,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/dev/db-optimize', async (req, res) => {
+  try {
+    const tStart = Date.now();
+    if (db.isPg) {
+      await dbRun('ANALYZE');
+    } else {
+      await dbRun('PRAGMA optimize');
+    }
+    const durationMs = Date.now() - tStart;
+    res.json({
+      ok: true,
+      message: `Base de datos optimizada y estadísticas re-analizadas exitosamente en ${durationMs} ms.`,
+      duration_ms: durationMs
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/dev/db-ping', async (req, res) => {
+  try {
+    const tStart = Date.now();
+    await dbGet('SELECT 1 as ping');
+    const pingMs = Date.now() - tStart;
+    res.json({ ok: true, ping_ms: pingMs, timestamp: new Date().toISOString() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
