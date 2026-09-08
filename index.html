@@ -1150,7 +1150,9 @@
               <div class="stat-row"><span id="lblCajaVentasSinpe">Ventas con SINPE Móvil:</span><strong id="cajaVentasSinpe">₡ 0</strong></div>
               <div class="stat-row"><span id="lblCajaEntradas">Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0</strong></div>
               <div class="stat-row"><span id="lblCajaSalidas">Salidas / Gastos Menores (-):</span><strong id="cajaSalidasTotal" style="color:#f87171;">-₡ 0</strong></div>
-              <div class="stat-row total"><span id="lblCajaTotalEfectivo">Total Esperado en Gaveta (₡):</span><strong id="cajaTotalEfectivo">₡ 50,000</strong></div>
+              <div class="stat-row" style="border-top: 1px dashed #334155; padding-top: 6px;"><span id="lblCajaTotalEsperadoEfectivo">Total Esperado en Efectivo (₡):</span><strong id="cajaTotalEsperadoEfectivo" style="color:#34d399;">₡ 50,000</strong></div>
+              <div class="stat-row"><span id="lblCajaTotalEsperadoDolares">Total Esperado en Dólares ($ USD):</span><strong id="cajaTotalEsperadoDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong></div>
+              <div class="stat-row total" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 12px; margin-top: 6px;"><span id="lblCajaTotalEfectivo" style="font-weight:800; color:#fbbf24;">Total General en Gaveta (₡ con Dólares):</span><strong id="cajaTotalEfectivo" style="font-size:1.15rem; color:#34d399;">₡ 50,000</strong></div>
             </div>
             
             <div class="caja-actions-grid">
@@ -4238,18 +4240,38 @@
             <strong id="czTotalSalidas" style="color:#f87171;">-₡ 0</strong>
           </div>
           <div style="height:1px; background:#374151; margin:8px 0;"></div>
-          <div style="display:flex; justify-content:space-between; font-size:1rem; font-weight:800; color:#fbbf24;">
-            <span id="lblCzTotalEsperado">Total Esperado en Gaveta (₡):</span>
-            <strong id="czTotalEsperado">₡ 0</strong>
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.88rem; color:#94a3b8;">
+            <span>Esperado en Efectivo (₡):</span>
+            <strong id="czEsperadoEfectivoCRC" style="color:#34d399;">₡ 0</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.88rem; color:#94a3b8;">
+            <span>Esperado en Dólares ($ USD):</span>
+            <strong id="czEsperadoDolaresUSD" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; color:#fbbf24; background:rgba(251,191,36,0.1); padding:8px 10px; border-radius:6px; border:1px solid rgba(251,191,36,0.25);">
+            <span id="lblCzTotalEsperado">Total General en Gaveta (₡ con USD):</span>
+            <strong id="czTotalEsperado" style="color:#fbbf24;">₡ 0</strong>
           </div>
         </div>
 
-        <!-- Input de Conteo Físico Real -->
-        <div class="field-row" style="margin-bottom: 14px;">
-          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.92rem; color:#f8fafc;">
-            💵 Efectivo Real Contado en Gaveta (₡ CRC): <span style="color:#ef4444;">*</span>
-          </label>
-          <input type="number" id="txtCierreZEfectivoReal" min="0" step="any" placeholder="Ingresa el monto total contado..." oninput="calcularDiferenciaCierreZ()" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.15rem; font-weight:800; border:2px solid #38bdf8; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
+        <!-- Inputs de Conteo Físico Real (Colones y Dólares) -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 12px;">
+          <div class="field-row">
+            <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.86rem; color:#f8fafc;">
+              💵 Colones en Gaveta (₡): <span style="color:#ef4444;">*</span>
+            </label>
+            <input type="number" id="txtCierreZEfectivoReal" min="0" step="any" placeholder="0" oninput="calcularDiferenciaCierreZ()" class="select-styled" style="width:100%; padding:10px 12px; font-size:1.05rem; font-weight:800; border:2px solid #34d399; background:#111827; color:#34d399; border-radius:8px; outline:none;" />
+          </div>
+          <div class="field-row">
+            <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.86rem; color:#f8fafc;">
+              💲 Dólares en Gaveta ($):
+            </label>
+            <input type="number" id="txtCierreZDolaresReal" min="0" step="any" placeholder="0.00" oninput="calcularDiferenciaCierreZ()" class="select-styled" style="width:100%; padding:10px 12px; font-size:1.05rem; font-weight:800; border:2px solid #38bdf8; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
+          </div>
+        </div>
+        <div style="margin-bottom:12px; font-size:0.78rem; color:#94a3b8; display:flex; justify-content:space-between;">
+          <span id="czTipoCambioInfo">💱 Tipo de Cambio: ₡520 / $1 USD</span>
+          <span id="czTotalContadoCombinado" style="font-weight:700; color:#f8fafc;">Total Contado: ₡ 0</span>
         </div>
 
         <!-- Indicador de Diferencia / Cuadre en Vivo -->

@@ -5744,6 +5744,9 @@ function renderSalón(filtroZona = null) {
           <ul class="mesa-tooltip-list">
             ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')}
           </ul>
+          <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px; display:flex; gap:6px;">
+            <button onclick="event.stopPropagation(); window.liberarMesaId(${m.id})" class="btn-tool" style="width:100%; background:rgba(239,68,68,0.25); border:1px solid #ef4444; color:#fca5a5; padding:5px 8px; border-radius:6px; font-size:0.75rem; font-weight:700; cursor:pointer;">🔓 Liberar Mesa ${m.orden_total > 0 ? '(PIN)' : '(₡0)'}</button>
+          </div>
         </div>
       `;
 
@@ -6841,6 +6844,9 @@ async function abrirComanderoMesa(mesaId) {
   if (btnResetMesa) {
     const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre') || (mesa.orden_total > 0));
     btnResetMesa.style.display = tieneCuentaOcupada ? 'inline-flex' : 'none';
+    const esSaldoCero = !mesa.orden_total || Number(mesa.orden_total) === 0;
+    btnResetMesa.innerHTML = esSaldoCero ? '🔓 Liberar Mesa' : '⚠️ Liberar Mesa (PIN)';
+    btnResetMesa.title = esSaldoCero ? 'Liberar mesa pagada y dejar disponible' : 'Liberar mesa con saldo pendiente (Requiere PIN de Administrador)';
   }
 
   const modCom = document.getElementById('modalComandero');
@@ -6872,76 +6878,129 @@ if (btnCloseComEl) {
   btnCloseComEl.addEventListener('click', window.cerrarComandero);
 }
 
-window.resetearMesaActualComandero = async function() {
-  const mesa = estado.mesaActiva;
-  if (!mesa) return;
-
+window.liberarMesaId = async function(mesaId) {
+  const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(mesaId)) || (estado.mesaActiva?.id === Number(mesaId) ? estado.mesaActiva : null) || { id: Number(mesaId), numero: `Mesa ${mesaId}`, orden_total: 0 };
   const mesaNom = mesa.numero || `Mesa ${mesa.id}`;
+  const totalMesa = Number(mesa.orden_total) || 0;
+  let pinAutorizado = null;
+
+  if (totalMesa > 0) {
+    const uAct = estado.usuarioActual || estado.usuario;
+    const esAdmin = uAct && (uAct.rol === 'admin' || uAct.rol === 'developer');
+    if (!esAdmin) {
+      pinAutorizado = await window.solicitarPinAdmin({
+        icono: '⚠️',
+        titulo: 'Autorización: Liberar Mesa con Saldo',
+        subtitulo: `La mesa "${mesaNom}" tiene un saldo pendiente de ${formatCRC(totalMesa)}`,
+        mensaje: 'Ingresa el PIN de Administrador/Supervisor para anular el saldo pendiente y liberar la mesa.'
+      });
+      if (!pinAutorizado) return;
+    }
+  }
+
   const confirmado = await confirmarAccion({
-    icono: '🔄',
-    titulo: '¿Liberar y limpiar mesa?',
-    subtitulo: `Esta acción cancelará cualquier cuenta abierta o trabada en "${mesaNom}"`,
-    mensaje: `¿Estás seguro de que deseas liberar "${mesaNom}"? Se cerrarán las órdenes activas y la mesa quedará totalmente en ₡0 y disponible para nuevos clientes.`,
-    tipo: 'peligro',
-    txtSi: '🔄 Sí, liberar mesa',
+    icono: '🔓',
+    titulo: `¿Liberar ${mesaNom}?`,
+    subtitulo: totalMesa > 0 ? `Se anulará la cuenta pendiente de ${formatCRC(totalMesa)}` : 'La mesa quedará libre y disponible para nuevos clientes',
+    mensaje: totalMesa > 0
+      ? `¿Estás seguro de forzar la liberación de "${mesaNom}"? Se anulará el saldo pendiente de ${formatCRC(totalMesa)}.`
+      : `¿Deseas liberar "${mesaNom}"? La mesa quedará disponible en verde.`,
+    tipo: totalMesa > 0 ? 'peligro' : 'info',
+    txtSi: '🔓 Sí, liberar mesa',
     txtNo: 'Cancelar'
   });
   if (!confirmado) return;
 
   try {
-    const uAct = estado.usuarioActual || estado.usuario;
-    const userRol = (uAct && (uAct.rol === 'admin' || uAct.rol === 'developer')) ? uAct.rol : 'admin';
-    const res = await fetch(`/api/mesas/${mesa.id}/reset`, {
+    const headers = { 'Content-Type': 'application/json' };
+    if (pinAutorizado) headers['x-supervisor-pin'] = pinAutorizado;
+
+    const res = await fetch(`/api/mesas/${mesa.id}/liberar`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-rol': userRol
-      }
+      headers,
+      body: JSON.stringify({
+        pinAutorizado,
+        usuarioNombre: estado.usuarioActual?.nombre || 'Personal'
+      })
     });
 
     const data = await res.json();
     if (!res.ok) {
+      if (data.requierePin) {
+        const pinReintentar = await window.solicitarPinAdmin({
+          icono: '⚠️',
+          titulo: 'PIN Requerido',
+          subtitulo: data.error,
+          mensaje: 'Ingresa el PIN de Administrador para confirmar la liberación.'
+        });
+        if (pinReintentar) {
+          const res2 = await fetch(`/api/mesas/${mesa.id}/liberar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-supervisor-pin': pinReintentar },
+            body: JSON.stringify({ pinAutorizado: pinReintentar })
+          });
+          const data2 = await res2.json();
+          if (res2.ok) {
+            return await procesarExitoLiberacionMesa(mesa, mesaNom);
+          } else {
+            alert('❌ ' + (data2.error || 'No se pudo liberar la mesa'));
+            return;
+          }
+        }
+      }
       alert('❌ ' + (data.error || 'No se pudo liberar la mesa'));
       return;
     }
 
-    if (window.PosOfflineDB) {
-      await window.PosOfflineDB.limpiarOrdenMesa(mesa.id).catch(() => {});
-    }
-
-    mesa.estado = 'libre';
-    mesa.cliente = null;
-    mesa.mesa_cliente = null;
-    mesa.items = [];
-    mesa.orden_id = null;
-    mesa.orden_activa_id = null;
-    mesa.orden_total = 0;
-    mesa.pidio_cuenta_qr = 0;
-    mesa.platos_pendientes = [];
-    mesa.items_pendientes = [];
-
-    // Limpiar también en el array global estado.mesas
-    const mesaEnEstado = (estado.mesas || []).find(m => Number(m.id) === Number(mesa.id));
-    if (mesaEnEstado) {
-      mesaEnEstado.estado = 'libre';
-      mesaEnEstado.cliente = null;
-      mesaEnEstado.mesa_cliente = null;
-      mesaEnEstado.orden_total = 0;
-      mesaEnEstado.orden_activa_id = null;
-      mesaEnEstado.items = [];
-      mesaEnEstado.platos_pendientes = [];
-      mesaEnEstado.items_pendientes = [];
-    }
-
-    document.getElementById('modalComandero').classList.remove('active');
-    mostrarNotificacionCentro(`🔄 "${mesaNom}" liberada y en ₡0 con éxito`, 'success');
-    await cargarMesasDesdeBackend();
-    if (typeof cargarKDSDesdeBackend === 'function') {
-      cargarKDSDesdeBackend();
-    }
+    await procesarExitoLiberacionMesa(mesa, mesaNom);
   } catch (e) {
     alert('❌ Error al liberar mesa: ' + e.message);
   }
+};
+
+async function procesarExitoLiberacionMesa(mesa, mesaNom) {
+  if (window.PosOfflineDB) {
+    await window.PosOfflineDB.limpiarOrdenMesa(mesa.id).catch(() => {});
+  }
+
+  mesa.estado = 'libre';
+  mesa.cliente = null;
+  mesa.mesa_cliente = null;
+  mesa.items = [];
+  mesa.orden_id = null;
+  mesa.orden_activa_id = null;
+  mesa.orden_total = 0;
+  mesa.pidio_cuenta_qr = 0;
+  mesa.platos_pendientes = [];
+  mesa.items_pendientes = [];
+
+  const mesaEnEstado = (estado.mesas || []).find(m => Number(m.id) === Number(mesa.id));
+  if (mesaEnEstado) {
+    mesaEnEstado.estado = 'libre';
+    mesaEnEstado.cliente = null;
+    mesaEnEstado.mesa_cliente = null;
+    mesaEnEstado.orden_total = 0;
+    mesaEnEstado.orden_activa_id = null;
+    mesaEnEstado.items = [];
+    mesaEnEstado.platos_pendientes = [];
+    mesaEnEstado.items_pendientes = [];
+  }
+
+  const modCom = document.getElementById('modalComandero');
+  if (modCom && modCom.classList.contains('active') && estado.mesaActiva?.id === mesa.id) {
+    modCom.classList.remove('active');
+  }
+
+  mostrarNotificacionCentro(`🔓 "${mesaNom}" liberada con éxito`, 'success');
+  await cargarMesasDesdeBackend();
+  if (typeof cargarKDSDesdeBackend === 'function') {
+    cargarKDSDesdeBackend();
+  }
+}
+
+window.resetearMesaActualComandero = async function() {
+  if (!estado.mesaActiva) return;
+  return window.liberarMesaId(estado.mesaActiva.id);
 };
 
 function renderTicketItems() {
@@ -7721,7 +7780,10 @@ async function cargarCajaDesdeBackend() {
       });
 
       const fondo = data.caja.monto_inicial || 0;
-      const totalEsperado = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
+      const totalEsperadoEfectivo = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
+      const totalEsperadoDolaresUSD = dolaresUSD;
+      const totalEsperadoDolaresCRC = dolaresCRC;
+      const totalGeneralGavetaCRC = Math.round((totalEsperadoEfectivo + totalEsperadoDolaresCRC) * 100) / 100;
 
       const elFondo = document.getElementById('cajaFondoInicial');
       if (elFondo) elFondo.textContent = formatCRC(fondo);
@@ -7741,8 +7803,16 @@ async function cargarCajaDesdeBackend() {
       const elSinpe = document.getElementById('cajaVentasSinpe');
       if (elSinpe) elSinpe.textContent = formatCRC(sinpe);
 
+      const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
+      if (elEspEf) elEspEf.textContent = formatCRC(totalEsperadoEfectivo);
+
+      const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
+      if (elEspDol) {
+        elEspDol.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
+      }
+
       const elTotEf = document.getElementById('cajaTotalEfectivo');
-      if (elTotEf) elTotEf.textContent = formatCRC(totalEsperado);
+      if (elTotEf) elTotEf.textContent = formatCRC(totalGeneralGavetaCRC);
 
       const elCajero = document.getElementById('cajeroTurnoNombre');
       if (elCajero) elCajero.textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
@@ -7757,12 +7827,20 @@ async function cargarCajaDesdeBackend() {
         ventasDolaresUSD: dolaresUSD,
         totalEntradas: entradas,
         totalSalidas: salidas,
-        totalEsperado,
+        totalEsperadoEfectivo,
+        totalEsperadoDolaresUSD,
+        totalEsperadoDolaresCRC,
+        totalGeneralGavetaCRC,
+        totalEsperado: totalGeneralGavetaCRC,
         movimientos: data.movimientos || []
       };
     } else {
       const elFondo = document.getElementById('cajaFondoInicial');
       if (elFondo) elFondo.textContent = 'CERRADA';
+      const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
+      if (elEspEf) elEspEf.textContent = '₡ 0.00';
+      const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
+      if (elEspDol) elEspDol.textContent = '$ 0.00 (₡ 0)';
       const elTotEf = document.getElementById('cajaTotalEfectivo');
       if (elTotEf) elTotEf.textContent = '₡ 0.00';
       const elVentasEf = document.getElementById('cajaVentasEfectivo');
@@ -8106,14 +8184,29 @@ window.abrirModalCierreZ = async function() {
     const modal = document.getElementById('modalCierreZ');
     if (!modal) return;
 
-    const txtEsperado = document.getElementById('czTotalEsperado') || document.getElementById('txtCierreZEsperado');
-    const txtReal = document.getElementById('txtCierreZEfectivoReal');
+    const txtEsperadoCRC = document.getElementById('czEsperadoEfectivoCRC');
+    const txtEsperadoUSD = document.getElementById('czEsperadoDolaresUSD');
+    const txtEsperadoTotal = document.getElementById('czTotalEsperado') || document.getElementById('txtCierreZEsperado');
+    const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+    const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
     const txtNotas = document.getElementById('txtCierreZNotas');
 
-    if (txtEsperado) txtEsperado.textContent = formatCRC(data.efectivo_esperado || 0);
-    if (txtReal) {
-      txtReal.value = '';
-      txtReal.placeholder = '0.00';
+    const espCRC = Number(data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : (data.efectivo_esperado || 0));
+    const espUSD = Number(data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0));
+    const espDolCRC = Number(data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0));
+    const espTotal = Number(data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : (espCRC + espDolCRC));
+
+    if (txtEsperadoCRC) txtEsperadoCRC.textContent = formatCRC(espCRC);
+    if (txtEsperadoUSD) txtEsperadoUSD.textContent = `$ ${espUSD.toFixed(2)} (${formatCRC(espDolCRC)})`;
+    if (txtEsperadoTotal) txtEsperadoTotal.textContent = formatCRC(espTotal);
+
+    if (txtRealCRC) {
+      txtRealCRC.value = '';
+      txtRealCRC.placeholder = '0';
+    }
+    if (txtRealUSD) {
+      txtRealUSD.value = '';
+      txtRealUSD.placeholder = '0.00';
     }
     if (txtNotas) txtNotas.value = '';
 
@@ -8125,9 +8218,7 @@ window.abrirModalCierreZ = async function() {
 
     const elVentasDolares = document.getElementById('czVentasDolares');
     if (elVentasDolares) {
-      const dUSD = Number(data.ventas?.dolares_usd) || (Number(data.ventas?.dolares) ? Number(data.ventas.dolares) / 520 : 0);
-      const dCRC = Number(data.ventas?.dolares) || 0;
-      elVentasDolares.textContent = `$ ${dUSD.toFixed(2)} (${formatCRC(dCRC)})`;
+      elVentasDolares.textContent = `$ ${espUSD.toFixed(2)} (${formatCRC(espDolCRC)})`;
     }
 
     const elVentasTarj = document.getElementById('czVentasTarjeta');
@@ -8142,18 +8233,26 @@ window.abrirModalCierreZ = async function() {
     const elSalidas = document.getElementById('czTotalSalidas') || document.getElementById('cierreZSalidas');
     if (elSalidas) elSalidas.textContent = `-${formatCRC(data.total_salidas || 0)}`;
 
+    const tcActual = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || (espUSD > 0 ? Math.round(espDolCRC / espUSD) : 520);
+    window._tcActualCierreZ = tcActual;
+    const elTC = document.getElementById('czTipoCambioInfo');
+    if (elTC) elTC.textContent = `💱 Tipo de Cambio: ₡${tcActual} / $1 USD`;
+
+    const elTotalComb = document.getElementById('czTotalContadoCombinado');
+    if (elTotalComb) elTotalComb.textContent = `Total Contado: ₡ 0`;
+
     const elDiferencia = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
     if (elDiferencia) {
       elDiferencia.style.display = 'block';
       elDiferencia.style.background = 'rgba(30,41,59,0.5)';
       elDiferencia.style.borderColor = '#334155';
       elDiferencia.style.color = '#94a3b8';
-      elDiferencia.innerHTML = '⚖️ Ingresa el monto contado para calcular la diferencia de arqueo.';
+      elDiferencia.innerHTML = '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.';
     }
 
     modal.classList.add('active');
     setTimeout(() => {
-      if (txtReal) txtReal.focus();
+      if (txtRealCRC) txtRealCRC.focus();
     }, 100);
   } catch (e) {
     alert('❌ Error al preparar Cierre Z: ' + e.message);
@@ -8168,73 +8267,100 @@ window.cerrarModalCierreZ = function() {
 
 window.calcularDiferenciaCierreZ = window.calcularDiferenciaArqueoCierreZ = function() {
   if (!window._datosCierreZPrecargados) return;
-  const txtReal = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
   const box = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
-  if (!txtReal || !box) return;
+  if (!box) return;
 
-  const realVal = parseFloat(txtReal.value);
-  if (isNaN(realVal)) {
+  const realCRC = parseFloat(txtRealCRC?.value || 0) || 0;
+  const realUSD = parseFloat(txtRealUSD?.value || 0) || 0;
+  const tc = window._tcActualCierreZ || 520;
+  const realUSDEnCRC = Math.round(realUSD * tc);
+  const totalContadoCombinado = Math.round(realCRC + realUSDEnCRC);
+
+  const elTotalComb = document.getElementById('czTotalContadoCombinado');
+  if (elTotalComb) {
+    elTotalComb.textContent = `Total Contado: ${formatCRC(totalContadoCombinado)} (${formatCRC(realCRC)} + $${realUSD.toFixed(2)})`;
+  }
+
+  const data = window._datosCierreZPrecargados;
+  const espCRC = Number(data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : (data.efectivo_esperado || 0));
+  const espUSD = Number(data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0));
+  const espDolCRC = Number(data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0));
+  const espTotal = Number(data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : (espCRC + espDolCRC));
+
+  if (txtRealCRC?.value === '' && txtRealUSD?.value === '') {
     box.style.display = 'block';
     box.style.background = 'rgba(30,41,59,0.5)';
     box.style.borderColor = '#334155';
     box.style.color = '#94a3b8';
-    box.innerHTML = '⚖️ Ingresa el monto contado para calcular la diferencia de arqueo.';
+    box.innerHTML = '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.';
     return;
   }
 
-  const esperado = Number(window._datosCierreZPrecargados.efectivo_esperado) || 0;
-  const diff = Math.round((realVal - esperado) * 100) / 100;
+  const diffTotal = Math.round((totalContadoCombinado - espTotal) * 100) / 100;
+  const diffCRC = Math.round((realCRC - espCRC) * 100) / 100;
+  const diffUSD = Math.round((realUSD - espUSD) * 100) / 100;
 
   box.style.display = 'block';
-  if (diff === 0) {
+  let badgeHtml = '';
+  if (diffTotal === 0) {
     box.style.background = 'rgba(16, 185, 129, 0.2)';
     box.style.borderColor = '#10b981';
     box.style.color = '#6ee7b7';
-    box.innerHTML = '✨ <strong>¡Caja Cuadrada Exacta!</strong> (Diferencia: ₡0.00)';
-  } else if (diff > 0) {
+    badgeHtml = '✨ <strong>¡Caja Cuadrada Exacta!</strong> (Diferencia: ₡0.00)';
+  } else if (diffTotal > 0) {
     box.style.background = 'rgba(59, 130, 246, 0.2)';
     box.style.borderColor = '#3b82f6';
     box.style.color = '#93c5fd';
-    box.innerHTML = `🟢 <strong>Sobrante en Caja:</strong> +${formatCRC(diff)} (El cajero tiene más dinero del esperado)`;
+    badgeHtml = `🟢 <strong>Sobrante Total en Gaveta:</strong> +${formatCRC(diffTotal)}`;
   } else {
     box.style.background = 'rgba(239, 68, 68, 0.2)';
     box.style.borderColor = '#dc2626';
     box.style.color = '#f87171';
-    box.innerHTML = `🔴 <strong>Faltante en Caja:</strong> -${formatCRC(Math.abs(diff))} (Falta dinero según las ventas registradas)`;
+    badgeHtml = `🔴 <strong>Faltante Total en Gaveta:</strong> -${formatCRC(Math.abs(diffTotal))}`;
   }
+
+  const detalleCRC = diffCRC === 0 ? '₡ 0' : (diffCRC > 0 ? `+${formatCRC(diffCRC)}` : `-${formatCRC(Math.abs(diffCRC))}`);
+  const detalleUSD = diffUSD === 0 ? '$ 0.00' : (diffUSD > 0 ? `+$${diffUSD.toFixed(2)}` : `-$${Math.abs(diffUSD).toFixed(2)}`);
+
+  box.innerHTML = `
+    <div>${badgeHtml}</div>
+    <div style="font-size:0.8rem; margin-top:4px; opacity:0.9;">
+      <span>• Colones: <strong>${detalleCRC}</strong></span> &nbsp;|&nbsp; 
+      <span>• Dólares: <strong>${detalleUSD}</strong></span>
+    </div>
+  `;
 };
 
 window.ejecutarCierreZ = async function() {
-  const txtReal = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
   const txtNotas = document.getElementById('txtCierreZNotas');
 
-  const realVal = txtReal ? txtReal.value : '';
-  if (realVal === '') {
-    alert('Por favor ingresa el monto de efectivo real contado en la gaveta.');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa el monto de efectivo real contado en la gaveta.', 'warning');
-    if (txtReal) txtReal.focus();
+  const valCRC = txtRealCRC ? txtRealCRC.value.trim() : '';
+  const valUSD = txtRealUSD ? txtRealUSD.value.trim() : '';
+
+  if (valCRC === '' && valUSD === '') {
+    alert('Por favor ingresa el dinero físico contado en la gaveta (Colones y/o Dólares).');
+    mostrarNotificacionCentro('⚠️ Por favor ingresa el monto contado en la gaveta.', 'warning');
+    if (txtRealCRC) txtRealCRC.focus();
     return;
   }
 
-  const efectivo_real_contado = parseFloat(realVal);
-  if (isNaN(efectivo_real_contado) || efectivo_real_contado < 0) {
-    alert('Por favor ingresa un monto válido.');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa un monto válido.', 'warning');
-    if (txtReal) txtReal.focus();
-    return;
-  }
+  const realCRC = parseFloat(valCRC || 0) || 0;
+  const realUSD = parseFloat(valUSD || 0) || 0;
+  const tc = window._tcActualCierreZ || 520;
+  const totalContadoCRC = Math.round(realCRC + (realUSD * tc));
 
   const notas = txtNotas ? txtNotas.value.trim() : '';
   const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
 
-  if (!confirm('⚠️ ¿Estás seguro de realizar el CIERRE Z DEFINITIVO del turno? Esta acción cerrará la caja en el sistema e imprimirá el reporte oficial final.')) {
-    return;
-  }
   const confirmarCierre = await window.confirmarAccion({
     icono: '🔒',
     titulo: '¿Ejecutar Cierre Z Definitivo?',
     subtitulo: 'Cierre oficial de turno y arqueo de caja',
-    mensaje: '¿Estás seguro de realizar el CIERRE Z DEFINITIVO del turno? Esta acción cerrará la caja en el sistema, registrará el arqueo contable e imprimirá el reporte oficial final.',
+    mensaje: `¿Estás seguro de realizar el CIERRE Z DEFINITIVO? Total contado: ${formatCRC(totalContadoCRC)} (${formatCRC(realCRC)} + $${realUSD.toFixed(2)} USD). Esta acción cerrará la caja en el sistema e imprimirá el reporte final.`,
     txtSi: '🔒 Sí, Cerrar Turno',
     txtNo: 'Cancelar',
     tipo: 'peligro'
@@ -8247,7 +8373,11 @@ window.ejecutarCierreZ = async function() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
       body: JSON.stringify({
-        efectivo_real_contado,
+        efectivo_real_contado: totalContadoCRC,
+        efectivo_real_contado_crc: realCRC,
+        dolares_real_contado: realUSD,
+        dolares_real_contado_usd: realUSD,
+        tipo_cambio: tc,
         notas,
         usuarioNombre,
         adminPin: window._adminPinCierreZ || '1234',

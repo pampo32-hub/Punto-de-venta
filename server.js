@@ -97,7 +97,9 @@ db.serialize(() => {
   db.run("ALTER TABLE Pagos ADD COLUMN tipo_cambio REAL DEFAULT 1", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN monto_usd REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_dolares REAL DEFAULT 0", () => {});
+  db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
+  db.run("ALTER TABLE Cajas ADD COLUMN monto_final_dolares REAL DEFAULT 0", () => {});
   db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     negocio_id INTEGER DEFAULT 1,
@@ -2155,16 +2157,84 @@ app.post('/api/mesas/:id/cliente', async (req, res) => {
   }
 });
 
-// Liberar mesa ocupada / con saldo 0
+// Liberar mesa: Meseros/Cajeros si saldo es ₡0, o requiere PIN de Admin si hay saldo pendiente
 app.post('/api/mesas/:id/liberar', async (req, res) => {
   try {
     const mesaId = req.params.id;
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
-    const ahora = new Date().toISOString();
-    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [ahora, mesaId]);
+    // 1. Obtener órdenes activas de la mesa para verificar si hay saldo pendiente
+    const ordenesActivas = await dbAll(
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [mesaId]
+    );
 
+    let totalPendiente = 0;
+    const ordenesConSaldo = [];
+    for (const ord of ordenesActivas) {
+      if (ord.estado !== 'pagada' && ord.estado !== 'cerrada') {
+        const monto = Number(ord.total) || 0;
+        if (monto > 0) {
+          totalPendiente += monto;
+          ordenesConSaldo.push(ord);
+        }
+      }
+    }
+
+    const ahora = new Date().toISOString();
+
+    // 2. Si hay saldo pendiente por pagar, exigir permisos de Administrador o PIN válido
+    if (totalPendiente > 0) {
+      const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+      const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
+      const negocioId = obtenerNegocioIdReq(req);
+
+      let autorizado = (rol === 'admin' || rol === 'developer');
+      if (!autorizado && pin) {
+        autorizado = await validarPinAdministrador(pin, negocioId);
+      }
+
+      if (!autorizado) {
+        return res.status(403).json({
+          error: `La mesa "${mesa.numero}" tiene un saldo pendiente de ₡${Math.round(totalPendiente).toLocaleString('es-CR')}. Se requiere PIN de Administrador para liberar la mesa.`,
+          requierePin: true,
+          saldoPendiente: totalPendiente,
+          mesaNumero: mesa.numero
+        });
+      }
+
+      // Autorizado con PIN/Admin: Cancelar órdenes pendientes con registro de auditoría
+      const idsPendientes = ordenesConSaldo.map(o => o.id);
+      if (idsPendientes.length > 0) {
+        const placeholders = idsPendientes.map(() => '?').join(',');
+        await dbRun(
+          `UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Liberación forzada por PIN Admin]' WHERE id IN (${placeholders})`,
+          [ahora, ...idsPendientes]
+        );
+        await dbRun(
+          `UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE orden_id IN (${placeholders}) AND estado_comanda != 'pagado'`,
+          idsPendientes
+        );
+      }
+
+      const usuarioNom = req.usuario?.nombre || req.body?.usuarioNombre || 'Supervisor';
+      await registrarAuditoria({
+        usuarioNombre: usuarioNom,
+        accion: 'liberacion_forzada_mesa',
+        tipoEvento: 'operativo',
+        modulo: 'mesas',
+        detalle: `Liberación forzada con PIN de mesa ${mesa.numero}. Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')}`
+      });
+    }
+
+    // 3. Cerrar cualquier orden remanente ya pagada o sin saldo
+    await dbRun(
+      "UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [ahora, mesaId]
+    );
+
+    // 4. Liberar mesa completamente
     await dbRun(
       "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [mesaId]
@@ -2176,7 +2246,11 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
 
     io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
 
-    res.json({ ok: true, message: `Mesa ${mesa.numero} liberada con éxito.` });
+    res.json({
+      ok: true,
+      message: `Mesa ${mesa.numero} liberada con éxito.`,
+      saldoAnulado: totalPendiente > 0 ? totalPendiente : 0
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -4862,6 +4936,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
 
     const fondoInicial = Number(caja.monto_inicial) || 0;
     const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
+    const totalGeneralEsperadoGaveta = Math.round((efectivoEsperado + ventasDolares) * 100) / 100;
 
     const tipPool = await dbAll(`
       SELECT 
@@ -4903,6 +4978,10 @@ app.get('/api/caja/corte-x', async (req, res) => {
       total_entradas: totalEntradas,
       total_salidas: totalSalidas,
       efectivo_esperado: efectivoEsperado,
+      esperado_efectivo_crc: efectivoEsperado,
+      esperado_dolares_usd: ventasDolaresUSD,
+      esperado_dolares_crc: ventasDolares,
+      total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
       tip_pool: tipPool,
       total_propinas: totalPropinas
     });
@@ -4911,10 +4990,21 @@ app.get('/api/caja/corte-x', async (req, res) => {
   }
 });
 
-// Cierre Z definitivo del turno con arqueo físico de caja
+// Cierre Z definitivo del turno con arqueo físico de caja (Colones y Dólares)
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
-    const { efectivo_real_contado, notas = '', usuarioNombre = 'Cajero', adminPin, pin } = req.body;
+    const {
+      efectivo_real_contado,
+      efectivo_real_contado_crc,
+      dolares_real_contado,
+      dolares_real_contado_usd,
+      tipo_cambio,
+      notas = '',
+      usuarioNombre = 'Cajero',
+      adminPin,
+      pin
+    } = req.body;
+
     const pinVerificar = adminPin || pin || req.headers['x-supervisor-pin'];
     if (pinVerificar) {
       const esValido = await validarPinAdministrador(pinVerificar);
@@ -4923,9 +5013,11 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       }
     }
 
-    const efectivoReal = parseFloat(efectivo_real_contado);
-    if (isNaN(efectivoReal) || efectivoReal < 0) {
-      return res.status(400).json({ error: 'Por favor ingresa un monto válido de efectivo contado en gaveta' });
+    const efectivoRealCRC = parseFloat(efectivo_real_contado_crc != null ? efectivo_real_contado_crc : efectivo_real_contado) || 0;
+    const dolaresRealUSD = parseFloat(dolares_real_contado_usd != null ? dolares_real_contado_usd : (dolares_real_contado || 0)) || 0;
+
+    if (efectivoRealCRC < 0 || dolaresRealUSD < 0 || isNaN(efectivoRealCRC) || isNaN(dolaresRealUSD)) {
+      return res.status(400).json({ error: 'Por favor ingresa montos válidos de efectivo en gaveta' });
     }
 
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
@@ -4978,9 +5070,19 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     });
 
     const fondoInicial = Number(caja.monto_inicial) || 0;
-    const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
-    const diferencia = Math.round((efectivoReal - efectivoEsperado) * 100) / 100;
-    const estadoCuadre = diferencia === 0 ? 'Cuadrada' : (diferencia > 0 ? 'Sobrante' : 'Faltante');
+    const efectivoEsperadoCRC = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
+    const dolaresEsperadoUSD = Math.round(ventasDolaresUSD * 100) / 100;
+    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
+    const totalGeneralEsperadoGavetaCRC = Math.round((efectivoEsperadoCRC + dolaresEsperadoCRC) * 100) / 100;
+
+    const tc = parseFloat(tipo_cambio) || (dolaresEsperadoUSD > 0 ? (dolaresEsperadoCRC / dolaresEsperadoUSD) : 520);
+    const dolaresRealCRC = Math.round(dolaresRealUSD * tc * 100) / 100;
+    const totalRealContadoGavetaCRC = Math.round((efectivoRealCRC + dolaresRealCRC) * 100) / 100;
+
+    const diferenciaCRC = Math.round((efectivoRealCRC - efectivoEsperadoCRC) * 100) / 100;
+    const diferenciaUSD = Math.round((dolaresRealUSD - dolaresEsperadoUSD) * 100) / 100;
+    const diferenciaTotal = Math.round((totalRealContadoGavetaCRC - totalGeneralEsperadoGavetaCRC) * 100) / 100;
+    const estadoCuadre = diferenciaTotal === 0 ? 'Cuadrada' : (diferenciaTotal > 0 ? 'Sobrante' : 'Faltante');
 
     const tipPool = await dbAll(`
       SELECT 
@@ -5000,21 +5102,23 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       UPDATE Cajas SET
         fecha_cierre = ?,
         monto_final_efectivo = ?,
+        monto_final_dolares = ?,
         total_ventas_efectivo = ?,
         total_ventas_tarjeta = ?,
         total_ventas_sinpe = ?,
         total_ventas_dolares = ?,
+        total_ventas_usd = ?,
         total_ventas_transferencia = ?,
         estado = 'cerrada'
       WHERE id = ?
-    `, [ahora, efectivoReal, ventasEfectivo, ventasTarjeta, ventasSinpe, ventasDolares, ventasTransferencia, caja.id]);
+    `, [ahora, efectivoRealCRC, dolaresRealUSD, ventasEfectivo, ventasTarjeta, ventasSinpe, ventasDolares, ventasDolaresUSD, ventasTransferencia, caja.id]);
 
     await registrarAuditoria({
       usuarioNombre,
       accion: 'cierre_z',
       tipoEvento: 'financiero',
       modulo: 'caja',
-      detalle: `Cierre Z Turno #${caja.id}. Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp: ₡${efectivoEsperado.toLocaleString('es-CR')} | Contado: ₡${efectivoReal.toLocaleString('es-CR')} (${estadoCuadre}: ₡${Math.abs(diferencia).toLocaleString('es-CR')})`
+      detalle: `Cierre Z Turno #${caja.id}. Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Esp USD: $${dolaresEsperadoUSD} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} + $${dolaresRealUSD} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`
     });
 
     io.emit('caja_actualizada');
@@ -5027,6 +5131,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       fecha_apertura: caja.fecha_apertura,
       fecha_cierre: ahora,
       fondo_inicial: fondoInicial,
+      tipo_cambio: tc,
       ventas: {
         efectivo: ventasEfectivo,
         tarjeta: ventasTarjeta,
@@ -5041,9 +5146,20 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       movimientos_detalle: movimientos,
       total_entradas: totalEntradas,
       total_salidas: totalSalidas,
-      efectivo_esperado: efectivoEsperado,
-      efectivo_real_contado: efectivoReal,
-      diferencia: diferencia,
+      efectivo_esperado: efectivoEsperadoCRC,
+      esperado_efectivo_crc: efectivoEsperadoCRC,
+      esperado_dolares_usd: dolaresEsperadoUSD,
+      esperado_dolares_crc: dolaresEsperadoCRC,
+      total_general_esperado_gaveta_crc: totalGeneralEsperadoGavetaCRC,
+      efectivo_real_contado: totalRealContadoGavetaCRC,
+      efectivo_real_contado_crc: efectivoRealCRC,
+      dolares_real_contado_usd: dolaresRealUSD,
+      dolares_real_contado_crc: dolaresRealCRC,
+      total_real_contado_gaveta_crc: totalRealContadoGavetaCRC,
+      diferencia: diferenciaTotal,
+      diferencia_crc: diferenciaCRC,
+      diferencia_usd: diferenciaUSD,
+      diferencia_total: diferenciaTotal,
       estado_cuadre: estadoCuadre,
       tip_pool: tipPool,
       total_propinas: totalPropinas,
