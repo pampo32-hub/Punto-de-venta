@@ -3771,10 +3771,14 @@
         <!-- PANEL 5: PAGO MIXTO / COMBINADO -->
         <div id="cobroMixtoPanel" class="pay-panel">
           <!-- Accesos rápidos / atajos mixto -->
-          <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
-            <button type="button" class="btn-sec" id="btnSplitMixto5050Tarj" data-action="split-efec-tarj" onclick="splitMixto5050('efectivo', 'tarjeta')" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; background:#1e293b; color:#93c5fd; border:1px solid #3b82f6;">⚡ 50% Efec / 50% Tarj</button>
-            <button type="button" class="btn-sec" id="btnSplitMixto5050Sinpe" data-action="split-efec-sinpe" onclick="splitMixto5050('efectivo', 'sinpe')" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; background:#1e293b; color:#6ee7b7; border:1px solid #10b981;">⚡ 50% Efec / 50% SINPE</button>
-            <button type="button" class="btn-sec" id="btnLimpiarMixto" data-action="limpiar-mixto" onclick="limpiarCamposMixto()" style="font-size:0.75rem; padding:4px 8px; border-radius:6px; background:#1e293b; color:#fca5a5; border:1px solid #ef4444; margin-left:auto;">🧹 Limpiar</button>
+          <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">
+            <button type="button" class="btn-sec" id="btnSplitMixto5050Tarj" data-action="split-efec-tarj" onclick="splitMixto5050('efectivo', 'tarjeta')" style="font-size:0.75rem; padding:5px 9px; border-radius:6px; background:#1e293b; color:#93c5fd; border:1px solid #3b82f6; cursor:pointer;">⚡ 50% Efec / 50% Tarj</button>
+            <button type="button" class="btn-sec" id="btnSplitMixto5050Sinpe" data-action="split-efec-sinpe" onclick="splitMixto5050('efectivo', 'sinpe')" style="font-size:0.75rem; padding:5px 9px; border-radius:6px; background:#1e293b; color:#6ee7b7; border:1px solid #10b981; cursor:pointer;">⚡ 50% Efec / 50% SINPE</button>
+            <button type="button" class="btn-sec" id="btnLimpiarMixto" data-action="limpiar-mixto" onclick="limpiarCamposMixto()" style="font-size:0.75rem; padding:5px 9px; border-radius:6px; background:#1e293b; color:#fca5a5; border:1px solid #ef4444; margin-left:auto; cursor:pointer;">🧹 Limpiar</button>
+          </div>
+
+          <div id="cobroMixtoHint" style="font-size:0.8rem; color:#93c5fd; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:6px; padding:6px 10px; margin-bottom:10px;">
+            💡 Digita el monto en un método o haz clic en <strong>⚡ Cubrir Resto</strong> para autoasignar el saldo.
           </div>
 
           <div class="mixto-matrix-grid">
@@ -3783,7 +3787,7 @@
               <span class="mixto-label">💵 Efectivo (₡):</span>
               <div class="mixto-input-wrap">
                 <input type="number" id="txtMixtoEfectivo" placeholder="0" class="mixto-calc-trigger" />
-                <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoEfectivo" data-cubrir="efectivo" onclick="autoAsignarRestanteMixto('efectivo')">Cubrir</button>
+                <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoEfectivo" data-cubrir="efectivo" onclick="autoAsignarRestanteMixto('efectivo')">⚡ Cubrir</button>
               </div>
             </div>
             <!-- Tarjeta -->
@@ -3792,7 +3796,7 @@
                 <span class="mixto-label">💳 Tarjeta (₡):</span>
                 <div class="mixto-input-wrap">
                   <input type="number" id="txtMixtoTarjeta" placeholder="0" class="mixto-calc-trigger" />
-                  <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoTarjeta" data-cubrir="tarjeta" onclick="autoAsignarRestanteMixto('tarjeta')">Cubrir</button>
+                  <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoTarjeta" data-cubrir="tarjeta" onclick="autoAsignarRestanteMixto('tarjeta')">⚡ Cubrir</button>
                 </div>
               </div>
               <input type="text" id="txtMixtoTarjetaRef" placeholder="Ref/Voucher Tarjeta (Opcional)" style="padding:4px 8px; font-size:0.8rem; background:#1e293b; border:1px solid #374151; border-radius:4px; color:#cbd5e1;" />
@@ -3803,7 +3807,7 @@
                 <span class="mixto-label">📱 SINPE (₡):</span>
                 <div class="mixto-input-wrap">
                   <input type="number" id="txtMixtoSinpe" placeholder="0" class="mixto-calc-trigger" />
-                  <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoSinpe" data-cubrir="sinpe" onclick="autoAsignarRestanteMixto('sinpe')">Cubrir</button>
+                  <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoSinpe" data-cubrir="sinpe" onclick="autoAsignarRestanteMixto('sinpe')">⚡ Cubrir</button>
                 </div>
               </div>
               <input type="text" id="txtMixtoSinpeRef" placeholder="Comprobante / Tel SINPE (Opcional)" style="padding:4px 8px; font-size:0.8rem; background:#1e293b; border:1px solid #374151; border-radius:4px; color:#cbd5e1;" />
@@ -3816,7 +3820,7 @@
               </div>
               <div class="mixto-input-wrap">
                 <input type="number" id="txtMixtoUSD" placeholder="$ 0.00" step="1" class="mixto-calc-trigger" />
-                <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoUSD" data-cubrir="usd" onclick="autoAsignarRestanteMixto('usd')">Cubrir</button>
+                <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoUSD" data-cubrir="usd" onclick="autoAsignarRestanteMixto('usd')">⚡ Cubrir</button>
               </div>
             </div>
           </div>

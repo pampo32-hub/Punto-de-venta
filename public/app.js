@@ -8753,6 +8753,9 @@ function calcularPagoMixto() {
   const elRestLbl = document.getElementById('cobroMixtoRestanteLabel');
   const elRestVal = document.getElementById('cobroMixtoRestanteDisplay');
   const badge = document.getElementById('cobroMixtoEstadoBadge');
+  const hint = document.getElementById('cobroMixtoHint');
+
+  const faltante = Math.max(0, totalCRC - totalAsignado);
 
   if (totalAsignado >= totalCRC && totalCRC > 0) {
     const vuelto = totalAsignado - totalCRC;
@@ -8777,8 +8780,13 @@ function calcularPagoMixto() {
         badge.style.color = '#34d399';
       }
     }
+    if (hint) {
+      hint.innerHTML = '🎉 <strong>¡Total completamente cubierto!</strong> Puedes presionar el botón verde <em>Liquidar, Imprimir & Liberar Mesa</em> abajo.';
+      hint.style.color = '#34d399';
+      hint.style.background = 'rgba(16,185,129,0.1)';
+      hint.style.borderColor = 'rgba(16,185,129,0.3)';
+    }
   } else {
-    const faltante = Math.max(0, totalCRC - totalAsignado);
     if (elRestLbl) elRestLbl.textContent = 'Falta por Cubrir';
     if (elRestVal) {
       elRestVal.textContent = formatCRC(faltante);
@@ -8793,7 +8801,63 @@ function calcularPagoMixto() {
         badge.style.color = '#fbbf24';
       }
     }
+    if (hint) {
+      if (totalAsignado > 0) {
+        hint.innerHTML = `💡 Has asignado <strong>${formatCRC(totalAsignado)}</strong>. Falta <strong>${formatCRC(faltante)}</strong> por cubrir. Haz clic en <em>⚡ Cubrir Resto</em> en el método deseado.`;
+        hint.style.color = '#fbbf24';
+        hint.style.background = 'rgba(245,158,11,0.1)';
+        hint.style.borderColor = 'rgba(245,158,11,0.3)';
+      } else {
+        hint.innerHTML = '💡 Digita el monto en un método o haz clic en <strong>⚡ Cubrir Resto</strong> para autoasignar el saldo.';
+        hint.style.color = '#93c5fd';
+        hint.style.background = 'rgba(59,130,246,0.1)';
+        hint.style.borderColor = 'rgba(59,130,246,0.25)';
+      }
+    }
   }
+
+  // Actualizar en tiempo real el texto y estilo de cada botón de cubrir
+  actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante, tc);
+}
+
+function actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante, tc) {
+  const filas = [
+    { id: 'txtMixtoEfectivo', btnId: 'btnCubrirMixtoEfectivo', tipo: 'efectivo', esUSD: false },
+    { id: 'txtMixtoTarjeta', btnId: 'btnCubrirMixtoTarjeta', tipo: 'tarjeta', esUSD: false },
+    { id: 'txtMixtoSinpe', btnId: 'btnCubrirMixtoSinpe', tipo: 'sinpe', esUSD: false },
+    { id: 'txtMixtoUSD', btnId: 'btnCubrirMixtoUSD', tipo: 'usd', esUSD: true }
+  ];
+
+  filas.forEach(f => {
+    const inp = document.getElementById(f.id);
+    const btn = document.getElementById(f.btnId);
+    if (!btn || !inp) return;
+
+    const val = parseFloat(inp.value) || 0;
+
+    if (val > 0) {
+      btn.innerHTML = `✓ ${f.esUSD ? '$ ' + val.toFixed(2) : formatCRC(val)}`;
+      btn.title = `Monto asignado. Haz clic para limpiar este campo.`;
+      btn.style.background = 'rgba(16,185,129,0.2)';
+      btn.style.border = '1px solid #10b981';
+      btn.style.color = '#34d399';
+    } else {
+      if (faltante > 0) {
+        const textoFaltante = f.esUSD ? `$ ${(faltante / tc).toFixed(2)}` : formatCRC(faltante);
+        btn.innerHTML = `⚡ Cubrir (${textoFaltante})`;
+        btn.title = `Asignar los ${textoFaltante} restantes a este método`;
+        btn.style.background = '#0284c7';
+        btn.style.border = '1px solid #38bdf8';
+        btn.style.color = '#ffffff';
+      } else {
+        btn.innerHTML = 'Cubrir';
+        btn.title = 'Total ya cubierto';
+        btn.style.background = '#1e293b';
+        btn.style.border = '1px solid #475569';
+        btn.style.color = '#94a3b8';
+      }
+    }
+  });
 }
 
 ['input', 'change', 'keyup'].forEach(ev => {
@@ -8807,74 +8871,53 @@ window.autoAsignarRestanteMixto = function(tipo) {
   if (totalCRC <= 0 && estado.mesaActiva) {
     totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
   }
+  if (totalCRC <= 0) return;
+
   const txtTC = document.getElementById('txtTipoCambioUSD');
   const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
 
-  const mEfectivo = tipo === 'efectivo' ? 0 : (parseFloat(document.getElementById('txtMixtoEfectivo')?.value) || 0);
-  const mTarjeta = tipo === 'tarjeta' ? 0 : (parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0);
-  const mSinpe = tipo === 'sinpe' ? 0 : (parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0);
-  const mUSD = tipo === 'usd' ? 0 : (parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0);
+  const inputMap = {
+    efectivo: document.getElementById('txtMixtoEfectivo'),
+    tarjeta: document.getElementById('txtMixtoTarjeta'),
+    sinpe: document.getElementById('txtMixtoSinpe'),
+    usd: document.getElementById('txtMixtoUSD')
+  };
 
-  const yaAsignadoSinEste = mEfectivo + mTarjeta + mSinpe + Math.round(mUSD * tc);
-  const faltante = Math.max(0, totalCRC - yaAsignadoSinEste);
+  const targetInput = inputMap[tipo];
+  if (!targetInput) return;
 
-  if (tipo === 'efectivo') {
-    const el = document.getElementById('txtMixtoEfectivo');
-    if (el) {
-      el.value = faltante > 0 ? faltante : (totalCRC > 0 && yaAsignadoSinEste === 0 ? totalCRC : '');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+  const valActual = parseFloat(targetInput.value) || 0;
+
+  // Si el usuario hace clic en un botón que YA tiene un valor asignado, lo limpia para permitir reescribir/reasignar
+  if (valActual > 0) {
+    targetInput.value = '';
+    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+    calcularPagoMixto();
+    return;
+  }
+
+  // Calcular cuánto hay asignado en los OTROS campos
+  const mEfec = tipo === 'efectivo' ? 0 : (parseFloat(inputMap.efectivo?.value) || 0);
+  const mTarj = tipo === 'tarjeta' ? 0 : (parseFloat(inputMap.tarjeta?.value) || 0);
+  const mSinpe = tipo === 'sinpe' ? 0 : (parseFloat(inputMap.sinpe?.value) || 0);
+  const mUSD = tipo === 'usd' ? 0 : (parseFloat(inputMap.usd?.value) || 0);
+
+  const yaAsignadoEnOtros = mEfec + mTarj + mSinpe + Math.round(mUSD * tc);
+  const faltante = Math.max(0, totalCRC - yaAsignadoEnOtros);
+
+  if (faltante > 0) {
+    if (tipo === 'usd') {
+      targetInput.value = +(faltante / tc).toFixed(2);
+    } else {
+      targetInput.value = faltante;
     }
-  } else if (tipo === 'tarjeta') {
-    const el = document.getElementById('txtMixtoTarjeta');
-    if (el) {
-      el.value = faltante > 0 ? faltante : (totalCRC > 0 && yaAsignadoSinEste === 0 ? totalCRC : '');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  } else if (tipo === 'sinpe') {
-    const el = document.getElementById('txtMixtoSinpe');
-    if (el) {
-      el.value = faltante > 0 ? faltante : (totalCRC > 0 && yaAsignadoSinEste === 0 ? totalCRC : '');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  } else if (tipo === 'usd') {
-    const el = document.getElementById('txtMixtoUSD');
-    if (el) {
-      el.value = faltante > 0 ? +(faltante / tc).toFixed(2) : (totalCRC > 0 && yaAsignadoSinEste === 0 ? +(totalCRC / tc).toFixed(2) : '');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   calcularPagoMixto();
 };
 
-// Listeners directos para botones de Pago Mixto
-document.querySelectorAll('.mixto-btn-restante').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    const tipo = btn.dataset.cubrir || (btn.getAttribute('onclick') || '').match(/'([^']+)'/)?.[1];
-    if (tipo) {
-      window.autoAsignarRestanteMixto(tipo);
-    }
-  });
-});
-document.querySelectorAll('[data-action="split-efec-tarj"]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.splitMixto5050('efectivo', 'tarjeta');
-  });
-});
-document.querySelectorAll('[data-action="split-efec-sinpe"]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.splitMixto5050('efectivo', 'sinpe');
-  });
-});
-document.querySelectorAll('[data-action="limpiar-mixto"]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.limpiarCamposMixto();
-  });
-});
+// Los botones de Pago Mixto utilizan handlers globales window.autoAsignarRestanteMixto, window.splitMixto5050 y window.limpiarCamposMixto
 
 document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
   const btnFinalizar = document.getElementById('btnFinalizarCobro');
