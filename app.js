@@ -3769,6 +3769,7 @@ async function cargarMenuDesdeBackend() {
       precio: p.precio,
       destino: p.destino,
       curso: p.curso || 2,
+      total_vendidos: Number(p.total_vendidos) || 0,
       happyHour: Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1',
       happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
       agotado: Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1',
@@ -3872,9 +3873,11 @@ window.filtrarProductosComandero = function() {
     return;
   }
 
-  // 3. Si hay categoría seleccionada -> Productos de esa categoría
+  // 3. Si hay categoría seleccionada -> Productos de esa categoría ordenados de más vendido a menos vendido
   const catId = window.categoriaActivaComandero;
-  const prods = (estado.productos || []).filter(p => p.catId === catId || p.categoria_id === catId);
+  const prods = (estado.productos || [])
+    .filter(p => p.catId === catId || p.categoria_id === catId)
+    .sort((a, b) => (Number(b.total_vendidos) || 0) - (Number(a.total_vendidos) || 0));
   renderGridProductos(prods, false, catId);
 };
 

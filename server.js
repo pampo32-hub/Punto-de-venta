@@ -2164,13 +2164,26 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 app.get('/api/menu', async (req, res) => {
   try {
     const categorias = await dbAll('SELECT * FROM Categorias ORDER BY id ASC');
-    const rawProductos = await dbAll('SELECT * FROM Productos WHERE activo = 1 OR activo IS NULL ORDER BY categoria_id ASC, id ASC');
+    const rawProductos = await dbAll(`
+      SELECT 
+        p.*,
+        COALESCE(SUM(d.cantidad), 0) AS total_vendidos
+      FROM Productos p
+      LEFT JOIN DetalleOrden d ON (
+        (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT) OR (d.producto_id IS NULL AND LOWER(d.nombre_producto) = LOWER(p.nombre)))
+        AND d.estado_comanda != 'anulado'
+      )
+      WHERE p.activo = 1 OR p.activo IS NULL
+      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
+      ORDER BY p.categoria_id ASC, total_vendidos DESC, p.id ASC
+    `);
     const productos = rawProductos.map(p => ({
       ...p,
       id: Number(p.id),
       categoria_id: Number(p.categoria_id),
       precio: Number(p.precio),
       curso: Number(p.curso) || 2,
+      total_vendidos: Number(p.total_vendidos) || 0,
       happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
       agotado: (Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1') ? 1 : 0,
       activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1
@@ -4621,7 +4634,7 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
 function verificarAdmin(req, res, next) {
   const rol = (req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
-  if (rol === 'admin' || rol === 'developer' || rol === 'cajero' || rol === 'supervisor' || pin === SUPERVISOR_PIN || pin === '9999' || !rol) {
+  if (rol === 'admin' || rol === 'developer' || pin === SUPERVISOR_PIN || pin === '9999') {
     return next();
   }
   return res.status(403).json({ error: 'Acceso denegado: Requiere permisos de Administrador' });
