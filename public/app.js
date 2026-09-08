@@ -5330,10 +5330,8 @@ function renderGrillaOrdenada(filtroZona = null) {
     mapaZonas.get(zNom).push(m);
   });
 
-  // Renderizar cada zona que tenga mesas
+  // Renderizar cada zona registrada o con mesas
   mapaZonas.forEach((mesasList, zNombre) => {
-    if (!mesasList || mesasList.length === 0) return;
-
     const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const zNomNorm = normalizar(zNombre);
     const filtroNorm = filtroZona ? normalizar(filtroZona) : '';
@@ -5365,29 +5363,33 @@ function renderGrillaOrdenada(filtroZona = null) {
     const cardsContainer = document.createElement('div');
     cardsContainer.className = `zone-grid-cards ${esBarraZona ? 'barra-list' : ''}`;
 
-    mesasList.forEach(m => {
+    if (mesasList.length === 0) {
+      const emptyBox = document.createElement('div');
+      emptyBox.style.cssText = 'color: #64748b; font-size: 0.78rem; font-style: italic; text-align: center; padding: 20px 10px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; margin-top: 6px;';
+      emptyBox.textContent = '📍 Zona activa (Sin mesas asignadas)';
+      cardsContainer.appendChild(emptyBox);
+    } else {
+      mesasList.forEach(m => {
       const card = document.createElement('div');
       const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
       const esCuenta = m.estado === 'cuenta';
-      const estadoClass = esCuenta ? 'cuenta-qr' : m.estado;
+      card.className = `mesa-render-card ${m.estado} ${esCuenta ? 'cuenta-qr' : ''} ${m.forma === 'round' ? 'round' : ''} ${esSilla ? 'silla' : ''}`;
+      card.style.left = m.x + 'px';
+      card.style.top = m.y + 'px';
+      card.style.width = (m.ancho || (esSilla ? 95 : 130)) + 'px';
+      card.style.height = (m.alto || (esSilla ? 105 : 120)) + 'px';
 
       const estadoEtiqueta = {
         libre: 'Libre',
         ocupada: 'Ocupada',
         abierta: 'Abierta',
         esperando: 'Esperando',
-        esperando_parcial: 'Esperando',
+        esperando_parcial: 'Esperando Parcial',
         activa: 'Activa',
         cuenta: 'Cuenta Pedida',
         unida: 'Unida'
       }[m.estado] || 'Libre';
 
-      const badgeClass = (m.estado === 'libre')
-        ? 'badge-libre'
-        : (esCuenta ? 'badge-cuenta' : 'badge-ocupada');
-
-      const clienteMesa = m.cliente || m.mesa_cliente;
-      let clienteHtml = '';
       if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
         clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
       }
@@ -5449,6 +5451,7 @@ function renderGrillaOrdenada(filtroZona = null) {
 
       cardsContainer.appendChild(card);
     });
+    }
 
     col.appendChild(cardsContainer);
     gridContainer.appendChild(col);
