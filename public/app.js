@@ -1537,9 +1537,10 @@ var estado = {
   itemModificando: null,
   splitPersonas: 4,
   splitColumnas: [],
-  // Estado de Pisos (1er y 2do Piso)
+  // Estado de Pisos y Vistas (1er y 2do Piso, Plano vs Grilla)
   pisoActual: 1,
   pisoActualEditor: 1,
+  vistaSalonModo: localStorage.getItem('pos_vista_salon') || 'plano',
 
   // Datos sincronizados con SQLite
   zonas: [],
@@ -5117,8 +5118,240 @@ function aplicarEscalaTextoMesa(el, w, h, esSilla) {
   if (clienteTag) clienteTag.style.fontSize = subFontSize;
 }
 
-function renderSalón(filtroZona = null) {
+function cambiarModoVistaSalon(modo) {
+  estado.vistaSalonModo = modo || 'plano';
+  try {
+    localStorage.setItem('pos_vista_salon', estado.vistaSalonModo);
+  } catch (_) {}
+
+  const btnPlano = document.getElementById('btnVistaPlano');
+  const btnGrilla = document.getElementById('btnVistaGrilla');
   const canvas = document.getElementById('mesasCanvasView');
+  const grid = document.getElementById('mesasGridView');
+
+  if (btnPlano) btnPlano.classList.toggle('active', estado.vistaSalonModo === 'plano');
+  if (btnGrilla) btnGrilla.classList.toggle('active', estado.vistaSalonModo === 'grilla');
+
+  if (estado.vistaSalonModo === 'grilla') {
+    if (canvas) canvas.style.display = 'none';
+    if (grid) grid.style.display = 'flex';
+    renderGrillaOrdenada();
+  } else {
+    if (grid) grid.style.display = 'none';
+    if (canvas) canvas.style.display = 'block';
+    renderSalón();
+  }
+}
+window.cambiarModoVistaSalon = cambiarModoVistaSalon;
+
+function renderGrillaOrdenada(filtroZona = null) {
+  const gridContainer = document.getElementById('mesasGridView');
+  const canvas = document.getElementById('mesasCanvasView');
+  if (!gridContainer) return;
+  gridContainer.innerHTML = '';
+
+  if (estado.pisoSalonActual) {
+    aplicarClasePisoSalon(estado.pisoSalonActual);
+  }
+
+  const pisoActivo = estado.pisoActual || 1;
+  actualizarBotonPisoSalon();
+
+  const mesasPiso = estado.mesas.filter(m => {
+    const mesaPiso = m.piso ? Number(m.piso) : (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
+    return mesaPiso === pisoActivo;
+  });
+
+  if (mesasPiso.length === 0) {
+    gridContainer.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: #94a3b8; font-size: 1.1rem; width: 100%;">
+        ℹ️ No hay mesas registradas en este piso (${pisoActivo === 2 ? 'Segundo Piso' : 'Primer Piso'}).
+      </div>
+    `;
+    return;
+  }
+
+  // Agrupar mesas por zonas conocidas y registradas
+  const mapaZonas = new Map();
+
+  // Agregar zonas de estado.zonas si existen para mantener orden
+  if (Array.isArray(estado.zonas) && estado.zonas.length > 0) {
+    estado.zonas.forEach(z => {
+      const zNom = (z.nombre || '').trim();
+      if (zNom && !mapaZonas.has(zNom)) {
+        mapaZonas.set(zNom, []);
+      }
+    });
+  }
+
+  mesasPiso.forEach(m => {
+    let zNom = (m.zonaNombre || m.zona || 'Salón Principal').trim();
+    if (!mapaZonas.has(zNom)) {
+      mapaZonas.set(zNom, []);
+    }
+    mapaZonas.get(zNom).push(m);
+  });
+
+  // Renderizar cada zona que tenga mesas
+  mapaZonas.forEach((mesasList, zNombre) => {
+    if (!mesasList || mesasList.length === 0) return;
+
+    const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const zNomNorm = normalizar(zNombre);
+    const filtroNorm = filtroZona ? normalizar(filtroZona) : '';
+
+    const esBarraZona = zNomNorm.includes('barra') || zNomNorm.includes('bar');
+
+    const col = document.createElement('div');
+    col.className = `zone-grid-column ${mesasList.length > 6 ? 'wide-column' : ''}`;
+    col.dataset.zonaNombre = zNomNorm;
+    col.id = `zone-col-${zNomNorm}`;
+
+    if (filtroNorm && filtroNorm !== 'todas' && filtroNorm !== 'segundo' && filtroNorm !== 'segundopiso') {
+      if (!zNomNorm.includes(filtroNorm) && !filtroNorm.includes(zNomNorm)) {
+        col.style.opacity = '0.35';
+      } else {
+        col.style.borderColor = 'rgba(56, 189, 248, 0.6)';
+        col.style.boxShadow = '0 0 20px rgba(56, 189, 248, 0.25)';
+      }
+    }
+
+    const header = document.createElement('div');
+    header.className = 'zone-grid-header';
+    header.innerHTML = `
+      <h4 class="zone-grid-title">${escapeHtml(zNombre.toUpperCase())}</h4>
+      <span class="zone-grid-count">${mesasList.length} ${mesasList.length === 1 ? 'mesa' : 'mesas'}</span>
+    `;
+    col.appendChild(header);
+
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = `zone-grid-cards ${esBarraZona ? 'barra-list' : ''}`;
+
+    mesasList.forEach(m => {
+      const card = document.createElement('div');
+      const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
+      const esCuenta = m.estado === 'cuenta';
+      const estadoClass = esCuenta ? 'cuenta-qr' : m.estado;
+
+      const estadoEtiqueta = {
+        libre: 'Libre',
+        ocupada: 'Ocupada',
+        abierta: 'Abierta',
+        esperando: 'Esperando',
+        esperando_parcial: 'Esperando',
+        activa: 'Activa',
+        cuenta: 'Cuenta Pedida',
+        unida: 'Unida'
+      }[m.estado] || 'Libre';
+
+      const badgeClass = (m.estado === 'libre')
+        ? 'badge-libre'
+        : (esCuenta ? 'badge-cuenta' : 'badge-ocupada');
+
+      const clienteMesa = m.cliente || m.mesa_cliente;
+      let clienteHtml = '';
+      if (clienteMesa && clienteMesa !== 'Cliente General') {
+        clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
+      }
+
+      const cap = m.capacidad ? `${m.capacidad}p` : (esSilla ? '1p' : '4p');
+
+      card.className = `mesa-grid-card ${estadoClass} ${esBarraZona ? 'barra-row' : ''}`;
+      card.dataset.mesaId = m.id;
+
+      let mergedBadgeHtml = '';
+      const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
+      if (!esLibre) {
+        const origenes = [];
+        if (m.transferida_de) origenes.push(m.transferida_de);
+        if (m.mesas_unidas && m.mesas_unidas.length > 0) {
+          m.mesas_unidas.forEach(u => { if (!origenes.includes(u)) origenes.push(u); });
+        } else if (m.unida_con && !origenes.includes(m.unida_con)) {
+          origenes.push(m.unida_con);
+        }
+        if (origenes.length > 0) {
+          const otros = origenes.map(n => n.toString().trim().replace(/^\+/, '')).join(' + ');
+          mergedBadgeHtml = `<small class="m-merged-badge" style="margin-left:4px;" title="Recibió orden de ${otros}">+${otros}</small>`;
+        }
+      }
+
+      if (esBarraZona) {
+        card.innerHTML = `
+          <div class="m-grid-header">
+            <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
+            <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
+          </div>
+          ${clienteHtml}
+          <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
+        `;
+      } else {
+        card.innerHTML = `
+          <div class="m-grid-header">
+            <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
+            <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
+          </div>
+          ${clienteHtml}
+          <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
+          <div class="m-grid-footer">
+            <span class="m-grid-cap">👥 ${cap}</span>
+            <span class="m-grid-zona" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
+          </div>
+        `;
+      }
+
+      // Manejador de clic
+      card.addEventListener('click', () => {
+        const esMesaSinCliente = m.estado === 'libre' || ((!m.cliente || m.cliente === 'Cliente General') && !m.orden_activa_id);
+        if (esMesaSinCliente) {
+          abrirModalPreguntaCliente(m.id);
+        } else {
+          abrirComanderoMesa(m.id);
+        }
+      });
+
+      cardsContainer.appendChild(card);
+    });
+
+    col.appendChild(cardsContainer);
+    gridContainer.appendChild(col);
+  });
+
+  // Si hay filtro activo de zona, hacer scroll horizontal hacia esa columna
+  if (filtroZona && filtroZona !== 'todas' && filtroZona !== 'segundo' && filtroZona !== 'segundopiso') {
+    const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const targetCol = gridContainer.querySelector(`[data-zona-nombre*="${normalizar(filtroZona)}"]`);
+    if (targetCol) {
+      setTimeout(() => {
+        targetCol.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }, 50);
+    }
+  }
+
+  if (typeof aplicarPersonalizacionAlDOM === 'function') {
+    aplicarPersonalizacionAlDOM();
+  }
+}
+window.renderGrillaOrdenada = renderGrillaOrdenada;
+
+function renderSalón(filtroZona = null) {
+  const modo = estado.vistaSalonModo || localStorage.getItem('pos_vista_salon') || 'plano';
+  const btnPlano = document.getElementById('btnVistaPlano');
+  const btnGrilla = document.getElementById('btnVistaGrilla');
+  if (btnPlano) btnPlano.classList.toggle('active', modo === 'plano');
+  if (btnGrilla) btnGrilla.classList.toggle('active', modo === 'grilla');
+
+  const canvas = document.getElementById('mesasCanvasView');
+  const grid = document.getElementById('mesasGridView');
+
+  if (modo === 'grilla') {
+    if (canvas) canvas.style.display = 'none';
+    if (grid) grid.style.display = 'flex';
+    return renderGrillaOrdenada(filtroZona);
+  } else {
+    if (grid) grid.style.display = 'none';
+    if (canvas) canvas.style.display = 'block';
+  }
+
   if (!canvas) return;
   canvas.innerHTML = '';
 
