@@ -2610,9 +2610,10 @@ window.poblarSelectorNegociosDev = async function() {
     if (!selector) return;
 
     const currentId = estado.negocioActual?.id || 1;
-    selector.innerHTML = negocios.map(n => `
-      <option value="${n.id}" ${n.id === currentId ? 'selected' : ''}>${n.nombre} (ID: ${n.id})</option>
-    `).join('');
+    selector.innerHTML = negocios.map(n => {
+      const tagInactivo = Number(n.activo) === 0 ? ' (⛔ Inactivo)' : '';
+      return `<option value="${n.id}" ${n.id === currentId ? 'selected' : ''}>${n.nombre}${tagInactivo} (ID: ${n.id})</option>`;
+    }).join('');
   } catch (e) {
     console.error('Error poblando selector de negocios dev:', e);
   }
@@ -2918,6 +2919,7 @@ async function cargarNegociosDev() {
     const res = await fetch('/api/dev/negocios');
     const negocios = await res.json();
     const grid = document.getElementById('devNegociosGrid');
+    if (!grid) return;
 
     grid.innerHTML = negocios.map(n => {
       let modulosCount = 11;
@@ -2930,15 +2932,23 @@ async function cargarNegociosDev() {
       }
 
       const esDev = (estado.usuarioActual?.rol || '').toLowerCase() === 'developer';
+      const esAdmin = ['developer', 'admin', 'administrador'].includes((estado.usuarioActual?.rol || '').toLowerCase());
+      const esActivo = n.activo !== 0 && n.activo !== '0';
       const puedeEliminar = esDev && Number(n.id) !== 1;
+      const puedeDesactivar = esAdmin && Number(n.id) !== 1;
       const nombreEscapado = (n.nombre || '').replace(/'/g, "\\'");
 
       return `
-        <div class="negocio-card">
+        <div class="negocio-card" style="${!esActivo ? 'opacity: 0.85; border: 1.5px dashed #ef4444; background: rgba(239, 68, 68, 0.04);' : ''}">
           <div class="negocio-top">
             <img class="negocio-logo-img" src="${n.logo_url || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=100'}" alt="Logo" />
-            <div class="negocio-details">
-              <h4>${n.nombre}</h4>
+            <div class="negocio-details" style="flex: 1;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <h4 style="margin: 0; ${!esActivo ? 'color: #fca5a5;' : ''}">${n.nombre}</h4>
+                <span class="badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; font-weight: 700; ${esActivo ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #059669;' : 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #dc2626;'}">
+                  ${esActivo ? '🟢 Activo' : '⛔ Inactivo'}
+                </span>
+              </div>
               <small>${n.slogan || 'Restaurante & Bar'}</small>
             </div>
           </div>
@@ -2958,8 +2968,13 @@ async function cargarNegociosDev() {
             <button class="btn-edit-negocio" style="flex: 1;" onclick="editarNegocioDev(${n.id})">
               ✏️ Editar Datos
             </button>
+            ${puedeDesactivar ? `
+            <button class="btn-toggle-activo-negocio" style="flex: 1; background: ${esActivo ? 'rgba(234, 179, 8, 0.15)' : 'rgba(16, 185, 129, 0.15)'}; border: 1px solid ${esActivo ? '#ca8a04' : '#10b981'}; color: ${esActivo ? '#fde047' : '#6ee7b7'}; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="toggleActivarNegocioDev(${n.id}, ${esActivo ? 0 : 1}, '${nombreEscapado}')">
+              ${esActivo ? '⏸️ Desactivar' : '▶️ Activar'}
+            </button>
+            ` : ''}
             ${puedeEliminar ? `
-            <button class="btn-delete-negocio" style="flex: 1 1 100%; background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7f1d1d'" onclick="eliminarNegocioDev(${n.id}, '${nombreEscapado}')">
+            <button class="btn-delete-negocio" style="flex: 1; background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7f1d1d'" onclick="eliminarNegocioDev(${n.id}, '${nombreEscapado}')">
               🗑️ Eliminar Comercio
             </button>
             ` : ''}
@@ -3284,6 +3299,16 @@ window.abrirPosComoNegocio = async function(negocioId) {
     const negocios = await res.json();
     const neg = negocios.find(n => n.id === negocioId);
     if (neg) {
+      if (Number(neg.activo) === 0) {
+        const reactivar = confirm(`⚠️ El comercio "${neg.nombre}" se encuentra actualmente DESACTIVADO / INACTIVO.\n\n¿Deseas reactivarlo ahora para abrir el Punto de Venta?`);
+        if (reactivar) {
+          await toggleActivarNegocioDev(neg.id, 1, neg.nombre, false);
+          neg.activo = 1;
+        } else {
+          return;
+        }
+      }
+
       estado.negocioActual = neg;
       sessionStorage.setItem('pos_negocio', JSON.stringify(neg));
       actualizarBrandingNegocio(neg);
@@ -3335,6 +3360,8 @@ window.abrirModalNuevoNegocio = function() {
   document.getElementById('devNegocioSlogan').value = '';
   document.getElementById('devNegocioLogoUrl').value = '';
   document.getElementById('devNegocioTelefono').value = '';
+  const elActivo = document.getElementById('devNegocioActivo');
+  if (elActivo) elActivo.value = '1';
   document.getElementById('negocioModalTitulo').textContent = '🏬 Registrar Nuevo Comercio';
   document.getElementById('modalDevNegocio').classList.add('active');
 };
@@ -3350,8 +3377,44 @@ window.editarNegocioDev = async function(negocioId) {
   document.getElementById('devNegocioSlogan').value = n.slogan || '';
   document.getElementById('devNegocioLogoUrl').value = n.logo_url || '';
   document.getElementById('devNegocioTelefono').value = n.telefono || '';
+  const elActivo = document.getElementById('devNegocioActivo');
+  if (elActivo) elActivo.value = (Number(n.activo) === 0 ? '0' : '1');
   document.getElementById('negocioModalTitulo').textContent = '✏️ Editar Comercio & Logo';
   document.getElementById('modalDevNegocio').classList.add('active');
+};
+
+window.toggleActivarNegocioDev = async function(negocioId, nuevoEstado, nombre, pedirConfirmacion = true) {
+  const idNum = Number(negocioId);
+  if (idNum === 1 && nuevoEstado === 0) {
+    alert('No es posible desactivar el comercio principal por defecto del sistema (ID 1).');
+    return;
+  }
+  const accion = nuevoEstado === 1 ? 'activar' : 'desactivar';
+  if (pedirConfirmacion) {
+    const confirmado = confirm(`¿Estás seguro de que deseas ${accion} el comercio "${nombre || ('ID ' + idNum)}"?`);
+    if (!confirmado) return;
+  }
+
+  try {
+    const res = await fetch(`/api/dev/negocios/${idNum}/toggle-activo`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': estado.usuarioActual?.rol || 'developer'
+      },
+      body: JSON.stringify({ activo: nuevoEstado })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error al ${accion} el comercio`);
+
+    if (pedirConfirmacion) {
+      alert(`✅ ${data.message || 'Estado del comercio actualizado exitosamente.'}`);
+    }
+    cargarNegociosDev();
+    if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
 };
 
 window.eliminarNegocioDev = async function(negocioId, nombre) {
@@ -3395,6 +3458,8 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
   const slogan = document.getElementById('devNegocioSlogan').value.trim();
   const logo_url = document.getElementById('devNegocioLogoUrl').value.trim();
   const telefono = document.getElementById('devNegocioTelefono').value.trim();
+  const elActivo = document.getElementById('devNegocioActivo');
+  const activo = elActivo ? parseInt(elActivo.value) : 1;
 
   if (!nombre) {
     alert('El nombre del negocio es obligatorio.');
@@ -3408,12 +3473,13 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
     const res = await fetch(endpoint, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, slogan, logo_url, telefono })
+      body: JSON.stringify({ nombre, slogan, logo_url, telefono, activo })
     });
     const data = await res.json();
     alert('🏬 ¡Comercio guardado exitosamente!');
     document.getElementById('modalDevNegocio').classList.remove('active');
     cargarNegociosDev();
+    if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
     if (estado.negocioActual && estado.negocioActual.id === Number(id)) {
       estado.negocioActual = data;
       actualizarBrandingNegocio(data);

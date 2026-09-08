@@ -219,6 +219,7 @@ function initDb() {
       direccion TEXT,
       activo INTEGER DEFAULT 1
     )`);
+    db.run("ALTER TABLE Negocios ADD COLUMN activo INTEGER DEFAULT 1", () => {});
 
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (

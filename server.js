@@ -568,7 +568,7 @@ app.post('/api/usuarios/cambiar-pin', async (req, res) => {
 app.get('/api/dev/negocios', async (req, res) => {
   try {
     const negocios = await dbAll(`
-      SELECT n.*, 
+      SELECT n.*, COALESCE(n.activo, 1) as activo,
         (SELECT COUNT(*) FROM Usuarios u WHERE u.negocio_id = n.id AND u.activo = 1) as total_usuarios,
         (SELECT COUNT(*) FROM Mesas m WHERE m.negocio_id = n.id) as total_mesas
       FROM Negocios n
@@ -582,14 +582,15 @@ app.get('/api/dev/negocios', async (req, res) => {
 
 app.post('/api/dev/negocios', async (req, res) => {
   try {
-    const { nombre, slogan = '', logo_url = '', moneda = 'CRC', telefono = '', direccion = '' } = req.body;
+    const { nombre, slogan = '', logo_url = '', moneda = 'CRC', telefono = '', direccion = '', activo = 1 } = req.body;
     if (!nombre) return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
 
+    const valActivo = activo === 0 ? 0 : 1;
     const r = await dbRun(
-      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion) VALUES (?, ?, ?, ?, ?, ?)',
-      [nombre, slogan, logo_url, moneda, telefono, direccion]
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo]
     );
-    const nuevo = await dbGet('SELECT * FROM Negocios WHERE id = ?', [r.lastID]);
+    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [r.lastID]);
     io.emit('negocio_creado', nuevo);
     res.json(nuevo);
   } catch (e) {
@@ -599,14 +600,63 @@ app.post('/api/dev/negocios', async (req, res) => {
 
 app.put('/api/dev/negocios/:id', async (req, res) => {
   try {
-    const { nombre, slogan, logo_url, moneda, telefono, direccion } = req.body;
+    const { nombre, slogan, logo_url, moneda, telefono, direccion, activo } = req.body;
+    const negocioId = Number(req.params.id);
+
+    let valActivo = activo !== undefined ? (Number(activo) === 0 ? 0 : 1) : 1;
+    if (negocioId === 1 && valActivo === 0) {
+      valActivo = 1; // Proteger el negocio principal ID 1
+    }
+
     await dbRun(
-      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ? WHERE id = ?',
-      [nombre, slogan, logo_url, moneda, telefono, direccion, req.params.id]
+      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ?, activo = ? WHERE id = ?',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, negocioId]
     );
-    const actualizado = await dbGet('SELECT * FROM Negocios WHERE id = ?', [req.params.id]);
+    const actualizado = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [negocioId]);
     io.emit('negocio_actualizado', actualizado);
     res.json(actualizado);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/dev/negocios/:id/toggle-activo', async (req, res) => {
+  try {
+    const rol = (req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol) || '').toLowerCase();
+    if (rol !== 'developer' && rol !== 'admin' && rol !== 'administrador') {
+      return res.status(403).json({ error: 'Acceso denegado: Acción exclusiva para rol Developer o Administrador.' });
+    }
+
+    const negocioId = Number(req.params.id);
+    if (isNaN(negocioId)) {
+      return res.status(400).json({ error: 'ID de comercio inválido.' });
+    }
+
+    const target = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [negocioId]);
+    if (!target) {
+      return res.status(404).json({ error: 'Comercio no encontrado.' });
+    }
+
+    let nuevoEstado;
+    if (req.body && req.body.activo !== undefined) {
+      nuevoEstado = Number(req.body.activo) === 1 ? 1 : 0;
+    } else {
+      nuevoEstado = target.activo === 1 ? 0 : 1;
+    }
+
+    if (negocioId === 1 && nuevoEstado === 0) {
+      return res.status(400).json({ error: 'No es posible desactivar el comercio principal por defecto del sistema (ID 1).' });
+    }
+
+    await dbRun('UPDATE Negocios SET activo = ? WHERE id = ?', [nuevoEstado, negocioId]);
+    const actualizado = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [negocioId]);
+    io.emit('negocio_actualizado', actualizado);
+    res.json({
+      ok: true,
+      activo: nuevoEstado,
+      negocio: actualizado,
+      message: nuevoEstado === 1 ? `Comercio "${actualizado.nombre}" activado exitosamente.` : `Comercio "${actualizado.nombre}" desactivado exitosamente.`
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -640,6 +690,9 @@ app.delete('/api/dev/negocios/:id', async (req, res) => {
     await dbRun('DELETE FROM Categorias WHERE negocio_id = ?', [negocioId]);
     await dbRun('DELETE FROM Productos WHERE negocio_id = ?', [negocioId]);
     await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [negocioId]);
+    try { await dbRun('DELETE FROM Insumos WHERE negocio_id = ?', [negocioId]); } catch (_) {}
+    try { await dbRun('DELETE FROM KardexMovimientos WHERE negocio_id = ?', [negocioId]); } catch (_) {}
+    try { await dbRun('DELETE FROM PersonalizacionPagina WHERE negocio_id = ?', [negocioId]); } catch (_) {}
     await dbRun('DELETE FROM Negocios WHERE id = ?', [negocioId]);
 
     io.emit('negocio_eliminado', { id: negocioId, nombre: target.nombre });
