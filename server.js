@@ -2052,14 +2052,16 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
     const ahora = new Date().toISOString();
+    const negocioId = Number(mesa.negocio_id || obtenerNegocioIdReq(req) || 1);
 
     // 1. Obtener todas las órdenes activas asociadas a la mesa
     const ordenesActivas = await dbAll(
-      "SELECT id FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      "SELECT id, total FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
       [mesaId]
     );
 
-    const ordenesIds = ordenesActivas.map(o => o.id);
+    const totalPendiente = (ordenesActivas || []).reduce((acc, o) => acc + (Number(o.total) || 0), 0);
+    const ordenesIds = (ordenesActivas || []).map(o => o.id);
     if (ordenesIds.length > 0) {
       const placeholders = ordenesIds.map(() => '?').join(',');
 
@@ -2078,6 +2080,21 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
          WHERE orden_id IN (${placeholders}) AND estado_comanda != 'pagado'`,
         ordenesIds
       );
+
+      // Registrar SIEMPRE en Auditoría el cierre forzado de cuenta
+      const usuarioNom = req.usuario?.nombre || req.usuario?.nombre_completo || req.body?.usuarioNombre || 'Administrador';
+      await registrarAuditoria({
+        negocioId,
+        usuarioId: req.usuario?.id || null,
+        usuarioNombre: usuarioNom,
+        accion: 'cierre_forzado_cuenta',
+        tipoEvento: 'seguridad',
+        modulo: 'mesas',
+        detalle: `Reset y cierre forzado de mesa "${mesa.numero}". ${ordenesIds.length} orden(es) cancelada(s). Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')}`,
+        motivo: req.body?.motivo || 'Reset forzado de mesa trabada',
+        monto: totalPendiente,
+        pinAutorizado: 1
+      });
     }
 
     // 2. Deshacer cualquier agrupación o unión activa
@@ -2111,7 +2128,8 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
       success: true,
       message: `Mesa "${mesa.numero}" reseteada y liberada exitosamente.`,
       mesaId: Number(mesaId),
-      ordenesCanceladas: ordenesIds.length
+      ordenesCanceladas: ordenesIds.length,
+      saldoAnulado: totalPendiente
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2126,10 +2144,14 @@ app.delete('/api/mesas/:id', async (req, res) => {
     const rol = req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol);
     const esAdmin = rol === 'admin' || rol === 'developer';
 
+    const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    const mesaNegocioId = mesaRow ? Number(mesaRow.negocio_id || 1) : 1;
+
     // Verificar si la mesa tiene orden activa con consumos
-    const ordenActiva = await dbGet("SELECT * FROM Ordenes WHERE (mesa_id = ? OR mesa_id = ?) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaId, Number(mesaId) || mesaId]);
-    if (ordenActiva) {
+    const ordenesActivas = await dbAll("SELECT id, total FROM Ordenes WHERE (mesa_id = ? OR mesa_id = ?) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaId, Number(mesaId) || mesaId]);
+    if (ordenesActivas && ordenesActivas.length > 0) {
       if (forzar && esAdmin) {
+        const totalPendiente = ordenesActivas.reduce((acc, o) => acc + (Number(o.total) || 0), 0);
         // Forzar cancelación de órdenes antes de eliminar
         const ahora = new Date().toISOString();
         await dbRun(
@@ -2140,6 +2162,21 @@ app.delete('/api/mesas/:id', async (req, res) => {
           "UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE (mesa_id = ? OR mesa_id = ?) AND estado = 'cancelada') AND estado_comanda != 'pagado'",
           [mesaId, Number(mesaId) || mesaId]
         );
+
+        // Registrar en Auditoría
+        const usuarioNom = req.usuario?.nombre || req.usuario?.nombre_completo || req.body?.usuarioNombre || 'Administrador';
+        await registrarAuditoria({
+          negocioId: mesaNegocioId,
+          usuarioId: req.usuario?.id || null,
+          usuarioNombre: usuarioNom,
+          accion: 'cierre_forzado_cuenta',
+          tipoEvento: 'seguridad',
+          modulo: 'mesas',
+          detalle: `Eliminación forzada de mesa "${mesaRow?.numero || mesaId}" con saldo activo. Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')}`,
+          motivo: 'Eliminación forzada de mesa con saldo pendiente',
+          monto: totalPendiente,
+          pinAutorizado: 1
+        });
       } else {
         return res.status(400).json({
           error: 'No se puede eliminar la mesa porque tiene una cuenta activa pendiente de cobro.',
@@ -2147,9 +2184,6 @@ app.delete('/api/mesas/:id', async (req, res) => {
         });
       }
     }
-
-    const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    const mesaNegocioId = mesaRow ? mesaRow.negocio_id : 1;
 
     await dbRun('UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1', [mesaId, mesaId]);
     await dbRun('DELETE FROM Mesas WHERE id = ?', [mesaId]);
@@ -2338,34 +2372,39 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     }
 
     const ahora = new Date().toISOString();
-    const negocioId = obtenerNegocioIdReq(req);
+    const negocioId = Number(mesa.negocio_id || obtenerNegocioIdReq(req) || 1);
     const exigirPin = await negocioTieneModulo(negocioId, 'pedir_pin_liberar_con_saldo');
 
-    // 2. Si hay saldo pendiente por pagar, exigir permisos de Administrador o PIN válido (si la feature está activa)
-    if (totalPendiente > 0 && exigirPin) {
-      const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
-      const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
+    const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+    const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
+    const usuarioNom = req.usuario?.nombre || req.usuario?.nombre_completo || req.body?.usuarioNombre || 'Personal';
 
-      let autorizado = (rol === 'admin' || rol === 'developer');
-      if (!autorizado && pin) {
-        autorizado = await validarPinAdministrador(pin, negocioId);
+    // 2. Si hay saldo pendiente por pagar:
+    if (totalPendiente > 0) {
+      let pinValidado = false;
+      if (exigirPin) {
+        let autorizado = (rol === 'admin' || rol === 'developer');
+        if (!autorizado && pin) {
+          pinValidado = await validarPinAdministrador(pin, negocioId);
+          autorizado = pinValidado;
+        }
+
+        if (!autorizado) {
+          return res.status(403).json({
+            error: `La mesa "${mesa.numero}" tiene un saldo pendiente de ₡${Math.round(totalPendiente).toLocaleString('es-CR')}. Se requiere PIN de Administrador para liberar la mesa.`,
+            requierePin: true,
+            saldoPendiente: totalPendiente,
+            mesaNumero: mesa.numero
+          });
+        }
       }
 
-      if (!autorizado) {
-        return res.status(403).json({
-          error: `La mesa "${mesa.numero}" tiene un saldo pendiente de ₡${Math.round(totalPendiente).toLocaleString('es-CR')}. Se requiere PIN de Administrador para liberar la mesa.`,
-          requierePin: true,
-          saldoPendiente: totalPendiente,
-          mesaNumero: mesa.numero
-        });
-      }
-
-      // Autorizado con PIN/Admin: Cancelar órdenes pendientes con registro de auditoría
-      const idsPendientes = ordenesConSaldo.map(o => o.id);
+      // Cancelar órdenes pendientes con registro de auditoría
+      const idsPendientes = ordenesConSaldo.length > 0 ? ordenesConSaldo.map(o => o.id) : ordenesActivas.map(o => o.id);
       if (idsPendientes.length > 0) {
         const placeholders = idsPendientes.map(() => '?').join(',');
         await dbRun(
-          `UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Liberación forzada por PIN Admin]' WHERE id IN (${placeholders})`,
+          `UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ?, notas = COALESCE(notas, '') || ' [Cierre forzado con saldo pendiente]' WHERE id IN (${placeholders})`,
           [ahora, ...idsPendientes]
         );
         await dbRun(
@@ -2374,13 +2413,18 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
         );
       }
 
-      const usuarioNom = req.usuario?.nombre || req.body?.usuarioNombre || 'Supervisor';
+      // Registrar SIEMPRE en Auditoría (General para todos los comercios)
       await registrarAuditoria({
+        negocioId,
+        usuarioId: req.usuario?.id || null,
         usuarioNombre: usuarioNom,
-        accion: 'liberacion_forzada_mesa',
-        tipoEvento: 'operativo',
+        accion: 'cierre_forzado_cuenta',
+        tipoEvento: 'seguridad',
         modulo: 'mesas',
-        detalle: `Liberación forzada con PIN de mesa ${mesa.numero}. Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')}`
+        detalle: `Cierre forzado de cuenta en mesa "${mesa.numero}". Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')}`,
+        motivo: req.body?.motivo || (pin ? 'Liberación/Cierre autorizado con PIN' : 'Cierre forzado con saldo pendiente'),
+        monto: totalPendiente,
+        pinAutorizado: (pinValidado || pin || rol === 'admin' || rol === 'developer') ? 1 : 0
       });
     }
 
@@ -4010,7 +4054,11 @@ app.post('/api/comandas/anular-item', async (req, res) => {
       [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, ahora]
     );
 
+    const ordenItem = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [item.orden_id]);
+    const ordenNegocioId = Number(ordenItem?.negocio_id || obtenerNegocioIdReq(req) || 1);
+
     await registrarAuditoria({
+      negocioId: ordenNegocioId,
       usuarioNombre: req.body.usuarioNombre || 'Supervisor Autorizado',
       accion: 'anulacion_comanda',
       tipoEvento: 'seguridad',

@@ -14541,7 +14541,10 @@ function renderTablaAuditoria(eventos) {
 
   eventos.forEach(ev => {
     const tr = document.createElement('tr');
-    const badgeClass = ev.tipo_evento || 'operativo';
+    let badgeClass = (ev.tipo_evento || 'operativo').toLowerCase();
+    if (ev.accion === 'cierre_forzado_cuenta' || ev.accion === 'liberacion_forzada_mesa') {
+      badgeClass = 'seguridad';
+    }
     const fecha = ev.fecha_hora ? formatearFechaHoraCR(ev.fecha_hora) : 'Reciente';
 
     tr.innerHTML = `
@@ -14570,9 +14573,13 @@ function filtrarTablaAuditoria() {
   const q = (document.getElementById('txtBuscarAuditoria')?.value || '').toLowerCase().trim();
 
   const filtrados = (estado.auditoria || []).filter(ev => {
-    const matchTipo = chipActivo === 'todos' || ev.accion === chipActivo;
+    const matchTipo = chipActivo === 'todos' || 
+      ev.accion === chipActivo || 
+      (chipActivo === 'cierre_forzado_cuenta' && (ev.accion === 'cierre_forzado_cuenta' || ev.accion === 'liberacion_forzada_mesa'));
     const matchQ = !q || 
       (ev.usuario_nombre && ev.usuario_nombre.toLowerCase().includes(q)) ||
+      (ev.accion && ev.accion.toLowerCase().includes(q)) ||
+      (ev.modulo && ev.modulo.toLowerCase().includes(q)) ||
       (ev.detalle && ev.detalle.toLowerCase().includes(q)) ||
       (ev.motivo && ev.motivo.toLowerCase().includes(q));
     return matchTipo && matchQ;
