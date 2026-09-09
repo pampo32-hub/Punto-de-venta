@@ -6449,23 +6449,23 @@ function mostrarNotificacionCentro(mensaje, tipo = 'info', callback = null) {
   let btnColor = 'var(--primary)';
 
   const mLower = (mensaje || '').toLowerCase();
-  if (tipo === 'success' || mLower.includes('éxito') || mLower.includes('correct') || mLower.includes('✅') || mLower.includes('restaurar')) {
-    icono = '✅';
-    titulo = '¡Completado!';
-    btnColor = 'linear-gradient(135deg, #10b981, #059669)';
-  } else if (tipo === 'error' || mLower.includes('error') || mLower.includes('❌') || mLower.includes('falló') || mLower.includes('denegad')) {
+  if (tipo === 'warning' || mLower.includes('aviso') || mLower.includes('⚠️') || mLower.includes('incorrect') || mLower.includes('inválid') || mLower.includes('invalid') || mLower.includes('requiere pin') || mLower.includes('ocupada')) {
+    icono = '⚠️';
+    titulo = 'Atención';
+    btnColor = 'linear-gradient(135deg, #f59e0b, #d97706)';
+  } else if (tipo === 'error' || mLower.includes('error') || mLower.includes('❌') || mLower.includes('falló') || mLower.includes('fallo') || mLower.includes('denegad')) {
     icono = '❌';
     titulo = 'Atención';
     btnColor = 'linear-gradient(135deg, #ef4444, #b91c1c)';
-  } else if (tipo === 'warning' || mLower.includes('aviso') || mLower.includes('⚠️') || mLower.includes('ocupada')) {
-    icono = '⚠️';
-    titulo = 'Aviso';
-    btnColor = 'linear-gradient(135deg, #f59e0b, #d97706)';
+  } else if (tipo === 'success' || (!mLower.includes('incorrect') && (mLower.includes('éxito') || mLower.includes('exito') || mLower.includes('correctamente') || mLower.includes('✅') || mLower.includes('restaurar')))) {
+    icono = '✅';
+    titulo = '¡Completado!';
+    btnColor = 'linear-gradient(135deg, #10b981, #059669)';
   }
 
   if (iconEl) iconEl.textContent = icono;
   if (titEl) titEl.textContent = titulo;
-  if (msgEl) msgEl.textContent = (mensaje || '').replace(/^[✅❌⚠️ℹ️🔄🔗✂️\s]+/, '');
+  if (msgEl) msgEl.textContent = (mensaje || '').replace(/^[✅❌⚠️ℹ️🔒🔄🔗✂️\s\uFFFD]+/, '');
   if (btnEl) btnEl.style.background = btnColor;
 
   let timerAuto = null;
@@ -7561,12 +7561,13 @@ window.confirmarAplicarDescuento = async function() {
     const data = await res.json();
     if (!res.ok) {
       const msgError = data.error || 'Error al aplicar descuento';
+      const esPinError = Boolean(data.pinInvalido || data.requierePin || (msgError && msgError.toLowerCase().includes('pin')));
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(msgError, 'error');
+        mostrarNotificacionCentro(msgError, esPinError ? 'warning' : 'error');
       } else {
         alert(msgError);
       }
-      if (txtPin && (data.pinInvalido || data.requierePin || (msgError && msgError.toLowerCase().includes('pin')))) {
+      if (txtPin && esPinError) {
         txtPin.value = '';
         txtPin.focus();
       }
