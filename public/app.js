@@ -13006,11 +13006,11 @@ window.abrirModuloInventario = function() {
 };
 
 // Modales de Inventario
-var tipoAjusteActivo = 'entrada';
+window.tipoAjusteActivo = 'entrada';
 
 window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null) {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '📦',
@@ -13025,11 +13025,12 @@ window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null
     }
   }
 
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+
   // Asegurar inventario cargado en estado
   if (!estado.inventario || !estado.inventario.length) {
     try {
-      const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
-      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
       const resInv = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
         headers: { 'x-user-rol': userRol, 'x-negocio-id': String(nid) }
       });
@@ -13050,20 +13051,24 @@ window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null
     `).join('');
   }
 
-  tipoAjusteActivo = tipo;
+  window.tipoAjusteActivo = tipo;
   window.seleccionarTipoAjuste(tipo);
 
   if (insumoId && ajusteSelect) {
-    ajusteSelect.value = insumoId;
+    ajusteSelect.value = String(insumoId);
   }
   actualizarEtiquetaUnidadAjuste();
-  const txtCant = document.getElementById('txtAjusteCantidad');
-  const txtMotivo = document.getElementById('txtAjusteMotivo');
+
+  const txtCant = document.getElementById('txtAjusteCantidad') || document.getElementById('txtCantidadAjuste');
+  const txtMotivo = document.getElementById('txtAjusteMotivo') || document.getElementById('txtMotivoAjuste');
   if (txtCant) txtCant.value = '';
   if (txtMotivo) txtMotivo.value = '';
 
   const modal = document.getElementById('modalAjusteInventario');
-  if (modal) modal.classList.add('active');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
 };
 
 window.filtrarInsumosAjusteModal = function() {
@@ -13104,11 +13109,16 @@ window.limpiarBuscadorInsumoAjuste = function() {
 };
 
 window.cerrarModalAjusteInventario = function() {
-  document.getElementById('modalAjusteInventario')?.classList.remove('active');
+  const modal = document.getElementById('modalAjusteInventario');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  window._pinSupervisorActivo = null;
 };
 
 window.seleccionarTipoAjuste = function(tipo) {
-  tipoAjusteActivo = tipo;
+  window.tipoAjusteActivo = tipo;
   const btnEntrada = document.getElementById('btnAjusteTipoEntrada');
   const btnMerma = document.getElementById('btnAjusteTipoMerma');
   const lblCant = document.getElementById('lblAjusteCantidad');
@@ -13165,51 +13175,311 @@ window.actualizarEtiquetaUnidadAjuste = actualizarEtiquetaUnidadAjuste;
 document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
 
 window.guardarAjusteInventario = async function() {
-  const insumoId = document.getElementById('txtInsumoAjusteId')?.value;
-  const tipo = document.getElementById('selectTipoAjuste')?.value;
-  const cantidad = document.getElementById('txtCantidadAjuste')?.value;
-  const motivo = document.getElementById('txtMotivoAjuste')?.value || 'Ajuste manual de inventario';
+  const selInsumo = document.getElementById('selectAjusteInsumo');
+  const insumoId = selInsumo ? selInsumo.value : document.getElementById('txtInsumoAjusteId')?.value;
+  const tipo = window.tipoAjusteActivo || 'entrada';
+  const txtCant = document.getElementById('txtAjusteCantidad') || document.getElementById('txtCantidadAjuste');
+  const cantidadStr = txtCant?.value?.trim();
+  const cantidad = parseFloat(cantidadStr);
+  const motivo = document.getElementById('txtAjusteMotivo')?.value?.trim() || 
+                 document.getElementById('txtMotivoAjuste')?.value?.trim() || 
+                 (tipo === 'entrada' ? 'Entrada de mercadería / compra' : 'Ajuste de merma / pérdida');
   const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-  const usuarioNombre = estado.usuarioActual ? estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario : 'Administrador';
+  const usuarioNombre = estado.usuarioActual ? (estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario || 'Administrador') : 'Administrador';
 
-  if (!insumoId || !tipo || !cantidad) {
-    mostrarNotificacionCentro('⚠️ Completa todos los campos obligatorios del ajuste', 'warning');
+  if (!insumoId) {
+    mostrarNotificacionCentro('⚠️ Por favor selecciona un insumo para ajustar', 'warning');
     return;
   }
 
+  if (isNaN(cantidad) || cantidad <= 0) {
+    if (txtCant) {
+      txtCant.style.borderColor = '#ef4444';
+      txtCant.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.5)';
+      txtCant.focus();
+      setTimeout(() => {
+        txtCant.style.borderColor = '#374151';
+        txtCant.style.boxShadow = 'none';
+      }, 2500);
+    }
+    mostrarNotificacionCentro('⚠️ Ingresa una cantidad válida mayor a 0 para el ajuste', 'warning');
+    return;
+  }
+
+  const btnConfirmar = document.getElementById('btnConfirmarAjusteInv');
+  if (btnConfirmar) {
+    btnConfirmar.disabled = true;
+    btnConfirmar.innerHTML = '⏳ Aplicando...';
+  }
+
   try {
+    const headers = { 
+      'Content-Type': 'application/json', 
+      'x-user-rol': rol,
+      'x-negocio-id': String(nid)
+    };
+    if (window._pinSupervisorActivo) {
+      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+    }
+
     const res = await fetch(`/api/admin/inventario/${insumoId}/ajuste`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json', 
-        'x-user-rol': rol,
-        'x-negocio-id': String(nid)
-      },
+      headers,
       body: JSON.stringify({ tipo, cantidad, motivo, usuarioNombre, negocio_id: nid })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error al guardar ajuste');
 
-    mostrarNotificacionCentro(`✅ Ajuste de inventario aplicado correctamente. Stock nuevo: ${data.nuevo_stock}`, 'success');
+    mostrarNotificacionCentro(`✅ Movimiento de inventario aplicado. Stock nuevo: ${data.nuevo_stock}`, 'success');
     if (typeof cerrarModalAjusteInventario === 'function') cerrarModalAjusteInventario();
-    if (typeof cargarInventarioAdmin === 'function') cargarInventarioAdmin();
+    if (typeof cargarInventarioAdmin === 'function') await cargarInventarioAdmin();
     if (typeof cargarKardexGeneral === 'function') cargarKardexGeneral();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  } finally {
+    if (btnConfirmar) {
+      btnConfirmar.disabled = false;
+      btnConfirmar.innerHTML = '💾 Aplicar Movimiento';
+    }
+  }
+};
+
+// MODAL NUEVO INSUMO
+window.abrirModalNuevoInsumo = async function() {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '➕',
+      titulo: 'Crear Insumo',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para registrar un nuevo insumo:'
+    });
+    if (!pin) return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
+    }
+  }
+
+  const txtNom = document.getElementById('txtNuevoInsumoNombre');
+  const txtStock = document.getElementById('txtNuevoInsumoStock');
+  const txtMin = document.getElementById('txtNuevoInsumoMin');
+  const txtCosto = document.getElementById('txtNuevoInsumoCosto');
+  const chkLicor = document.getElementById('chkNuevoInsumoEsLicor');
+  const txtCatManual = document.getElementById('txtNuevoInsumoCatManual');
+  const selCat = document.getElementById('selectNuevoInsumoCat');
+
+  if (txtNom) txtNom.value = '';
+  if (txtStock) txtStock.value = '10';
+  if (txtMin) txtMin.value = '3';
+  if (txtCosto) txtCosto.value = '1500';
+  if (chkLicor) chkLicor.checked = false;
+  if (txtCatManual) {
+    txtCatManual.value = '';
+    txtCatManual.style.display = 'none';
+  }
+
+  if (selCat) {
+    const categorias = [...new Set((estado.inventario || []).map(i => i.categoria).filter(Boolean))];
+    if (!categorias.includes('General')) categorias.unshift('General');
+    if (!categorias.includes('Bebidas & Cervezas')) categorias.push('Bebidas & Cervezas');
+    if (!categorias.includes('Licores & Destilados')) categorias.push('Licores & Destilados');
+    if (!categorias.includes('Carnes')) categorias.push('Carnes');
+    if (!categorias.includes('Abarrotes & Salsas')) categorias.push('Abarrotes & Salsas');
+
+    selCat.innerHTML = categorias.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('') +
+      '<option value="__otra__">➕ Otra categoría...</option>';
+    selCat.value = 'General';
+  }
+
+  window.toggleConfigFraccionable('nuevo', false);
+  window.onCambioUnidadInsumo('nuevo');
+
+  const modal = document.getElementById('modalNuevoInsumo');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
+};
+
+window.cerrarModalNuevoInsumo = function() {
+  const modal = document.getElementById('modalNuevoInsumo');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  window._pinSupervisorActivo = null;
+};
+
+window.guardarNuevoInsumo = async function() {
+  const nombre = document.getElementById('txtNuevoInsumoNombre')?.value?.trim();
+  const selCat = document.getElementById('selectNuevoInsumoCat')?.value;
+  const txtCatManual = document.getElementById('txtNuevoInsumoCatManual')?.value?.trim();
+  const categoria = (selCat === '__otra__' ? txtCatManual : selCat) || 'General';
+  const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
+  const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
+  const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 0;
+  const costo_unitario = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
+  const es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+
+  if (!nombre) {
+    mostrarNotificacionCentro('⚠️ Por favor ingresa el nombre del insumo', 'warning');
+    const txtNom = document.getElementById('txtNuevoInsumoNombre');
+    if (txtNom) txtNom.focus();
+    return;
+  }
+
+  let capacidad_ml = null;
+  let medida_shot_ml = null;
+  if (es_licor) {
+    const selCap = document.getElementById('selNuevoInsumoCapacidad')?.value;
+    const txtCapCustom = parseFloat(document.getElementById('txtNuevoInsumoCapacidadCustom')?.value);
+    capacidad_ml = selCap === 'custom' ? (txtCapCustom || 750) : (parseFloat(selCap) || 750);
+
+    const selShot = document.getElementById('selNuevoInsumoMedidaShot')?.value;
+    const txtShotCustom = parseFloat(document.getElementById('txtNuevoInsumoMedidaShotCustom')?.value);
+    medida_shot_ml = selShot === 'custom' ? (txtShotCustom || 30) : (parseFloat(selShot) || 30);
+  }
+
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  const usuarioNombre = estado.usuarioActual ? (estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario || 'Admin') : 'Admin';
+
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-rol': rol,
+      'x-negocio-id': String(nid)
+    };
+    if (window._pinSupervisorActivo) {
+      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+    }
+
+    const res = await fetch('/api/admin/inventario', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        nombre,
+        categoria,
+        unidad_medida,
+        stock_actual,
+        stock_minimo,
+        costo_unitario,
+        es_licor,
+        capacidad_ml,
+        medida_shot_ml,
+        negocio_id: nid,
+        usuarioNombre
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al crear insumo');
+
+    mostrarNotificacionCentro(`✅ Insumo "${nombre}" registrado en bodega correctamente.`, 'success');
+    window.cerrarModalNuevoInsumo();
+    if (typeof cargarInventarioAdmin === 'function') await cargarInventarioAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
   }
 };
 
+// MODAL EDITAR INSUMO
+window.abrirModalEditarInsumo = async function(insumoId) {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '✏️',
+      titulo: 'Editar Insumo',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para editar el insumo:'
+    });
+    if (!pin) return;
+    window._pinSupervisorActivo = pin;
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('👑 Edición de insumo autorizada con PIN', 'success');
+    }
+  }
+
+  const ins = (estado.inventario || []).find(i => Number(i.id) === Number(insumoId));
+  if (!ins) {
+    mostrarNotificacionCentro('⚠️ Insumo no encontrado.', 'warning');
+    return;
+  }
+
+  const elId = document.getElementById('txtEditarInsumoId');
+  const elNom = document.getElementById('txtEditarInsumoNombre');
+  const selCat = document.getElementById('selectEditarInsumoCat');
+  const txtCatManual = document.getElementById('txtEditarInsumoCatManual');
+  const selUni = document.getElementById('selectEditarInsumoUnidad');
+  const elMin = document.getElementById('txtEditarInsumoMin');
+  const elCos = document.getElementById('txtEditarInsumoCosto');
+  const chkLicor = document.getElementById('chkEditarInsumoEsLicor');
+
+  if (elId) elId.value = ins.id;
+  if (elNom) elNom.value = ins.nombre || '';
+  if (selUni) selUni.value = ins.unidad_medida || 'unidades';
+  if (elMin) elMin.value = ins.stock_minimo !== undefined ? ins.stock_minimo : 5;
+  if (elCos) elCos.value = ins.costo_unitario !== undefined ? ins.costo_unitario : 0;
+  if (chkLicor) chkLicor.checked = Boolean(ins.es_licor);
+
+  if (selCat) {
+    const categorias = [...new Set((estado.inventario || []).map(i => i.categoria).filter(Boolean))];
+    if (ins.categoria && !categorias.includes(ins.categoria)) categorias.unshift(ins.categoria);
+    if (!categorias.includes('General')) categorias.unshift('General');
+    selCat.innerHTML = categorias.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('') +
+      '<option value="__otra__">➕ Otra categoría...</option>';
+    selCat.value = ins.categoria || 'General';
+  }
+  if (txtCatManual) {
+    txtCatManual.value = '';
+    txtCatManual.style.display = 'none';
+  }
+
+  window.toggleConfigFraccionable('editar', Boolean(ins.es_licor));
+  window.onCambioUnidadInsumo('editar');
+
+  const modal = document.getElementById('modalEditarInsumo');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
+};
+
+window.cerrarModalEditarInsumo = function() {
+  const modal = document.getElementById('modalEditarInsumo');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  window._pinSupervisorActivo = null;
+};
+
 window.guardarEdicionInsumo = async function() {
   const id = document.getElementById('txtEditarInsumoId')?.value;
   const nombre = document.getElementById('txtEditarInsumoNombre')?.value?.trim();
-  const categoria = document.getElementById('txtEditarInsumoCategoria')?.value?.trim() || 'General';
+  const selCat = document.getElementById('selectEditarInsumoCat')?.value;
+  const txtCatManual = document.getElementById('txtEditarInsumoCatManual')?.value?.trim();
+  const categoria = (selCat === '__otra__' ? txtCatManual : selCat) || 'General';
   const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
-  const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMinimo')?.value) || 0;
+  const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
   const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
   const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-  const capacidad_ml = es_licor ? (parseFloat(document.getElementById('txtEditarInsumoCapacidadMl')?.value) || (unidad_medida === 'kg' ? 1000 : 750)) : null;
-  const medida_shot_ml = es_licor ? (parseFloat(document.getElementById('txtEditarInsumoMedidaShotMl')?.value) || (unidad_medida === 'kg' ? 200 : 30)) : null;
+  
+  let capacidad_ml = null;
+  let medida_shot_ml = null;
+  if (es_licor) {
+    const selCap = document.getElementById('selEditarInsumoCapacidad')?.value;
+    const txtCapCustom = parseFloat(document.getElementById('txtEditarInsumoCapacidadCustom')?.value);
+    capacidad_ml = selCap === 'custom' ? (txtCapCustom || 750) : (parseFloat(selCap) || 750);
+
+    const selShot = document.getElementById('selEditarInsumoMedidaShot')?.value;
+    const txtShotCustom = parseFloat(document.getElementById('txtEditarInsumoMedidaShotCustom')?.value);
+    medida_shot_ml = selShot === 'custom' ? (txtShotCustom || 30) : (parseFloat(selShot) || 30);
+  }
 
   if (!id || !nombre) {
     alert('Por favor indica al menos el nombre del insumo.');
@@ -13219,16 +13489,22 @@ window.guardarEdicionInsumo = async function() {
   const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
   try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-rol': rol,
+      'x-negocio-id': String(nid)
+    };
+    if (window._pinSupervisorActivo) {
+      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+    }
+
     const res = await fetch(`/api/admin/inventario/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-rol': rol,
-        'x-negocio-id': String(nid)
-      },
+      headers,
       body: JSON.stringify({
         nombre, categoria, unidad_medida, stock_minimo, costo_unitario,
         es_licor, capacidad_ml, medida_shot_ml,
+        negocio_id: nid,
         usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario : 'Admin'
       })
     });
@@ -13236,11 +13512,84 @@ window.guardarEdicionInsumo = async function() {
     if (!res.ok) throw new Error(data.error);
 
     mostrarNotificacionCentro(`✅ Insumo "${nombre}" actualizado correctamente.`, 'success');
-    if (typeof cerrarModalEditarInsumo === 'function') cerrarModalEditarInsumo();
-    if (typeof cargarInventarioAdmin === 'function') cargarInventarioAdmin();
+    window.cerrarModalEditarInsumo();
+    if (typeof cargarInventarioAdmin === 'function') await cargarInventarioAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
   }
+};
+
+// FRACCIONAMIENTO & CATEGORÍAS AUXILIARES
+window.verificarCategoriaInsumoManual = function(modo) {
+  const sel = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoCat' : 'selectEditarInsumoCat');
+  const txt = document.getElementById(modo === 'nuevo' ? 'txtNuevoInsumoCatManual' : 'txtEditarInsumoCatManual');
+  if (!sel || !txt) return;
+  if (sel.value === '__otra__') {
+    txt.style.display = 'block';
+    txt.focus();
+  } else {
+    txt.style.display = 'none';
+  }
+};
+
+window.onCambioUnidadInsumo = function(modo) {
+  const selUni = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
+  const selCap = document.getElementById(modo === 'nuevo' ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
+  const selShot = document.getElementById(modo === 'nuevo' ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
+  if (!selUni || !selCap || !selShot) return;
+
+  const u = selUni.value;
+  if (u === 'kg') {
+    selCap.innerHTML = '<option value="1000">1 Kg (1000 g)</option><option value="500">500 g (1/2 Kg)</option><option value="2000">2 Kg (2000 g)</option><option value="custom">Personalizado (g)</option>';
+    selShot.innerHTML = '<option value="100">100 g (Porción)</option><option value="150">150 g (Carne/Pescado)</option><option value="200">200 g (Plato Fuerte)</option><option value="50">50 g (Guarnición)</option><option value="custom">Personalizado (g)</option>';
+  } else if (u === 'litros') {
+    selCap.innerHTML = '<option value="1000">1 Litro (1000 ml)</option><option value="2000">2 Litros</option><option value="3000">3 Litros</option><option value="custom">Personalizado (ml)</option>';
+    selShot.innerHTML = '<option value="250">250 ml (1 Vaso)</option><option value="350">350 ml (Lata)</option><option value="500">500 ml (Medio Litro)</option><option value="50">50 ml (Chupito)</option><option value="custom">Personalizado (ml)</option>';
+  } else {
+    selCap.innerHTML = '<option value="750">Botella Estándar (750 ml)</option><option value="1000">Botella Litro (1000 ml)</option><option value="350">Media Botella (350 ml)</option><option value="1750">Magnum (1750 ml)</option><option value="custom">Personalizado (ml)</option>';
+    selShot.innerHTML = '<option value="30">1 Shot Estándar (30 ml / 1 oz)</option><option value="45">1.5 oz (45 ml / Trago)</option><option value="60">2 oz (60 ml / Doble)</option><option value="custom">Personalizado (ml)</option>';
+  }
+
+  window.actualizarCalculoFraccionable(modo);
+};
+
+window.toggleConfigFraccionable = function(modo, activo) {
+  const seccion = document.getElementById(modo === 'nuevo' ? 'seccionConfigLicorNuevo' : 'seccionConfigLicorEditar');
+  if (seccion) {
+    seccion.style.display = activo ? 'block' : 'none';
+  }
+  window.actualizarCalculoFraccionable(modo);
+};
+
+window.actualizarCalculoFraccionable = function(modo) {
+  const prefijo = modo === 'nuevo' ? 'Nuevo' : 'Editar';
+  const chk = document.getElementById(`chk${prefijo}InsumoEsLicor`);
+  if (!chk || !chk.checked) return;
+
+  const selCap = document.getElementById(`sel${prefijo}InsumoCapacidad`);
+  const txtCapCustom = document.getElementById(`txt${prefijo}InsumoCapacidadCustom`);
+  const selShot = document.getElementById(`sel${prefijo}InsumoMedidaShot`);
+  const txtShotCustom = document.getElementById(`txt${prefijo}InsumoMedidaShotCustom`);
+  const txtCosto = document.getElementById(`txt${prefijo}InsumoCosto`);
+
+  if (selCap && txtCapCustom) {
+    txtCapCustom.style.display = (selCap.value === 'custom') ? 'block' : 'none';
+  }
+  if (selShot && txtShotCustom) {
+    txtShotCustom.style.display = (selShot.value === 'custom') ? 'block' : 'none';
+  }
+
+  const cap = (selCap?.value === 'custom' ? parseFloat(txtCapCustom?.value) : parseFloat(selCap?.value)) || 750;
+  const shot = (selShot?.value === 'custom' ? parseFloat(txtShotCustom?.value) : parseFloat(selShot?.value)) || 30;
+  const costo = parseFloat(txtCosto?.value) || 0;
+
+  const rend = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
+  const costoPorcion = rend > 0 ? Math.round(costo / rend) : 0;
+
+  const lblRend = document.getElementById(`lblRendimientoShots${prefijo}`);
+  const lblCosto = document.getElementById(`lblCostoPorShot${prefijo}`);
+  if (lblRend) lblRend.textContent = rend;
+  if (lblCosto) lblCosto.textContent = typeof formatCRC === 'function' ? formatCRC(costoPorcion) : `₡${costoPorcion}`;
 };
 
 // ELIMINACIÓN DE INSUMO DE BODEGA
