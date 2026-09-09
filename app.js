@@ -594,6 +594,82 @@ window.alCambiarCategoriaProducto = function() {
   }
 };
 
+window.subirImagenDesdePC = function(event, inputTargetId, previewImgId, callback = null) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('⚠️ Por favor selecciona un archivo de imagen válido (JPG, PNG, WebP).');
+    return;
+  }
+
+  // Límite de 20MB para archivos locales
+  if (file.size > 20 * 1024 * 1024) {
+    alert('⚠️ La imagen es demasiado pesada (máximo 20 MB).');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Data = e.target.result;
+    try {
+      const res = await fetch('/api/upload/imagen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imagen: base64Data,
+          nombre: file.name
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al subir imagen');
+      }
+
+      const inputTarget = document.getElementById(inputTargetId);
+      if (inputTarget) {
+        inputTarget.value = data.url;
+      }
+
+      if (previewImgId) {
+        const previewImg = document.getElementById(previewImgId);
+        if (previewImg) {
+          previewImg.src = data.url;
+        }
+        const previewCont = document.getElementById('previewContainerNuevoProd');
+        if (previewCont) previewCont.style.display = 'flex';
+      }
+
+      if (typeof callback === 'function') {
+        callback();
+      }
+
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('✅ Foto subida y guardada exitosamente en la PC principal', 'success');
+      }
+    } catch (err) {
+      alert('❌ ' + err.message);
+    }
+  };
+  reader.readAsDataURL(file);
+};
+
+window.actualizarPreviewModalNuevoProd = function() {
+  const txtImg = document.getElementById('txtNuevoProdImagen');
+  const previewImg = document.getElementById('previewModalNuevoProd');
+  const previewCont = document.getElementById('previewContainerNuevoProd');
+  if (!txtImg || !previewImg || !previewCont) return;
+
+  const url = txtImg.value.trim();
+  if (url) {
+    previewImg.src = url;
+    previewCont.style.display = 'flex';
+  } else {
+    previewCont.style.display = 'none';
+  }
+};
+
 window.abrirModalNuevoProducto = async function() {
   const modal = document.getElementById('modalAgregarProducto');
   const txtId = document.getElementById('txtNuevoProdId');
@@ -616,6 +692,7 @@ window.abrirModalNuevoProducto = async function() {
   const txtStock = document.getElementById('txtKardexInsumoStock');
   const txtCosto = document.getElementById('txtKardexInsumoCosto');
   const txtMin = document.getElementById('txtKardexInsumoMin');
+  const previewCont = document.getElementById('previewContainerNuevoProd');
 
   if (iconHeader) iconHeader.textContent = '➕';
   if (titleHeader) titleHeader.textContent = 'Agregar Producto';
@@ -625,6 +702,7 @@ window.abrirModalNuevoProducto = async function() {
   if (txtNombre) txtNombre.value = '';
   if (txtPrecio) txtPrecio.value = '';
   if (txtImg) txtImg.value = '';
+  if (previewCont) previewCont.style.display = 'none';
   if (selCurso) selCurso.value = '2';
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
   if (txtNuevaCatNombre) txtNuevaCatNombre.value = '';
@@ -743,6 +821,16 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (txtNombre) txtNombre.value = prod.nombre || '';
   if (txtPrecio) txtPrecio.value = prod.precio !== undefined ? prod.precio : '';
   if (txtImg) txtImg.value = prod.imagen_url || '';
+  const previewCont = document.getElementById('previewContainerNuevoProd');
+  const previewImg = document.getElementById('previewModalNuevoProd');
+  if (previewCont && previewImg) {
+    if (prod.imagen_url) {
+      previewImg.src = prod.imagen_url;
+      previewCont.style.display = 'flex';
+    } else {
+      previewCont.style.display = 'none';
+    }
+  }
   if (selDest) selDest.value = prod.destino || 'cocina';
   if (selCurso) selCurso.value = String(prod.curso || 2);
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';

@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fs = require('fs');
 const db = require('./database');
 const printerService = require('./printerService');
 
@@ -269,7 +270,58 @@ app.use(
 );
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Directorio de uploads de imágenes estáticas locales
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) {}
+}
+app.use('/uploads', express.static(uploadsDir));
+
+// Endpoint para subir y almacenar imágenes localmente en el servidor
+app.post('/api/upload/imagen', async (req, res) => {
+  try {
+    const { imagen, nombre = 'foto.jpg' } = req.body;
+    if (!imagen) {
+      return res.status(400).json({ error: 'No se envió ninguna imagen.' });
+    }
+
+    // Extraer base64 y tipo de imagen
+    const matches = String(imagen).match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ error: 'Formato de imagen inválido. Debe ser una imagen en Base64.' });
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    let ext = 'jpg';
+    if (mimeType.includes('png')) ext = 'png';
+    else if (mimeType.includes('webp')) ext = 'webp';
+    else if (mimeType.includes('gif')) ext = 'gif';
+    else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = 'jpg';
+    else if (mimeType.includes('svg')) ext = 'svg';
+
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const sanitizedName = (nombre || 'prod').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+    const fileName = `img_${Date.now()}_${Math.floor(Math.random() * 10000)}_${sanitizedName}.${ext}`;
+    const filePath = path.join(uploadsDir, fileName);
+
+    fs.writeFileSync(filePath, buffer);
+
+    const relativeUrl = `/uploads/${fileName}`;
+    res.json({ ok: true, url: relativeUrl, message: 'Imagen subida y guardada exitosamente en la PC principal.' });
+  } catch (e) {
+    console.error('Error subiendo imagen:', e);
+    res.status(500).json({ error: 'Error al procesar la imagen: ' + e.message });
+  }
+});
 
 // 2. Limitador de tasa contra ataques de fuerza bruta en autenticación
 const authRateLimiter = rateLimit({

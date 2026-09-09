@@ -2164,8 +2164,14 @@
         </div>
 
         <div class="field-group" style="margin-top:12px;">
-          <label>URL de la Foto / Imagen (o pega un enlace de internet):</label>
-          <input type="url" id="custImagenUrl" placeholder="https://ejemplo.com/hamburguesa.jpg" oninput="actualizarPreviewBoton()" />
+          <label>Foto / Imagen del Platillo o Bebida:</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="url" id="custImagenUrl" placeholder="https://ejemplo.com/hamburguesa.jpg o sube de tu PC" oninput="actualizarPreviewBoton()" style="flex:1;" />
+            <input type="file" id="fileCustImagen" accept="image/*" style="display:none;" onchange="subirImagenDesdePC(event, 'custImagenUrl', null, actualizarPreviewBoton)" />
+            <button type="button" class="btn-sec" onclick="document.getElementById('fileCustImagen').click()" style="white-space:nowrap; padding:8px 12px; font-size:0.85rem; display:flex; align-items:center; gap:5px; background:#1e293b; color:#38bdf8; border:1px solid #0284c7; border-radius:8px; cursor:pointer;" title="Subir foto guardada en tu computadora">
+              📁 Subir de PC
+            </button>
+          </div>
         </div>
 
         <label class="section-label" style="margin-top:10px;">Galería de Fotos Pre-cargadas (Toca para elegir una foto):</label>
@@ -3012,8 +3018,18 @@
         </div>
 
         <div class="field-row" style="margin-bottom:10px;">
-          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem; color:#94a3b8;">Foto / Imagen URL (Opcional):</label>
-          <input type="url" id="txtNuevoProdImagen" class="select-styled" placeholder="https://... (dejar vacío para icono automático)" style="width:100%; padding:8px 12px; font-size:0.88rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem; color:#94a3b8;">Foto / Imagen del Producto (Opcional):</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="url" id="txtNuevoProdImagen" class="select-styled" placeholder="https://... o sube una desde tu PC" style="flex:1; padding:8px 12px; font-size:0.88rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" oninput="actualizarPreviewModalNuevoProd()" />
+            <input type="file" id="fileNuevoProdImagen" accept="image/*" style="display:none;" onchange="subirImagenDesdePC(event, 'txtNuevoProdImagen', 'previewModalNuevoProd', actualizarPreviewModalNuevoProd)" />
+            <button type="button" class="btn-sec" onclick="document.getElementById('fileNuevoProdImagen').click()" style="white-space:nowrap; padding:8px 12px; font-size:0.85rem; display:flex; align-items:center; gap:5px; background:#1e293b; color:#38bdf8; border:1px solid #0284c7; border-radius:8px; cursor:pointer;" title="Subir foto guardada en tu computadora">
+              📁 Subir de PC
+            </button>
+          </div>
+          <div id="previewContainerNuevoProd" style="margin-top:8px; display:none; align-items:center; gap:10px;">
+            <img id="previewModalNuevoProd" src="" style="width:48px; height:48px; object-fit:cover; border-radius:8px; border:1px solid #334155;" />
+            <span style="font-size:0.75rem; color:#10b981; font-weight:600;">✅ Foto cargada correctamente</span>
+          </div>
         </div>
       </div>
       <div class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding: 14px 20px;">
