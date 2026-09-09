@@ -903,17 +903,96 @@ app.get('/api/dev/negocios', async (req, res) => {
 
 app.post('/api/dev/negocios', async (req, res) => {
   try {
-    const { nombre, slogan = '', logo_url = '', moneda = 'CRC', telefono = '', direccion = '', activo = 1 } = req.body;
-    if (!nombre) return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
+    const { 
+      nombre, 
+      slogan = '', 
+      logo_url = '', 
+      moneda = 'CRC', 
+      telefono = '', 
+      direccion = '', 
+      activo = 1,
+      plan_nombre = 'Plan Full Tech 2026',
+      modulos_activos = 'all',
+      crear_admin = false,
+      crearAdmin = false,
+      admin_usuario = '',
+      adminUsuario = '',
+      admin_nombre = '',
+      adminNombre = '',
+      admin_password = '',
+      adminPassword = '',
+      admin_pin = '1234',
+      adminPin = '1234',
+      crear_estructura_base = false,
+      crearEstructuraBase = false
+    } = req.body;
+
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
+    }
 
     const valActivo = activo === 0 ? 0 : 1;
     const r = await dbRun(
-      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo]
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [nombre.trim(), slogan.trim(), logo_url.trim(), (moneda || 'CRC').toUpperCase(), telefono.trim(), direccion.trim(), valActivo, plan_nombre, typeof modulos_activos === 'object' ? JSON.stringify(modulos_activos) : modulos_activos]
     );
-    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [r.lastID]);
+    const nuevoNegocioId = r.lastID;
+
+    // Crear estructura base inicial (Zonas, Mesas, Categorías) si se solicitó
+    const debeCrearEstructura = Boolean(crear_estructura_base || crearEstructuraBase);
+    if (debeCrearEstructura) {
+      const rZona = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, 'Salón Principal']);
+      const zonaId = rZona.lastID;
+      for (let i = 1; i <= 6; i++) {
+        await dbRun(
+          `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
+           VALUES (?, ?, ?, 4, 'libre', ?, ?, 130, 120, 'square', 1)`,
+          [nuevoNegocioId, `Mesa ${i}`, zonaId, 40 + ((i - 1) % 3) * 160, 40 + Math.floor((i - 1) / 3) * 150]
+        );
+      }
+      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Comidas', 'fas fa-utensils', 'cocina')`, [nuevoNegocioId]);
+      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Bebidas', 'fas fa-glass-martini-alt', 'bar')`, [nuevoNegocioId]);
+    }
+
+    // Crear Usuario Administrador para el nuevo negocio si se especificó
+    let adminCreado = null;
+    const debeCrearAdmin = Boolean(crear_admin || crearAdmin || admin_usuario || adminUsuario);
+    const finalAdminUser = (admin_usuario || adminUsuario || '').trim().toLowerCase();
+    const finalAdminPass = (admin_password || adminPassword || '').trim();
+    const finalAdminNombre = (admin_nombre || adminNombre || '').trim() || `Admin ${nombre.trim()}`;
+    const finalAdminPin = String(admin_pin || adminPin || '1234').trim();
+
+    if (debeCrearAdmin && finalAdminUser && finalAdminPass) {
+      const permisosAdmin = JSON.stringify({
+        salon: true,
+        kds: true,
+        caja: true,
+        facturacion: true,
+        empleados: true,
+        catalogo: true,
+        reportes: true,
+        configuracion: true
+      });
+      const hashedPassword = await bcrypt.hash(finalAdminPass, 10);
+
+      const rUser = await dbRun(
+        `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
+         VALUES (?, ?, ?, ?, 'admin', 'M', ?, ?, 1, 0)`,
+        [nuevoNegocioId, finalAdminUser, finalAdminNombre, hashedPassword, finalAdminPin, permisosAdmin]
+      );
+      adminCreado = {
+        id: rUser.lastID,
+        negocio_id: nuevoNegocioId,
+        usuario: finalAdminUser,
+        nombre_completo: finalAdminNombre,
+        rol: 'admin',
+        pin: finalAdminPin
+      };
+    }
+
+    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevo);
-    res.json(nuevo);
+    res.json({ ...nuevo, admin: adminCreado });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

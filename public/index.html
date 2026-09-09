@@ -2340,31 +2340,45 @@
   <!-- MODAL: CREAR / EDITAR NEGOCIO (DEVELOPER) -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalDevNegocio">
-    <div class="modal-dialog">
+    <div class="modal-dialog" style="max-width: 580px;">
       <div class="dialog-header">
         <div>
           <h3 id="negocioModalTitulo">🏬 Registrar Nuevo Comercio</h3>
-          <small>Configura los datos y el logo oficial del restaurante</small>
+          <small>Configura los datos del restaurante y sus credenciales de acceso</small>
         </div>
         <button class="btn-icon-close" id="btnCloseDevNegocio">✕</button>
       </div>
-      <div class="dialog-body">
+      <div class="dialog-body" style="max-height: 80vh; overflow-y: auto;">
         <input type="hidden" id="devNegocioId" value="" />
+        
+        <div style="font-weight: 700; color: #38bdf8; font-size: 0.85rem; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+          🏢 1. Datos Generales del Restaurante
+        </div>
+
         <div class="field-group">
-          <label>Nombre del Negocio / Restaurante:</label>
+          <label>Nombre del Negocio / Restaurante: <span style="color:#ef4444;">*</span></label>
           <input type="text" id="devNegocioNombre" placeholder="Ej: Cervecería La Terraza" required />
         </div>
         <div class="field-group" style="margin-top:10px;">
           <label>Slogan / Subtítulo:</label>
           <input type="text" id="devNegocioSlogan" placeholder="Ej: GastroPub & Grill" />
         </div>
-        <div class="field-group" style="margin-top:10px;">
-          <label>URL del Logo (Aparecerá en el encabezado del sistema):</label>
-          <input type="url" id="devNegocioLogoUrl" placeholder="https://ejemplo.com/logo.png" />
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+          <div class="field-group">
+            <label>Moneda Principal:</label>
+            <select id="devNegocioMoneda" style="width: 100%; padding: 8px 10px; border-radius: 8px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; font-weight: 600;">
+              <option value="CRC">🇨🇷 CRC (Colones ₡)</option>
+              <option value="USD">🇺🇸 USD (Dólares $)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label>Teléfono:</label>
+            <input type="text" id="devNegocioTelefono" placeholder="Ej: 2222-1111" />
+          </div>
         </div>
         <div class="field-group" style="margin-top:10px;">
-          <label>Teléfono:</label>
-          <input type="text" id="devNegocioTelefono" placeholder="Ej: 2222-1111" />
+          <label>URL del Logo (Opcional):</label>
+          <input type="url" id="devNegocioLogoUrl" placeholder="https://ejemplo.com/logo.png" />
         </div>
         <div class="field-group" style="margin-top:10px;">
           <label>Estado del Comercio:</label>
@@ -2373,6 +2387,49 @@
             <option value="0">⛔ Inactivo / Desactivado</option>
           </select>
         </div>
+
+        <!-- SECCIÓN: CREACIÓN DE ADMINISTRADOR INICIAL (Para nuevos comercios) -->
+        <div id="devSeccionCrearAdmin" style="margin-top: 16px; padding: 14px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <label style="font-weight: 700; color: #38bdf8; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;">
+              <input type="checkbox" id="devCrearAdminCheck" checked style="accent-color: #38bdf8; width: 18px; height: 18px; cursor: pointer;" />
+              👤 Crear Usuario Administrador (Admin)
+            </label>
+            <span style="font-size: 0.75rem; background: rgba(56, 189, 248, 0.2); color: #bae6fd; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">Recomendado</span>
+          </div>
+          
+          <div id="devCamposAdminContainer" style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="field-group">
+                <label style="font-size: 0.8rem; color: #cbd5e1;">Nombre Completo Admin:</label>
+                <input type="text" id="devAdminNombre" placeholder="Ej: Mario Gómez" style="font-size: 0.85rem;" />
+              </div>
+              <div class="field-group">
+                <label style="font-size: 0.8rem; color: #cbd5e1;">Usuario (Login): <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="devAdminUsuario" placeholder="Ej: admin_terraza" style="font-size: 0.85rem;" />
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="field-group">
+                <label style="font-size: 0.8rem; color: #cbd5e1;">Contraseña: <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="devAdminPassword" placeholder="Clave de acceso" style="font-size: 0.85rem;" />
+              </div>
+              <div class="field-group">
+                <label style="font-size: 0.8rem; color: #cbd5e1;">PIN Rápido (4 dígitos):</label>
+                <input type="text" id="devAdminPin" maxlength="6" placeholder="1234" value="1234" style="font-size: 0.85rem;" />
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(56, 189, 248, 0.2);">
+              <input type="checkbox" id="devCrearEstructuraBase" checked style="accent-color: #10b981; width: 16px; height: 16px; cursor: pointer;" />
+              <label for="devCrearEstructuraBase" style="font-size: 0.8rem; color: #cbd5e1; cursor: pointer; margin: 0;">
+                🪴 Crear estructura base (Salón Principal, 6 mesas y categorías Comidas/Bebidas)
+              </label>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="dialog-footer">
         <button class="btn-sec" id="btnCancelarDevNegocio">Cancelar</button>

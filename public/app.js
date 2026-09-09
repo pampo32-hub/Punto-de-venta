@@ -4151,11 +4151,60 @@ window.abrirModalNuevoNegocio = function() {
   document.getElementById('devNegocioSlogan').value = '';
   document.getElementById('devNegocioLogoUrl').value = '';
   document.getElementById('devNegocioTelefono').value = '';
+  const elMoneda = document.getElementById('devNegocioMoneda');
+  if (elMoneda) elMoneda.value = 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   if (elActivo) elActivo.value = '1';
+
+  // Sección Admin inicial
+  const seccionAdmin = document.getElementById('devSeccionCrearAdmin');
+  if (seccionAdmin) seccionAdmin.style.display = 'block';
+  const checkAdmin = document.getElementById('devCrearAdminCheck');
+  if (checkAdmin) checkAdmin.checked = true;
+  const containerAdmin = document.getElementById('devCamposAdminContainer');
+  if (containerAdmin) containerAdmin.style.display = 'flex';
+  
+  const elAdminNombre = document.getElementById('devAdminNombre');
+  if (elAdminNombre) elAdminNombre.value = '';
+  const elAdminUser = document.getElementById('devAdminUsuario');
+  if (elAdminUser) elAdminUser.value = '';
+  const elAdminPass = document.getElementById('devAdminPassword');
+  if (elAdminPass) elAdminPass.value = '';
+  const elAdminPin = document.getElementById('devAdminPin');
+  if (elAdminPin) elAdminPin.value = '1234';
+  const elEstructura = document.getElementById('devCrearEstructuraBase');
+  if (elEstructura) elEstructura.checked = true;
+
   document.getElementById('negocioModalTitulo').textContent = '🏬 Registrar Nuevo Comercio';
   document.getElementById('modalDevNegocio').classList.add('active');
 };
+
+// Auto-sugerir usuario admin al escribir el nombre del restaurante
+document.getElementById('devNegocioNombre')?.addEventListener('input', (e) => {
+  const id = document.getElementById('devNegocioId')?.value;
+  if (id) return; // Solo para nuevos comercios
+  const val = e.target.value.trim();
+  const elAdminUser = document.getElementById('devAdminUsuario');
+  const elAdminNombre = document.getElementById('devAdminNombre');
+  if (val && elAdminUser && (!elAdminUser.dataset.custom || elAdminUser.dataset.custom === 'false')) {
+    const slug = val.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 15);
+    elAdminUser.value = `admin_${slug}`;
+  }
+  if (val && elAdminNombre && (!elAdminNombre.dataset.custom || elAdminNombre.dataset.custom === 'false')) {
+    elAdminNombre.value = `Admin ${val}`;
+  }
+});
+
+document.getElementById('devAdminUsuario')?.addEventListener('input', function() {
+  this.dataset.custom = 'true';
+});
+document.getElementById('devAdminNombre')?.addEventListener('input', function() {
+  this.dataset.custom = 'true';
+});
+document.getElementById('devCrearAdminCheck')?.addEventListener('change', function() {
+  const container = document.getElementById('devCamposAdminContainer');
+  if (container) container.style.display = this.checked ? 'flex' : 'none';
+});
 
 window.editarNegocioDev = async function(negocioId) {
   const res = await fetch('/api/dev/negocios');
@@ -4168,8 +4217,15 @@ window.editarNegocioDev = async function(negocioId) {
   document.getElementById('devNegocioSlogan').value = n.slogan || '';
   document.getElementById('devNegocioLogoUrl').value = n.logo_url || '';
   document.getElementById('devNegocioTelefono').value = n.telefono || '';
+  const elMoneda = document.getElementById('devNegocioMoneda');
+  if (elMoneda) elMoneda.value = n.moneda || 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   if (elActivo) elActivo.value = (Number(n.activo) === 0 ? '0' : '1');
+  
+  // Ocultar sección de creación de admin al editar
+  const seccionAdmin = document.getElementById('devSeccionCrearAdmin');
+  if (seccionAdmin) seccionAdmin.style.display = 'none';
+
   document.getElementById('negocioModalTitulo').textContent = '✏️ Editar Comercio & Logo';
   document.getElementById('modalDevNegocio').classList.add('active');
 };
@@ -4249,12 +4305,47 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
   const slogan = document.getElementById('devNegocioSlogan').value.trim();
   const logo_url = document.getElementById('devNegocioLogoUrl').value.trim();
   const telefono = document.getElementById('devNegocioTelefono').value.trim();
+  const elMoneda = document.getElementById('devNegocioMoneda');
+  const moneda = elMoneda ? elMoneda.value : 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   const activo = elActivo ? parseInt(elActivo.value) : 1;
 
   if (!nombre) {
     alert('El nombre del negocio es obligatorio.');
     return;
+  }
+
+  const payload = { nombre, slogan, logo_url, telefono, moneda, activo };
+
+  // Si es un nuevo negocio, verificar opciones de Admin y Estructura Base
+  if (!id) {
+    const checkAdmin = document.getElementById('devCrearAdminCheck')?.checked;
+    if (checkAdmin) {
+      const adminUsuario = document.getElementById('devAdminUsuario')?.value.trim();
+      const adminPassword = document.getElementById('devAdminPassword')?.value.trim();
+      const adminNombre = document.getElementById('devAdminNombre')?.value.trim() || `Admin ${nombre}`;
+      const adminPin = document.getElementById('devAdminPin')?.value.trim() || '1234';
+
+      if (!adminUsuario) {
+        alert('Por favor ingresa un nombre de Usuario para el Administrador (o desmarca la casilla de crear admin).');
+        document.getElementById('devAdminUsuario')?.focus();
+        return;
+      }
+      if (!adminPassword) {
+        alert('Por favor ingresa una Contraseña para el Administrador.');
+        document.getElementById('devAdminPassword')?.focus();
+        return;
+      }
+
+      payload.crear_admin = true;
+      payload.admin_usuario = adminUsuario;
+      payload.admin_password = adminPassword;
+      payload.admin_nombre = adminNombre;
+      payload.admin_pin = adminPin;
+    }
+
+    const checkEstructura = document.getElementById('devCrearEstructuraBase')?.checked;
+    payload.crear_estructura_base = Boolean(checkEstructura);
   }
 
   const endpoint = id ? `/api/dev/negocios/${id}` : '/api/dev/negocios';
@@ -4264,10 +4355,17 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
     const res = await fetch(endpoint, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, slogan, logo_url, telefono, activo })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
-    alert('🏬 ¡Comercio guardado exitosamente!');
+    if (!res.ok) throw new Error(data.error || 'Error al guardar el negocio');
+
+    if (!id && data.admin) {
+      alert(`🎉 ¡Comercio y Administrador Creados Exitosamente!\n\n🏢 Comercio: ${data.nombre}\n👤 Usuario Admin: ${data.admin.usuario}\n🔑 PIN de Acceso: ${data.admin.pin}\n\nEl usuario Administrador ya puede ingresar al sistema para este negocio.`);
+    } else {
+      alert('🏬 ¡Comercio guardado exitosamente!');
+    }
+
     document.getElementById('modalDevNegocio').classList.remove('active');
     cargarNegociosDev();
     if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
