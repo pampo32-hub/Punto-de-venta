@@ -8456,3 +8456,442 @@ body.dev-inspecting-active * {
   font-weight: 700 !important;
   cursor: pointer;
 }
+
+
+/* =============================================================================
+   👑 MODO BETA TESTER: TRANSFORMACIÓN 100% DE BOTONES A 3D ORO CHAMPAGNE & NOIR
+   ============================================================================= */
+
+/* Botón Toggle en Top-Nav */
+.btn-beta-gold-toggle {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(180, 130, 10, 0.25) 100%) !important;
+  border: 1px solid rgba(212, 175, 55, 0.5) !important;
+  color: #FDE047 !important;
+  font-weight: 700 !important;
+  transition: all 0.2s ease !important;
+}
+
+.btn-beta-gold-toggle:hover {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.3) 0%, rgba(180, 130, 10, 0.4) 100%) !important;
+  border-color: #FDE047 !important;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.4) !important;
+}
+
+.btn-beta-gold-toggle.active {
+  background: linear-gradient(180deg, #F5D77F 0%, #D4AF37 100%) !important;
+  border-bottom: 3px solid #713F12 !important;
+  color: #261B02 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 0 14px rgba(212, 175, 55, 0.6) !important;
+}
+
+/* =============================================================================
+   REGLAS GLOBALES PARA 100% DE LOS BOTONES BAJO body.beta-tester-gold
+   ============================================================================= */
+
+body.beta-tester-gold {
+  --primary: #D4AF37;
+  --primary-glow: #FDE047;
+}
+
+/* 1. BOTONES PRINCIPALES DE ACCIÓN (COBRAR, PAGAR, GUARDAR, REGISTRAR, CONFIRMAR, LOGIN) */
+body.beta-tester-gold .btn-pri,
+body.beta-tester-gold .btn-primary,
+body.beta-tester-gold .btn-checkout,
+body.beta-tester-gold #btn-checkout,
+body.beta-tester-gold #btnPagarModal,
+body.beta-tester-gold #btnConfirmarCobro,
+body.beta-tester-gold #btnPagarComanda,
+body.beta-tester-gold .btn-cobro,
+body.beta-tester-gold .btn-confirm-action,
+body.beta-tester-gold .btn-login-submit,
+body.beta-tester-gold #btnLoginSubmit,
+body.beta-tester-gold .btn-abrir-mesa,
+body.beta-tester-gold .btn-guardar-cambios,
+body.beta-tester-gold .btn-crear-producto,
+body.beta-tester-gold .btn-abrir-modal,
+body.beta-tester-gold .btn-realizar-pago,
+body.beta-tester-gold .btn-confirmar-arqueo,
+body.beta-tester-gold .btn-guardar-receta,
+body.beta-tester-gold .btn-modal-submit,
+body.beta-tester-gold .btn-action-primary,
+body.beta-tester-gold .btn-confirmar-pago,
+body.beta-tester-gold button[type="submit"] {
+  background: linear-gradient(180deg, #F5D77F 0%, #D4AF37 50%, #AA820A 100%) !important;
+  border: 1px solid #FFF1B0 !important;
+  border-bottom: 4px solid #684F05 !important;
+  border-radius: 12px !important;
+  color: #261B02 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 5px 15px rgba(212, 175, 55, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.7) !important;
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .btn-pri:hover,
+body.beta-tester-gold .btn-primary:hover,
+body.beta-tester-gold .btn-checkout:hover,
+body.beta-tester-gold #btn-checkout:hover,
+body.beta-tester-gold #btnPagarModal:hover,
+body.beta-tester-gold #btnConfirmarCobro:hover,
+body.beta-tester-gold #btnPagarComanda:hover,
+body.beta-tester-gold .btn-cobro:hover,
+body.beta-tester-gold .btn-confirm-action:hover,
+body.beta-tester-gold .btn-login-submit:hover,
+body.beta-tester-gold #btnLoginSubmit:hover,
+body.beta-tester-gold .btn-abrir-mesa:hover,
+body.beta-tester-gold .btn-guardar-cambios:hover,
+body.beta-tester-gold .btn-crear-producto:hover,
+body.beta-tester-gold .btn-abrir-modal:hover,
+body.beta-tester-gold .btn-realizar-pago:hover,
+body.beta-tester-gold .btn-confirmar-arqueo:hover,
+body.beta-tester-gold .btn-guardar-receta:hover,
+body.beta-tester-gold .btn-modal-submit:hover,
+body.beta-tester-gold .btn-action-primary:hover,
+body.beta-tester-gold .btn-confirmar-pago:hover,
+body.beta-tester-gold button[type="submit"]:hover {
+  background: linear-gradient(180deg, #FFF1B0 0%, #E2C04D 50%, #B88E14 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 7px 18px rgba(212, 175, 55, 0.5) !important;
+}
+
+body.beta-tester-gold .btn-pri:active,
+body.beta-tester-gold .btn-primary:active,
+body.beta-tester-gold .btn-checkout:active,
+body.beta-tester-gold #btn-checkout:active,
+body.beta-tester-gold #btnPagarModal:active,
+body.beta-tester-gold #btnConfirmarCobro:active,
+body.beta-tester-gold #btnPagarComanda:active,
+body.beta-tester-gold .btn-cobro:active,
+body.beta-tester-gold .btn-confirm-action:active,
+body.beta-tester-gold .btn-login-submit:active,
+body.beta-tester-gold #btnLoginSubmit:active,
+body.beta-tester-gold .btn-abrir-mesa:active,
+body.beta-tester-gold .btn-guardar-cambios:active,
+body.beta-tester-gold .btn-crear-producto:active,
+body.beta-tester-gold .btn-abrir-modal:active,
+body.beta-tester-gold .btn-realizar-pago:active,
+body.beta-tester-gold .btn-confirmar-arqueo:active,
+body.beta-tester-gold .btn-guardar-receta:active,
+body.beta-tester-gold .btn-modal-submit:active,
+body.beta-tester-gold .btn-action-primary:active,
+body.beta-tester-gold .btn-confirmar-pago:active,
+body.beta-tester-gold button[type="submit"]:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 2. BOTONES DE COCINA / KDS / ENVIAR COMANDA */
+body.beta-tester-gold .btn-enviar-cocina,
+body.beta-tester-gold #btnEnviarCocina,
+body.beta-tester-gold .btn-cocina,
+body.beta-tester-gold .btn-kds-ready,
+body.beta-tester-gold .btn-kds-despachar,
+body.beta-tester-gold .btn-kds-action,
+body.beta-tester-gold .btn-ordenar,
+body.beta-tester-gold .btn-despacho-kds {
+  background: linear-gradient(180deg, #27272A 0%, #18181B 100%) !important;
+  border: 1px solid #D4AF37 !important;
+  border-bottom: 4px solid #713F12 !important;
+  border-radius: 12px !important;
+  color: #FEF08A !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(212, 175, 55, 0.3) !important;
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .btn-enviar-cocina:hover,
+body.beta-tester-gold #btnEnviarCocina:hover,
+body.beta-tester-gold .btn-cocina:hover,
+body.beta-tester-gold .btn-kds-ready:hover,
+body.beta-tester-gold .btn-kds-despachar:hover,
+body.beta-tester-gold .btn-kds-action:hover,
+body.beta-tester-gold .btn-ordenar:hover,
+body.beta-tester-gold .btn-despacho-kds:hover {
+  border-color: #FDE047 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.3) !important;
+}
+
+body.beta-tester-gold .btn-enviar-cocina:active,
+body.beta-tester-gold #btnEnviarCocina:active,
+body.beta-tester-gold .btn-cocina:active,
+body.beta-tester-gold .btn-kds-ready:active,
+body.beta-tester-gold .btn-kds-despachar:active,
+body.beta-tester-gold .btn-kds-action:active,
+body.beta-tester-gold .btn-ordenar:active,
+body.beta-tester-gold .btn-despacho-kds:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* 3. BOTONES DE PRE-FACTURA / IMPRESIÓN / TICKETS */
+body.beta-tester-gold .btn-prefactura,
+body.beta-tester-gold #btnPreFactura,
+body.beta-tester-gold .btn-print-ticket,
+body.beta-tester-gold .btn-imprimir,
+body.beta-tester-gold .btn-ticket-mesa,
+body.beta-tester-gold .btn-reimprimir-ticket {
+  background: linear-gradient(180deg, #F59E0B 0%, #D97706 100%) !important;
+  border: 1px solid #FDE68A !important;
+  border-bottom: 4px solid #92400E !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 10px rgba(217, 119, 6, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .btn-prefactura:hover,
+body.beta-tester-gold #btnPreFactura:hover,
+body.beta-tester-gold .btn-print-ticket:hover,
+body.beta-tester-gold .btn-imprimir:hover,
+body.beta-tester-gold .btn-ticket-mesa:hover {
+  background: linear-gradient(180deg, #FBBF24 0%, #D97706 100%) !important;
+  transform: translateY(-1px) !important;
+}
+
+body.beta-tester-gold .btn-prefactura:active,
+body.beta-tester-gold #btnPreFactura:active,
+body.beta-tester-gold .btn-print-ticket:active,
+body.beta-tester-gold .btn-imprimir:active,
+body.beta-tester-gold .btn-ticket-mesa:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* 4. BOTONES DE NAVEGACIÓN, PÍLDORAS DE CATEGORÍA, SUBCATEGORÍAS & SALÓN */
+body.beta-tester-gold .nav-pill,
+body.beta-tester-gold .cat-pill,
+body.beta-tester-gold .subcat-pill,
+body.beta-tester-gold .zone-pill,
+body.beta-tester-gold .tab-btn,
+body.beta-tester-gold .btn-tool,
+body.beta-tester-gold .dev-nav-btn,
+body.beta-tester-gold .db-pill,
+body.beta-tester-gold .btn-piso,
+body.beta-tester-gold .btn-topbar-tool,
+body.beta-tester-gold .btn-admin-panel-trigger,
+body.beta-tester-gold .happy-hour-pill {
+  background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
+  border-bottom: 3px solid #020617 !important;
+  border-radius: 10px !important;
+  color: #E2E8F0 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.1s ease !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .nav-pill:hover,
+body.beta-tester-gold .cat-pill:hover,
+body.beta-tester-gold .subcat-pill:hover,
+body.beta-tester-gold .zone-pill:hover,
+body.beta-tester-gold .tab-btn:hover,
+body.beta-tester-gold .btn-tool:hover,
+body.beta-tester-gold .dev-nav-btn:hover,
+body.beta-tester-gold .db-pill:hover,
+body.beta-tester-gold .btn-piso:hover,
+body.beta-tester-gold .btn-topbar-tool:hover,
+body.beta-tester-gold .btn-admin-panel-trigger:hover {
+  border-color: #D4AF37 !important;
+  color: #FEF08A !important;
+  transform: translateY(-1px) !important;
+}
+
+body.beta-tester-gold .nav-pill.active,
+body.beta-tester-gold .cat-pill.active,
+body.beta-tester-gold .subcat-pill.active,
+body.beta-tester-gold .zone-pill.active,
+body.beta-tester-gold .tab-btn.active,
+body.beta-tester-gold .btn-tool.active,
+body.beta-tester-gold .dev-nav-btn.active,
+body.beta-tester-gold .db-pill.active,
+body.beta-tester-gold .btn-piso.active {
+  background: linear-gradient(180deg, #F5D77F 0%, #D4AF37 100%) !important;
+  border-bottom: 3px solid #713F12 !important;
+  color: #261B02 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4) !important;
+}
+
+body.beta-tester-gold .nav-pill:active,
+body.beta-tester-gold .cat-pill:active,
+body.beta-tester-gold .subcat-pill:active,
+body.beta-tester-gold .zone-pill:active,
+body.beta-tester-gold .tab-btn:active,
+body.beta-tester-gold .btn-tool:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* 5. TECLADO NUMÉRICO TÁCTIL (NUMPAD) Y CALCULADORA */
+body.beta-tester-gold .numpad-btn,
+body.beta-tester-gold .btn-calc,
+body.beta-tester-gold .btn-num,
+body.beta-tester-gold .key-btn,
+body.beta-tester-gold .btn-keypad,
+body.beta-tester-gold .calc-btn {
+  background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%) !important;
+  border: 1px solid #334155 !important;
+  border-bottom: 4px solid #020617 !important;
+  border-radius: 10px !important;
+  color: #F8FAFC !important;
+  font-weight: 800 !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.1s ease !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .numpad-btn:hover,
+body.beta-tester-gold .btn-calc:hover,
+body.beta-tester-gold .btn-num:hover,
+body.beta-tester-gold .key-btn:hover,
+body.beta-tester-gold .btn-keypad:hover {
+  border-color: #D4AF37 !important;
+  color: #FDE047 !important;
+  transform: translateY(-1px) !important;
+}
+
+body.beta-tester-gold .numpad-btn:active,
+body.beta-tester-gold .btn-calc:active,
+body.beta-tester-gold .btn-num:active,
+body.beta-tester-gold .key-btn:active,
+body.beta-tester-gold .btn-keypad:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* 6. BOTONES DE CONTROL DE CANTIDAD (+ / -) Y ACCIONES RÁPIDAS EN PRODUCTOS */
+body.beta-tester-gold .qty-btn,
+body.beta-tester-gold .btn-qty,
+body.beta-tester-gold .btn-item-qty,
+body.beta-tester-gold .btn-add-prod,
+body.beta-tester-gold .btn-plus,
+body.beta-tester-gold .btn-minus {
+  background: linear-gradient(180deg, #334155 0%, #1E293B 100%) !important;
+  border: 1px solid #D4AF37 !important;
+  border-bottom: 2px solid #0F172A !important;
+  color: #FEF08A !important;
+  font-weight: 800 !important;
+  border-radius: 6px !important;
+  transition: all 0.1s ease !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .qty-btn:active,
+body.beta-tester-gold .btn-qty:active,
+body.beta-tester-gold .btn-item-qty:active,
+body.beta-tester-gold .btn-add-prod:active {
+  transform: translateY(2px) !important;
+}
+
+/* 7. BOTONES DE PELIGRO / CANCELAR / ELIMINAR / LIBERAR */
+body.beta-tester-gold .btn-danger,
+body.beta-tester-gold .btn-cancel,
+body.beta-tester-gold .btn-delete,
+body.beta-tester-gold .btn-eliminar,
+body.beta-tester-gold .btn-cancelar,
+body.beta-tester-gold .btn-liberar-mesa,
+body.beta-tester-gold .btn-quitar-item,
+body.beta-tester-gold .btn-dev-logout {
+  background: linear-gradient(180deg, #EF4444 0%, #DC2626 100%) !important;
+  border: 1px solid #FCA5A5 !important;
+  border-bottom: 4px solid #991B1B !important;
+  border-radius: 10px !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.3) !important;
+  transition: all 0.1s ease !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .btn-danger:hover,
+body.beta-tester-gold .btn-cancel:hover,
+body.beta-tester-gold .btn-delete:hover,
+body.beta-tester-gold .btn-eliminar:hover,
+body.beta-tester-gold .btn-cancelar:hover,
+body.beta-tester-gold .btn-liberar-mesa:hover,
+body.beta-tester-gold .btn-dev-logout:hover {
+  background: linear-gradient(180deg, #F87171 0%, #DC2626 100%) !important;
+  transform: translateY(-1px) !important;
+}
+
+body.beta-tester-gold .btn-danger:active,
+body.beta-tester-gold .btn-cancel:active,
+body.beta-tester-gold .btn-delete:active,
+body.beta-tester-gold .btn-eliminar:active,
+body.beta-tester-gold .btn-cancelar:active,
+body.beta-tester-gold .btn-liberar-mesa:active,
+body.beta-tester-gold .btn-dev-logout:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* 8. BOTONES SECUNDARIOS, CIERRE Y CANCELACIÓN EN MODALES */
+body.beta-tester-gold .btn-sec,
+body.beta-tester-gold .btn-secondary,
+body.beta-tester-gold .btn-modal-cancel,
+body.beta-tester-gold .btn-modal-close,
+body.beta-tester-gold .btn-cerrar-modal,
+body.beta-tester-gold .btn-close,
+body.beta-tester-gold .btn-volver-categorias {
+  background: linear-gradient(180deg, #334155 0%, #1E293B 100%) !important;
+  border: 1px solid rgba(212, 175, 55, 0.3) !important;
+  border-bottom: 3px solid #0F172A !important;
+  border-radius: 10px !important;
+  color: #F8FAFC !important;
+  font-weight: 600 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.1s ease !important;
+  cursor: pointer !important;
+}
+
+body.beta-tester-gold .btn-sec:hover,
+body.beta-tester-gold .btn-secondary:hover,
+body.beta-tester-gold .btn-modal-cancel:hover,
+body.beta-tester-gold .btn-cerrar-modal:hover,
+body.beta-tester-gold .btn-volver-categorias:hover {
+  border-color: #D4AF37 !important;
+  color: #FEF08A !important;
+  transform: translateY(-1px) !important;
+}
+
+body.beta-tester-gold .btn-sec:active,
+body.beta-tester-gold .btn-secondary:active,
+body.beta-tester-gold .btn-modal-cancel:active,
+body.beta-tester-gold .btn-cerrar-modal:active,
+body.beta-tester-gold .btn-volver-categorias:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* 9. CHIPS DE USUARIOS / ROLES EN LOGIN */
+body.beta-tester-gold .chip-account {
+  background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%) !important;
+  border: 1px solid rgba(212, 175, 55, 0.4) !important;
+  border-bottom: 3px solid #020617 !important;
+  color: #F8FAFC !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.15s ease !important;
+}
+
+body.beta-tester-gold .chip-account:hover {
+  border-color: #FDE047 !important;
+  color: #FEF08A !important;
+  transform: translateY(-1px) !important;
+}
+
+body.beta-tester-gold .chip-account:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
