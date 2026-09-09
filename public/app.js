@@ -4927,10 +4927,6 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
           </div>
           <div class="prod-card-large-info">
             <h4 class="prod-card-large-name">${escapeHtml(p.nombre)}</h4>
-            <div class="prod-card-large-meta">
-              <span style="color: ${isAgotado ? '#f87171' : '#34d399'}; font-weight: 700;">${isAgotado ? '✕ Agotado' : '● Disponible'}</span>
-              <span>${p.codigo || (p.destino === 'barra' ? '🍸 Barra' : '🍳 Cocina')}</span>
-            </div>
           </div>
         </div>
       `;
@@ -7143,6 +7139,14 @@ window.cerrarComandero = function() {
     modal.classList.remove('active');
     modal.style.display = 'none';
   }
+  document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
+  const btnSalon = document.querySelector('.nav-pill[data-view="salon"]');
+  if (btnSalon) btnSalon.classList.add('active');
+  const viewSalon = document.getElementById('view-salon');
+  if (viewSalon) viewSalon.classList.add('active');
+  sessionStorage.setItem('pos_active_view', 'salon');
+
   if (typeof cargarMesasDesdeBackend === 'function') {
     cargarMesasDesdeBackend();
   }
@@ -14571,7 +14575,7 @@ window.renderizarTablaVentasProductos = function(productos = []) {
         </span>
       </td>
       <td style="text-align:center;">
-        <button class="btn-tool" style="background:#1e1b4b; border-color:#6366f1; color:#c7d2fe; padding:4px 10px; font-size:0.8rem; font-weight:700;" onclick="abrirModalDetalleInsumos(${p.producto_id})">
+        <button class="btn-tool" style="background:#1e1b4b; border-color:#6366f1; color:#c7d2fe; padding:4px 10px; font-size:0.8rem; font-weight:700;" onclick="abrirModalDetalleInsumos('${p.producto_id}')">
           🔍 Ver Insumos
         </button>
       </td>
@@ -14705,7 +14709,7 @@ window.abrirModalDetalleInsumos = async function(productoId) {
   if (!modal) return;
 
   let prod = (window.reporteVentasActual && window.reporteVentasActual.productos) ? 
-    window.reporteVentasActual.productos.find(p => p.producto_id === productoId) : null;
+    window.reporteVentasActual.productos.find(p => String(p.producto_id) === String(productoId)) : null;
 
   if (!prod) {
     try {
@@ -17694,6 +17698,9 @@ window.ejecutarEliminarExistenciasBodegaConfirmado = async function() {
 
 
 window.abrirMenuDirecto = function() {
+  document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+  const btnMenu = document.getElementById('btnNavMenuDirecto');
+  if (btnMenu) btnMenu.classList.add('active');
   if (typeof abrirModoParaLlevar === 'function') {
     abrirModoParaLlevar();
   }

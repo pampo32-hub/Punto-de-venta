@@ -7043,11 +7043,11 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       SELECT 
         d.producto_id,
         COALESCE(MAX(p.nombre), MAX(d.nombre_producto)) AS producto_nombre,
-        MAX(p.categoria_id) AS categoria_id,
-        MAX(c.nombre) AS categoria_nombre,
-        MAX(c.icono) AS categoria_icono,
+        COALESCE(MAX(p.categoria_id), MAX(c.id), 4) AS categoria_id,
+        COALESCE(MAX(c.nombre), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN 'Cervezas' ELSE 'General' END) AS categoria_nombre,
+        COALESCE(MAX(c.icono), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN '🍺' ELSE '🍽️' END) AS categoria_icono,
         MAX(p.imagen_url) AS imagen_url,
-        MAX(p.precio) AS precio_actual,
+        COALESCE(MAX(p.precio), AVG(CAST(d.precio_unitario AS DOUBLE PRECISION)), 7500) AS precio_actual,
         SUM(d.cantidad) AS cantidad_vendida,
         SUM(d.subtotal) AS total_ingresos,
         COUNT(DISTINCT d.orden_id) AS total_ordenes,
@@ -7055,7 +7055,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Productos p ON d.producto_id = p.id
-      LEFT JOIN Categorias c ON p.categoria_id = c.id
+      LEFT JOIN Categorias c ON (p.categoria_id = c.id OR (p.categoria_id IS NULL AND (LOWER(c.nombre) LIKE '%cerveza%' OR c.id = 4)))
       WHERE o.estado = 'pagada'
         AND d.estado_comanda != 'anulado'
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
@@ -7065,15 +7065,17 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const paramsVentas = [desde, hasta, nid, nid];
 
     if (producto_id) {
-      sqlVentas += ' AND d.producto_id = ?';
-      paramsVentas.push(Number(producto_id));
+      sqlVentas += ' AND (d.producto_id = ? OR CAST(d.producto_id AS TEXT) = ?)';
+      paramsVentas.push(isNaN(Number(producto_id)) ? producto_id : Number(producto_id));
+      paramsVentas.push(String(producto_id));
     }
     if (categoria_id && categoria_id !== 'todas') {
-      sqlVentas += ' AND p.categoria_id = ?';
+      sqlVentas += ' AND (p.categoria_id = ? OR (p.categoria_id IS NULL AND LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (\'4\', 4, \'8\', 8, 150, 158, 166, 174, 182)))';
+      paramsVentas.push(Number(categoria_id));
       paramsVentas.push(Number(categoria_id));
     }
 
-    sqlVentas += ' GROUP BY d.producto_id ORDER BY total_ingresos DESC';
+    sqlVentas += ' GROUP BY COALESCE(p.id, CASE WHEN LOWER(d.nombre_producto) LIKE \'%balde%\' THEN \'balde_nacional\' ELSE d.producto_id END) ORDER BY total_ingresos DESC';
 
     const ventasRows = await dbAll(sqlVentas, paramsVentas);
 
@@ -7097,10 +7099,13 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       recetasPorProducto[r.producto_id].push(r);
     }
 
+    const todosLosInsumos = await dbAll('SELECT * FROM Inventario');
+
     for (const fila of ventasRows) {
       const pId = fila.producto_id;
       const cantVendida = Number(fila.cantidad_vendida) || 0;
       const totalIngreso = Number(fila.total_ingresos) || 0;
+      const esBaldeItem = Boolean(fila.producto_nombre && fila.producto_nombre.toLowerCase().includes('balde'));
 
       totalUnidadesVendidas += cantVendida;
       totalIngresosBrutos += totalIngreso;
@@ -7147,6 +7152,91 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
           const g = insumosGlobalesMap.get(r.insumo_id);
           g.cantidad_total_consumida = Math.round((g.cantidad_total_consumida + cantidadTotalConsumida) * 1000) / 1000;
           g.costo_total += costoTotalInsumo;
+        }
+      } else if (esBaldeItem) {
+        // Balde de 6 cervezas: obtener detalles de notas o desgloses
+        const filasBalde = await dbAll(`
+          SELECT d.notas, d.cantidad, d.nombre_producto
+          FROM DetalleOrden d
+          JOIN Ordenes o ON d.orden_id = o.id
+          WHERE (d.producto_id = ? OR CAST(d.producto_id AS TEXT) = ? OR LOWER(d.nombre_producto) LIKE '%balde%')
+            AND o.estado = 'pagada'
+            AND d.estado_comanda != 'anulado'
+            AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
+            AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
+        `, [isNaN(Number(pId)) ? pId : Number(pId), String(pId), desde, hasta]);
+
+        const desgloseCervezas = {};
+        let totalCervezasContadas = 0;
+
+        for (const fb of filasBalde) {
+          const cantB = Number(fb.cantidad) || 1;
+          if (fb.notas && fb.notas.includes('x ')) {
+            const partes = fb.notas.split(',').map(s => s.trim());
+            for (const p of partes) {
+              const m = p.match(/^(\d+)\s*x\s*(.+)$/i);
+              if (m) {
+                const subC = Number(m[1]) * cantB;
+                const subNom = m[2].trim();
+                desgloseCervezas[subNom] = (desgloseCervezas[subNom] || 0) + subC;
+                totalCervezasContadas += subC;
+              }
+            }
+          } else if (fb.nombre_producto && fb.nombre_producto.includes('(')) {
+            const m = fb.nombre_producto.match(/Balde de ([^(]+)/i);
+            const subNom = m ? m[1].trim() : 'Cerveza Nacional';
+            const subC = 6 * cantB;
+            desgloseCervezas[subNom] = (desgloseCervezas[subNom] || 0) + subC;
+            totalCervezasContadas += subC;
+          }
+        }
+
+        if (totalCervezasContadas === 0 && cantVendida > 0) {
+          desgloseCervezas['Cerveza Nacional'] = 6 * cantVendida;
+        }
+
+        for (const [nomCerveza, cantTotalBotellas] of Object.entries(desgloseCervezas)) {
+          let insumoMatch = todosLosInsumos.find(i => 
+            i.nombre.toLowerCase() === nomCerveza.toLowerCase() ||
+            i.nombre.toLowerCase().includes(nomCerveza.toLowerCase()) ||
+            nomCerveza.toLowerCase().includes(i.nombre.toLowerCase())
+          ) || todosLosInsumos.find(i => i.nombre.toLowerCase().includes('pilsen') || i.nombre.toLowerCase().includes('imperial')) || {
+            id: 'ins_balde_' + nomCerveza,
+            nombre: nomCerveza,
+            unidad_medida: 'botellas',
+            costo_unitario: 950,
+            stock_actual: 0
+          };
+
+          const costoUnit = Number(insumoMatch.costo_unitario) || 950;
+          const costoTotal = Math.round(cantTotalBotellas * costoUnit);
+          costoInsumosProducto += costoTotal;
+
+          insumosProducto.push({
+            insumo_id: insumoMatch.id,
+            nombre: insumoMatch.nombre || nomCerveza,
+            unidad_medida: insumoMatch.unidad_medida || 'botellas',
+            cantidad_por_unidad: cantVendida > 0 ? Math.round((cantTotalBotellas / cantVendida) * 10) / 10 : 6,
+            cantidad_total_consumida: cantTotalBotellas,
+            costo_unitario: costoUnit,
+            costo_total: costoTotal,
+            stock_actual: insumoMatch.stock_actual || 0
+          });
+
+          if (!insumosGlobalesMap.has(insumoMatch.id)) {
+            insumosGlobalesMap.set(insumoMatch.id, {
+              insumo_id: insumoMatch.id,
+              nombre: insumoMatch.nombre || nomCerveza,
+              unidad_medida: insumoMatch.unidad_medida || 'botellas',
+              costo_unitario: costoUnit,
+              stock_actual: insumoMatch.stock_actual || 0,
+              cantidad_total_consumida: 0,
+              costo_total: 0
+            });
+          }
+          const g = insumosGlobalesMap.get(insumoMatch.id);
+          g.cantidad_total_consumida = Math.round((g.cantidad_total_consumida + cantTotalBotellas) * 1000) / 1000;
+          g.costo_total += costoTotal;
         }
       }
 
