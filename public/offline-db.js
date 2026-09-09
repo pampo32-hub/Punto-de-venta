@@ -157,6 +157,13 @@
     },
 
     /**
+     * Guarda o actualiza los ítems de una mesa (alias seguro)
+     */
+    guardarItemsMesa: async function (mesaId, items, total) {
+      return PosOfflineDB.guardarOrdenMesa(mesaId, { total }, items);
+    },
+
+    /**
      * Obtiene la orden guardada de una mesa
      */
     obtenerOrdenMesa: async function (mesaId) {

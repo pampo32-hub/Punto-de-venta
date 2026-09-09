@@ -10134,10 +10134,16 @@ window.ejecutarCobroFinal = async function() {
             }
           }
         });
-        if (window.PosOfflineDB) {
-          const remTot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-          window.PosOfflineDB.guardarItemsMesa(estado.mesaActiva.id, estado.mesaActiva.items, remTot).catch(() => {});
-        }
+        try {
+          if (window.PosOfflineDB && estado.mesaActiva) {
+            const remTot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+            if (typeof window.PosOfflineDB.guardarItemsMesa === 'function') {
+              window.PosOfflineDB.guardarItemsMesa(estado.mesaActiva.id, estado.mesaActiva.items, remTot).catch(() => {});
+            } else if (typeof window.PosOfflineDB.guardarOrdenMesa === 'function') {
+              window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, { total: remTot }, estado.mesaActiva.items).catch(() => {});
+            }
+          }
+        } catch (_) {}
       }
 
       // Verificar si quedan personas con productos o cuotas sin pagar
@@ -10287,9 +10293,7 @@ window.ejecutarCobroFinal = async function() {
       if (esLiquidacionFinal) {
         // Todas las cuentas liquidadas: liberar mesa y cerrar todos los modales
         if (estado.mesaActiva) {
-          if (window.PosOfflineDB) {
-            window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
-          }
+          try { if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) { window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {}); } } catch (_) {}
           estado.mesaActiva.estado = 'libre';
           estado.mesaActiva.cliente = null;
           estado.mesaActiva.mesa_cliente = null;
@@ -10355,9 +10359,7 @@ window.ejecutarCobroFinal = async function() {
     } else {
       // COBRO ESTÁNDAR COMPLETO DE MESA (NO SPLIT)
       if (estado.mesaActiva) {
-        if (window.PosOfflineDB) {
-          window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
-        }
+        try { if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) { window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {}); } } catch (_) {}
         estado.mesaActiva.estado = 'libre';
         estado.mesaActiva.cliente = null;
         estado.mesaActiva.mesa_cliente = null;
