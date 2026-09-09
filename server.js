@@ -3001,7 +3001,7 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
       return res.status(403).json({ error: '🔒 PIN incorrecto. Ingresa el PIN de Administrador o Supervisor autorizado.', pinInvalido: true });
     }
     const uSupervisor = await dbGet(
-      'SELECT nombre_completo, rol FROM Usuarios WHERE (negocio_id = ? OR rol = "developer" OR (negocio_id IS NULL AND ? = 1)) AND pin = ? AND (rol = "admin" OR rol = "developer")', 
+      "SELECT nombre_completo, rol FROM Usuarios WHERE (negocio_id = ? OR rol = 'developer' OR (negocio_id IS NULL AND ? = 1)) AND pin = ? AND (rol = 'admin' OR rol = 'developer')", 
       [ordenNegocioId, ordenNegocioId, String(pin).trim()]
     );
     const autorizadorNombre = uSupervisor?.nombre_completo || 'Administrador (PIN)';
