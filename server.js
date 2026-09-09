@@ -466,6 +466,12 @@ app.get('/m/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'cliente.html'));
 });
 
+// Rutas comerciales y presentación de la página web del sistema
+app.get(['/landing', '/pagina', '/sitio', '/web'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
+
+
 
 // WebSockets para tiempo real (KDS Cocina / Barra / Meseros / Admin)
 io.on('connection', (socket) => {

@@ -1,0 +1,2084 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GAMMA POS Cloud | El Sistema de Punto de Venta #1 para Restaurantes y Bares</title>
+  <meta name="description" content="El software de punto de venta inteligente para restaurantes, bares y cafeterías. Salón 2D/3D con 17 temas, comandero táctil, KDS de cocina, división de cuentas con pre-facturas, kárdex y facturación electrónica." />
+  
+  <!-- Favicon & Fuentes Google -->
+  <link rel="icon" type="image/png" href="/img/gamma_pos_logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ==========================================================================
+       VARIABLES Y PALETA DE COLORES GAMMA POS LUXURY DARK & GOLD
+       ========================================================================== */
+    :root {
+      --bg-main: #070a12;
+      --bg-surface: #0e1526;
+      --bg-card: rgba(18, 26, 46, 0.85);
+      --bg-card-hover: rgba(28, 40, 70, 0.95);
+      --primary: #0284c7;
+      --primary-glow: #38bdf8;
+      --gold: #f59e0b;
+      --gold-light: #fbbf24;
+      --gold-glow: rgba(245, 158, 11, 0.45);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.35);
+      --purple: #8b5cf6;
+      --pink: #ec4899;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-gold: rgba(245, 158, 11, 0.3);
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 8px;
+      --shadow-3d: 0 10px 30px -5px rgba(0, 0, 0, 0.7), 0 0 25px rgba(245, 158, 11, 0.15);
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* Background Ambient Glows */
+    .ambient-glow-1 {
+      position: absolute;
+      top: 0;
+      left: 20%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(2, 132, 199, 0.18) 0%, transparent 70%);
+      filter: blur(100px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .ambient-glow-2 {
+      position: absolute;
+      top: 500px;
+      right: 10%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, transparent 70%);
+      filter: blur(110px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Container Utility */
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* ==========================================================================
+       TOP NAVIGATION BAR
+       ========================================================================== */
+    .landing-navbar {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      background: rgba(7, 10, 18, 0.85);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border-subtle);
+      z-index: 1000;
+      padding: 14px 0;
+      transition: all 0.3s ease;
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-logo-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-logo-img {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      object-fit: cover;
+      box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+      border: 1.5px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff 40%, var(--gold-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-sub {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--primary-glow);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .nav-menu {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.92rem;
+      transition: color 0.2s ease;
+    }
+
+    .nav-link:hover {
+      color: var(--gold-light);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    /* 3D Gold & Luxury Button Styles */
+    .btn-gold-3d {
+      background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+      color: #1a0e02;
+      font-family: var(--font-heading);
+      font-weight: 800;
+      font-size: 0.95rem;
+      padding: 10px 22px;
+      border-radius: var(--radius-sm);
+      border: 1px solid #fde68a;
+      box-shadow: 0 4px 0 #92400e, 0 8px 18px rgba(217, 119, 6, 0.4);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-gold-3d:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 #92400e, 0 12px 24px rgba(245, 158, 11, 0.55);
+      background: linear-gradient(180deg, #fef08a 0%, #f59e0b 100%);
+    }
+
+    .btn-gold-3d:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #92400e, 0 4px 10px rgba(217, 119, 6, 0.3);
+    }
+
+    .btn-outline-glass {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.92rem;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .btn-outline-glass:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--primary-glow);
+      color: var(--primary-glow);
+    }
+
+    /* ==========================================================================
+       HERO SECTION
+       ========================================================================== */
+    .hero-section {
+      padding: 80px 0 60px;
+      position: relative;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid var(--border-gold);
+      padding: 6px 16px;
+      border-radius: 50px;
+      color: var(--gold-light);
+      font-size: 0.82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 24px;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+    }
+
+    .hero-headline {
+      font-family: var(--font-heading);
+      font-size: clamp(2.4rem, 5vw, 4.1rem);
+      font-weight: 900;
+      line-height: 1.12;
+      letter-spacing: -1.5px;
+      margin-bottom: 24px;
+    }
+
+    .hero-headline .text-gradient-gold {
+      background: linear-gradient(135deg, #ffffff 10%, #fbbf24 60%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline;
+    }
+
+    .hero-headline .text-gradient-cyan {
+      background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline;
+    }
+
+    .hero-subhead {
+      font-size: 1.15rem;
+      color: #cbd5e1;
+      max-width: 820px;
+      margin-bottom: 38px;
+      font-weight: 400;
+      line-height: 1.7;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 50px;
+      align-items: center;
+    }
+
+    /* Quick Live Metrics */
+    .metrics-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      padding: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .metric-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .metric-icon-box {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .metric-num {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .metric-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* ==========================================================================
+       INTERACTIVE LIVE DEMO MOCKUP SHOWCASE
+       ========================================================================== */
+    .demo-showcase-section {
+      padding: 80px 0;
+      position: relative;
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto 50px;
+    }
+
+    .section-tag {
+      color: var(--gold-light);
+      font-size: 0.82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: clamp(2rem, 3.5vw, 2.9rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+
+    /* Mockup Container */
+    .mockup-window {
+      background: #090d18;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: 0 30px 80px -15px rgba(0, 0, 0, 0.8), 0 0 35px rgba(2, 132, 199, 0.15);
+    }
+
+    .mockup-toolbar {
+      background: #0d1424;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .mockup-dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #f59e0b; }
+    .dot.green { background: #10b981; }
+
+    .mockup-tabs {
+      display: flex;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px;
+      border-radius: 10px;
+    }
+
+    .mockup-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mockup-tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.4);
+    }
+
+    .mockup-body {
+      padding: 24px;
+      min-height: 480px;
+      background: radial-gradient(circle at 50% 0%, #111a30 0%, #080c16 100%);
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Simulated Interactive Views inside Mockup */
+    .salon-sim-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 16px;
+    }
+
+    .table-sim-card {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1.5px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 16px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative;
+    }
+
+    .table-sim-card:hover {
+      transform: translateY(-4px) scale(1.03);
+      border-color: var(--gold-light);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .table-sim-card.occupied {
+      border-color: #ef4444;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(15, 23, 42, 0.85) 100%);
+    }
+
+    .table-sim-card.free {
+      border-color: #10b981;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(15, 23, 42, 0.85) 100%);
+    }
+
+    .table-sim-card.bill-requested {
+      border-color: #f59e0b;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(15, 23, 42, 0.85) 100%);
+      animation: pulseGold 2s infinite ease-in-out;
+    }
+
+    @keyframes pulseGold {
+      0%, 100% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.2); }
+      50% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.6); }
+    }
+
+    .table-name {
+      font-weight: 800;
+      font-size: 1.05rem;
+      margin-bottom: 4px;
+    }
+
+    .table-status {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    /* KDS Simulated UI */
+    .kds-sim-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .kds-sim-ticket {
+      background: #0f172a;
+      border: 1.5px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .kds-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 8px;
+    }
+
+    .kds-timer-urgent {
+      color: #ef4444;
+      font-weight: 800;
+      font-size: 0.85rem;
+      background: rgba(239, 68, 68, 0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .kds-timer-ok {
+      color: #10b981;
+      font-weight: 800;
+      font-size: 0.85rem;
+      background: rgba(16, 185, 129, 0.15);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    /* Split Bill Simulated UI */
+    .split-sim-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .split-person-card {
+      background: #0f172a;
+      border: 1px solid var(--border-gold);
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    /* ==========================================================================
+       VALUE PROPOSITION / PROBLEMS SOLVED GRID
+       ========================================================================== */
+    .problems-section {
+      padding: 80px 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(14, 21, 38, 0.5) 50%, transparent 100%);
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .comparison-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .comparison-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--gold) 0%, var(--primary) 100%);
+    }
+
+    .comparison-card:hover {
+      transform: translateY(-6px);
+      border-color: var(--border-gold);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    }
+
+    .comp-icon {
+      font-size: 2.2rem;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .comp-title {
+      font-family: var(--font-heading);
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .comp-old {
+      color: #f87171;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+
+    .comp-new {
+      color: #34d399;
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* ==========================================================================
+       17 TEMAS VISUALES SHOWCASE
+       ========================================================================== */
+    .themes-section {
+      padding: 90px 0;
+      position: relative;
+    }
+
+    .theme-picker-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 40px;
+    }
+
+    .theme-pill-btn {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 10px 18px;
+      border-radius: 30px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .theme-pill-btn:hover {
+      border-color: var(--gold-light);
+      color: #fff;
+      transform: translateY(-2px);
+    }
+
+    .theme-pill-btn.active {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.15) 100%);
+      border-color: var(--gold);
+      color: #fbbf24;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+    }
+
+    .theme-preview-box {
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 30px;
+      transition: all 0.4s ease;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
+
+    /* ==========================================================================
+       CORE MODULES FEATURE GRID
+       ========================================================================== */
+    .features-section {
+      padding: 90px 0;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 28px;
+    }
+
+    .feature-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.3s ease;
+    }
+
+    .feature-box:hover {
+      transform: translateY(-5px);
+      border-color: rgba(56, 189, 248, 0.4);
+      box-shadow: 0 15px 35px rgba(2, 132, 199, 0.15);
+    }
+
+    .feature-icon-wrapper {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(2, 132, 199, 0.2) 0%, rgba(14, 21, 38, 0.8) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+    }
+
+    .feature-heading {
+      font-family: var(--font-heading);
+      font-size: 1.35rem;
+      font-weight: 800;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .feature-text {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+
+    .feature-badges-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .f-badge {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #cbd5e1;
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    /* ==========================================================================
+       TARGET BUSINESS TYPES (SEGMENTS)
+       ========================================================================== */
+    .business-types-section {
+      padding: 80px 0;
+      background: #090d18;
+    }
+
+    .biz-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .biz-card {
+      background: #0e1526;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      text-align: center;
+      transition: all 0.25s ease;
+    }
+
+    .biz-card:hover {
+      border-color: var(--gold);
+      transform: translateY(-4px);
+    }
+
+    .biz-emoji {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .biz-name {
+      font-family: var(--font-heading);
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .biz-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* ==========================================================================
+       INTERACTIVE ROI CALCULATOR
+       ========================================================================== */
+    .calculator-section {
+      padding: 90px 0;
+      position: relative;
+    }
+
+    .calc-card {
+      background: linear-gradient(135deg, rgba(14, 21, 38, 0.95) 0%, rgba(9, 13, 24, 0.95) 100%);
+      border: 1.5px solid var(--border-gold);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    .calc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      align-items: center;
+    }
+
+    .calc-input-group {
+      margin-bottom: 24px;
+    }
+
+    .calc-label {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+    }
+
+    .calc-slider {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: #1e293b;
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    .calc-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--gold-light);
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.8);
+      cursor: pointer;
+      border: 2px solid #fff;
+    }
+
+    .calc-results-box {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 30px;
+      text-align: center;
+    }
+
+    .roi-number {
+      font-family: var(--font-heading);
+      font-size: 3rem;
+      font-weight: 900;
+      color: #34d399;
+      margin: 10px 0;
+      text-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+    }
+
+    /* ==========================================================================
+       PRICING PLANS
+       ========================================================================== */
+    .pricing-section {
+      padding: 90px 0;
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .pricing-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+
+    .pricing-card.featured {
+      background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, rgba(14, 21, 38, 0.95) 100%);
+      border: 2px solid var(--gold);
+      box-shadow: 0 20px 50px rgba(245, 158, 11, 0.2);
+      transform: scale(1.03);
+    }
+
+    .pricing-badge {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+      color: #1a0e02;
+      font-weight: 900;
+      font-size: 0.75rem;
+      padding: 4px 14px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .plan-title {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .plan-price {
+      font-family: var(--font-heading);
+      font-size: 2.8rem;
+      font-weight: 900;
+      color: #fff;
+      margin: 16px 0;
+    }
+
+    .plan-price span {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .plan-features-list {
+      list-style: none;
+      margin: 24px 0 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .plan-feature-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.92rem;
+      color: #cbd5e1;
+    }
+
+    .plan-feature-item.check::before {
+      content: '✓';
+      color: #10b981;
+      font-weight: 900;
+      font-size: 1.1rem;
+    }
+
+    /* ==========================================================================
+       FAQ ACCORDION
+       ========================================================================== */
+    .faq-section {
+      padding: 90px 0;
+      background: #090d18;
+    }
+
+    .faq-accordion {
+      max-width: 820px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .faq-item {
+      background: #0e1526;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+
+    .faq-item.active {
+      border-color: var(--border-gold);
+    }
+
+    .faq-question {
+      padding: 20px 24px;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.05rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .faq-answer {
+      padding: 0 24px 20px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      display: none;
+    }
+
+    .faq-item.active .faq-answer {
+      display: block;
+    }
+
+    /* ==========================================================================
+       FINAL CTA & FOOTER
+       ========================================================================== */
+    .final-cta-section {
+      padding: 100px 0 80px;
+      text-align: center;
+      position: relative;
+    }
+
+    .cta-card-gradient {
+      background: radial-gradient(circle at 50% 50%, rgba(2, 132, 199, 0.25) 0%, rgba(14, 21, 38, 0.95) 70%);
+      border: 1.5px solid var(--border-gold);
+      border-radius: 28px;
+      padding: 60px 30px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8), 0 0 50px rgba(245, 158, 11, 0.2);
+    }
+
+    .footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 40px 0;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 900px) {
+      .nav-menu { display: none; }
+      .calc-grid { grid-template-columns: 1fr; }
+      .split-sim-wrap { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Glows -->
+  <div class="ambient-glow-1"></div>
+  <div class="ambient-glow-2"></div>
+
+  <!-- ========================================================================
+       TOP NAVBAR
+       ======================================================================== -->
+  <header class="landing-navbar">
+    <div class="container nav-inner">
+      <a href="#" class="brand-logo-wrapper">
+        <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" class="brand-logo-img" onerror="this.src='/gamma_pos_logo.png'" />
+        <div>
+          <div class="brand-title">GAMMA POS</div>
+          <div class="brand-sub">CLOUD RESTAURANT SUITE 2026</div>
+        </div>
+      </a>
+
+      <ul class="nav-menu">
+        <li><a href="#demo" class="nav-link">Demo Interactiva</a></li>
+        <li><a href="#modulos" class="nav-link">Módulos</a></li>
+        <li><a href="#temas" class="nav-link">17 Temas 2D/3D</a></li>
+        <li><a href="#negocios" class="nav-link">Negocios</a></li>
+        <li><a href="#calculadora" class="nav-link">Calculadora ROI</a></li>
+        <li><a href="#planes" class="nav-link">Planes</a></li>
+        <li><a href="#faq" class="nav-link">Preguntas</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <a href="/" class="btn-outline-glass">
+          🔐 Iniciar Sesión
+        </a>
+        <a href="/" class="btn-gold-3d">
+          🚀 Probar Sistema POS
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       HERO SECTION
+       ======================================================================== -->
+  <section class="hero-section">
+    <div class="container">
+      <div class="hero-badge">
+        ✨ EL SISTEMA POS #1 PARA GASTRONOMÍA &amp; BARES EN COSTA RICA Y LATAM
+      </div>
+
+      <h1 class="hero-headline">
+        El Punto de Venta Inteligente para <br />
+        <span class="text-gradient-gold">Eliminar el Caos</span> y <span class="text-gradient-cyan">Multiplicar tus Ganancias</span>
+      </h1>
+
+      <p class="hero-subhead">
+        Control absoluto de salón 2D/3D con 17 temas, comandero táctil ultra veloz con modificadores, KDS inteligente en cocina con alertas audibles, división de cuentas en segundos con pre-facturas térmicas, kárdex y escandallos de recetas, y <strong>100% operatividad offline</strong> sin depender del internet.
+      </p>
+
+      <div class="hero-cta-group">
+        <a href="/" class="btn-gold-3d" style="font-size: 1.1rem; padding: 14px 32px;">
+          🔥 Ingresar al Sistema POS en Vivo
+        </a>
+        <a href="https://wa.me/?text=Hola%2C%20quiero%20informaci%C3%B3n%20y%20demostraci%C3%B3n%20de%20GAMMA%20POS" target="_blank" class="btn-outline-glass" style="font-size: 1.05rem; padding: 14px 26px;">
+          💬 Solicitar Demo por WhatsApp
+        </a>
+      </div>
+
+      <!-- Quick Metrics Bar -->
+      <div class="metrics-bar">
+        <div class="metric-item">
+          <div class="metric-icon-box">⚡</div>
+          <div>
+            <div class="metric-num">100%</div>
+            <div class="metric-label">Resistencia Offline (IndexedDB)</div>
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-icon-box">🧾</div>
+          <div>
+            <div class="metric-num">3 Segundos</div>
+            <div class="metric-label">División de Cuenta &amp; Pre-Factura</div>
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-icon-box">🎨</div>
+          <div>
+            <div class="metric-num">17 Temas</div>
+            <div class="metric-label">Personalización 2D / 3D en Vivo</div>
+          </div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-icon-box">🇨🇷</div>
+          <div>
+            <div class="metric-num">Hacienda 4.3</div>
+            <div class="metric-label">Factura Electrónica &amp; SINPE Móvil</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       INTERACTIVE LIVE DEMO MOCKUP
+       ======================================================================== -->
+  <section id="demo" class="demo-showcase-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">SIMULADOR EN VIVO</span>
+        <h2 class="section-title">Experimenta la Potencia y Fluidez de GAMMA POS</h2>
+        <p class="section-desc">Interactúa con los módulos reales de nuestro software. Todo diseñado con cero fricción táctil para salón, cocina, barra y caja.</p>
+      </div>
+
+      <div class="mockup-window">
+        <div class="mockup-toolbar">
+          <div class="mockup-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+
+          <div class="mockup-tabs">
+            <button class="mockup-tab-btn active" onclick="switchMockTab('tabSalon', this)">
+              🗺️ Salón 2D/3D
+            </button>
+            <button class="mockup-tab-btn" onclick="switchMockTab('tabComandero', this)">
+              🍽️ Comandero Táctil
+            </button>
+            <button class="mockup-tab-btn" onclick="switchMockTab('tabKds', this)">
+              🍳 KDS Cocina &amp; Barra
+            </button>
+            <button class="mockup-tab-btn" onclick="switchMockTab('tabSplit', this)">
+              ✂️ División de Cuentas
+            </button>
+          </div>
+
+          <span style="font-size:0.75rem; font-weight:800; color:var(--gold-light); background:rgba(245,158,11,0.15); padding:4px 10px; border-radius:6px;">
+            GAMMA POS v2.9.2 PRO
+          </span>
+        </div>
+
+        <div class="mockup-body">
+          
+          <!-- TAB 1: SALON -->
+          <div id="tabSalon" class="tab-content active">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div style="display:flex; gap:8px;">
+                <span class="f-badge" style="background:rgba(16,185,129,0.2); color:#34d399;">● 8 Mesas Libres</span>
+                <span class="f-badge" style="background:rgba(239,68,68,0.2); color:#f87171;">● 4 Ocupadas</span>
+                <span class="f-badge" style="background:rgba(245,158,11,0.2); color:#fbbf24;">⚡ 1 Pidiendo Cuenta</span>
+              </div>
+              <span style="font-size:0.85rem; color:var(--text-muted);">Haz clic en una mesa para ver su estado</span>
+            </div>
+
+            <div class="salon-sim-grid">
+              <div class="table-sim-card free" onclick="simularMesa('Mesa 1', 'Libre', 'Capacidad 4 comensales')">
+                <div style="font-size:1.8rem;">🪑</div>
+                <div class="table-name">Mesa 1</div>
+                <span class="table-status" style="color:#10b981;">Libre</span>
+              </div>
+              <div class="table-sim-card occupied" onclick="simularMesa('Mesa 2', 'Ocupada', '3 comensales • Total: ₡28,500')">
+                <div style="font-size:1.8rem;">🍔</div>
+                <div class="table-name">Mesa 2</div>
+                <span class="table-status" style="color:#ef4444;">₡28,500</span>
+              </div>
+              <div class="table-sim-card bill-requested" onclick="simularMesa('Mesa 3', 'Pidiendo Cuenta QR', 'Cliente solicitó Pre-Factura desde su celular')">
+                <div style="font-size:1.8rem;">🧾</div>
+                <div class="table-name">Mesa 3</div>
+                <span class="table-status" style="color:#f59e0b;">Pide Cuenta</span>
+              </div>
+              <div class="table-sim-card free" onclick="simularMesa('Mesa 4', 'Libre', 'Capacidad 2 comensales')">
+                <div style="font-size:1.8rem;">🪑</div>
+                <div class="table-name">Mesa 4</div>
+                <span class="table-status" style="color:#10b981;">Libre</span>
+              </div>
+              <div class="table-sim-card occupied" onclick="simularMesa('Barra 1', 'Ocupada', '2 Cervezas Artesanales Happy Hour 2x1')">
+                <div style="font-size:1.8rem;">🍸</div>
+                <div class="table-name">Barra 1</div>
+                <span class="table-status" style="color:#ef4444;">₡6,000</span>
+              </div>
+              <div class="table-sim-card free" onclick="simularMesa('Terraza 1', 'Libre', 'Vista al Jardín')">
+                <div style="font-size:1.8rem;">🌴</div>
+                <div class="table-name">Terraza 1</div>
+                <span class="table-status" style="color:#10b981;">Libre</span>
+              </div>
+            </div>
+
+            <div id="simMesaInfo" style="margin-top:20px; padding:12px 18px; background:rgba(255,255,255,0.04); border-radius:10px; border:1px solid var(--border-subtle); font-size:0.9rem; color:#cbd5e1;">
+              💡 <strong>Trazabilidad en tiempo real:</strong> Cada mesa registra tiempo de estancia, pedidos despachados, alertas de solicitud de cuenta por QR y botón de unión/separación rápida.
+            </div>
+          </div>
+
+          <!-- TAB 2: COMANDERO -->
+          <div id="tabComandero" class="tab-content">
+            <div style="display:grid; grid-template-columns:2fr 1fr; gap:16px;">
+              <div>
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                  <button class="f-badge" style="background:var(--primary); color:#fff; cursor:pointer;">🔥 Principales</button>
+                  <button class="f-badge" style="cursor:pointer;">🍔 Hamburguesas</button>
+                  <button class="f-badge" style="cursor:pointer;">🍸 Licores &amp; Cocktails</button>
+                  <button class="f-badge" style="background:rgba(245,158,11,0.2); color:#fbbf24; cursor:pointer;">⚡ Happy Hour 2x1</button>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+                  <div style="background:#1e293b; padding:12px; border-radius:10px; border:1px solid #334155;">
+                    <div style="font-weight:700;">Ribeye Steak 400g</div>
+                    <div style="color:var(--gold-light); font-size:0.85rem; font-weight:800;">₡16,500</div>
+                    <small style="color:var(--text-muted);">Término, Guarnición, Salsa</small>
+                  </div>
+                  <div style="background:#1e293b; padding:12px; border-radius:10px; border:1px solid #334155;">
+                    <div style="font-weight:700;">Burger Black Angus</div>
+                    <div style="color:var(--gold-light); font-size:0.85rem; font-weight:800;">₡8,900</div>
+                    <small style="color:var(--text-muted);">Extra Bacon, Queso Suizo</small>
+                  </div>
+                  <div style="background:#1e293b; padding:12px; border-radius:10px; border:1px solid #f59e0b;">
+                    <div style="font-weight:700;">Gin Tonic Premium 2x1</div>
+                    <div style="color:var(--gold-light); font-size:0.85rem; font-weight:800;">₡5,500 <span style="text-decoration:line-through; font-size:0.75rem; color:#94a3b8;">₡11,000</span></div>
+                    <small style="color:#fbbf24;">Promoción Activa</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Ticket Lateral -->
+              <div style="background:#0b1120; border:1px solid #334155; border-radius:12px; padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                  <div style="font-weight:800; border-bottom:1px solid #1e293b; padding-bottom:6px; margin-bottom:8px; display:flex; justify-content:space-between;">
+                    <span>Mesa 5 • Comanda #142</span>
+                    <span style="color:#10b981;">Tiempos</span>
+                  </div>
+                  <div style="font-size:0.82rem; margin-bottom:4px; display:flex; justify-content:space-between;">
+                    <span>1x Ribeye (Término Medio)</span>
+                    <span>₡16,500</span>
+                  </div>
+                  <div style="font-size:0.82rem; margin-bottom:4px; display:flex; justify-content:space-between;">
+                    <span>2x Gin Tonic (Happy Hour)</span>
+                    <span>₡5,500</span>
+                  </div>
+                </div>
+                <div style="border-top:1px solid #1e293b; padding-top:8px;">
+                  <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.1rem; color:var(--gold-light); margin-bottom:8px;">
+                    <span>Total:</span>
+                    <span>₡22,000</span>
+                  </div>
+                  <button class="btn-gold-3d" style="width:100%; font-size:0.85rem; justify-content:center;">
+                    🚀 Enviar a Cocina y Barra
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: KDS COCINA -->
+          <div id="tabKds" class="tab-content">
+            <div class="kds-sim-grid">
+              <div class="kds-sim-ticket">
+                <div class="kds-header">
+                  <div>
+                    <strong style="color:#fff;">Mesa 2 • Tique #48</strong>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Mesero: Carlos • 2 Comensales</div>
+                  </div>
+                  <span class="kds-timer-urgent">⏱️ 16:40 min</span>
+                </div>
+                <div style="font-size:0.9rem; line-height:1.5;">
+                  <div>🥩 <strong>1x Ribeye Steak 400g</strong> <span style="color:#f87171;">(Término 3/4, Papa Asada)</span></div>
+                  <div>🍔 <strong>1x Burger BBQ Crujiente</strong> <span style="color:#38bdf8;">(Sin cebolla)</span></div>
+                </div>
+                <button class="btn-outline-glass" style="margin-top:auto; font-size:0.8rem; justify-content:center; border-color:#10b981; color:#34d399;">
+                  ✓ Marcar Listo para Servir
+                </button>
+              </div>
+
+              <div class="kds-sim-ticket">
+                <div class="kds-header">
+                  <div>
+                    <strong style="color:#fff;">Mesa 6 • Tique #49</strong>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Mesera: Sofía • 4 Comensales</div>
+                  </div>
+                  <span class="kds-timer-ok">⏱️ 03:15 min</span>
+                </div>
+                <div style="font-size:0.9rem; line-height:1.5;">
+                  <div>🍕 <strong>1x Pizza Margherita Grande</strong></div>
+                  <div>🍟 <strong>1x Papas Trufadas con Parmesano</strong></div>
+                </div>
+                <button class="btn-outline-glass" style="margin-top:auto; font-size:0.8rem; justify-content:center; border-color:var(--primary); color:var(--primary-glow);">
+                  👨‍🍳 En Preparación
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 4: SPLIT BILL -->
+          <div id="tabSplit" class="tab-content">
+            <div class="split-sim-wrap">
+              <div class="split-person-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                  <strong style="color:var(--gold-light);">👤 Persona 1 (Carlos)</strong>
+                  <span class="f-badge" style="background:#10b981; color:#fff;">Listo para Pagar</span>
+                </div>
+                <div style="font-size:0.85rem; margin-bottom:6px; display:flex; justify-content:space-between;">
+                  <span>1x Ribeye Steak</span> <span>₡16,500</span>
+                </div>
+                <div style="font-size:0.85rem; margin-bottom:12px; display:flex; justify-content:space-between;">
+                  <span>1x Copa Vino Tinto</span> <span>₡4,500</span>
+                </div>
+                <div style="border-top:1px solid #334155; padding-top:8px; margin-bottom:12px; display:flex; justify-content:space-between; font-weight:800;">
+                  <span>Subtotal + IVA:</span> <span style="color:#fff;">₡23,730</span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-outline-glass" style="font-size:0.75rem; padding:6px 12px; flex:1; justify-content:center;">
+                    📄 Pre-Factura
+                  </button>
+                  <button class="btn-gold-3d" style="font-size:0.75rem; padding:6px 12px; flex:1; justify-content:center;">
+                    💳 Cobrar Factura
+                  </button>
+                </div>
+              </div>
+
+              <div class="split-person-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                  <strong style="color:var(--primary-glow);">👤 Persona 2 (María)</strong>
+                  <span class="f-badge" style="background:#3b82f6; color:#fff;">Pendiente</span>
+                </div>
+                <div style="font-size:0.85rem; margin-bottom:6px; display:flex; justify-content:space-between;">
+                  <span>1x Ensalada César con Pollo</span> <span>₡6,800</span>
+                </div>
+                <div style="font-size:0.85rem; margin-bottom:12px; display:flex; justify-content:space-between;">
+                  <span>1x Limonada con Menta</span> <span>₡2,200</span>
+                </div>
+                <div style="border-top:1px solid #334155; padding-top:8px; margin-bottom:12px; display:flex; justify-content:space-between; font-weight:800;">
+                  <span>Subtotal + IVA:</span> <span style="color:#fff;">₡10,170</span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-outline-glass" style="font-size:0.75rem; padding:6px 12px; flex:1; justify-content:center;">
+                    📄 Pre-Factura
+                  </button>
+                  <button class="btn-gold-3d" style="font-size:0.75rem; padding:6px 12px; flex:1; justify-content:center;">
+                    💳 Cobrar Factura
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       PROBLEMS VS SOLUTIONS (WHY GAMMA POS)
+       ======================================================================== -->
+  <section class="problems-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">VENTAJAS COMPETITIVAS</span>
+        <h2 class="section-title">¿Por qué los Restaurantes y Bares más Exitosos Eligen GAMMA POS?</h2>
+        <p class="section-desc">Diseñado para resolver de raíz los problemas que drenan el tiempo y las ganancias de los negocios gastronómicos.</p>
+      </div>
+
+      <div class="comparison-grid">
+        <div class="comparison-card">
+          <span class="comp-icon">✂️</span>
+          <h3 class="comp-title">División de Cuentas Instantánea</h3>
+          <div class="comp-old">❌ <strong>Sistemas Antiguos:</strong> 15 minutos calculando en papel quién paga qué, generando quejas en mesas grandes y atrasando el cierre de caja.</div>
+          <div class="comp-new">✅ <strong>GAMMA POS:</strong> Arrastra ítems a comensal 1, 2 o divide en partes iguales. Imprime pre-factura térmica individual y cobra con facturación electrónica separada en 3 segundos.</div>
+        </div>
+
+        <div class="comparison-card">
+          <span class="comp-icon">🌐</span>
+          <h3 class="comp-title">Operatividad 100% Sin Internet</h3>
+          <div class="comp-old">❌ <strong>Sistemas en la Nube Débiles:</strong> Si el proveedor de internet falla, el restaurante queda paralizado sin poder cobrar ni comandar.</div>
+          <div class="comp-new">✅ <strong>GAMMA POS:</strong> Motor local IndexedDB con auto-sincronización. El salón sigue vendiendo, comandando e imprimiendo sin enterarse del corte.</div>
+        </div>
+
+        <div class="comparison-card">
+          <span class="comp-icon">🍾</span>
+          <h3 class="comp-title">Kárdex de Licores &amp; Escandallos</h3>
+          <div class="comp-old">❌ <strong>Sistemas Tradicionales:</strong> Fugas silenciosas de botellas, tragos regalados y recetas que no descuentan insumos con precisión.</div>
+          <div class="comp-new">✅ <strong>GAMMA POS:</strong> Control exacto de shots (30ml) y botellas (750ml/1L) con mermas operativas y alertas de stock mínimo automático.</div>
+        </div>
+
+        <div class="comparison-card">
+          <span class="comp-icon">🍳</span>
+          <h3 class="comp-title">KDS Inteligente con Alertas Sonoras</h3>
+          <div class="comp-old">❌ <strong>Sistemas de Papel:</strong> Comandas perdidas, letras ilegibles, platillos fríos y meseros discutiendo con el chef.</div>
+          <div class="comp-new">✅ <strong>GAMMA POS:</strong> Pantallas dinámicas en cocina y barra con semáforo de tiempo, sonidos de timbre y despacho por tiempos (Entrada, Fuerte, Postre).</div>
+        </div>
+
+        <div class="comparison-card">
+          <span class="comp-icon">🍸</span>
+          <h3 class="comp-title">Happy Hour 2x1 Dinámico</h3>
+          <div class="comp-old">❌ <strong>Otros POS:</strong> El cajero debe calcular promociones manuales, aplicando descuentos incorrectos en horas no permitidas.</div>
+          <div class="comp-new">✅ <strong>GAMMA POS:</strong> Motor de Happy Hour con programación semanal por horas y días, en modos estricto o flexible con 1 solo clic.</div>
+        </div>
+
+        <div class="comparison-card">
+          <span class="comp-icon">🖨️</span>
+          <h3 class="comp-title">Impresión Térmica Multi-Destino</h3>
+          <div class="comp-old">❌ <strong>Otros POS:</strong> Configuración engorrosa de drivers que se desconfiguran con cualquier actualización de Windows.</div>
+          <div class="comp-new">✅ <strong>GAMMA POS:</strong> Conexión ESC/POS directa a impresoras de 80mm en Caja, Cocina, Barra Fría y Horno de Pizzas simultáneamente.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       17 TEMAS 2D / 3D SHOWCASE
+       ======================================================================== -->
+  <section id="temas" class="themes-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">PERSONALIZACIÓN TOTAL</span>
+        <h2 class="section-title">17 Temas Visuales Únicos para la Identidad de tu Local</h2>
+        <p class="section-desc">Desde un elegante Bistro Francés o un Café Nórdico hasta un Gastrobar Nocturno, Obsidian Gold o Cyberpunk Neón. Cambia de atmósfera con 1 toque.</p>
+      </div>
+
+      <div class="theme-picker-bar">
+        <button class="theme-pill-btn active" onclick="cambiarTemaDemo('bistro', this)">🥐 Bistro Nórdico</button>
+        <button class="theme-pill-btn" onclick="cambiarTemaDemo('crema', this)">☕ Crema Latte</button>
+        <button class="theme-pill-btn" onclick="cambiarTemaDemo('gold', this)">👑 Obsidian Gold</button>
+        <button class="theme-pill-btn" onclick="cambiarTemaDemo('titanium', this)">⚡ Titanium Blue</button>
+        <button class="theme-pill-btn" onclick="cambiarTemaDemo('cyberpunk', this)">💜 Cyberpunk Neon</button>
+        <button class="theme-pill-btn" onclick="cambiarTemaDemo('emerald', this)">🌿 Emerald Forest</button>
+        <button class="theme-pill-btn" onclick="cambiarTemaDemo('rustico', this)">🪵 Caoba Rústico</button>
+      </div>
+
+      <div id="themePreviewContainer" class="theme-preview-box" style="background: radial-gradient(circle, #1a2234 0%, #0d121f 100%); border-color: #3b82f6;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+          <div>
+            <h3 id="demoThemeName" style="font-family:var(--font-heading); font-size:1.4rem; color:#fff;">Tema Activo: Bistro Nórdico</h3>
+            <p id="demoThemeDesc" style="font-size:0.88rem; color:var(--text-muted);">Estilo escandinavo con texturas suaves, maderas claras y contraste optimizado para luz diurna.</p>
+          </div>
+          <span id="demoThemeBadge" class="f-badge" style="background:rgba(56,189,248,0.2); color:#38bdf8; font-size:0.85rem;">Vista 3D Isométrica Activa</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:16px;">
+          <div style="background:rgba(255,255,255,0.06); padding:16px; border-radius:14px; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+            <div style="font-size:1.8rem; margin-bottom:4px;">🍷</div>
+            <strong>Mesa VIP 1</strong>
+            <div style="font-size:0.75rem; color:#34d399; font-weight:700;">Atendida por Carlos</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.06); padding:16px; border-radius:14px; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+            <div style="font-size:1.8rem; margin-bottom:4px;">🍕</div>
+            <strong>Mesa VIP 2</strong>
+            <div style="font-size:0.75rem; color:#f87171; font-weight:700;">En Espera de Comida</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.06); padding:16px; border-radius:14px; text-align:center; border:1px solid rgba(255,255,255,0.1);">
+            <div style="font-size:1.8rem; margin-bottom:4px;">🍸</div>
+            <strong>Barra Central</strong>
+            <div style="font-size:0.75rem; color:#fbbf24; font-weight:700;">Happy Hour Activo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       CORE MODULES IN-DEPTH
+       ======================================================================== -->
+  <section id="modulos" class="features-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">TODO EN UNO</span>
+        <h2 class="section-title">Todos los Módulos que Necesitas para Escalar tu Negocio</h2>
+        <p class="section-desc">Sin módulos escondidos ni costos adicionales. Cada rincón de tu operación conectado en tiempo real.</p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Feature 1 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">🗺️</div>
+            <h3 class="feature-heading">Diseñador de Salón 2D / 3D</h3>
+            <p class="feature-text">Mueve, rota y dimensiona mesas redondas, cuadradas, barras y cabinas por pisos o zonas. Muestra el estado en vivo de cada mesa con temporizadores de estancia.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Drag &amp; Drop</span>
+            <span class="f-badge">Múltiples Pisos</span>
+            <span class="f-badge">Unión de Mesas</span>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">🍽️</div>
+            <h3 class="feature-heading">Comandero Táctil &amp; Modificadores</h3>
+            <p class="feature-text">Toma de pedidos ultrarrápida pensada para tablets y pantallas táctiles. Envío por tiempos (Entradas, Fuertes, Postres) y notas personalizadas al chef.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Tiempos de Servicio</span>
+            <span class="f-badge">Variantes con Cargo/Sin Cargo</span>
+            <span class="f-badge">Búsqueda Rápida '/'</span>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">🍳</div>
+            <h3 class="feature-heading">KDS Cocina &amp; Barra</h3>
+            <p class="feature-text">Pantalla de comandas digitales sin papel. Enrutamiento automático: bebidas a la barra y carnes a la cocina caliente con alerta sonora al entrar un nuevo pedido.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Timbre de Audio</span>
+            <span class="f-badge">Semáforo de Demora</span>
+            <span class="f-badge">Despacho Parcial</span>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">✂️</div>
+            <h3 class="feature-heading">División de Cuentas (Split Bill)</h3>
+            <p class="feature-text">Divide cuentas por personas en segundos sin cálculos mentales. Imprime tickets de Pre-Factura silenciosos para cada invitado y factura por separado.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Pre-Factura Térmica</span>
+            <span class="f-badge">Factura Individual</span>
+            <span class="f-badge">Partes Iguales</span>
+          </div>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">📦</div>
+            <h3 class="feature-heading">Kárdex, Recetas &amp; Escandallos</h3>
+            <p class="feature-text">Control milimétrico de inventario con costo de receta, mermas porcentuales, control de licores por shots (30ml) y avisos de reposición.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Shots y Botellas</span>
+            <span class="f-badge">Mermas Automáticas</span>
+            <span class="f-badge">Historial Kárdex</span>
+          </div>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">📱</div>
+            <h3 class="feature-heading">Menú Digital QR &amp; Auto-Pedido</h3>
+            <p class="feature-text">Generación de QR para cada mesa. Los comensales ven fotos en alta resolución, precios actualizados, llaman al mesero o solicitan la cuenta desde su móvil.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">QR por Mesa</span>
+            <span class="f-badge">Llamar al Mesero</span>
+            <span class="f-badge">Pedir Cuenta QR</span>
+          </div>
+        </div>
+
+        <!-- Feature 7 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">💵</div>
+            <h3 class="feature-heading">Caja, Cierres X/Z &amp; Multimoneda</h3>
+            <p class="feature-text">Apertura y cierre de caja ciego con arqueo detallado, ventas en Colones (CRC) y Dólares (USD) con tipo de cambio en vivo, Tarjeta y SINPE Móvil.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Arqueo Ciego</span>
+            <span class="f-badge">Cortes X y Z</span>
+            <span class="f-badge">SINPE Móvil</span>
+          </div>
+        </div>
+
+        <!-- Feature 8 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">⚡</div>
+            <h3 class="feature-heading">Facturación Electrónica Hacienda 4.3</h3>
+            <p class="feature-text">Emisión de Tiquetes Electrónicos y Facturas Electrónicas autorizadas por el Ministerio de Hacienda en Costa Rica con envío automático de XML y PDF.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Hacienda Costa Rica</span>
+            <span class="f-badge">IVA 13% / 1% / 0%</span>
+            <span class="f-badge">10% Servicio Legal</span>
+          </div>
+        </div>
+
+        <!-- Feature 9 -->
+        <div class="feature-box">
+          <div>
+            <div class="feature-icon-wrapper">🏢</div>
+            <h3 class="feature-heading">Multi-Sucursal &amp; Franquicias</h3>
+            <p class="feature-text">Consola de desarrollador y administrador maestro para gestionar múltiples restaurantes, cartas diferenciadas, inventarios y permisos por rol.</p>
+          </div>
+          <div class="feature-badges-list">
+            <span class="f-badge">Roles: Admin/Caja/Salonero</span>
+            <span class="f-badge">Multi-Comercio SaaS</span>
+            <span class="f-badge">Auditoría Total</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       BUSINESS SEGMENTS
+       ======================================================================== -->
+  <section id="negocios" class="business-types-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">ADAPTABILIDAD PROBADA</span>
+        <h2 class="section-title">El Software Ideal para Cualquier Formato Gastronómico</h2>
+        <p class="section-desc">Configurable a la medida de tu flujo de trabajo particular.</p>
+      </div>
+
+      <div class="biz-grid">
+        <div class="biz-card">
+          <span class="biz-emoji">🥩</span>
+          <h3 class="biz-name">Restaurantes &amp; Fine Dining</h3>
+          <p class="biz-desc">Control de tiempos por platos, reservas, maridaje de vinos y división de cuentas premium.</p>
+        </div>
+
+        <div class="biz-card">
+          <span class="biz-emoji">🍸</span>
+          <h3 class="biz-name">Bares &amp; Gastrobares</h3>
+          <p class="biz-desc">Happy Hour 2x1 automatizado, control de botellas por shot y rapidez de cobro en barra.</p>
+        </div>
+
+        <div class="biz-card">
+          <span class="biz-emoji">🍕</span>
+          <h3 class="biz-name">Pizzerías &amp; Fast Casual</h3>
+          <p class="biz-desc">Modificadores de ingredientes, mitad y mitad, pedidos para llevar y entrega express.</p>
+        </div>
+
+        <div class="biz-card">
+          <span class="biz-emoji">☕</span>
+          <h3 class="biz-name">Cafeterías &amp; Bakeries</h3>
+          <p class="biz-desc">Venta en mostrador de 1 toque, combos de desayuno, combos de repostería y café de especialidad.</p>
+        </div>
+
+        <div class="biz-card">
+          <span class="biz-emoji">🍲</span>
+          <h3 class="biz-name">Sodas &amp; Comida Típica</h3>
+          <p class="biz-desc">Menús del día rápidos, combos ejecutivos, cobro por SINPE Móvil y tickets sin complicaciones.</p>
+        </div>
+
+        <div class="biz-card">
+          <span class="biz-emoji">🌴</span>
+          <h3 class="biz-name">Clubes de Playa &amp; Hoteles</h3>
+          <p class="biz-desc">Multi-zonas (Piscina, Deck, Playa), cobro en USD, propina del 10% y modo offline garantizado.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       INTERACTIVE ROI CALCULATOR
+       ======================================================================== -->
+  <section id="calculadora" class="calculator-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">CALCULADORA DE RETORNO</span>
+        <h2 class="section-title">¿Cuánto Dinero y Tiempo Puedes Ahorrar Cada Mes?</h2>
+        <p class="section-desc">Mueve los deslizadores y descubre el impacto directo de GAMMA POS en la rentabilidad de tu negocio.</p>
+      </div>
+
+      <div class="calc-card">
+        <div class="calc-grid">
+          <div>
+            <div class="calc-input-group">
+              <div class="calc-label">
+                <span>Número de Mesas / Puntos de Venta:</span>
+                <span id="labelMesas" style="color:var(--gold-light); font-weight:800;">12 Mesas</span>
+              </div>
+              <input type="range" id="sliderMesas" min="3" max="60" value="12" class="calc-slider" oninput="calcularROI()" />
+            </div>
+
+            <div class="calc-input-group">
+              <div class="calc-label">
+                <span>Venta Mensual Estimada (₡ Colones):</span>
+                <span id="labelVentas" style="color:var(--gold-light); font-weight:800;">₡ 4,500,000</span>
+              </div>
+              <input type="range" id="sliderVentas" min="1000000" max="25000000" step="500000" value="4500000" class="calc-slider" oninput="calcularROI()" />
+            </div>
+
+            <div style="font-size:0.85rem; color:var(--text-muted); line-height:1.5;">
+              📌 <em>Cálculo basado en reducción de pérdidas por mermas en licores (8%), rotación más rápida de mesas con split bill (15% más clientes) y eliminación de errores en comandas.</em>
+            </div>
+          </div>
+
+          <div class="calc-results-box">
+            <span style="font-size:0.85rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); font-weight:700;">Ahorro Mensual Estimado:</span>
+            <div id="resAhorroDinero" class="roi-number">₡ 495,000</div>
+            <div style="color:#cbd5e1; font-weight:600; font-size:0.95rem; margin-bottom:16px;">
+              ⏱️ <span id="resHorasAhorradas" style="color:var(--gold-light); font-weight:800;">38 Horas</span> de trabajo operativo ahorradas al mes
+            </div>
+            <a href="/" class="btn-gold-3d" style="width:100%; justify-content:center;">
+              🚀 Empezar a Ahorrar con GAMMA POS
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       PRICING PLANS
+       ======================================================================== -->
+  <section id="planes" class="pricing-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">PLANES ACCESIBLES</span>
+        <h2 class="section-title">Inversión Clara, Sin Sorpresas ni Letras Pequeñas</h2>
+        <p class="section-desc">Todos los planes incluyen soporte técnico, actualizaciones automáticas y compatibilidad total con impresoras térmicas.</p>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- Plan 1 -->
+        <div class="pricing-card">
+          <div>
+            <h3 class="plan-title">Plan Emprendedor</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Ideal para sodas, cafeterías y pequeños locales gastronómicos.</p>
+            <div class="plan-price">$29 <span>/ mes</span></div>
+
+            <ul class="plan-features-list">
+              <li class="plan-feature-item check">Salón 2D hasta 15 mesas</li>
+              <li class="plan-feature-item check">Comandero Táctil &amp; Caja</li>
+              <li class="plan-feature-item check">1 Impresora Térmica 80mm</li>
+              <li class="plan-feature-item check">Modo 100% Offline</li>
+              <li class="plan-feature-item check">Facturación Express &amp; SINPE</li>
+              <li class="plan-feature-item check">Soporte por WhatsApp</li>
+            </ul>
+          </div>
+
+          <a href="/" class="btn-outline-glass" style="justify-content:center;">Elegir Plan Emprendedor</a>
+        </div>
+
+        <!-- Plan 2 (Featured) -->
+        <div class="pricing-card featured">
+          <div class="pricing-badge">⭐ MÁS POPULAR</div>
+          <div>
+            <h3 class="plan-title" style="color:var(--gold-light);">Plan Restaurante Pro</h3>
+            <p style="font-size:0.85rem; color:#cbd5e1;">Para restaurantes, bares y gastrobares que exigen máxima eficiencia.</p>
+            <div class="plan-price" style="color:var(--gold-light);">$59 <span>/ mes</span></div>
+
+            <ul class="plan-features-list">
+              <li class="plan-feature-item check">Salón 2D/3D con 17 Temas Visuales</li>
+              <li class="plan-feature-item check">Mesas y comensales Ilimitados</li>
+              <li class="plan-feature-item check">KDS Cocina &amp; Barra con Audio</li>
+              <li class="plan-feature-item check">División de Cuentas &amp; Pre-Facturas</li>
+              <li class="plan-feature-item check">Kárdex de Licores (Shots) &amp; Recetas</li>
+              <li class="plan-feature-item check">Happy Hour 2x1 Automatizado</li>
+              <li class="plan-feature-item check">Facturación Electrónica Hacienda</li>
+              <li class="plan-feature-item check">Menú Digital QR en Mesa</li>
+            </ul>
+          </div>
+
+          <a href="/" class="btn-gold-3d" style="justify-content:center;">🚀 Activar Plan Pro Ahora</a>
+        </div>
+
+        <!-- Plan 3 -->
+        <div class="pricing-card">
+          <div>
+            <h3 class="plan-title">Plan Multi-Sucursal</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Para cadenas de restaurantes, franquicias y grupos gastronómicos.</p>
+            <div class="plan-price">$99 <span>/ mes</span></div>
+
+            <ul class="plan-features-list">
+              <li class="plan-feature-item check">Todo lo incluido en el Plan Pro</li>
+              <li class="plan-feature-item check">Consola Desarrollador / Multi-Local</li>
+              <li class="plan-feature-item check">Inventarios centralizados</li>
+              <li class="plan-feature-item check">Reportes consolidados en tiempo real</li>
+              <li class="plan-feature-item check">Soporte VIP 24/7 prioritario</li>
+              <li class="plan-feature-item check">Capacitación presencial / remota</li>
+            </ul>
+          </div>
+
+          <a href="/" class="btn-outline-glass" style="justify-content:center;">Contactar para Franquicias</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       FAQ SECTION
+       ======================================================================== -->
+  <section id="faq" class="faq-section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">RESOLVEMOS TUS DUDAS</span>
+        <h2 class="section-title">Preguntas Frecuentes</h2>
+        <p class="section-desc">Todo lo que necesitas saber antes de implementar GAMMA POS en tu local.</p>
+      </div>
+
+      <div class="faq-accordion">
+        <div class="faq-item active">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>¿Qué sucede si se corta el internet en mi restaurante?</span>
+            <span>➕</span>
+          </div>
+          <div class="faq-answer">
+            GAMMA POS cuenta con una arquitectura de resiliencia total basada en IndexedDB. Si el internet se interrumpe, tus saloneros siguen comandando, tu cocina sigue recibiendo tiquetes y tu caja sigue cobrando e imprimiendo sin pausas. En cuanto la conexión regresa, todo se sincroniza automáticamente con el servidor en la nube.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>¿Funciona con mis impresoras térmicas actuales (Epson, Bixolon, Xprinter)?</span>
+            <span>➕</span>
+          </div>
+          <div class="faq-answer">
+            ¡Sí! GAMMA POS es 100% compatible con cualquier impresora térmica de 80mm y 58mm por conexión USB, Red LAN o Wi-Fi utilizando el protocolo universal ESC/POS estándar, sin necesidad de controladores complicados.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>¿Cómo funciona la división de cuentas y la pre-factura?</span>
+            <span>➕</span>
+          </div>
+          <div class="faq-answer">
+            En la pantalla de cobro puedes dividir la cuenta arrastrando productos a diferentes personas o dividiendo en montos iguales. Puedes imprimir una pre-factura silenciosa e individual para cada comensal para que revisen su consumo antes de pagar, y luego emitir facturas electrónicas separadas por persona.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>¿Puedo usarlo en tablets Android, iPads o laptops?</span>
+            <span>➕</span>
+          </div>
+          <div class="faq-answer">
+            Sí. GAMMA POS es una Progressive Web App (PWA) moderna y ligera. Puedes usarlo en cualquier tablet táctil (Android, iPad), laptops, computadoras todo en uno (All-in-One) táctiles y teléfonos móviles de tus meseros sin tener que pagar licencias por dispositivo.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>¿Cumple con la Facturación Electrónica de Hacienda Costa Rica?</span>
+            <span>➕</span>
+          </div>
+          <div class="faq-answer">
+            Totalmente. Genera Tiquetes Electrónicos y Facturas Electrónicas bajo la normativa versión 4.3 de la Dirección General de Tributación, incluyendo el cálculo del 13% de IVA y el 10% de Servicio de Mesa legal.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       FINAL CALL TO ACTION
+       ======================================================================== -->
+  <section class="final-cta-section">
+    <div class="container">
+      <div class="cta-card-gradient">
+        <h2 style="font-family:var(--font-heading); font-size:clamp(2rem, 4vw, 3rem); font-weight:900; margin-bottom:18px;">
+          Lleva tu Restaurante o Bar al Siguiente Nivel Hoy Mismo
+        </h2>
+        <p style="color:#cbd5e1; font-size:1.1rem; max-width:700px; margin:0 auto 36px;">
+          Únete a cientos de empresarios gastronómicos que transformaron el caos de su salón en orden, velocidad y altas ganancias.
+        </p>
+        <div style="display:flex; justify-content:center; gap:16px; flex-wrap:wrap;">
+          <a href="/" class="btn-gold-3d" style="font-size:1.15rem; padding:16px 36px;">
+            🔥 Ingresar a GAMMA POS Ahora
+          </a>
+          <a href="https://wa.me/?text=Hola%20quiero%20informaci%C3%B3n%20de%20GAMMA%20POS" target="_blank" class="btn-outline-glass" style="font-size:1.05rem; padding:16px 28px;">
+            💬 Hablar con un Especialista
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================
+       FOOTER
+       ======================================================================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" style="width:28px; height:28px; border-radius:6px;" onerror="this.src='/gamma_pos_logo.png'" />
+        <span style="font-weight:700; color:#fff;">GAMMA POS Cloud Suite © 2026</span>
+      </div>
+
+      <div style="display:flex; gap:20px; font-size:0.85rem;">
+        <a href="/" style="color:var(--text-muted); text-decoration:none;">Acceso al POS</a>
+        <a href="#modulos" style="color:var(--text-muted); text-decoration:none;">Módulos</a>
+        <a href="#planes" style="color:var(--text-muted); text-decoration:none;">Planes y Precios</a>
+        <a href="#faq" style="color:var(--text-muted); text-decoration:none;">Preguntas Frecuentes</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ========================================================================
+       SCRIPTS INTERACTIVOS DE LA LANDING
+       ======================================================================== -->
+  <script>
+    // Cambio de Pestañas en Mockup Interactivo
+    function switchMockTab(tabId, btn) {
+      document.querySelectorAll('.mockup-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      
+      btn.classList.add('active');
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add('active');
+    }
+
+    // Simulación de clic en mesa
+    function simularMesa(nombre, estado, detalle) {
+      const box = document.getElementById('simMesaInfo');
+      if (box) {
+        box.innerHTML = `🍽️ <strong>${nombre}:</strong> Estado [${estado}] — ${detalle}. <span style="color:#fbbf24; cursor:pointer; font-weight:700;" onclick="location.href='/'">➡️ Abrir Comanda en POS</span>`;
+      }
+    }
+
+    // Selector de temas visuales
+    const temasData = {
+      bistro: {
+        name: 'Bistro Nórdico',
+        desc: 'Estilo escandinavo con texturas suaves, maderas claras y contraste optimizado para luz diurna.',
+        bg: 'radial-gradient(circle, #1a2234 0%, #0d121f 100%)',
+        border: '#3b82f6',
+        badge: 'Vista 3D Isométrica Activa'
+      },
+      crema: {
+        name: 'Crema Latte & Café',
+        desc: 'Gama cálida y refinada con tonos marfil, cuero y detalles sutiles para cafeterías y bistrós gourmet.',
+        bg: 'radial-gradient(circle, #2d261e 0%, #17120c 100%)',
+        border: '#d97706',
+        badge: 'Estilo Warm Latte 3D'
+      },
+      gold: {
+        name: 'Obsidian Gold Luxury',
+        desc: 'Fondo negro azabache profundo con resplandores dorados y acabados metálicos para alta gastronomía y lounges.',
+        bg: 'radial-gradient(circle, #1f1a0d 0%, #080703 100%)',
+        border: '#f59e0b',
+        badge: 'Ultra Luxury Gold 3D'
+      },
+      titanium: {
+        name: 'Titanium Blue',
+        desc: 'Diseño ultra moderno con acentos azul cian, alto contraste y respuesta visual instantánea.',
+        bg: 'radial-gradient(circle, #0c1e38 0%, #050b14 100%)',
+        border: '#0284c7',
+        badge: 'High Performance 3D'
+      },
+      cyberpunk: {
+        name: 'Cyberpunk Neon',
+        desc: 'Colores eléctricos magenta y cian brillante con sombras fluorescentes para bares nocturnos y gastrobares.',
+        bg: 'radial-gradient(circle, #260c38 0%, #0c0214 100%)',
+        border: '#ec4899',
+        badge: 'Neon Glow 3D'
+      },
+      emerald: {
+        name: 'Emerald Forest',
+        desc: 'Verdes profundos y tonos orgánicos relajantes inspirados en terrazas botánicas y restaurantes de autor.',
+        bg: 'radial-gradient(circle, #0c2b1e 0%, #03120c 100%)',
+        border: '#10b981',
+        badge: 'Organic Green 3D'
+      },
+      rustico: {
+        name: 'Caoba Rústico',
+        desc: 'Textura de madera maciza, calidez rústica y ambientación tradicional para asadores y parrillas.',
+        bg: 'radial-gradient(circle, #381b10 0%, #170904 100%)',
+        border: '#b45309',
+        badge: 'Rustic Wood 3D'
+      }
+    };
+
+    function cambiarTemaDemo(temaKey, btn) {
+      document.querySelectorAll('.theme-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const data = temasData[temaKey];
+      if (!data) return;
+
+      const box = document.getElementById('themePreviewContainer');
+      const nameEl = document.getElementById('demoThemeName');
+      const descEl = document.getElementById('demoThemeDesc');
+      const badgeEl = document.getElementById('demoThemeBadge');
+
+      if (box) {
+        box.style.background = data.bg;
+        box.style.borderColor = data.border;
+      }
+      if (nameEl) nameEl.textContent = 'Tema Activo: ' + data.name;
+      if (descEl) descEl.textContent = data.desc;
+      if (badgeEl) badgeEl.textContent = data.badge;
+    }
+
+    // Calculadora ROI
+    function calcularROI() {
+      const mesas = parseInt(document.getElementById('sliderMesas').value) || 12;
+      const ventas = parseInt(document.getElementById('sliderVentas').value) || 4500000;
+
+      document.getElementById('labelMesas').textContent = mesas + ' Mesas';
+      document.getElementById('labelVentas').textContent = '₡ ' + ventas.toLocaleString('es-CR');
+
+      // Estimación: 11% de ahorro mensual combinado (mermas + rotación de mesas + no pérdidas)
+      const ahorro = Math.round(ventas * 0.11);
+      const horas = Math.round(mesas * 3.2);
+
+      document.getElementById('resAhorroDinero').textContent = '₡ ' + ahorro.toLocaleString('es-CR');
+      document.getElementById('resHorasAhorradas').textContent = horas + ' Horas';
+    }
+
+    // FAQ Accordion Toggle
+    function toggleFaq(el) {
+      const item = el.parentElement;
+      const isActive = item.classList.contains('active');
+      
+      document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
+      if (!isActive) {
+        item.classList.add('active');
+      }
+    }
+  </script>
+</body>
+</html>
