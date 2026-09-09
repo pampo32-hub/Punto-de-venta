@@ -766,6 +766,17 @@ window.abrirModalNuevoProducto = async function() {
     } catch(e) {}
   }
 
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  if (!estado.categorias || estado.categorias.length === 0) {
+    try {
+      const resMenu = await fetch(`/api/menu?negocio_id=${nid}`, { headers: { 'x-negocio-id': String(nid) } });
+      if (resMenu.ok) {
+        const dataMenu = await resMenu.json();
+        estado.categorias = dataMenu.categorias || [];
+      }
+    } catch(e) {}
+  }
+
   if (selCat) {
     const cats = estado.categorias || [];
     let opts = cats.map(c => 
@@ -787,7 +798,12 @@ window.abrirModalNuevoProducto = async function() {
       }
     };
     selCat.onchange = window.alCambiarCategoriaProducto;
-    if (selCat.options.length > 0) {
+    if (cats.length === 0) {
+      selCat.value = '__nueva__';
+      if (boxNuevaCat) boxNuevaCat.style.display = 'block';
+      if (txtNuevaCatNombre) txtNuevaCatNombre.value = 'Comidas';
+    } else if (selCat.options.length > 0) {
+      selCat.selectedIndex = 0;
       selCat.dispatchEvent(new Event('change'));
       window.alCambiarCategoriaProducto();
     }
@@ -974,43 +990,53 @@ window.guardarNuevoProducto = async function() {
     return;
   }
 
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
+
   let categoria_id = selCat ? selCat.value : null;
 
-  // Si se seleccionó "+ Crear nueva categoría..."
-  if (categoria_id === '__nueva__') {
+  // Si se seleccionó "+ Crear nueva categoría..." o no hay categoría seleccionada
+  if (categoria_id === '__nueva__' || !categoria_id) {
     const txtNuevaCatNombre = document.getElementById('txtNuevaCatNombre');
     const txtNuevaCatIcono = document.getElementById('txtNuevaCatIcono');
     const selNuevaCatDestino = document.getElementById('selectNuevaCatDestino');
 
     const nuevaCatNombre = (txtNuevaCatNombre ? txtNuevaCatNombre.value : '').trim();
-    const nuevaCatIcono = (txtNuevaCatIcono ? txtNuevaCatIcono.value : '🍾').trim() || '🍾';
-    const nuevaCatDestino = selNuevaCatDestino ? selNuevaCatDestino.value : 'barra';
+    const nuevaCatIcono = (txtNuevaCatIcono ? txtNuevaCatIcono.value : '🍽️').trim() || '🍽️';
+    const nuevaCatDestino = selNuevaCatDestino ? selNuevaCatDestino.value : 'cocina';
 
-    if (!nuevaCatNombre) {
+    if (categoria_id === '__nueva__' && !nuevaCatNombre) {
       alert('Por favor escribe el nombre de la nueva categoría.');
       if (txtNuevaCatNombre) txtNuevaCatNombre.focus();
       return;
     }
 
-    try {
-      const resCat = await fetch('/api/categorias', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: nuevaCatNombre,
-          icono: nuevaCatIcono,
-          destino: nuevaCatDestino
-        })
-      });
-      const dataCat = await resCat.json();
-      if (!resCat.ok) {
-        alert('❌ Error al crear categoría: ' + (dataCat.error || 'No se pudo crear'));
+    if (nuevaCatNombre) {
+      try {
+        const resCat = await fetch('/api/categorias', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-user-rol': userRol,
+            'x-negocio-id': String(nid)
+          },
+          body: JSON.stringify({
+            nombre: nuevaCatNombre,
+            icono: nuevaCatIcono,
+            destino: nuevaCatDestino,
+            negocio_id: nid
+          })
+        });
+        const dataCat = await resCat.json();
+        if (!resCat.ok) {
+          alert('❌ Error al crear categoría: ' + (dataCat.error || 'No se pudo crear'));
+          return;
+        }
+        categoria_id = dataCat.categoria ? dataCat.categoria.id : null;
+      } catch (e) {
+        alert('❌ Error creando categoría: ' + e.message);
         return;
       }
-      categoria_id = dataCat.categoria ? dataCat.categoria.id : null;
-    } catch (e) {
-      alert('❌ Error creando categoría: ' + e.message);
-      return;
     }
   }
 
@@ -1021,8 +1047,6 @@ window.guardarNuevoProducto = async function() {
   const curso = selCurso ? selCurso.value : 2;
   const happy_hour = chkHH && chkHH.checked ? 1 : 0;
   const agotado = chkAgotado && chkAgotado.checked ? 1 : 0;
-
-  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
   // Datos Kárdex
   let kardex_tipo = document.getElementById('selectKardexTipo')?.value || 'ninguno';
@@ -1072,7 +1096,8 @@ window.guardarNuevoProducto = async function() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-rol': userRol
+          'x-user-rol': userRol,
+          'x-negocio-id': String(nid)
         },
         body: JSON.stringify({
           nombre,
@@ -1081,7 +1106,8 @@ window.guardarNuevoProducto = async function() {
           stock_actual: stockAuto,
           stock_minimo: 3,
           costo_unitario: costoAuto,
-          es_licor: 0
+          es_licor: 0,
+          negocio_id: nid
         })
       });
       const dataInsumo = await resInsumo.json();
@@ -1133,19 +1159,20 @@ window.guardarNuevoProducto = async function() {
     cantidad_descuento,
     insumo_stock_actual,
     insumo_costo_unitario,
-    insumo_stock_minimo
+    insumo_stock_minimo,
+    negocio_id: nid
   };
 
   try {
     const url = isEditing ? `/api/productos/${prodId}` : '/api/productos';
     const method = isEditing ? 'PUT' : 'POST';
-    const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
 
     const res = await fetch(url, {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'x-user-rol': userRol
+        'x-user-rol': userRol,
+        'x-negocio-id': String(nid)
       },
       body: JSON.stringify(payload)
     });

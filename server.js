@@ -1864,7 +1864,19 @@ app.put('/api/productos/:id/visual', async (req, res) => {
 app.get('/api/mesas', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
+    let zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
+    if (zonas.length === 0) {
+      const rZona = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [negocioId, 'Salón Principal']);
+      const zonaId = rZona.lastID;
+      for (let i = 1; i <= 6; i++) {
+        await dbRun(
+          `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
+           VALUES (?, ?, ?, 4, 'libre', ?, ?, 130, 120, 'square', 1)`,
+          [negocioId, `Mesa ${i}`, zonaId, 40 + ((i - 1) % 3) * 160, 40 + Math.floor((i - 1) / 3) * 150]
+        );
+      }
+      zonas = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ? ORDER BY id ASC', [negocioId]);
+    }
     const mesas = await dbAll(`
       SELECT m.*, z.nombre as zonaNombre,
              o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
@@ -3304,7 +3316,12 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 app.get('/api/menu', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    const categorias = await dbAll('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
+    let categorias = await dbAll('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
+    if (categorias.length === 0) {
+      await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Comidas', '🍽️', 'cocina']);
+      await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Bebidas', '🍹', 'barra']);
+      categorias = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ? ORDER BY id ASC', [negocioId]);
+    }
     const rawProductos = await dbAll(`
       SELECT 
         p.*,
@@ -3424,7 +3441,7 @@ app.post('/api/productos', async (req, res) => {
       cantidad_descuento,
       negocio_id
     } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const negocioId = obtenerNegocioIdReq(req, negocio_id || 1);
     const nombreLimpio = (nombre || '').trim();
     const precioNum = parseFloat(precio);
 
@@ -3440,13 +3457,30 @@ app.post('/api/productos', async (req, res) => {
 
     if (catId) {
       const cat = await dbGet('SELECT * FROM Categorias WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catId, negocioId, negocioId]);
-      if (cat && !destinoFinal) {
-        destinoFinal = cat.destino || 'cocina';
+      if (cat) {
+        if (!destinoFinal) destinoFinal = cat.destino || 'cocina';
+      } else {
+        // Si la categoría no pertenece a este negocio, buscar o crear la primera de este negocio
+        const primeraCat = await dbGet('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1', [negocioId, negocioId]);
+        if (primeraCat) {
+          catId = primeraCat.id;
+          if (!destinoFinal) destinoFinal = primeraCat.destino || 'cocina';
+        } else {
+          const rNueva = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Comidas', '🍽️', 'cocina']);
+          catId = rNueva.lastID;
+          if (!destinoFinal) destinoFinal = 'cocina';
+        }
       }
     } else {
       const primeraCat = await dbGet('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1', [negocioId, negocioId]);
-      catId = primeraCat ? primeraCat.id : 1;
-      if (!destinoFinal) destinoFinal = primeraCat ? (primeraCat.destino || 'cocina') : 'cocina';
+      if (primeraCat) {
+        catId = primeraCat.id;
+        if (!destinoFinal) destinoFinal = primeraCat.destino || 'cocina';
+      } else {
+        const rNueva = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Comidas', '🍽️', 'cocina']);
+        catId = rNueva.lastID;
+        if (!destinoFinal) destinoFinal = 'cocina';
+      }
     }
 
     if (!destinoFinal || (destinoFinal !== 'barra' && destinoFinal !== 'cocina')) {
@@ -3488,7 +3522,7 @@ app.post('/api/productos', async (req, res) => {
     io.emit('producto_creado', nuevoProd);
     io.emit('menu_actualizado');
 
-    res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd });
+    res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd, id: prodId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
