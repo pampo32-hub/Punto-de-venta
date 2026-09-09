@@ -2479,6 +2479,8 @@ window.guardarNuevoPinAutoservicio = async function() {
 };
 
 window.cerrarSesion = function() {
+  document.body.classList.remove('beta-tester-gold');
+  try { localStorage.removeItem('pos_beta_theme_gold'); } catch(e) {}
   if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
   estado.usuarioActual = null;
   sessionStorage.removeItem('pos_usuario');
@@ -18055,43 +18057,26 @@ window.abrirMenuDirecto = function() {
 
 
 // =============================================================================
-// 👑 MODO BETA TESTER: CONTROL DE BOTONES 3D ORO CHAMPAGNE (100% DE BOTONES)
+// 👑 AISLAMIENTO ESTRICTO: 100% BOTONES 3D ORO CHAMPAGNE EXCLUSIVOS PARA BETA TESTER
 // =============================================================================
-window.toggleBetaTesterGoldTheme = function() {
-  const isBetaActive = document.body.classList.toggle('beta-tester-gold');
-  localStorage.setItem('pos_beta_theme_gold', isBetaActive ? 'true' : 'false');
-  
-  const btn = document.getElementById('btnBetaGoldToggle');
-  if (btn) {
-    btn.classList.toggle('active', isBetaActive);
-  }
-  const lbl = document.getElementById('lblBetaGoldText');
-  if (lbl) {
-    lbl.textContent = isBetaActive ? '🌟 3D Gold (Activo)' : '👑 3D Gold (Beta)';
-  }
-  
-  if (typeof mostrarNotificacionCentro === 'function') {
-    mostrarNotificacionCentro(
-      isBetaActive ? '👑 Modo Beta Tester: 100% de Botones 3D Oro Champagne Activados' : '↩️ Modo Estándar: Botones clásicos restaurados',
-      isBetaActive ? 'success' : 'info'
-    );
-  }
-};
+window.aplicarAislamientoTemaBeta = function() {
+  try {
+    localStorage.removeItem('pos_beta_theme_gold');
+  } catch(e) {}
 
-// Activar automáticamente para comercio Beta Tester o preferencia guardada
-window.verificarActivarTemaBetaGold = function() {
-  const esNegocioBeta = (typeof estado !== 'undefined' && estado.negocioActual && (Number(estado.negocioActual.id) === 2 || (estado.negocioActual.nombre || '').toLowerCase().includes('beta')));
-  const preferenciaGuardada = localStorage.getItem('pos_beta_theme_gold') === 'true';
+  const neg = (typeof estado !== 'undefined' && estado.negocioActual) 
+    ? estado.negocioActual 
+    : (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')) : null);
 
-  if (esNegocioBeta || preferenciaGuardada) {
+  const esBeta = neg && (Number(neg.id) === 2 || (neg.nombre || '').toLowerCase().includes('beta'));
+  
+  if (esBeta) {
     document.body.classList.add('beta-tester-gold');
-    const btn = document.getElementById('btnBetaGoldToggle');
-    if (btn) btn.classList.add('active');
-    const lbl = document.getElementById('lblBetaGoldText');
-    if (lbl) lbl.textContent = '🌟 3D Gold (Activo)';
+  } else {
+    document.body.classList.remove('beta-tester-gold');
   }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  window.verificarActivarTemaBetaGold();
+  window.aplicarAislamientoTemaBeta();
 });
