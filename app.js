@@ -8916,31 +8916,71 @@ document.addEventListener('keydown', (e) => {
       return;
     }
 
-    // Atajos alfanuméricos cuando NO se está digitando texto/monto en un input
-    if (!isInputActive) {
-      if (e.key === '1' || e.key === 'e' || e.key === 'E') {
+    // Captura de métodos de pago en Modal de Cobro
+    const activeEl = document.activeElement;
+    const isReferenceInput = activeEl && (activeEl.id === 'txtTarjetaReferencia' || activeEl.id === 'txtSinpeReferencia' || activeEl.tagName === 'TEXTAREA');
+    const k = e.key ? e.key.toLowerCase() : '';
+
+    // Letras rápidas (E, T, S, D, M) para cambio directo de pestaña
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && !isReferenceInput) {
+      if (k === 'e') {
         e.preventDefault();
         window.seleccionarMetodoCobro('Efectivo');
         const txtEf = document.getElementById('txtEfectivoRecibido');
-        if (txtEf) { txtEf.focus(); txtEf.select(); }
+        if (txtEf) { txtEf.focus(); txtEf.select?.(); }
         return;
       }
-      if (e.key === '2' || e.key === 't' || e.key === 'T' || e.key === 'd' || e.key === 'D') {
+      if (k === 't') {
         e.preventDefault();
         window.seleccionarMetodoCobro('Tarjeta');
         return;
       }
-      if (e.key === '3' || e.key === 's' || e.key === 'S') {
+      if (k === 's') {
         e.preventDefault();
         window.seleccionarMetodoCobro('SINPE');
         return;
       }
-      if (e.key === '4' || e.key === 'u' || e.key === 'U') {
+      if (k === 'd') {
         e.preventDefault();
         window.seleccionarMetodoCobro('Dolares');
+        const txtDol = document.getElementById('txtDolaresRecibidos');
+        if (txtDol) { txtDol.focus(); txtDol.select?.(); }
         return;
       }
-      if (e.key === '5' || e.key === 'm' || e.key === 'M') {
+      if (k === 'm') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Mixto');
+        return;
+      }
+    }
+
+    // Atajos numéricos (1, 2, 3, 4, 5) cuando NO se está digitando texto/monto en un input
+    if (!isInputActive) {
+      if (e.key === '1') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Efectivo');
+        const txtEf = document.getElementById('txtEfectivoRecibido');
+        if (txtEf) { txtEf.focus(); txtEf.select?.(); }
+        return;
+      }
+      if (e.key === '2') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Tarjeta');
+        return;
+      }
+      if (e.key === '3') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('SINPE');
+        return;
+      }
+      if (e.key === '4') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Dolares');
+        const txtDol = document.getElementById('txtDolaresRecibidos');
+        if (txtDol) { txtDol.focus(); txtDol.select?.(); }
+        return;
+      }
+      if (e.key === '5') {
         e.preventDefault();
         window.seleccionarMetodoCobro('Mixto');
         return;
