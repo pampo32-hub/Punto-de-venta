@@ -3920,6 +3920,14 @@ window.aplicarRestriccionesModulos = function() {
   document.querySelectorAll('#btnVoicePOS, #btnDictarComanda, .btn-voice-pos, #btnSugerenciasIA, .card-ia, .ai-badge, .btn-ia-suggest, .seccion-ia').forEach(el => {
     el.style.display = tieneIA ? '' : 'none';
   });
+
+  // 11. Descuentos & Cortesías con PIN y Auditoría
+  const tieneDescuentos = tieneModulo('descuentos_cortesias_pin');
+  const btnDesc = document.getElementById('btnAbrirModalDescuento');
+  if (btnDesc) btnDesc.style.display = tieneDescuentos ? '' : 'none';
+  document.querySelectorAll('.btn-descuento-trigger, #btnAbrirModalDescuento').forEach(el => {
+    el.style.display = tieneDescuentos ? '' : 'none';
+  });
 };
 
 window.abrirPosComoNegocio = async function(negocioId) {
@@ -5341,7 +5349,11 @@ async function cargarMesasDesdeBackend() {
         grupo_mesas: m.grupo_mesas || null,
         es_mesa_agrupada: Boolean(m.es_mesa_agrupada),
         es_mesa_secundaria_unida: Boolean(m.es_mesa_secundaria_unida),
-        unida_a_numero: m.unida_a_numero || null
+        unida_a_numero: m.unida_a_numero || null,
+        minutos_inactiva: m.minutos_inactiva || 0,
+        minutos_comida_lista: m.minutos_comida_lista || 0,
+        semaforo_alerta: m.semaforo_alerta || 'normal',
+        semaforo_activo: Boolean(m.semaforo_activo)
       };
     });
 
@@ -5603,6 +5615,13 @@ function renderGrillaOrdenada(filtroZona = null) {
           }
         }
 
+        let semaforoBadgeHtml = '';
+        if (m.semaforo_alerta === 'comida_lista') {
+          semaforoBadgeHtml = `<div class="badge-semaforo-comida-lista" style="margin: 4px 0;" title="Platillos listos en cocina hace ${m.minutos_comida_lista} min">🔥 Comida Lista (${m.minutos_comida_lista}m)</div>`;
+        } else if (m.semaforo_alerta === 'inactiva') {
+          semaforoBadgeHtml = `<div class="badge-semaforo-inactiva" style="margin: 4px 0;" title="Mesa ocupada sin comanda reciente (${m.minutos_inactiva} min)">⚠️ ${m.minutos_inactiva}m inactiva</div>`;
+        }
+
         if (esBarraZona) {
           card.innerHTML = `
             <div class="m-grid-header">
@@ -5610,6 +5629,7 @@ function renderGrillaOrdenada(filtroZona = null) {
               <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
             </div>
             ${clienteHtml}
+            ${semaforoBadgeHtml}
             <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
           `;
         } else {
@@ -5619,6 +5639,7 @@ function renderGrillaOrdenada(filtroZona = null) {
               <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
             </div>
             ${clienteHtml}
+            ${semaforoBadgeHtml}
             <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
             <div class="m-grid-footer">
               <span class="m-grid-cap">👥 ${cap}</span>
@@ -5825,12 +5846,20 @@ function renderSalón(filtroZona = null) {
       clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
     }
 
+    let semaforoBadgeHtml = '';
+    if (m.semaforo_alerta === 'comida_lista') {
+      semaforoBadgeHtml = `<div class="badge-semaforo-comida-lista" title="¡Platillos listos en cocina hace ${m.minutos_comida_lista} min!">🔥 Comida Lista (${m.minutos_comida_lista}m)</div>`;
+    } else if (m.semaforo_alerta === 'inactiva') {
+      semaforoBadgeHtml = `<div class="badge-semaforo-inactiva" title="Mesa ocupada sin comanda reciente (${m.minutos_inactiva} min)">⚠️ ${m.minutos_inactiva}m inactiva</div>`;
+    }
+
     card.innerHTML = `
       <div class="m-header">
         <span class="m-num">${m.numero} ${mergedBadgeHtml}</span>
         <span class="m-badge">${estadoEtiqueta}</span>
       </div>
       ${clienteHtml}
+      ${semaforoBadgeHtml}
       <div class="m-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
       ${cuentaQrHtml}
       ${waitChipHtml}
@@ -6805,6 +6834,10 @@ async function abrirComanderoMesa(mesaId) {
         : ('Orden #' + (data.orden.numero_orden || data.orden.id));
       mesa.orden_id = data.orden.id;
       mesa.modo_happy_hour = data.orden.modo_happy_hour || 'estricto';
+      mesa.descuento_monto = data.orden.descuento_monto || 0;
+      mesa.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
+      mesa.descuento_motivo = data.orden.descuento_motivo || '';
+      mesa.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
       mesa.items = (data.items || []).map(it => ({
         id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
         id: it.producto_id || it.id,
@@ -6850,6 +6883,10 @@ async function abrirComanderoMesa(mesaId) {
       document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
       mesa.orden_id = null;
       mesa.modo_happy_hour = 'estricto';
+      mesa.descuento_monto = 0;
+      mesa.descuento_porcentaje = 0;
+      mesa.descuento_motivo = '';
+      mesa.descuento_autorizado_por = '';
       mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
@@ -7136,11 +7173,12 @@ function recalcularTotalesTicket() {
     document.getElementById('comServicio').textContent = '₡ 0.00';
     document.getElementById('comIva').textContent = '₡ 0.00';
     document.getElementById('comTotal').textContent = '₡ 0.00';
-    document.getElementById('comHappyHourRow').style.display = 'none';
     const hhRow = document.getElementById('comHappyHourRow');
     if (hhRow) hhRow.style.display = 'none';
     const cobroHH = document.getElementById('cobroHappyHourBadgeRow');
     if (cobroHH) cobroHH.style.display = 'none';
+    const rowDescEsp = document.getElementById('rowDescuentoEspecial');
+    if (rowDescEsp) rowDescEsp.style.display = 'none';
     return;
   }
 
@@ -7190,8 +7228,27 @@ function recalcularTotalesTicket() {
     }
   }
 
+  const descuentoEspecial = (estado.mesaActiva && estado.mesaActiva.descuento_monto) ? Number(estado.mesaActiva.descuento_monto) : 0;
+  const rowDescEsp = document.getElementById('rowDescuentoEspecial');
+  const lblDescEsp = document.getElementById('lblDescuentoEspecial');
+  const comDescEsp = document.getElementById('comDescuentoEspecial');
+
+  if (rowDescEsp) {
+    if (descuentoEspecial > 0) {
+      rowDescEsp.style.display = 'flex';
+      if (lblDescEsp) {
+        lblDescEsp.textContent = `🎁 Descuento Especial (${estado.mesaActiva.descuento_porcentaje || 0}%):`;
+      }
+      if (comDescEsp) {
+        comDescEsp.textContent = '-' + formatCRC(descuentoEspecial);
+      }
+    } else {
+      rowDescEsp.style.display = 'none';
+    }
+  }
+
   const totalBruto = sub;
-  const total = Math.max(0, totalBruto - descuentoHH);
+  const total = Math.max(0, totalBruto - descuentoHH - descuentoEspecial);
   const subtotalBase = Math.round(total / 1.23);
   const servicio = Math.round(subtotalBase * 0.10);
   const iva = total - subtotalBase - servicio;
@@ -7284,6 +7341,234 @@ window.toggleModoHappyHourActual = async function() {
 
   if (typeof mostrarNotificacionCentro === 'function') {
     mostrarNotificacionCentro(`🍸 Modo Happy Hour cambiado a: ${nuevoModo === 'flexible' ? 'Flexible 🤝 (Completa pares impares)' : 'Estricto 🛡️ (Solo horario HH)'}`, 'info');
+  }
+};
+
+// ============================================================================
+// MODAL DE DESCUENTOS & CORTESÍAS CON PIN Y AUDITORÍA
+// ============================================================================
+window.abrirModalAplicarDescuento = function() {
+  if (!estado.mesaActiva || (!estado.mesaActiva.orden_id && (!estado.mesaActiva.items || estado.mesaActiva.items.length === 0))) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Debes tener una orden o platillos activos en la mesa para aplicar descuentos.', 'warning');
+    } else {
+      alert('⚠️ Debes tener una orden o platillos activos en la mesa para aplicar descuentos.');
+    }
+    return;
+  }
+
+  const mod = document.getElementById('modalAplicarDescuento');
+  if (!mod) return;
+
+  const subtitulo = document.getElementById('subtituloDescuentoMesa');
+  if (subtitulo) {
+    const totalActual = estado.mesaActiva.orden_total || 0;
+    subtitulo.textContent = `Mesa ${estado.mesaActiva.numero || ''} • Total actual: ${formatCRC(totalActual)}`;
+  }
+
+  const txtVal = document.getElementById('txtValorDescuentoManual');
+  const txtMotivo = document.getElementById('txtMotivoDescuento');
+  const txtPin = document.getElementById('txtPinSupervisorDescuento');
+  const selTipo = document.getElementById('selTipoDescuentoManual');
+
+  if (txtVal) txtVal.value = '';
+  if (txtMotivo) txtMotivo.value = '';
+  if (txtPin) txtPin.value = '';
+  if (selTipo) selTipo.value = 'porcentaje';
+
+  window.actualizarModoDescuentoManual();
+
+  mod.classList.add('active');
+  mod.style.display = 'flex';
+};
+
+window.cerrarModalAplicarDescuento = function() {
+  const mod = document.getElementById('modalAplicarDescuento');
+  if (mod) {
+    mod.classList.remove('active');
+    mod.style.display = 'none';
+  }
+};
+
+window.seleccionarPresetDescuento = function(tipo, valor) {
+  const selTipo = document.getElementById('selTipoDescuentoManual');
+  const txtVal = document.getElementById('txtValorDescuentoManual');
+
+  if (selTipo) selTipo.value = tipo;
+  if (txtVal) txtVal.value = valor;
+
+  window.actualizarModoDescuentoManual();
+
+  document.querySelectorAll('.btn-desc-preset').forEach(b => b.classList.remove('active'));
+  if (typeof event !== 'undefined' && event && event.target) {
+    const btnClickeado = event.target.closest('.btn-desc-preset');
+    if (btnClickeado) btnClickeado.classList.add('active');
+  }
+};
+
+window.actualizarModoDescuentoManual = function() {
+  const selTipo = document.getElementById('selTipoDescuentoManual');
+  const boxVal = document.getElementById('boxValorDescuentoManual');
+  const txtVal = document.getElementById('txtValorDescuentoManual');
+  const lblVal = boxVal ? boxVal.querySelector('label') : null;
+
+  if (!selTipo || !boxVal || !txtVal) return;
+
+  if (selTipo.value === 'cortesia') {
+    boxVal.style.opacity = '0.4';
+    txtVal.disabled = true;
+    txtVal.value = '100';
+    if (lblVal) lblVal.textContent = 'Cortesía Completa (100%):';
+  } else if (selTipo.value === 'porcentaje') {
+    boxVal.style.opacity = '1';
+    txtVal.disabled = false;
+    txtVal.placeholder = 'Ej: 15';
+    txtVal.min = '1';
+    txtVal.max = '100';
+    if (lblVal) lblVal.textContent = 'Porcentaje (%):';
+  } else if (selTipo.value === 'monto') {
+    boxVal.style.opacity = '1';
+    txtVal.disabled = false;
+    txtVal.placeholder = 'Ej: 3000';
+    txtVal.min = '1';
+    txtVal.removeAttribute('max');
+    if (lblVal) lblVal.textContent = 'Monto en Colones (₡):';
+  }
+};
+
+window.confirmarAplicarDescuento = async function() {
+  if (!estado.mesaActiva) return;
+
+  const ordenId = estado.mesaActiva.orden_id;
+  if (!ordenId) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Primero debes enviar la comanda para crear la orden antes de aplicar el descuento.', 'warning');
+    } else {
+      alert('⚠️ Primero debes enviar la comanda para crear la orden antes de aplicar el descuento.');
+    }
+    return;
+  }
+
+  const selTipo = document.getElementById('selTipoDescuentoManual');
+  const txtVal = document.getElementById('txtValorDescuentoManual');
+  const txtMotivo = document.getElementById('txtMotivoDescuento');
+  const txtPin = document.getElementById('txtPinSupervisorDescuento');
+
+  const tipo = selTipo ? selTipo.value : 'porcentaje';
+  const valor = txtVal ? Number(txtVal.value) : 0;
+  const motivo = (txtMotivo && txtMotivo.value.trim()) ? txtMotivo.value.trim() : 'Descuento autorizado';
+  const pin = txtPin ? txtPin.value.trim() : '';
+
+  if (tipo !== 'cortesia' && (!valor || valor <= 0)) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Ingresa un valor de descuento válido.', 'warning');
+    } else {
+      alert('⚠️ Ingresa un valor de descuento válido.');
+    }
+    return;
+  }
+
+  const uAct = estado.usuarioActual || estado.usuario;
+  const esAdminDev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer'));
+
+  if (!esAdminDev && !pin) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🔒 Se requiere el PIN de Administrador/Supervisor para autorizar el descuento.', 'warning');
+    } else {
+      alert('🔒 Se requiere el PIN de Administrador/Supervisor para autorizar el descuento.');
+    }
+    if (txtPin) txtPin.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/ordenes/${ordenId}/descuento`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': uAct ? uAct.rol : 'mesero'
+      },
+      body: JSON.stringify({ tipo, valor, motivo, pin })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('❌ ' + (data.error || 'Error al aplicar descuento'), 'error');
+      } else {
+        alert('❌ ' + (data.error || 'Error al aplicar descuento'));
+      }
+      return;
+    }
+
+    if (data.orden) {
+      estado.mesaActiva.descuento_monto = data.orden.descuento_monto || 0;
+      estado.mesaActiva.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
+      estado.mesaActiva.descuento_motivo = data.orden.descuento_motivo || '';
+      estado.mesaActiva.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
+      estado.mesaActiva.orden_total = data.orden.total || 0;
+    }
+
+    window.cerrarModalAplicarDescuento();
+    renderTicketItems();
+    if (typeof cargarMesasDesdeBackend === 'function') {
+      cargarMesasDesdeBackend();
+    }
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('✅ ' + (data.message || 'Descuento aplicado con éxito'), 'success');
+    } else {
+      alert('✅ ' + (data.message || 'Descuento aplicado con éxito'));
+    }
+  } catch (e) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('❌ Error de conexión al aplicar descuento: ' + e.message, 'error');
+    } else {
+      alert('❌ Error de conexión al aplicar descuento: ' + e.message);
+    }
+  }
+};
+
+window.quitarDescuentoOrdenActual = async function() {
+  if (!estado.mesaActiva || !estado.mesaActiva.orden_id) return;
+
+  const confirmar = confirm('¿Deseas quitar el descuento aplicado a esta orden?');
+  if (!confirmar) return;
+
+  const uAct = estado.usuarioActual || estado.usuario;
+  try {
+    const res = await fetch(`/api/ordenes/${estado.mesaActiva.orden_id}/descuento`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': uAct ? uAct.rol : 'admin'
+      },
+      body: JSON.stringify({ tipo: 'porcentaje', valor: 0, motivo: 'Descuento eliminado' })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'Error al quitar descuento'));
+      return;
+    }
+
+    if (data.orden) {
+      estado.mesaActiva.descuento_monto = 0;
+      estado.mesaActiva.descuento_porcentaje = 0;
+      estado.mesaActiva.descuento_motivo = '';
+      estado.mesaActiva.descuento_autorizado_por = '';
+      estado.mesaActiva.orden_total = data.orden.total || 0;
+    }
+
+    renderTicketItems();
+    if (typeof cargarMesasDesdeBackend === 'function') {
+      cargarMesasDesdeBackend();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('✅ Descuento removido', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error al quitar descuento: ' + e.message);
   }
 };
 

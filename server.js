@@ -1070,6 +1070,26 @@ const CATALOGO_MODULOS = [
     precioCRC: 0,
     precioUSD: 0,
     esBase: true
+  },
+  {
+    id: 'descuentos_cortesias_pin',
+    nombre: 'Descuentos & Cortesías con PIN y Auditoría',
+    icono: '🎁',
+    categoria: 'Ventas & Caja',
+    descripcion: 'Aplicación de descuentos (%, monto fijo o 100% cortesía) protegidos con PIN de supervisor y bitácora de seguridad.',
+    precioCRC: 0,
+    precioUSD: 0,
+    esBase: false
+  },
+  {
+    id: 'semaforo_tiempos_salon',
+    nombre: 'Semáforo de Tiempo de Atención & Mesas Inactivas',
+    icono: '⏱️',
+    categoria: 'Operaciones Salón',
+    descripcion: 'Alertas visuales en el plano de mesas por inactividad prolongada (>20 min) o platos listos sin entregar (>5 min).',
+    precioCRC: 0,
+    precioUSD: 0,
+    esBase: false
   }
 ];
 
@@ -1902,6 +1922,39 @@ app.get('/api/mesas', async (req, res) => {
       } else if (!m.es_mesa_unida) {
         m.unida_con = null;
       }
+      // Calcular métricas de tiempo para Semáforo de Salón (si el módulo está activo)
+      const semaforoActivo = await negocioTieneModulo(negocioId, 'semaforo_tiempos_salon');
+      let minutosInactiva = 0;
+      let minutosComidaLista = 0;
+      let semaforoAlerta = 'normal';
+
+      if (m.estado !== 'libre') {
+        const fechaRef = m.orden_fecha_apertura || (items.length > 0 ? (items[items.length - 1].hora_pedido || items[items.length - 1].creado_en) : null);
+        if (fechaRef) {
+          minutosInactiva = Math.max(0, Math.floor((ahora - new Date(fechaRef).getTime()) / 60000));
+        }
+
+        const itemsListos = items.filter(it => it.destino === 'cocina' && it.estado_comanda === 'listo');
+        if (itemsListos.length > 0) {
+          const primerListo = itemsListos.find(it => it.hora_listo);
+          if (primerListo && primerListo.hora_listo) {
+            minutosComidaLista = Math.max(0, Math.floor((ahora - new Date(primerListo.hora_listo).getTime()) / 60000));
+          }
+        }
+
+        if (semaforoActivo) {
+          if (minutosComidaLista >= 5) {
+            semaforoAlerta = 'comida_lista';
+          } else if (minutosInactiva >= 20 && pendientes.length === 0) {
+            semaforoAlerta = 'inactiva';
+          }
+        }
+      }
+
+      m.minutos_inactiva = minutosInactiva;
+      m.minutos_comida_lista = minutosComidaLista;
+      m.semaforo_alerta = semaforoAlerta;
+      m.semaforo_activo = semaforoActivo;
     }
 
     res.json({ zonas, mesas });
@@ -2925,6 +2978,100 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 
 
 
+
+// ============================================================================
+// 5.5 DESCUENTOS & CORTESÍAS CON PIN Y AUDITORÍA
+// ============================================================================
+app.post('/api/ordenes/:id/descuento', async (req, res) => {
+  try {
+    const ordenId = Number(req.params.id);
+    const { tipo = 'porcentaje', valor = 0, motivo = 'Descuento autorizado', pin = '' } = req.body;
+
+    const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    const negocioId = orden.negocio_id || 1;
+    const moduloActivo = await negocioTieneModulo(negocioId, 'descuentos_cortesias_pin');
+    if (!moduloActivo) {
+      return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
+    }
+
+    // Validar PIN de Administrador/Supervisor
+    const rol = (req.usuario?.rol || req.headers['x-user-rol'] || '').toLowerCase();
+    let autorizado = (rol === 'admin' || rol === 'developer');
+    let autorizadorNombre = req.usuario?.nombre || 'Administrador';
+
+    if (!autorizado) {
+      if (!pin) {
+        return res.status(403).json({ error: 'Se requiere PIN de Administrador/Supervisor para autorizar el descuento.', requierePin: true });
+      }
+      const esValido = await validarPinAdministrador(pin, negocioId);
+      if (!esValido) {
+        return res.status(403).json({ error: 'PIN de Administrador inválido.', requierePin: true });
+      }
+      autorizado = true;
+      const uSupervisor = await dbGet('SELECT nombre_completo, rol FROM Usuarios WHERE (negocio_id = ? OR rol = "developer") AND pin = ? AND (rol = "admin" OR rol = "developer")', [negocioId, String(pin).trim()]);
+      autorizadorNombre = uSupervisor?.nombre_completo || 'Administrador (PIN)';
+    }
+
+    // Obtener detalles de la orden para calcular subtotal bruto
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+    const subtotalBruto = items.reduce((acc, it) => acc + (Number(it.subtotal) || (Number(it.precio_unitario) * Number(it.cantidad))), 0);
+
+    let descuentoMonto = 0;
+    let descuentoPorcentaje = 0;
+
+    if (tipo === 'cortesia') {
+      descuentoPorcentaje = 100;
+      descuentoMonto = subtotalBruto;
+    } else if (tipo === 'porcentaje') {
+      descuentoPorcentaje = Math.min(100, Math.max(0, Number(valor) || 0));
+      descuentoMonto = Math.round((subtotalBruto * descuentoPorcentaje) / 100);
+    } else if (tipo === 'monto') {
+      descuentoMonto = Math.min(subtotalBruto, Math.max(0, Number(valor) || 0));
+      descuentoPorcentaje = subtotalBruto > 0 ? Math.round((descuentoMonto / subtotalBruto) * 100) : 0;
+    }
+
+    const subtotalNeto = Math.max(0, subtotalBruto - descuentoMonto);
+    const servicio10 = Math.round(subtotalNeto * 0.10);
+    const iva13 = Math.round(subtotalNeto * 0.13);
+    const totalFinal = subtotalNeto + servicio10 + iva13;
+
+    await dbRun(
+      `UPDATE Ordenes 
+       SET subtotal = ?, descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?, servicio_10 = ?, iva_13 = ?, total = ?
+       WHERE id = ?`,
+      [subtotalBruto, descuentoMonto, descuentoPorcentaje, motivo, autorizadorNombre, servicio10, iva13, totalFinal, ordenId]
+    );
+
+    // Registrar en Auditoría
+    await registrarAuditoria({
+      usuarioNombre: autorizadorNombre,
+      accion: 'descuento_aplicado',
+      tipoEvento: 'SEGURIDAD',
+      modulo: 'ventas',
+      detalle: `Descuento de ₡${descuentoMonto.toLocaleString('es-CR')} (${descuentoPorcentaje}%) aplicado a Orden #${orden.numero_orden || orden.id}. Motivo: ${motivo}`,
+      motivo: motivo,
+      monto: descuentoMonto,
+      pinAutorizado: 1
+    });
+
+    const ordenActualizada = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+
+    io.emit('orden_actualizada', { ordenId, mesaId: orden.mesa_id, total: totalFinal, descuento: descuentoMonto });
+    if (orden.mesa_id) {
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: totalFinal, descuento: descuentoMonto });
+    }
+
+    res.json({
+      ok: true,
+      message: `Descuento de ${descuentoPorcentaje}% (₡${descuentoMonto.toLocaleString('es-CR')}) aplicado correctamente.`,
+      orden: ordenActualizada
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ============================================================================
 // 6. CATÁLOGO DE MENÚ & CONTROL DE AGOTADOS ("86 LIST")

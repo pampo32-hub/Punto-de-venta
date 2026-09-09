@@ -357,6 +357,10 @@ function initDb() {
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_happy_hour REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN transferida_de TEXT", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN descuento_monto REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN descuento_porcentaje REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN descuento_motivo TEXT", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN descuento_autorizado_por TEXT", () => {});
 
     // 8. Detalle de Órdenes (Comandas)
     db.run(`CREATE TABLE IF NOT EXISTS DetalleOrden (
@@ -603,11 +607,20 @@ function initDb() {
     });
 
     // Sembrar Negocios Iniciales (1: GastroBar, 2: Beta Tester)
+    const modulosProduccionBase = JSON.stringify([
+      "pos_core", "kds_cocina", "mesas_promos", "split_bill", "menu_qr",
+      "auto_pago_qr", "offline_first", "inventario_recetas", "notificaciones_whatsapp",
+      "inteligencia_artificial", "facturacion_electronica", "pedir_pin_liberar_con_saldo",
+      "caja_arqueo_dual_dolares", "comanda_express_cobro_anticipado"
+    ]);
+
     db.get('SELECT COUNT(*) as count FROM Negocios WHERE id = 1', (err, row) => {
       if (!err && (!row || row.count === 0)) {
         db.run(`INSERT INTO Negocios (id, nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos) 
-          VALUES (1, 'GastroBar Fuego & Brasas', 'Restaurante, Bar & Lounge', 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80', 'CRC', '2222-3344', 'San José, Costa Rica', 1, 'Plan Full Tech 2026', 'all')`);
+          VALUES (1, 'GastroBar Fuego & Brasas', 'Restaurante, Bar & Lounge', 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80', 'CRC', '2222-3344', 'San José, Costa Rica', 1, 'Plan Full Tech 2026', ?)`, [modulosProduccionBase]);
         console.log('🌱 Negocio 1 (GastroBar) creado.');
+      } else if (!err && row && row.count > 0) {
+        db.run(`UPDATE Negocios SET modulos_activos = ? WHERE id = 1 AND modulos_activos = 'all'`, [modulosProduccionBase]);
       }
     });
 
