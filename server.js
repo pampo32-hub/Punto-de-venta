@@ -6271,6 +6271,7 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
 
 app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
   try {
+    const negocioId = obtenerNegocioIdReq(req);
     const {
       nombre, categoria = 'General', unidad_medida = 'unidades',
       stock_actual = 0, stock_minimo = 5, costo_unitario = 0,
@@ -6289,9 +6290,9 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       `INSERT INTO Inventario (
         negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo,
         costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        nombre.trim(), categoria.trim(), unidad_medida.trim(),
+        negocioId, nombre.trim(), categoria.trim(), unidad_medida.trim(),
         Number(stock_actual), Number(stock_minimo), Number(costo_unitario),
         producto_id ? Number(producto_id) : null, ahora,
         esLic, capMl, shotMl, rendShots
@@ -6299,16 +6300,20 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
     );
 
     await registrarAuditoria({
+      negocioId,
       usuarioNombre,
       accion: 'crear_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida})${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
+      detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida}) en negocio ${negocioId}${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
     });
+
+    if (io) io.emit('inventario_actualizado');
 
     res.status(201).json({
       id: result.lastID,
       insumoId: result.lastID,
+      negocio_id: negocioId,
       message: 'Insumo registrado correctamente',
       es_licor: esLic,
       capacidad_ml: capMl,
@@ -6441,29 +6446,31 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
   try {
     const id = req.params.id;
     const { motivo = 'Eliminación manual de existencias en bodega', usuarioNombre = 'Administrador' } = req.body || {};
+    const reqNegocioId = obtenerNegocioIdReq(req);
 
     let insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) {
       return res.status(404).json({ error: 'Insumo no encontrado en bodega.' });
     }
 
+    const negocioIdInsumo = insumo.negocio_id || reqNegocioId;
     const stockPrevio = Number(insumo.stock_actual || insumo.stock || 0);
     const ahora = new Date().toISOString();
 
     await dbRun('UPDATE Inventario SET stock_actual = 0, actualizado_en = ? WHERE id = ?', [ahora, id]);
 
-    // Registrar en InventarioMovimientos
+    // Registrar en InventarioMovimientos con negocio_id correcto
     try {
       await dbRun(
         `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-         VALUES (1, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
-        [id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
+         VALUES (?, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
+        [negocioIdInsumo, id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
       );
     } catch (_) {}
 
     // Registrar en Auditoria
     await registrarAuditoria({
-      negocioId: insumo.negocio_id || 1,
+      negocioId: negocioIdInsumo,
       usuarioNombre,
       accion: 'eliminar_existencia_bodega',
       tipoEvento: 'inventario',
@@ -6473,7 +6480,10 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
       pinAutorizado: 1
     });
 
-    if (io) io.emit('inventario_actualizado');
+    if (io) {
+      io.emit('inventario_actualizado');
+      io.emit('inventario_cambio', { insumoId: id, stock_actual: 0, negocio_id: negocioIdInsumo });
+    }
 
     res.json({
       success: true,
@@ -6502,6 +6512,7 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
     const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
 
+    const negocioId = insumo.negocio_id || obtenerNegocioIdReq(req);
     let nuevoStock = insumo.stock_actual;
     let accionAuditoria = 'ajuste_inventario';
     let tipoEvento = 'operativo';
@@ -6524,6 +6535,7 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
     const costoTotalAjuste = Math.abs(cantNum) * (insumo.costo_unitario || 0);
 
     await registrarAuditoria({
+      negocioId,
       usuarioNombre,
       accion: accionAuditoria,
       tipoEvento,
@@ -6535,11 +6547,14 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 
     await dbRun(
       `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocioId, id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
     );
 
-    io.emit('inventario_actualizado');
+    if (io) {
+      io.emit('inventario_actualizado');
+      io.emit('inventario_cambio', { insumoId: id, stock_actual: nuevoStock, negocio_id: negocioId });
+    }
 
     res.json({
       message: 'Ajuste de inventario aplicado',
@@ -6832,14 +6847,15 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
 // --- KARDEX GENERAL / MOVIMIENTOS COMPLETOS ---
 app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, res) => {
   try {
+    const negocioId = obtenerNegocioIdReq(req);
     const { insumo_id, tipo, limit } = req.query;
     let query = `
       SELECT m.*, i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, i.es_licor, i.rendimiento_shots
       FROM InventarioMovimientos m
       LEFT JOIN Inventario i ON m.insumo_id = i.id
-      WHERE 1=1
+      WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND i.negocio_id = ?) OR (m.negocio_id IS NULL AND i.negocio_id IS NULL AND ? = 1))
     `;
-    const params = [];
+    const params = [negocioId, negocioId, negocioId];
     if (insumo_id && insumo_id !== 'todos') {
       query += ' AND m.insumo_id = ?';
       params.push(insumo_id);
@@ -6953,36 +6969,70 @@ app.delete('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async
       req.query?.revertir_stock === '1'
     );
 
+    let stockNuevo = null;
+    let insumoActualizado = null;
+
     if (revertirStock && movimiento.insumo_id) {
       const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [movimiento.insumo_id]);
       if (insumo) {
         let ajusteReversion = 0;
-        if (movimiento.tipo === 'entrada') {
+        const tipoNorm = String(movimiento.tipo || '').toLowerCase().trim();
+
+        if (tipoNorm === 'entrada' || tipoNorm === 'compra' || tipoNorm === 'ingreso') {
           // Revertir una entrada significa restar lo que había ingresado
           ajusteReversion = -Number(movimiento.cantidad);
-        } else if (['merma', 'venta', 'salida'].includes(movimiento.tipo)) {
+        } else if (['merma', 'venta', 'salida', 'consumo', 'descarte'].includes(tipoNorm)) {
           // Revertir una merma o venta significa devolver el insumo al stock
           ajusteReversion = Number(movimiento.cantidad);
-        } else if (movimiento.tipo === 'ajuste' || movimiento.tipo === 'fijar') {
+        } else if (tipoNorm === 'ajuste' || tipoNorm === 'fijar') {
           // Revertir un ajuste devuelve el stock previo
-          if (movimiento.stock_previo !== null && movimiento.stock_nuevo !== null) {
-            ajusteReversion = Number(movimiento.stock_previo) - Number(movimiento.stock_nuevo);
+          if (movimiento.stock_previo !== null && movimiento.stock_previo !== undefined) {
+            stockNuevo = Math.max(0, Number(movimiento.stock_previo));
           }
         }
 
-        if (ajusteReversion !== 0) {
-          const nuevoStock = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + ajusteReversion) * 1000) / 1000);
-          await dbRun('UPDATE Inventario SET stock_actual = ? WHERE id = ?', [nuevoStock, insumo.id]);
+        if (stockNuevo === null && ajusteReversion !== 0) {
+          stockNuevo = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + ajusteReversion) * 1000) / 1000);
+        }
+
+        if (stockNuevo !== null) {
+          await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [
+            stockNuevo,
+            new Date().toISOString(),
+            insumo.id
+          ]);
+          insumoActualizado = { ...insumo, stock_actual: stockNuevo };
         }
       }
     }
 
     await dbRun('DELETE FROM InventarioMovimientos WHERE id = ?', [id]);
 
+    await registrarAuditoria({
+      negocioId: movimiento.negocio_id || 1,
+      usuarioNombre: req.body?.usuarioNombre || 'Administrador',
+      accion: 'eliminar_movimiento_kardex',
+      tipoEvento: 'inventario',
+      modulo: 'kardex',
+      detalle: `Eliminación de movimiento Kárdex #${id} (${movimiento.tipo} de ${movimiento.cantidad})${revertirStock ? ` con reversión de stock a ${stockNuevo}` : ' sin modificar stock'}`
+    });
+
+    if (io) {
+      io.emit('inventario_actualizado');
+      if (insumoActualizado) {
+        io.emit('inventario_cambio', {
+          insumoId: insumoActualizado.id,
+          stock_actual: stockNuevo,
+          negocio_id: insumoActualizado.negocio_id
+        });
+      }
+    }
+
     res.json({
       success: true,
       message: 'Movimiento de Kárdex eliminado correctamente',
-      revertir_stock: revertirStock
+      revertir_stock: revertirStock,
+      stock_actual: stockNuevo
     });
   } catch (e) {
     res.status(500).json({ error: e.message });

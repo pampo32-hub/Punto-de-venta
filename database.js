@@ -636,6 +636,27 @@ function initDb() {
           VALUES (2, 'Beta Tester (Sandbox)', 'Laboratorio de Pruebas & Nuevas Funciones', 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80', 'CRC', '8888-9900', 'Entorno Virtual de Pruebas Sandbox', 1, 'Plan Sandbox Developer', 'all')`);
         console.log('🌱 Negocio 2 (Beta Tester Sandbox) creado.');
 
+        // Sembrar Inventario aislado para Beta Tester (Sandbox)
+        db.get('SELECT COUNT(*) as count FROM Inventario WHERE negocio_id = 2', (errInv, rowInv) => {
+          if (!errInv && (!rowInv || rowInv.count === 0)) {
+            db.all('SELECT * FROM Inventario WHERE negocio_id = 1', (errOrig, itemsOrig) => {
+              if (!errOrig && itemsOrig && itemsOrig.length > 0) {
+                itemsOrig.forEach(i => {
+                  db.run(`INSERT INTO Inventario (
+                    negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo,
+                    costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots
+                  ) VALUES (2, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`, [
+                    i.nombre, i.categoria, i.unidad_medida, i.stock_actual || 50, i.stock_minimo || 5,
+                    i.costo_unitario || 1000, new Date().toISOString(), i.es_licor || 0,
+                    i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots
+                  ]);
+                });
+                console.log('🌱 Inventario base clonado e independizado para Negocio 2 (Sandbox).');
+              }
+            });
+          }
+        });
+
         // Sembrar Zonas para Beta Tester
         const zonasBeta = [
           { id: 101, nombre: 'Salón Principal' },

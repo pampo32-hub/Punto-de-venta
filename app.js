@@ -744,8 +744,9 @@ window.abrirModalNuevoProducto = async function() {
   if (!estado.inventario || !estado.inventario.length) {
     try {
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
-      const resInv = await fetch('/api/admin/inventario', {
-        headers: { 'x-user-rol': userRol }
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const resInv = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
+        headers: { 'x-user-rol': userRol, 'x-negocio-id': String(nid) }
       });
       if (resInv.ok) estado.inventario = await resInv.json();
     } catch(e) {}
@@ -849,8 +850,9 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (!estado.inventario || !estado.inventario.length) {
     try {
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
-      const resInv = await fetch('/api/admin/inventario', {
-        headers: { 'x-user-rol': userRol }
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const resInv = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
+        headers: { 'x-user-rol': userRol, 'x-negocio-id': String(nid) }
       });
       if (resInv.ok) estado.inventario = await resInv.json();
     } catch(e) {}
@@ -12780,10 +12782,12 @@ window.ejecutarEliminarKardexConfirmado = async function(revertirStock) {
   if (!window.kardexMovimientoAEliminar) return;
   const movId = window.kardexMovimientoAEliminar.id;
 
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
   const headers = {
     'Content-Type': 'application/json',
-    'x-user-rol': userRol
+    'x-user-rol': userRol,
+    'x-negocio-id': String(nid)
   };
   if (window._pinKardexActivo) {
     headers['x-supervisor-pin'] = window._pinKardexActivo;
@@ -12826,8 +12830,9 @@ window.ejecutarEliminarKardexConfirmado = async function(revertirStock) {
 async function cargarInventarioAdmin() {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch('/api/admin/inventario', {
-      headers: { 'x-user-rol': rol }
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
+      headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) }
     });
     if (!res.ok) throw new Error('Error al consultar inventario');
     estado.inventario = await res.json();
@@ -13010,8 +13015,9 @@ window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null
   if (!estado.inventario || !estado.inventario.length) {
     try {
       const userRol = estado.usuarioActual ? estado.usuarioActual.rol : (estado.usuario ? estado.usuario.rol : 'admin');
-      const resInv = await fetch('/api/admin/inventario', {
-        headers: { 'x-user-rol': userRol }
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const resInv = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
+        headers: { 'x-user-rol': userRol, 'x-negocio-id': String(nid) }
       });
       if (resInv.ok) estado.inventario = await resInv.json();
     } catch(e) {}
@@ -13145,420 +13151,29 @@ window.actualizarEtiquetaUnidadAjuste = actualizarEtiquetaUnidadAjuste;
 document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
 
 window.guardarAjusteInventario = async function() {
-  const insumoId = document.getElementById('selectAjusteInsumo')?.value;
-  const cantidad = parseFloat(document.getElementById('txtAjusteCantidad')?.value);
-  const motivo = (document.getElementById('txtAjusteMotivo')?.value || '').trim();
+  const insumoId = document.getElementById('txtInsumoAjusteId')?.value;
+  const tipo = document.getElementById('selectTipoAjuste')?.value;
+  const cantidad = document.getElementById('txtCantidadAjuste')?.value;
+  const motivo = document.getElementById('txtMotivoAjuste')?.value || 'Ajuste manual de inventario';
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  const usuarioNombre = estado.usuarioActual ? estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario : 'Administrador';
 
-  if (!cantidad || cantidad <= 0) {
-    alert('Ingresa una cantidad válida mayor a 0');
+  if (!insumoId || !tipo || !cantidad) {
+    mostrarNotificacionCentro('⚠️ Completa todos los campos obligatorios del ajuste', 'warning');
     return;
   }
 
   try {
     const res = await fetch(`/api/admin/inventario/${insumoId}/ajuste`, {
       method: 'POST',
-      headers: obtenerHeadersAuthAdmin({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        tipo: tipoAjusteActivo,
-        cantidad,
-        motivo: motivo || (tipoAjusteActivo === 'entrada' ? 'Entrada de compra' : 'Merma registrada'),
-        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
-      })
+      headers: { 
+        'Content-Type': 'application/json', 
+        'x-user-rol': rol,
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ tipo, cantidad, motivo, usuarioNombre, negocio_id: nid })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-
-    mostrarNotificacionCentro(`✅ Movimiento de inventario aplicado con éxito.`, 'success');
-    cerrarModalAjusteInventario();
-    cargarInventarioAdmin();
-  } catch (e) {
-    alert('❌ ' + e.message);
-  }
-};
-
-// GESTIÓN DE FRACCIONAMIENTO INTELIGENTE
-window.onCambioUnidadInsumo = function(modo) {
-  const selUni = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
-  const unidad = (selUni?.value || 'unidades').toLowerCase();
-  window.actualizarOpcionesFraccionablePorUnidad(modo, unidad);
-  window.actualizarCalculoFraccionable(modo);
-};
-
-window.actualizarOpcionesFraccionablePorUnidad = function(modo, unidad) {
-  const isNuevo = modo === 'nuevo';
-  const selCap = document.getElementById(isNuevo ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
-  const selMed = document.getElementById(isNuevo ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
-  const lblCap = document.getElementById(isNuevo ? 'lblCapacidadTituloNuevo' : 'lblCapacidadTituloEditar');
-  const lblMed = document.getElementById(isNuevo ? 'lblMedidaShotTituloNuevo' : 'lblMedidaShotTituloEditar');
-  const lblTit = document.getElementById(isNuevo ? 'lblTituloFraccionableNuevo' : 'lblTituloFraccionableEditar');
-  const lblIconRend = document.getElementById(isNuevo ? 'lblIconoRendimientoNuevo' : 'lblIconoRendimientoEditar');
-  const lblUniRend = document.getElementById(isNuevo ? 'lblUnidadRendimientoNuevo' : 'lblUnidadRendimientoEditar');
-
-  if (unidad === 'kg') {
-    if (lblTit) lblTit.innerHTML = '⚖️ Fraccionable en Gramos / Porciones (Pescados, Carnes, etc.)';
-    if (lblCap) lblCap.textContent = 'Peso Total por Empaque / Unidad (g):';
-    if (lblMed) lblMed.textContent = 'Tamaño de Porción / Dosis (g):';
-    if (lblIconRend) lblIconRend.textContent = '🍽️';
-    if (lblUniRend) lblUniRend.textContent = 'porciones por kg';
-
-    if (selCap) {
-      selCap.innerHTML = `
-        <option value="1000">1000 g (1 Kilogramo)</option>
-        <option value="500">500 g (Medio Kilo)</option>
-        <option value="2000">2000 g (2 Kilogramos)</option>
-        <option value="2500">2500 g (2.5 Kilos)</option>
-        <option value="5000">5000 g (5 Kilos)</option>
-        <option value="custom">Personalizado (gramos)...</option>
-      `;
-    }
-    if (selMed) {
-      selMed.innerHTML = `
-        <option value="200">200 g (Porción Estándar Ceviche/Carne)</option>
-        <option value="150">150 g (Porción Mediana)</option>
-        <option value="100">100 g (Porción Pequeña / Tapa)</option>
-        <option value="250">250 g (Porción Gourmet 1/4 kg)</option>
-        <option value="300">300 g (Porción Grande / Plato Fuerte)</option>
-        <option value="custom">Personalizado (gramos)...</option>
-      `;
-    }
-  } else if (unidad === 'litros' || unidad === 'botellas') {
-    if (lblTit) lblTit.innerHTML = '🍾 Fraccionable por Shots / Tragos / Copes';
-    if (lblCap) lblCap.textContent = 'Capacidad de la Botella / Envase:';
-    if (lblMed) lblMed.textContent = 'Medida del Shot / Trago:';
-    if (lblIconRend) lblIconRend.textContent = '🍸';
-    if (lblUniRend) lblUniRend.textContent = 'shots por botella';
-
-    if (selCap) {
-      selCap.innerHTML = `
-        <option value="750">750 ml (Estándar de Barra)</option>
-        <option value="1000">1000 ml (1 Litro)</option>
-        <option value="1500">1500 ml (1.5 Litros / Magnum)</option>
-        <option value="1750">1750 ml (1.75 Litros)</option>
-        <option value="375">375 ml (Media Botella / Pacha)</option>
-        <option value="custom">Personalizado (ml)...</option>
-      `;
-    }
-    if (selMed) {
-      selMed.innerHTML = `
-        <option value="30">1 onza (~30 ml - Copa Tradicional CR)</option>
-        <option value="37">1.25 onzas (~37 ml)</option>
-        <option value="45">1.5 onzas (~45 ml - Jigger Coctelería)</option>
-        <option value="60">2 onzas (~60 ml - Trago Doble)</option>
-        <option value="custom">Personalizado (ml)...</option>
-      `;
-    }
-  } else {
-    if (lblTit) lblTit.innerHTML = '🍽️ Fraccionable en Porciones / Raciones';
-    if (lblCap) lblCap.textContent = 'Cantidad / Contenido por Unidad:';
-    if (lblMed) lblMed.textContent = 'Tamaño de Ración / Porción:';
-    if (lblIconRend) lblIconRend.textContent = '🍽️';
-    if (lblUniRend) lblUniRend.textContent = 'porciones por unidad';
-
-    if (selCap) {
-      selCap.innerHTML = `
-        <option value="1">1 Unidad Completa</option>
-        <option value="10">10 Unidades por Paquete</option>
-        <option value="12">12 Unidades (Docena)</option>
-        <option value="24">24 Unidades (Caja)</option>
-        <option value="custom">Personalizado...</option>
-      `;
-    }
-    if (selMed) {
-      selMed.innerHTML = `
-        <option value="1">1 Ración / Porción</option>
-        <option value="0.5">0.5 (Media Ración)</option>
-        <option value="0.25">0.25 (Un Cuarto)</option>
-        <option value="custom">Personalizado...</option>
-      `;
-    }
-  }
-};
-
-window.toggleConfigFraccionable = function(modo, checked) {
-  const isNuevo = modo === 'nuevo';
-  const sec = document.getElementById(isNuevo ? 'seccionConfigLicorNuevo' : 'seccionConfigLicorEditar');
-  if (sec) sec.style.display = checked ? 'block' : 'none';
-  window.actualizarCalculoFraccionable(modo);
-};
-
-window.actualizarCalculoFraccionable = function(modo) {
-  const isNuevo = modo === 'nuevo';
-  const selUni = document.getElementById(isNuevo ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
-  const unidad = (selUni?.value || 'unidades').toLowerCase();
-
-  const selCap = document.getElementById(isNuevo ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
-  const txtCapCustom = document.getElementById(isNuevo ? 'txtNuevoInsumoCapacidadCustom' : 'txtEditarInsumoCapacidadCustom');
-  let cap = 750;
-  if (selCap && selCap.value === 'custom') {
-    if (txtCapCustom) txtCapCustom.style.display = 'block';
-    cap = parseFloat(txtCapCustom?.value) || (unidad === 'kg' ? 1000 : 750);
-  } else {
-    if (txtCapCustom) txtCapCustom.style.display = 'none';
-    cap = parseFloat(selCap?.value) || (unidad === 'kg' ? 1000 : 750);
-  }
-
-  const selShot = document.getElementById(isNuevo ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
-  const txtShotCustom = document.getElementById(isNuevo ? 'txtNuevoInsumoMedidaShotCustom' : 'txtEditarInsumoMedidaShotCustom');
-  let shot = 30;
-  if (selShot && selShot.value === 'custom') {
-    if (txtShotCustom) txtShotCustom.style.display = 'block';
-    shot = parseFloat(txtShotCustom?.value) || (unidad === 'kg' ? 200 : 30);
-  } else {
-    if (txtShotCustom) txtShotCustom.style.display = 'none';
-    shot = parseFloat(selShot?.value) || (unidad === 'kg' ? 200 : 30);
-  }
-
-  const costo = parseFloat(document.getElementById(isNuevo ? 'txtNuevoInsumoCosto' : 'txtEditarInsumoCosto')?.value) || 0;
-  const rendimiento = shot > 0 ? Math.round((cap / shot) * 100) / 100 : 0;
-  const costoPorcion = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
-
-  const lblRend = document.getElementById(isNuevo ? 'lblRendimientoShotsNuevo' : 'lblRendimientoShotsEditar');
-  const lblCosto = document.getElementById(isNuevo ? 'lblCostoPorShotNuevo' : 'lblCostoPorShotEditar');
-  if (lblRend) lblRend.textContent = rendimiento;
-  if (lblCosto) lblCosto.textContent = formatCRC(costoPorcion);
-};
-
-// Aliases para retrocompatibilidad
-window.toggleConfigLicorNuevo = (c) => window.toggleConfigFraccionable('nuevo', c);
-window.toggleConfigLicorEditar = (c) => window.toggleConfigFraccionable('editar', c);
-window.actualizarCalculoShotsNuevo = () => window.actualizarCalculoFraccionable('nuevo');
-window.actualizarCalculoShotsEditar = () => window.actualizarCalculoFraccionable('editar');
-
-window.abrirModalNuevoInsumo = async function() {
-  const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
-  if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '➕',
-      titulo: 'Registrar Nuevo Insumo',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para registrar nuevos insumos en bodega:'
-    });
-    if (!pin) return;
-    window._pinSupervisorActivo = pin;
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
-    }
-  }
-
-  const n = document.getElementById('txtNuevoInsumoNombre');
-  const s = document.getElementById('txtNuevoInsumoStock');
-  const m = document.getElementById('txtNuevoInsumoMin');
-  const cs = document.getElementById('txtNuevoInsumoCosto');
-  const selUni = document.getElementById('selectNuevoInsumoUnidad');
-  const chkL = document.getElementById('chkNuevoInsumoEsLicor');
-
-  if (n) n.value = '';
-  if (s) s.value = '10';
-  if (m) m.value = '3';
-  if (cs) cs.value = '1000';
-  if (selUni) selUni.value = 'unidades';
-
-  window.poblarCategoriasInsumo('selectNuevoInsumoCat', 'General', 'nuevo');
-  window.onCambioUnidadInsumo('nuevo');
-
-  if (chkL) chkL.checked = false;
-  window.toggleConfigFraccionable('nuevo', false);
-
-  const modal = document.getElementById('modalNuevoInsumo');
-  if (modal) modal.classList.add('active');
-};
-
-window.verificarCategoriaInsumoManual = function(modo) {
-  const isNuevo = modo === 'nuevo';
-  const sel = document.getElementById(isNuevo ? 'selectNuevoInsumoCat' : 'selectEditarInsumoCat');
-  const txtManual = document.getElementById(isNuevo ? 'txtNuevoInsumoCatManual' : 'txtEditarInsumoCatManual');
-  if (!sel || !txtManual) return;
-
-  if (sel.value === '__nueva__') {
-    txtManual.style.display = 'block';
-    txtManual.focus();
-  } else {
-    txtManual.style.display = 'none';
-    txtManual.value = '';
-  }
-};
-
-window.cerrarModalNuevoInsumo = function() {
-  document.getElementById('modalNuevoInsumo')?.classList.remove('active');
-};
-
-window.guardarNuevoInsumo = async function() {
-  const nombre = (document.getElementById('txtNuevoInsumoNombre')?.value || '').trim();
-  const selCat = document.getElementById('selectNuevoInsumoCat');
-  const txtManual = document.getElementById('txtNuevoInsumoCatManual');
-  let categoria = 'General';
-  if (selCat && selCat.value === '__nueva__') {
-    categoria = (txtManual?.value || '').trim() || 'General';
-  } else if (selCat && selCat.value) {
-    categoria = selCat.value;
-  }
-
-  const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
-  const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
-  const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 3;
-  const costo_unitario = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
-
-  if (!nombre) return alert('El nombre del insumo es obligatorio.');
-
-  const es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-  let capacidad_ml = (unidad_medida === 'kg') ? 1000 : 750;
-  let medida_shot_ml = (unidad_medida === 'kg') ? 200 : 30;
-
-  if (es_licor) {
-    const selCap = document.getElementById('selNuevoInsumoCapacidad');
-    const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
-    capacidad_ml = (selCap && selCap.value === 'custom') 
-      ? (parseFloat(txtCapCustom?.value) || capacidad_ml) 
-      : (parseFloat(selCap?.value) || capacidad_ml);
-
-    const selShot = document.getElementById('selNuevoInsumoMedidaShot');
-    const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
-    medida_shot_ml = (selShot && selShot.value === 'custom') 
-      ? (parseFloat(txtShotCustom?.value) || medida_shot_ml) 
-      : (parseFloat(selShot?.value) || medida_shot_ml);
-  }
-
-  try {
-    const res = await fetch('/api/admin/inventario', {
-      method: 'POST',
-      headers: obtenerHeadersAuthAdmin({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario,
-        es_licor, capacidad_ml, medida_shot_ml,
-        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-
-    mostrarNotificacionCentro(`✅ Insumo "${nombre}" registrado correctamente.`, 'success');
-    window.cerrarModalNuevoInsumo();
-    cargarInventarioAdmin();
-  } catch (e) {
-    alert('❌ ' + e.message);
-  }
-};
-
-// CONTROL DE EDICIÓN DE INSUMO
-window.abrirModalEditarInsumo = async function(id) {
-  try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch(`/api/admin/inventario/${id}`, {
-      headers: { 'x-user-rol': rol }
-    });
-    if (!res.ok) throw new Error('No se pudo obtener el insumo');
-    const insumo = await res.json();
-
-    const elId = document.getElementById('txtEditarInsumoId');
-    const elNom = document.getElementById('txtEditarInsumoNombre');
-    const elUni = document.getElementById('selectEditarInsumoUnidad');
-    const elMin = document.getElementById('txtEditarInsumoMin');
-    const elCos = document.getElementById('txtEditarInsumoCosto');
-
-    if (elId) elId.value = insumo.id;
-    if (elNom) elNom.value = insumo.nombre || '';
-    if (elUni) elUni.value = insumo.unidad_medida || 'unidades';
-    if (elMin) elMin.value = insumo.stock_minimo ?? 3;
-    if (elCos) elCos.value = insumo.costo_unitario ?? 0;
-
-    window.poblarCategoriasInsumo('selectEditarInsumoCat', insumo.categoria || 'General', 'editar');
-    window.onCambioUnidadInsumo('editar');
-
-    const chkLicor = document.getElementById('chkEditarInsumoEsLicor');
-    if (chkLicor) chkLicor.checked = Boolean(insumo.es_licor);
-
-    // Configurar capacidad y medida
-    const selCap = document.getElementById('selEditarInsumoCapacidad');
-    const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
-    const capVal = String(insumo.capacidad_ml || (insumo.unidad_medida === 'kg' ? 1000 : 750));
-    if (selCap) {
-      let optionExists = Array.from(selCap.options).some(o => o.value === capVal);
-      if (optionExists) {
-        selCap.value = capVal;
-        if (txtCapCustom) txtCapCustom.style.display = 'none';
-      } else {
-        selCap.value = 'custom';
-        if (txtCapCustom) {
-          txtCapCustom.style.display = 'block';
-          txtCapCustom.value = capVal;
-        }
-      }
-    }
-
-    const selShot = document.getElementById('selEditarInsumoMedidaShot');
-    const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
-    const shotVal = String(insumo.medida_shot_ml || (insumo.unidad_medida === 'kg' ? 200 : 30));
-    if (selShot) {
-      let optionExists = Array.from(selShot.options).some(o => o.value === shotVal);
-      if (optionExists) {
-        selShot.value = shotVal;
-        if (txtShotCustom) txtShotCustom.style.display = 'none';
-      } else {
-        selShot.value = 'custom';
-        if (txtShotCustom) {
-          txtShotCustom.style.display = 'block';
-          txtShotCustom.value = shotVal;
-        }
-      }
-    }
-
-    window.toggleConfigFraccionable('editar', Boolean(insumo.es_licor));
-    window.actualizarCalculoFraccionable('editar');
-
-    document.getElementById('modalEditarInsumo')?.classList.add('active');
-  } catch (e) {
-    alert('❌ ' + e.message);
-  }
-};
-
-window.cerrarModalEditarInsumo = function() {
-  document.getElementById('modalEditarInsumo')?.classList.remove('active');
-};
-
-window.guardarEdicionInsumo = async function() {
-  const id = document.getElementById('txtEditarInsumoId')?.value;
-  const nombre = (document.getElementById('txtEditarInsumoNombre')?.value || '').trim();
-  const selCat = document.getElementById('selectEditarInsumoCat');
-  const txtManual = document.getElementById('txtEditarInsumoCatManual');
-  let categoria = 'General';
-  if (selCat && selCat.value === '__nueva__') {
-    categoria = (txtManual?.value || '').trim() || 'General';
-  } else if (selCat && selCat.value) {
-    categoria = selCat.value;
-  }
-
-  const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
-  const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
-  const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
-
-  if (!id || !nombre) {
-    return alert('Nombre del insumo es obligatorio.');
-  }
-
-  const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-  let capacidad_ml = (unidad_medida === 'kg') ? 1000 : 750;
-  let medida_shot_ml = (unidad_medida === 'kg') ? 200 : 30;
-
-  if (es_licor) {
-    const selCap = document.getElementById('selEditarInsumoCapacidad');
-    const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
-    capacidad_ml = (selCap && selCap.value === 'custom') 
-      ? (parseFloat(txtCapCustom?.value) || capacidad_ml) 
-      : (parseFloat(selCap?.value) || capacidad_ml);
-
-    const selShot = document.getElementById('selEditarInsumoMedidaShot');
-    const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
-    medida_shot_ml = (selShot && selShot.value === 'custom') 
-      ? (parseFloat(txtShotCustom?.value) || medida_shot_ml) 
-      : (parseFloat(selShot?.value) || medida_shot_ml);
-  }
-
-  try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch(`/api/admin/inventario/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'x-user-rol': rol },
       body: JSON.stringify({
         nombre, categoria, unidad_medida, stock_minimo, costo_unitario,
         es_licor, capacidad_ml, medida_shot_ml,
@@ -13748,9 +13363,7 @@ async function inicializarPanelRecetas() {
   // Cargar lista resumida de productos con ficha
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch('/api/admin/recetas/resumen', {
-      headers: { 'x-user-rol': rol }
-    });
+    const res = await fetch(`/api/admin/recetas/resumen?negocio_id=${nid}`, { headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) } });
     if (res.ok) {
       const recetas = await res.json();
       if (recetas && recetas.length > 0) {
@@ -17882,11 +17495,19 @@ window.confirmarEliminarExistenciasBodega = async function(insumoId) {
   if (elStock) elStock.textContent = `${insumo.stock_actual || 0} ${insumo.unidad_medida || 'unidades'}`;
   if (inMotivo) inMotivo.value = 'Eliminación manual de existencias en bodega';
 
-  document.getElementById('modalConfirmarEliminarExistencias')?.classList.add('active');
+  const modal = document.getElementById('modalConfirmarEliminarExistencias');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
 };
 
 window.cerrarModalEliminarExistenciasBodega = function() {
-  document.getElementById('modalConfirmarEliminarExistencias')?.classList.remove('active');
+  const modal = document.getElementById('modalConfirmarEliminarExistencias');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
   window.insumoAEliminarExistenciaId = null;
 };
 
@@ -17895,11 +17516,13 @@ window.ejecutarEliminarExistenciasBodegaConfirmado = async function() {
   const insumoId = window.insumoAEliminarExistenciaId;
   const motivo = document.getElementById('txtMotivoEliminarExistencias')?.value?.trim() || 'Eliminación manual de existencias en bodega';
 
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
   const usuarioNombre = estado.usuarioActual ? estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario : 'Administrador';
   const headers = {
     'Content-Type': 'application/json',
-    'x-user-rol': userRol
+    'x-user-rol': userRol,
+    'x-negocio-id': String(nid)
   };
   if (window._pinBodegaActivo) {
     headers['x-supervisor-pin'] = window._pinBodegaActivo;
@@ -17909,7 +17532,7 @@ window.ejecutarEliminarExistenciasBodegaConfirmado = async function() {
     const res = await fetch(`/api/admin/inventario/${insumoId}/eliminar-existencias`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ motivo, usuarioNombre })
+      body: JSON.stringify({ motivo, usuarioNombre, negocio_id: nid })
     });
 
     const data = await res.json();
