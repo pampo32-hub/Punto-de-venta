@@ -782,7 +782,7 @@ function initDb() {
     ];
 
     fotosPlatillos.forEach(f => {
-      db.run('UPDATE Productos SET imagen_url = ? WHERE codigo = ? OR id = ?', [f.img, f.cod, f.id]);
+      db.run("UPDATE Productos SET imagen_url = ? WHERE (codigo = ? OR id = ?) AND (imagen_url IS NULL OR TRIM(imagen_url) = '')", [f.img, f.cod, f.id]);
     });
 
     // Sembrar Mesas Iniciales si no existen
