@@ -2298,6 +2298,8 @@
               <select id="staffRol">
                 <option value="salonero">Salonero / Salonera</option>
                 <option value="cajero">Cajero de Turno</option>
+                <option value="admin" id="optStaffRolAdmin">🛡️ Administrador</option>
+                <option value="superadmin" id="optStaffRolSuperadmin">👑 Super Admin</option>
               </select>
             </div>
             <div class="field-group">
@@ -2388,25 +2390,25 @@
           </select>
         </div>
 
-        <!-- SECCIÓN: CREACIÓN DE ADMINISTRADOR INICIAL (Para nuevos comercios) -->
+        <!-- SECCIÓN: CREACIÓN DE SUPER ADMIN INICIAL (Para nuevos comercios) -->
         <div id="devSeccionCrearAdmin" style="margin-top: 16px; padding: 14px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <label style="font-weight: 700; color: #38bdf8; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;">
               <input type="checkbox" id="devCrearAdminCheck" checked style="accent-color: #38bdf8; width: 18px; height: 18px; cursor: pointer;" />
-              👤 Crear Usuario Administrador (Admin)
+              👑 Crear Usuario Super Admin (Dueño de Local)
             </label>
-            <span style="font-size: 0.75rem; background: rgba(56, 189, 248, 0.2); color: #bae6fd; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">Recomendado</span>
+            <span style="font-size: 0.75rem; background: rgba(56, 189, 248, 0.2); color: #bae6fd; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">Super Admin</span>
           </div>
           
           <div id="devCamposAdminContainer" style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <div class="field-group">
-                <label style="font-size: 0.8rem; color: #cbd5e1;">Nombre Completo Admin:</label>
+                <label style="font-size: 0.8rem; color: #cbd5e1;">Nombre Completo Super Admin:</label>
                 <input type="text" id="devAdminNombre" placeholder="Ej: Mario Gómez" style="font-size: 0.85rem;" />
               </div>
               <div class="field-group">
                 <label style="font-size: 0.8rem; color: #cbd5e1;">Usuario (Login): <span style="color:#ef4444;">*</span></label>
-                <input type="text" id="devAdminUsuario" placeholder="Ej: admin_terraza" style="font-size: 0.85rem;" />
+                <input type="text" id="devAdminUsuario" placeholder="Ej: superadmin_terraza" style="font-size: 0.85rem;" />
               </div>
             </div>
 
@@ -2434,6 +2436,109 @@
       <div class="dialog-footer">
         <button class="btn-sec" id="btnCancelarDevNegocio">Cancelar</button>
         <button class="btn-pri" id="btnGuardarDevNegocio">💾 Guardar Comercio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CLONAR COMERCIO AISLADO CON SUPER ADMIN (DEVELOPER) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalDevClonarNegocio" style="display:none; z-index: 100050;">
+    <div class="modal-dialog" style="max-width: 600px; width: 95vw; background: #0f172a; border: 1px solid #a855f7; box-shadow: 0 25px 60px rgba(0,0,0,0.85); border-radius: 18px; overflow: hidden; padding: 0;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #3b0764, #1e1b4b); border-bottom: 1px solid #a855f7; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-size: 1.8rem; background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">🧬</div>
+          <div>
+            <h3 style="margin:0; color:#f8fafc; font-size:1.15rem; font-weight:800;">Clonar Comercio (100% Aislado e Independiente)</h3>
+            <span style="color:#d8b4fe; font-size:0.78rem;">Crea una réplica exacta sin relación alguna con el comercio original</span>
+          </div>
+        </div>
+        <button onclick="cerrarModalClonarNegocioDev()" style="background:transparent; border:none; color:#94a3b8; font-size:1.3rem; cursor:pointer;">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 22px; max-height: 75vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;">
+        <input type="hidden" id="devClonOrigenId" value="" />
+        
+        <!-- Alerta de Aislamiento -->
+        <div style="background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; color: #e9d5ff; line-height: 1.45;">
+          🛡️ <strong>Garantía de Aislamiento:</strong> Se crearán nuevas mesas, zonas, platillos, categorías e inventario independientes con IDs propios. Los cambios en el clon no afectarán en nada al restaurante original.
+        </div>
+
+        <div class="field-group">
+          <label style="color:#94a3b8; font-size:0.82rem; font-weight:700; margin-bottom:4px; display:block;">Restaurante de Origen (Base):</label>
+          <input type="text" id="devClonOrigenNombre" readonly style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#94a3b8; font-size:0.9rem; font-weight:700;" />
+        </div>
+
+        <div style="font-weight: 700; color: #38bdf8; font-size: 0.85rem; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
+          🏬 1. Datos del Nuevo Restaurante Clon
+        </div>
+
+        <div class="field-group">
+          <label style="color:#cbd5e1; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Nombre del Nuevo Negocio: <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="devClonNombre" placeholder="Ej: GastroBar Sucursal Escazú" required style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #38bdf8; color:#fff; font-size:0.95rem; font-weight:700;" />
+        </div>
+
+        <div class="field-group">
+          <label style="color:#cbd5e1; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Slogan / Subtítulo:</label>
+          <input type="text" id="devClonSlogan" placeholder="Ej: Sucursal Oeste & Bar" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#fff; font-size:0.9rem;" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="field-group">
+            <label style="color:#cbd5e1; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Moneda:</label>
+            <select id="devClonMoneda" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#fff; font-size:0.9rem; font-weight:700;">
+              <option value="CRC">🇨🇷 CRC (Colones ₡)</option>
+              <option value="USD">🇺🇸 USD (Dólares $)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label style="color:#cbd5e1; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Teléfono (Opcional):</label>
+            <input type="text" id="devClonTelefono" placeholder="Ej: 2222-3333" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#fff; font-size:0.9rem;" />
+          </div>
+        </div>
+
+        <!-- SECCIÓN CREDENCIALES DEL SUPER ADMIN -->
+        <div style="margin-top: 10px; padding: 16px; background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.06)); border: 1px solid #f59e0b; border-radius: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="font-weight: 800; color: #fbbf24; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+              <span>👑</span> Credenciales del Super Admin (Dueño del Clon)
+            </div>
+            <span style="font-size: 0.72rem; background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 9999px; font-weight: 800;">SUPERADMIN</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div class="field-group">
+              <label style="font-size: 0.8rem; color: #cbd5e1; font-weight:600; display:block; margin-bottom:4px;">Nombre del Super Admin:</label>
+              <input type="text" id="devClonAdminNombre" placeholder="Ej: Administrador General" style="width:100%; padding:9px 10px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#fff; font-size:0.85rem;" />
+            </div>
+            <div class="field-group">
+              <label style="font-size: 0.8rem; color: #cbd5e1; font-weight:600; display:block; margin-bottom:4px;">Usuario de Acceso (Login): <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="devClonAdminUsuario" placeholder="Ej: superadmin_escazu" style="width:100%; padding:9px 10px; border-radius:8px; background:#0f172a; border:1px solid #f59e0b; color:#fff; font-size:0.85rem; font-weight:700;" />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="field-group">
+              <label style="font-size: 0.8rem; color: #cbd5e1; font-weight:600; display:block; margin-bottom:4px;">Contraseña: <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="devClonAdminPassword" placeholder="Clave secreta" style="width:100%; padding:9px 10px; border-radius:8px; background:#0f172a; border:1px solid #f59e0b; color:#fff; font-size:0.85rem; font-weight:700;" />
+            </div>
+            <div class="field-group">
+              <label style="font-size: 0.8rem; color: #cbd5e1; font-weight:600; display:block; margin-bottom:4px;">PIN Rápido (4 dígitos):</label>
+              <input type="text" id="devClonAdminPin" maxlength="6" placeholder="1234" value="1234" style="width:100%; padding:9px 10px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#38bdf8; font-size:0.95rem; font-weight:800; text-align:center;" />
+            </div>
+          </div>
+          <small style="color:#94a3b8; font-size:0.75rem; display:block; margin-top:8px;">
+            👑 El Super Admin podrá gestionar el negocio, el menú, inventario y crear usuarios con perfil Administrador y operativo en Gestión de Personal.
+          </small>
+        </div>
+
+      </div>
+
+      <div class="dialog-footer" style="padding: 14px 22px; display: flex; justify-content: flex-end; gap: 10px; background: #080d18; border-top: 1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalClonarNegocioDev()" style="padding: 9px 18px; font-size: 0.88rem; cursor: pointer;">Cancelar</button>
+        <button class="btn-pri" id="btnGuardarDevClonarNegocio" onclick="guardarClonarNegocioDev()" style="background: linear-gradient(135deg, #a855f7, #7c3aed); color: #fff; border: none; padding: 9px 24px; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 14px rgba(168,85,247,0.4);">
+          🧬 Confirmar y Clonar Comercio
+        </button>
       </div>
     </div>
   </div>
@@ -2485,6 +2590,7 @@
               <option value="salonero">Salonero / Salonera</option>
               <option value="cajero">Cajero</option>
               <option value="admin">Administrador</option>
+              <option value="superadmin">👑 Super Admin</option>
               <option value="developer">Developer</option>
             </select>
           </div>

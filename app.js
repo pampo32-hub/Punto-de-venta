@@ -3669,8 +3669,8 @@ async function cargarNegociosDev() {
             <button class="btn-open-pos-as" style="flex: 1 1 100%;" onclick="abrirPosComoNegocio(${n.id})">
               👀 Abrir POS como este Local
             </button>
-            <button class="btn-edit-negocio" style="flex: 1; background: #065f46; border-color: #047857; color: #a7f3d0; font-weight: 700;" onclick="duplicarNegocioDev(${n.id}, '${nombreEscapado}')" title="Clonar este restaurante con todas sus zonas, mesas, categorías y menú">
-              🐑 Duplicar
+            <button class="btn-edit-negocio" style="flex: 1; background: #581c87; border-color: #7e22ce; color: #f3e8ff; font-weight: 700;" onclick="abrirModalClonarNegocioDev(${n.id}, '${nombreEscapado}', '${(n.slogan || '').replace(/'/g, "\\'")}', '${n.moneda || 'CRC'}', '${(n.telefono || '').replace(/'/g, "\\'")}')" title="Clonar este restaurante en un entorno 100% aislado con su propio Super Admin">
+              🧬 Clonar
             </button>
             <button class="btn-edit-negocio" style="flex: 1; background: #312e81; border-color: #4338ca; color: #e0e7ff; font-weight: 700;" onclick="abrirModalModulosNegocio(${n.id})">
               🧩 Licencia & Módulos
@@ -3697,27 +3697,81 @@ async function cargarNegociosDev() {
   }
 }
 
-window.duplicarNegocioDev = async function(negocioId, nombreActual) {
-  const nombreNuevo = prompt(`¿Qué nombre deseas asignarle a la copia de "${nombreActual}"?`, `${nombreActual} (Copia Sandbox)`);
-  if (nombreNuevo === null) return;
-  if (!nombreNuevo.trim()) {
-    alert('El nombre del restaurante clonado no puede estar vacío.');
+window.abrirModalClonarNegocioDev = function(id, nombre, slogan, moneda, telefono) {
+  const modal = document.getElementById('modalDevClonarNegocio');
+  if (!modal) return;
+  document.getElementById('devClonOrigenId').value = id;
+  document.getElementById('devClonOrigenNombre').value = nombre || '';
+  document.getElementById('devClonNombre').value = nombre ? (nombre + ' (Clon)') : '';
+  document.getElementById('devClonSlogan').value = slogan || '';
+  document.getElementById('devClonMoneda').value = moneda || 'CRC';
+  document.getElementById('devClonTelefono').value = telefono || '';
+
+  const baseUser = (nombre || 'clon').toLowerCase().replace(/[^a-z0-9]/g, '');
+  document.getElementById('devClonAdminNombre').value = 'Administrador ' + (nombre || '');
+  document.getElementById('devClonAdminUsuario').value = 'super_' + baseUser.slice(0, 10);
+  document.getElementById('devClonAdminPassword').value = '123456';
+  document.getElementById('devClonAdminPin').value = '1234';
+
+  modal.classList.add('active');
+};
+
+window.cerrarModalClonarNegocioDev = function() {
+  const modal = document.getElementById('modalDevClonarNegocio');
+  if (modal) modal.classList.remove('active');
+};
+
+window.guardarClonarNegocioDev = async function() {
+  const origenId = document.getElementById('devClonOrigenId')?.value;
+  const nombre = document.getElementById('devClonNombre')?.value.trim();
+  const slogan = document.getElementById('devClonSlogan')?.value.trim();
+  const moneda = document.getElementById('devClonMoneda')?.value || 'CRC';
+  const telefono = document.getElementById('devClonTelefono')?.value.trim();
+  const adminNombre = document.getElementById('devClonAdminNombre')?.value.trim();
+  const adminUsuario = document.getElementById('devClonAdminUsuario')?.value.trim();
+  const adminPassword = document.getElementById('devClonAdminPassword')?.value.trim();
+  const adminPin = document.getElementById('devClonAdminPin')?.value.trim() || '1234';
+
+  if (!nombre) {
+    alert('Por favor indica el nombre del nuevo restaurante clonado.');
+    return;
+  }
+  if (!adminUsuario || !adminPassword) {
+    alert('Por favor completa el usuario y contraseña del Super Admin.');
     return;
   }
 
+  const btnGuardar = document.getElementById('btnGuardarDevClonarNegocio');
+  if (btnGuardar) {
+    btnGuardar.disabled = true;
+    btnGuardar.innerText = '⏳ Clonando Restaurante...';
+  }
+
   try {
-    const res = await fetch(`/api/dev/negocios/${negocioId}/duplicar`, {
+    const res = await fetch(`/api/dev/negocios/${origenId}/clonar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombreNuevo: nombreNuevo.trim() })
+      body: JSON.stringify({
+        nombreNuevo: nombre,
+        slogan,
+        moneda,
+        telefono,
+        adminNombre,
+        adminUsuario,
+        adminPassword,
+        adminPin
+      })
     });
+
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al duplicar negocio');
+    if (!res.ok) throw new Error(data.error || 'Error al clonar el comercio');
+
+    cerrarModalClonarNegocioDev();
 
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(`✅ ${data.message || 'Restaurante clonado exitosamente.'}`, 'success');
+      mostrarNotificacionCentro(`🧬 ¡Restaurante "${nombre}" clonado exitosamente con rol Super Admin!`, 'success');
     } else {
-      alert(`✅ ${data.message || 'Restaurante clonado exitosamente.'}`);
+      alert(`🧬 ¡Restaurante "${nombre}" clonado exitosamente!`);
     }
 
     await cargarNegociosDev();
@@ -3725,9 +3779,16 @@ window.duplicarNegocioDev = async function(negocioId, nombreActual) {
       await window.poblarSelectorNegociosDev();
     }
   } catch (e) {
-    alert('Error: ' + e.message);
+    alert('❌ Error al clonar: ' + e.message);
+  } finally {
+    if (btnGuardar) {
+      btnGuardar.disabled = false;
+      btnGuardar.innerText = '🧬 Confirmar y Clonar Comercio';
+    }
   }
 };
+
+window.duplicarNegocioDev = window.abrirModalClonarNegocioDev;
 
 // ============================================================================
 // CENTRO DE LICENCIAS Y MÓDULOS SAAS 2026 (DEVELOPER)
@@ -4424,8 +4485,15 @@ async function cargarUsuariosDev() {
 
     tbody.innerHTML = usuarios.map(u => {
       let rolBadge = (u.rol || '').toUpperCase();
+      let badgeStyle = 'background:#1e293b; color:#38bdf8;';
       let genBadge = u.genero === 'F' ? '👩 Mujer' : '👨 Hombre';
-      if (u.rol === 'salonero') {
+      if (u.rol === 'superadmin') {
+        rolBadge = '👑 Super Admin';
+        badgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; font-weight: 800;';
+      } else if (u.rol === 'admin' || u.rol === 'administrador') {
+        rolBadge = '🛡️ Administrador';
+        badgeStyle = 'background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #0284c7; font-weight: 700;';
+      } else if (u.rol === 'salonero') {
         rolBadge = u.genero === 'F' ? 'Salonera' : 'Salonero';
       }
 
@@ -4433,7 +4501,7 @@ async function cargarUsuariosDev() {
         <tr>
           <td><strong>${escapeHtml(u.usuario)}</strong></td>
           <td>${escapeHtml(u.nombre_completo)}</td>
-          <td><span class="badge-tag" style="background:#1e293b; color:#38bdf8;">${escapeHtml(rolBadge)}</span></td>
+          <td><span class="badge-tag" style="${badgeStyle}">${escapeHtml(rolBadge)}</span></td>
           <td>${genBadge}</td>
           <td>${escapeHtml(u.negocio_nombre || 'Comercio Principal')}</td>
           <td><code>${escapeHtml(u.pin || '1234')}</code></td>
@@ -4588,18 +4656,39 @@ async function cargarEmpleadosAdmin() {
       return;
     }
 
-    // Muestra solo cajeros, saloneros y saloneras. NUNCA a developer.
-    tbody.innerHTML = empleados.map(e => `
+    // Configurar visibilidad de roles en el dropdown según el rol del usuario conectado
+    const userRolActual = (estado.usuarioActual?.rol || '').toLowerCase();
+    const optAdmin = document.getElementById('optStaffRolAdmin');
+    const optSuperadmin = document.getElementById('optStaffRolSuperadmin');
+    const puedeCrearAdmin = userRolActual === 'superadmin' || userRolActual === 'developer';
+    if (optAdmin) optAdmin.style.display = puedeCrearAdmin ? '' : 'none';
+    if (optSuperadmin) optSuperadmin.style.display = userRolActual === 'developer' ? '' : 'none';
+
+    tbody.innerHTML = empleados.map(e => {
+      let badgeStyle = 'background:#1e293b; color:#38bdf8;';
+      let rolBadge = escapeHtml(e.rolDisplay || e.rol);
+      if (e.rol === 'superadmin') {
+        badgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; font-weight: 800;';
+        rolBadge = '👑 Super Admin';
+      } else if (e.rol === 'admin' || e.rol === 'administrador') {
+        badgeStyle = 'background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #0284c7; font-weight: 700;';
+        rolBadge = '🛡️ Administrador';
+      }
+
+      return `
       <tr>
         <td><strong>${escapeHtml(e.nombre_completo)}</strong></td>
         <td><code>${escapeHtml(e.usuario)}</code></td>
-        <td><span class="badge-tag" style="background:#1e293b; color:#38bdf8;">${escapeHtml(e.rolDisplay)}</span></td>
+        <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span></td>
         <td><code>${escapeHtml(e.pin || '1234')}</code></td>
         <td>
-          <button class="btn-item-tool" style="color:#ef4444;" onclick="eliminarEmpleadoAdmin(${e.id})">🗑️ Despedir</button>
+          ${e.rol === 'superadmin' && userRolActual !== 'developer' ? '<small style="color:#f59e0b; font-weight:700;">👑 Dueño</small>' : `
+            <button class="btn-item-tool" style="color:#ef4444;" onclick="eliminarEmpleadoAdmin(${e.id})">🗑️ Despedir</button>
+          `}
         </td>
       </tr>
-    `).join('');
+      `;
+    }).join('');
   } catch (e) {
     console.error('Error cargando empleados admin:', e);
   }

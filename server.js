@@ -959,11 +959,12 @@ app.post('/api/dev/negocios', async (req, res) => {
     const debeCrearAdmin = Boolean(crear_admin || crearAdmin || admin_usuario || adminUsuario);
     const finalAdminUser = (admin_usuario || adminUsuario || '').trim().toLowerCase();
     const finalAdminPass = (admin_password || adminPassword || '').trim();
-    const finalAdminNombre = (admin_nombre || adminNombre || '').trim() || `Admin ${nombre.trim()}`;
+    const finalAdminNombre = (admin_nombre || adminNombre || '').trim() || `Super Admin ${nombre.trim()}`;
     const finalAdminPin = String(admin_pin || adminPin || '1234').trim();
 
     if (debeCrearAdmin && finalAdminUser && finalAdminPass) {
       const permisosAdmin = JSON.stringify({
+        superadmin: true,
         salon: true,
         kds: true,
         caja: true,
@@ -977,7 +978,7 @@ app.post('/api/dev/negocios', async (req, res) => {
 
       const rUser = await dbRun(
         `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
-         VALUES (?, ?, ?, ?, 'admin', 'M', ?, ?, 1, 0)`,
+         VALUES (?, ?, ?, ?, 'superadmin', 'M', ?, ?, 1, 0)`,
         [nuevoNegocioId, finalAdminUser, finalAdminNombre, hashedPassword, finalAdminPin, permisosAdmin]
       );
       adminCreado = {
@@ -985,7 +986,7 @@ app.post('/api/dev/negocios', async (req, res) => {
         negocio_id: nuevoNegocioId,
         usuario: finalAdminUser,
         nombre_completo: finalAdminNombre,
-        rol: 'admin',
+        rol: 'superadmin',
         pin: finalAdminPin
       };
     }
@@ -1289,27 +1290,48 @@ app.get('/api/dev/modulos/catalogo', (req, res) => {
   res.json(CATALOGO_MODULOS);
 });
 
-// Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario)
-app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
+// Clonar un negocio completo de forma 100% aislada (Zonas, Mesas, Categorías, Productos, Inventario y Super Admin)
+const handlerClonarNegocio = async (req, res) => {
   try {
     const origenId = Number(req.params.id);
-    const { nombreNuevo = '', sloganNuevo = '' } = req.body || {};
+    const { 
+      nombreNuevo = '', 
+      sloganNuevo = '',
+      moneda = '',
+      telefono = '',
+      direccion = '',
+      logo_url = '',
+      crear_admin = true,
+      crearAdmin = true,
+      admin_usuario = '',
+      adminUsuario = '',
+      admin_nombre = '',
+      adminNombre = '',
+      admin_password = '',
+      adminPassword = '',
+      admin_pin = '1234',
+      adminPin = '1234'
+    } = req.body || {};
     
     const origen = await dbGet('SELECT * FROM Negocios WHERE id = ?', [origenId]);
     if (!origen) return res.status(404).json({ error: 'Negocio de origen no encontrado' });
 
-    const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Copia)`;
-    const sloganClon = sloganNuevo.trim() || origen.slogan || 'Copia de restaurante';
+    const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Clon)`;
+    const sloganClon = sloganNuevo.trim() || origen.slogan || 'Restaurante & Bar';
+    const monedaClon = (moneda || origen.moneda || 'CRC').toUpperCase();
+    const telClon = telefono.trim() || origen.telefono || '';
+    const dirClon = direccion.trim() || origen.direccion || '';
+    const logoClon = logo_url.trim() || origen.logo_url || '';
 
-    // 1. Insertar nuevo Negocio
+    // 1. Insertar nuevo Negocio totalmente independiente
     const rNeg = await dbRun(
       `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-      [nombreClon, sloganClon, origen.logo_url, origen.moneda || 'CRC', origen.telefono, origen.direccion, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
+      [nombreClon, sloganClon, logoClon, monedaClon, telClon, dirClon, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
     );
     const nuevoNegocioId = rNeg.lastID;
 
-    // 2. Duplicar Zonas y mapear IDs
+    // 2. Clonar Zonas y mapear IDs
     const zonasOrigen = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ?', [origenId]);
     const mapaZonas = {};
     for (const z of zonasOrigen) {
@@ -1317,7 +1339,7 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
       mapaZonas[z.id] = rZ.lastID;
     }
 
-    // 3. Duplicar Mesas asociadas a las nuevas zonas
+    // 3. Clonar Mesas asociadas a las nuevas zonas (con estado 'libre' y sin historial de órdenes)
     const mesasOrigen = await dbAll('SELECT * FROM Mesas WHERE negocio_id = ?', [origenId]);
     for (const m of mesasOrigen) {
       const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
@@ -1328,7 +1350,7 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
       );
     }
 
-    // 4. Duplicar Categorías y mapear IDs
+    // 4. Clonar Categorías y mapear IDs
     const catsOrigen = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ?', [origenId]);
     const mapaCats = {};
     for (const c of catsOrigen) {
@@ -1336,34 +1358,100 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
       mapaCats[c.id] = rC.lastID;
     }
 
-    // 5. Duplicar Productos asociados a las nuevas categorías
+    // 5. Clonar Productos asociados a las nuevas categorías y mapear IDs
     const prodsOrigen = await dbAll('SELECT * FROM Productos WHERE negocio_id = ?', [origenId]);
+    const mapaProds = {};
     for (const p of prodsOrigen) {
       const nuevaCatId = mapaCats[p.categoria_id] || (Object.values(mapaCats)[0] || 1);
-      await dbRun(
+      const rP = await dbRun(
         `INSERT INTO Productos (negocio_id, categoria_id, codigo, nombre, precio, descripcion, destino, curso, happy_hour, agotado, imagen_url, color_badge, activo)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [nuevoNegocioId, nuevaCatId, p.codigo, p.nombre, p.precio, p.descripcion, p.destino, p.curso || 2, p.happy_hour || 0, p.agotado || 0, p.imagen_url, p.color_badge, p.activo !== undefined ? p.activo : 1]
       );
+      mapaProds[p.id] = rP.lastID;
     }
 
-    // 6. Duplicar Inventario
+    // 6. Clonar Inventario y mapear IDs
     const invOrigen = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [origenId]);
+    const mapaInsumos = {};
     for (const i of invOrigen) {
-      await dbRun(
-        `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
+      const nuevoProdId = i.producto_id ? (mapaProds[i.producto_id] || null) : null;
+      const rI = await dbRun(
+        `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, nuevoProdId, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
       );
+      mapaInsumos[i.id] = rI.lastID;
+    }
+
+    // 7. Clonar Recetas mapeadas (InventarioRecetas)
+    const oldProdIds = Object.keys(mapaProds);
+    if (oldProdIds.length > 0) {
+      const placeholders = oldProdIds.map(() => '?').join(',');
+      const recetas = await dbAll(`SELECT * FROM InventarioRecetas WHERE producto_id IN (${placeholders})`, oldProdIds);
+      for (const rec of recetas) {
+        const nuevoPId = mapaProds[rec.producto_id];
+        const nuevoIId = mapaInsumos[rec.insumo_id] || rec.insumo_id;
+        if (nuevoPId && nuevoIId) {
+          await dbRun(
+            'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, ?)',
+            [nuevoPId, nuevoIId, rec.cantidad, rec.merma_porcentaje || 0]
+          );
+        }
+      }
+    }
+
+    // 8. Crear Usuario Super Admin para el nuevo clon
+    let adminCreado = null;
+    const finalAdminUser = (admin_usuario || adminUsuario || '').trim().toLowerCase();
+    const finalAdminPass = (admin_password || adminPassword || '').trim();
+    const finalAdminNombre = (admin_nombre || adminNombre || '').trim() || `Super Admin ${nombreClon}`;
+    const finalAdminPin = String(admin_pin || adminPin || '1234').trim();
+
+    if (finalAdminUser && finalAdminPass) {
+      const permisosAdmin = JSON.stringify({
+        superadmin: true,
+        salon: true,
+        kds: true,
+        caja: true,
+        facturacion: true,
+        empleados: true,
+        catalogo: true,
+        reportes: true,
+        configuracion: true
+      });
+      const hashedPassword = await bcrypt.hash(finalAdminPass, 10);
+
+      const rUser = await dbRun(
+        `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
+         VALUES (?, ?, ?, ?, 'superadmin', 'M', ?, ?, 1, 0)`,
+        [nuevoNegocioId, finalAdminUser, finalAdminNombre, hashedPassword, finalAdminPin, permisosAdmin]
+      );
+      adminCreado = {
+        id: rUser.lastID,
+        negocio_id: nuevoNegocioId,
+        usuario: finalAdminUser,
+        nombre_completo: finalAdminNombre,
+        rol: 'superadmin',
+        pin: finalAdminPin
+      };
     }
 
     const nuevoNegocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevoNegocio);
-    res.json({ ok: true, message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`, negocio: nuevoNegocio });
+    res.json({
+      ok: true,
+      message: `Restaurante clonado exitosamente bajo el nombre "${nombreClon}".`,
+      negocio: nuevoNegocio,
+      admin: adminCreado
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+};
+
+app.post('/api/dev/negocios/:id/clonar', handlerClonarNegocio);
+app.post('/api/dev/negocios/:id/duplicar', handlerClonarNegocio);
 
 // Obtener módulos activos de un negocio
 app.get('/api/dev/negocios/:id/modulos', async (req, res) => {
@@ -1726,12 +1814,13 @@ app.get('/api/admin/empleados', async (req, res) => {
       ORDER BY id ASC
     `, [negocioId, negocioId]);
 
-    // Mapear etiquetas con género
+    // Mapear etiquetas con género y rol
     const listado = empleados.map(e => {
       let rolDisplay = e.rol;
-      if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';
-      if (e.rol === 'cajero') rolDisplay = 'Cajero';
-      if (e.rol === 'admin') rolDisplay = 'Administrador';
+      if (e.rol === 'superadmin') rolDisplay = 'Super Administrador';
+      else if (e.rol === 'admin') rolDisplay = 'Administrador';
+      else if (e.rol === 'cajero') rolDisplay = 'Cajero';
+      else if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';
       return { ...e, rolDisplay };
     });
 
@@ -1744,18 +1833,29 @@ app.get('/api/admin/empleados', async (req, res) => {
 app.post('/api/admin/empleados', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
+    const solicitanteRol = (req.usuario?.rol || req.headers['x-user-rol'] || 'admin').toLowerCase();
     const { usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234' } = req.body;
     
-    // Bloqueo estricto: el admin NO puede crear roles developer
+    // Bloqueo estricto: nadie puede crear roles developer desde este panel
     if (rol === 'developer') {
       return res.status(403).json({ error: 'Permiso denegado: El administrador no puede crear usuarios de desarrollador' });
     }
 
-    const permisos = rol === 'cajero' 
-      ? '{"salon":true,"caja":true,"facturacion":true}'
-      : '{"salon":true,"kds":true}';
+    // REGLA CLAVE: Solo Superadmin o Developer pueden crear usuarios con rol admin o superadmin
+    if (['admin', 'superadmin'].includes(rol.toLowerCase()) && !['superadmin', 'developer'].includes(solicitanteRol)) {
+      return res.status(403).json({ error: 'Permiso denegado: Solo el Super Administrador o Desarrollador puede crear usuarios con perfil Administrador.' });
+    }
 
-    const debeCambiar = (rol !== 'admin' && rol !== 'developer') ? 1 : 0;
+    let permisos = '{"salon":true,"kds":true}';
+    if (rol === 'superadmin') {
+      permisos = '{"superadmin":true,"salon":true,"kds":true,"caja":true,"facturacion":true,"empleados":true,"catalogo":true,"reportes":true,"configuracion":true}';
+    } else if (rol === 'admin') {
+      permisos = '{"salon":true,"kds":true,"caja":true,"facturacion":true,"empleados":true,"catalogo":true,"reportes":true,"configuracion":true}';
+    } else if (rol === 'cajero') {
+      permisos = '{"salon":true,"caja":true,"facturacion":true}';
+    }
+
+    const debeCambiar = (!['admin', 'superadmin', 'developer'].includes(rol)) ? 1 : 0;
     const hashedPassword = await bcrypt.hash(password.trim(), 10);
 
     const r = await dbRun(
@@ -1775,9 +1875,16 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
     const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
     if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
 
-    // Bloqueo estricto: Jamás permitir que un admin modifique a un developer
+    const solicitanteRol = (req.usuario?.rol || req.headers['x-user-rol'] || 'admin').toLowerCase();
+
+    // Bloqueo estricto: Jamás permitir modificar a un developer desde este módulo
     if (target.rol === 'developer') {
       return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil' });
+    }
+
+    // Un admin normal no puede modificar a un superadmin
+    if (target.rol === 'superadmin' && solicitanteRol !== 'superadmin' && solicitanteRol !== 'developer') {
+      return res.status(403).json({ error: 'Acceso denegado: Solo el Super Administrador o Desarrollador puede modificar a un Super Administrador.' });
     }
 
     if (req.usuario && req.usuario.rol !== 'developer') {
@@ -1789,17 +1896,23 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
     const { nombre_completo, password, rol, genero, pin, debe_cambiar_password } = req.body;
     if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
 
+    if (rol && ['admin', 'superadmin'].includes(rol.toLowerCase()) && !['superadmin', 'developer'].includes(solicitanteRol)) {
+      return res.status(403).json({ error: 'Permiso denegado: Solo el Super Administrador o Desarrollador puede asignar el rol de Administrador.' });
+    }
+
+    const rolFinal = rol || target.rol;
+
     if (password && String(password).trim()) {
-      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((rol !== 'admin' && rol !== 'developer') ? 1 : 0);
+      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((!['admin', 'superadmin', 'developer'].includes(rolFinal)) ? 1 : 0);
       const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
         'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ? WHERE id = ?',
-        [nombre_completo, hashedPassword, rol, genero, pin, debeCambiar, req.params.id]
+        [nombre_completo, hashedPassword, rolFinal, genero, pin, debeCambiar, req.params.id]
       );
     } else {
       await dbRun(
         'UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ? WHERE id = ?',
-        [nombre_completo, rol, genero, pin, req.params.id]
+        [nombre_completo, rolFinal, genero, pin, req.params.id]
       );
     }
 
@@ -6297,7 +6410,7 @@ async function validarPinAdministrador(pin, negocioId = null) {
   const pinStr = String(pin).trim();
   try {
     const usuariosAdmin = await dbAll(
-      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'developer') AND activo = 1"
+      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'superadmin', 'developer') AND activo = 1"
     );
     for (const u of usuariosAdmin) {
       if (negocioId && u.rol !== 'developer' && u.negocio_id != null && Number(u.negocio_id) !== Number(negocioId)) {
@@ -6334,7 +6447,7 @@ async function verificarAdmin(req, res, next) {
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
 
-  if (['admin', 'developer', 'supervisor'].includes(rol)) {
+  if (['admin', 'superadmin', 'developer', 'supervisor'].includes(rol)) {
     return next();
   }
 
