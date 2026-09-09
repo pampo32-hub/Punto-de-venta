@@ -1,38 +1,5 @@
 
 // ============================================================================
-// INTERCEPTOR GLOBAL FETCH CON TOKEN JWT DE SESIÓN
-// ============================================================================
-(function() {
-  const _origFetch = window.fetch;
-  window.fetch = async function(resource, init = {}) {
-    const token = sessionStorage.getItem('pos_token');
-    if (token && (typeof resource === 'string' || (typeof URL !== 'undefined' && resource instanceof URL))) {
-      const urlStr = typeof resource === 'string' ? resource : resource.toString();
-      if (urlStr.startsWith('/api/') || urlStr.includes('/api/')) {
-        init = init ? { ...init } : {};
-        if (!init.headers) {
-          init.headers = { 'Authorization': 'Bearer ' + token };
-        } else if (typeof Headers !== 'undefined' && init.headers instanceof Headers) {
-          if (!init.headers.has('Authorization')) {
-            init.headers.set('Authorization', 'Bearer ' + token);
-          }
-        } else if (Array.isArray(init.headers)) {
-          const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
-          if (!hasAuth) {
-            init.headers.push(['Authorization', 'Bearer ' + token]);
-          }
-        } else {
-          if (!init.headers['Authorization'] && !init.headers['authorization']) {
-            init.headers['Authorization'] = 'Bearer ' + token;
-          }
-        }
-      }
-    }
-    return _origFetch.call(this, resource, init);
-  };
-})();
-
-// ============================================================================
 // MODAL MANAGER CENTRALIZADO (CONTROL DE ESTADO ÚNICO Y EXCLUSIVIDAD DE MODALES)
 // ============================================================================
 window._modalActivoId = null;
@@ -86,16 +53,11 @@ window.confirmarAccion = function(opciones) {
     if (elMensaje) elMensaje.textContent = opciones.mensaje || '';
 
     // Color del botón confirmar según peligro
-    // Color del botón confirmar según tipo
     if (elBtnSi) {
       const esPeligroso = opciones.tipo === 'peligro' || opciones.tipo === 'danger';
-      const esVerde = opciones.tipo === 'exito' || opciones.tipo === 'success' || opciones.tipo === 'verde' || opciones.tipo === 'primario';
       elBtnSi.style.background = esPeligroso
         ? 'linear-gradient(135deg,#ef4444,#dc2626)'
-        : (esVerde ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#6366f1,#4f46e5)');
-      elBtnSi.style.boxShadow = esPeligroso
-        ? '0 4px 14px rgba(239,68,68,0.45)'
-        : (esVerde ? '0 4px 14px rgba(16,185,129,0.45)' : '0 4px 14px rgba(99,102,241,0.45)');
+        : 'linear-gradient(135deg,#6366f1,#4f46e5)';
       elBtnSi.textContent = opciones.txtSi || 'Confirmar';
     }
     if (elBtnNo) elBtnNo.textContent = opciones.txtNo || 'Cancelar';
@@ -594,82 +556,6 @@ window.alCambiarCategoriaProducto = function() {
   }
 };
 
-window.subirImagenDesdePC = function(event, inputTargetId, previewImgId, callback = null) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  if (!file.type.startsWith('image/')) {
-    alert('⚠️ Por favor selecciona un archivo de imagen válido (JPG, PNG, WebP).');
-    return;
-  }
-
-  // Límite de 20MB para archivos locales
-  if (file.size > 20 * 1024 * 1024) {
-    alert('⚠️ La imagen es demasiado pesada (máximo 20 MB).');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    const base64Data = e.target.result;
-    try {
-      const res = await fetch('/api/upload/imagen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imagen: base64Data,
-          nombre: file.name
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Error al subir imagen');
-      }
-
-      const inputTarget = document.getElementById(inputTargetId);
-      if (inputTarget) {
-        inputTarget.value = data.url;
-      }
-
-      if (previewImgId) {
-        const previewImg = document.getElementById(previewImgId);
-        if (previewImg) {
-          previewImg.src = data.url;
-        }
-        const previewCont = document.getElementById('previewContainerNuevoProd');
-        if (previewCont) previewCont.style.display = 'flex';
-      }
-
-      if (typeof callback === 'function') {
-        callback();
-      }
-
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('✅ Foto subida y guardada exitosamente en la PC principal', 'success');
-      }
-    } catch (err) {
-      alert('❌ ' + err.message);
-    }
-  };
-  reader.readAsDataURL(file);
-};
-
-window.actualizarPreviewModalNuevoProd = function() {
-  const txtImg = document.getElementById('txtNuevoProdImagen');
-  const previewImg = document.getElementById('previewModalNuevoProd');
-  const previewCont = document.getElementById('previewContainerNuevoProd');
-  if (!txtImg || !previewImg || !previewCont) return;
-
-  const url = txtImg.value.trim();
-  if (url) {
-    previewImg.src = url;
-    previewCont.style.display = 'flex';
-  } else {
-    previewCont.style.display = 'none';
-  }
-};
-
 window.abrirModalNuevoProducto = async function() {
   const modal = document.getElementById('modalAgregarProducto');
   const txtId = document.getElementById('txtNuevoProdId');
@@ -692,7 +578,6 @@ window.abrirModalNuevoProducto = async function() {
   const txtStock = document.getElementById('txtKardexInsumoStock');
   const txtCosto = document.getElementById('txtKardexInsumoCosto');
   const txtMin = document.getElementById('txtKardexInsumoMin');
-  const previewCont = document.getElementById('previewContainerNuevoProd');
 
   if (iconHeader) iconHeader.textContent = '➕';
   if (titleHeader) titleHeader.textContent = 'Agregar Producto';
@@ -702,7 +587,6 @@ window.abrirModalNuevoProducto = async function() {
   if (txtNombre) txtNombre.value = '';
   if (txtPrecio) txtPrecio.value = '';
   if (txtImg) txtImg.value = '';
-  if (previewCont) previewCont.style.display = 'none';
   if (selCurso) selCurso.value = '2';
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
   if (txtNuevaCatNombre) txtNuevaCatNombre.value = '';
@@ -821,16 +705,6 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (txtNombre) txtNombre.value = prod.nombre || '';
   if (txtPrecio) txtPrecio.value = prod.precio !== undefined ? prod.precio : '';
   if (txtImg) txtImg.value = prod.imagen_url || '';
-  const previewCont = document.getElementById('previewContainerNuevoProd');
-  const previewImg = document.getElementById('previewModalNuevoProd');
-  if (previewCont && previewImg) {
-    if (prod.imagen_url) {
-      previewImg.src = prod.imagen_url;
-      previewCont.style.display = 'flex';
-    } else {
-      previewCont.style.display = 'none';
-    }
-  }
   if (selDest) selDest.value = prod.destino || 'cocina';
   if (selCurso) selCurso.value = String(prod.curso || 2);
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
@@ -999,9 +873,7 @@ window.guardarNuevoProducto = async function() {
   }
 
   const destino = selDest ? selDest.value : 'cocina';
-  const prodExistente = isEditing ? (estado.productos || []).find(p => p.id === prodId) : null;
-  const imagen_url_raw = (txtImg ? txtImg.value : '').trim();
-  const imagen_url = imagen_url_raw !== '' ? imagen_url_raw : (prodExistente && prodExistente.imagen_url ? prodExistente.imagen_url : null);
+  const imagen_url = (txtImg ? txtImg.value : '').trim();
   const curso = selCurso ? selCurso.value : 2;
   const happy_hour = chkHH && chkHH.checked ? 1 : 0;
   const agotado = chkAgotado && chkAgotado.checked ? 1 : 0;
@@ -1487,17 +1359,15 @@ window.guardarNuevoNombreMesa = async function() {
 
   const uAct = estado.usuarioActual || estado.usuario;
   const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
     const res = await fetch('/api/mesas/' + mesaParaRenombrar.id, {
       method: 'PUT',
       headers: { 
         'Content-Type': 'application/json',
-        'x-user-rol': userRol,
-        'x-negocio-id': String(nid)
+        'x-user-rol': userRol
       },
-      body: JSON.stringify({ numero: nuevoNombre, negocio_id: nid })
+      body: JSON.stringify({ numero: nuevoNombre })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1541,15 +1411,11 @@ window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
 
   const uAct = estado.usuarioActual || estado.usuario;
   const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
     let res = await fetch('/api/mesas/' + mesaId, {
       method: 'DELETE',
-      headers: { 
-        'x-user-rol': userRol,
-        'x-negocio-id': String(nid)
-      }
+      headers: { 'x-user-rol': userRol }
     });
     let data = await res.json();
 
@@ -1567,10 +1433,7 @@ window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
 
       res = await fetch('/api/mesas/' + mesaId + '?forzar=true', {
         method: 'DELETE',
-        headers: { 
-          'x-user-rol': userRol,
-          'x-negocio-id': String(nid)
-        }
+        headers: { 'x-user-rol': userRol }
       });
       data = await res.json();
     }
@@ -1674,10 +1537,9 @@ var estado = {
   itemModificando: null,
   splitPersonas: 4,
   splitColumnas: [],
-  // Estado de Pisos y Vistas (1er y 2do Piso, Plano vs Grilla)
+  // Estado de Pisos (1er y 2do Piso)
   pisoActual: 1,
   pisoActualEditor: 1,
-  vistaSalonModo: localStorage.getItem('pos_vista_salon') || 'plano',
 
   // Datos sincronizados con SQLite
   zonas: [],
@@ -1716,39 +1578,9 @@ try {
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
     });
-    socket.on('mesa_actualizada', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
-      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
-      if (d && d.mesaId) {
-        const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(d.mesaId));
-        if (mesa) {
-          if (d.estado === 'libre' || d.cliente === null) {
-            mesa.cliente = null;
-            mesa.mesa_cliente = null;
-          } else if (d.cliente !== undefined) {
-            mesa.cliente = d.cliente;
-            mesa.mesa_cliente = d.cliente;
-          }
-        }
-      }
-      cargarMesasDesdeBackend();
-    });
-    socket.on('nueva_mesa_creada', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
-      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
-      cargarMesasDesdeBackend();
-    });
-    socket.on('mesa_eliminada', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
-      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
-      cargarMesasDesdeBackend();
-    });
+    socket.on('mesa_actualizada', () => cargarMesasDesdeBackend());
     socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
-    socket.on('mesa_renombrada', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
-      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
-      cargarMesasDesdeBackend();
-    });
+    socket.on('mesa_renombrada', () => cargarMesasDesdeBackend());
     socket.on('producto_creado', () => cargarMenuDesdeBackend());
     socket.on('menu_actualizado', () => cargarMenuDesdeBackend());
     socket.on('actualizacion_disponible', (d) => {
@@ -1790,11 +1622,7 @@ try {
       renderGridProductos(estado.productos);
     });
     socket.on('producto_visual_cambiado', () => cargarMenuDesdeBackend());
-    socket.on('mesas_reorganizadas', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
-      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
-      cargarMesasDesdeBackend();
-    });
+    socket.on('mesas_reorganizadas', () => cargarMesasDesdeBackend());
     socket.on('happy_hour_cambio', (data) => {
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
     });
@@ -1802,9 +1630,6 @@ try {
       if (estado.negocioActual && Number(estado.negocioActual.id) === Number(d.negocioId)) {
         estado.negocioActual.modulos_activos = d.modulos_activos;
         estado.negocioActual.plan_nombre = d.plan_nombre;
-        try {
-          sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
-        } catch (_) {}
         if (typeof aplicarRestriccionesModulos === 'function') {
           aplicarRestriccionesModulos();
         }
@@ -1943,10 +1768,7 @@ function formatCRC(num) {
 
 // Inverso de formatCRC: '₡ 1.800' → 1800 (el punto es separador de miles, NO decimal)
 function parseCRC(text) {
-  if (typeof text === 'number') return Math.round(text);
-  if (!text) return 0;
-  const digitsOnly = String(text).replace(/[₡\s,\.]/g, '');
-  return parseInt(digitsOnly, 10) || 0;
+  return parseInt(String(text).replace(/[₡\s\.]/g, ''), 10) || 0;
 }
 
 
@@ -2204,49 +2026,17 @@ window.cargarUsuariosPublicosLogin = async function() {
       'admin': 'admin123',
       'cajero': 'caja123',
       'carlos': 'mesero123',
-      'sofia': 'mesera123',
-      'admin_beta': 'admin123',
-      'mesero_beta': 'mesero123',
-      'admin_terraza': '123',
-      'cajero_terraza': '123',
-      'mesero_terraza': '123',
-      'salonera_terraza': '123'
+      'sofia': 'mesera123'
     };
 
-    // Agrupar usuarios por negocio
-    const porNegocio = {};
-    usuarios.forEach(u => {
-      const nId = Number(u.negocio_id) || 1;
-      const nNombre = u.negocio_nombre || (nId === 3 ? 'Bistro & Grill La Terraza' : 'GastroBar Fuego & Brasas');
-      if (!porNegocio[nId]) {
-        porNegocio[nId] = {
-          nombre: nNombre,
-          icono: nId === 3 ? '🌴' : '🍔',
-          color: nId === 3 ? '#38bdf8' : '#f59e0b',
-          usuarios: []
-        };
-      }
-      porNegocio[nId].usuarios.push(u);
-    });
-
-    container.innerHTML = Object.values(porNegocio).map(neg => `
-      <div class="negocio-login-group" style="margin-bottom: 12px;">
-        <div style="font-size: 0.76rem; font-weight: 700; color: ${neg.color}; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-          <span>${neg.icono}</span> <span>${escapeHtml(neg.nombre)}</span>
-        </div>
-        <div class="demo-chips-grid">
-          ${neg.usuarios.map(u => {
-            const defaultPass = demoDefaults[u.usuario] || (u.pin || '123');
-            const rolClass = u.rol === 'salonero' && u.genero === 'F' ? 'salonera' : u.rol;
-            return `
-              <button type="button" class="chip-account ${escapeHtml(rolClass)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}')" title="Ingresar como ${escapeHtml(u.nombre_completo)} (${escapeHtml(neg.nombre)})">
-                ${u.avatar || '👤'} ${escapeHtml(u.nombre_completo)} <small style="opacity:0.8; font-size:0.75rem;">(${escapeHtml(u.rolDisplay)})</small>
-              </button>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    `).join('');
+    container.innerHTML = usuarios.map(u => {
+      const defaultPass = demoDefaults[u.usuario] || '';
+      return `
+        <button type="button" class="chip-account ${escapeHtml(u.rol)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}')" title="Ingresar como ${escapeHtml(u.nombre_completo)}">
+          ${u.avatar || '👤'} ${escapeHtml(u.nombre_completo)} <small style="opacity:0.8; font-size:0.75rem;">(${escapeHtml(u.rolDisplay)})</small>
+        </button>
+      `;
+    }).join('');
   } catch (e) {
     console.error('Error cargando usuarios públicos login:', e);
   }
@@ -2289,13 +2079,7 @@ window.ejecutarLogin = async function() {
       body: JSON.stringify({ usuario, password })
     });
     const data = await res.json();
-    if (!res.ok) {
-      if (data.comercio_desactivado || (data.error && data.error.toLowerCase().includes('comercio desactivado'))) {
-        alert('⛔ Comercio desactivado, contacte con su proveedor!');
-        return;
-      }
-      throw new Error(data.error || 'Error de autenticación');
-    }
+    if (!res.ok) throw new Error(data.error || 'Error de autenticación');
 
     if (data.debe_cambiar_password) {
       document.getElementById('txtObligatorioUsuario').value = data.usuario.usuario;
@@ -2318,9 +2102,6 @@ window.ejecutarLogin = async function() {
     estado.negocioActual = data.negocio;
 
     // Guardar en sesión
-    if (data.token) {
-      sessionStorage.setItem('pos_token', data.token);
-    }
     sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
     sessionStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
 
@@ -2465,7 +2246,6 @@ window.cerrarSesion = function() {
   if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
   estado.usuarioActual = null;
   sessionStorage.removeItem('pos_usuario');
-  sessionStorage.removeItem('pos_token');
   const devTop = document.getElementById('devTopControls');
   if (devTop) devTop.style.display = 'none';
   document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
@@ -2491,15 +2271,6 @@ function aplicarEnrutamientoPorRol() {
   }
 
   document.getElementById('landingLoginView').classList.remove('active');
-
-  // CASO 0: SI EL COMERCIO ESTÁ DESACTIVADO Y NO ES DEVELOPER, BLOQUEAR ACCESO INMEDIATAMENTE
-  if (u.rol !== 'developer') {
-    if (estado.negocioActual && Number(estado.negocioActual.activo) === 0) {
-      alert('⛔ Comercio desactivado, contacte con su proveedor!');
-      if (typeof cerrarSesion === 'function') cerrarSesion();
-      return;
-    }
-  }
 
   // CASO 1: DEVELOPER ➔ PORTAL DISTINTO DE DESARROLLADOR
   if (u.rol === 'developer') {
@@ -2570,13 +2341,8 @@ function aplicarEnrutamientoPorRol() {
 
   // Restaurar vista y zona activa guardada en sesión tras recarga (F5)
   const savedView = sessionStorage.getItem('pos_active_view') || 'salon';
-  let viewToRestore = savedView;
-  if (viewToRestore === 'kds' && !tieneModulo('kds_cocina')) viewToRestore = 'salon';
-  if (viewToRestore === 'facturacion' && !tieneModulo('facturacion_electronica')) viewToRestore = 'salon';
-  if (['inventario', 'recetas', 'kardex'].includes(viewToRestore) && !tieneModulo('inventario_recetas')) viewToRestore = 'salon';
-
-  const esVistaAdmin = ['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(viewToRestore);
-  if (esVistaAdmin && !esAdmin) viewToRestore = 'salon';
+  const esVistaAdmin = ['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(savedView);
+  const viewToRestore = (esVistaAdmin && !esAdmin) ? 'salon' : savedView;
 
   if (esVistaAdmin && esAdmin) {
     abrirModuloAdmin(viewToRestore);
@@ -2597,7 +2363,6 @@ function aplicarEnrutamientoPorRol() {
     }
   }
 }
-window.aplicarEnrutamientoPorRol = aplicarEnrutamientoPorRol;
 
 // Helpers globales para acceso directo a módulos de Admin desde cualquier vista
 window.irAPuntoDeVentaAdmin = function() {
@@ -2643,34 +2408,35 @@ window._pinSupervisorActivo = null;
 
 window.obtenerHeadersAuthAdmin = function(extraHeaders = {}) {
   const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-  const token = sessionStorage.getItem('pos_token');
   const headers = {
     'x-user-rol': rol,
     ...extraHeaders
   };
-  if (token) {
-    headers['Authorization'] = 'Bearer ' + token;
-  }
   if (window._pinSupervisorActivo) {
     headers['x-supervisor-pin'] = window._pinSupervisorActivo;
   }
   return headers;
 };
 
-window.abrirPanelAdmin = async function() {
+window.abrirPanelAdmin = function() {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '👑',
-      titulo: 'Panel de Administración',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para ingresar al panel de control:'
-    });
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para ingresar al panel:');
     if (!pin) return;
-    window._pinSupervisorActivo = pin;
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      window._pinSupervisorActivo = pin.trim();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
+      }
+      setTimeout(() => {
+        const modal = document.getElementById('modalPanelAdmin');
+        if (modal) modal.classList.add('active');
+      }, 150);
+      return;
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
     }
   }
   const modal = document.getElementById('modalPanelAdmin');
@@ -2698,26 +2464,11 @@ window.togglePanelAdmin = function() {
 
 window.ejecutarAccionAdmin = function(tipo) {
   cerrarPanelAdmin();
-  if (['inventario', 'recetas', 'kardex'].includes(tipo) && !tieneModulo('inventario_recetas')) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ El módulo de Inventario y Recetas no está activo para este comercio.', 'warning');
-    }
-    return;
-  }
-  if (tipo === 'happyhour' && !tieneModulo('mesas_promos')) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ El módulo de Mesas Avanzadas y Happy Hour no está activo para este comercio.', 'warning');
-    }
-    return;
-  }
-
   if (tipo === 'metricas' || tipo === 'inventario' || tipo === 'recetas' || tipo === 'kardex' || tipo === 'auditoria' || tipo === 'editor-plano') {
     abrirModuloAdmin(tipo);
   } else if (tipo === 'personal') {
     if (typeof cargarEmpleadosAdmin === 'function') cargarEmpleadosAdmin();
     document.getElementById('modalAdminPersonal')?.classList.add('active');
-  } else if (tipo === 'happyhour') {
-    abrirModalAdminHappyHour();
   } else if (tipo === 'fotos') {
     if (typeof poblarSelectorProductosCustom === 'function') poblarSelectorProductosCustom();
     if (typeof renderGaleriaPresets === 'function') renderGaleriaPresets();
@@ -2727,44 +2478,23 @@ window.ejecutarAccionAdmin = function(tipo) {
     if (typeof abrirModalActualizaciones === 'function') abrirModalActualizaciones();
   } else if (tipo === 'impresoras') {
     if (typeof abrirModalMonitorImpresoras === 'function') abrirModalMonitorImpresoras();
-  } else if (tipo === 'agotados') {
-    abrirModalAgotados();
   }
 };
 
-window.abrirModuloAdmin = async function(modulo) {
-  if (['inventario', 'recetas', 'kardex'].includes(modulo) && !tieneModulo('inventario_recetas')) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ El módulo de Inventario y Recetas no está contratado.', 'warning');
-    }
-    return;
-  }
-  if (modulo === 'facturacion' && !tieneModulo('facturacion_electronica')) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ El módulo de Facturación Electrónica no está contratado.', 'warning');
-    }
-    return;
-  }
-  if (modulo === 'kds' && !tieneModulo('kds_cocina')) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ El módulo KDS Cocina no está contratado.', 'warning');
-    }
-    return;
-  }
-
+window.abrirModuloAdmin = function(modulo) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '🔒',
-      titulo: 'Módulo de Administración',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para acceder a este módulo:'
-    });
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN de Administrador (1234) para acceder:');
     if (!pin) return;
-    window._pinSupervisorActivo = pin;
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      window._pinSupervisorActivo = pin.trim();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
     }
   }
 
@@ -2815,15 +2545,14 @@ function actualizarBrandingNegocio(negocio) {
   if (negocio.logo_url) {
     logoImg.src = negocio.logo_url;
     logoImg.style.display = 'block';
-    if (emoji) emoji.style.display = 'none';
+    emoji.style.display = 'none';
   } else {
-    logoImg.src = '/img/gamma_pos_logo.png';
-    logoImg.style.display = 'block';
-    if (emoji) emoji.style.display = 'none';
+    logoImg.style.display = 'none';
+    emoji.style.display = 'inline-block';
   }
 
-  nomTxt.textContent = negocio.nombre || 'GAMMA POS';
-  slogTxt.textContent = negocio.slogan || 'Punto de Venta Profesional';
+  nomTxt.textContent = negocio.nombre || 'PUNTO DE VENTA';
+  slogTxt.textContent = negocio.slogan || 'GastroBar Pro';
 }
 
 // ============================================================================
@@ -2842,12 +2571,6 @@ function cargarDevPortal() {
       btn.classList.add('active');
 
       const target = btn.dataset.devTab;
-      if (target !== 'db') {
-        if (typeof window.detenerMonitorDbDev === 'function') {
-          window.detenerMonitorDbDev();
-        }
-      }
-
       if (target === 'comercios') {
         document.getElementById('devTabComercios')?.classList.add('active');
         cargarNegociosDev();
@@ -2856,9 +2579,6 @@ function cargarDevPortal() {
         cargarUsuariosDev();
       } else if (target === 'db') {
         document.getElementById('devTabDb')?.classList.add('active');
-        if (typeof window.cargarMonitorDbDev === 'function') {
-          window.cargarMonitorDbDev();
-        }
       } else if (target === 'editor-pagina') {
         document.getElementById('devTabEditorPagina')?.classList.add('active');
         cargarPersonalizacionPagina();
@@ -2890,10 +2610,9 @@ window.poblarSelectorNegociosDev = async function() {
     if (!selector) return;
 
     const currentId = estado.negocioActual?.id || 1;
-    selector.innerHTML = negocios.map(n => {
-      const tagInactivo = Number(n.activo) === 0 ? ' (⛔ Inactivo)' : '';
-      return `<option value="${n.id}" ${n.id === currentId ? 'selected' : ''}>${n.nombre}${tagInactivo} (ID: ${n.id})</option>`;
-    }).join('');
+    selector.innerHTML = negocios.map(n => `
+      <option value="${n.id}" ${n.id === currentId ? 'selected' : ''}>${n.nombre} (ID: ${n.id})</option>
+    `).join('');
   } catch (e) {
     console.error('Error poblando selector de negocios dev:', e);
   }
@@ -3194,386 +2913,11 @@ window.cargarAuditoriaDev = async function() {
   }
 };
 
-// ============================================================================
-// MONITOR VISUAL DE BASE DE DATOS EN TIEMPO REAL (DEV PORTAL)
-// ============================================================================
-window._dbMonitorTimer = null;
-window._dbMonitorIntervalMs = 5000;
-window._dbMonitorTablasData = [];
-window._dbMonitorFiltroCat = 'todos';
-window._dbMonitorBusqueda = '';
-window._dbMonitorCargando = false;
-
-window.detenerMonitorDbDev = function() {
-  if (window._dbMonitorTimer) {
-    clearTimeout(window._dbMonitorTimer);
-    window._dbMonitorTimer = null;
-  }
-};
-
-window.cambiarIntervaloDbDev = function(ms) {
-  window._dbMonitorIntervalMs = Number(ms);
-  window.detenerMonitorDbDev();
-  if (window._dbMonitorIntervalMs > 0) {
-    window.cargarMonitorDbDev();
-  }
-};
-
-window.cargarMonitorDbDev = async function(manual = false) {
-  window.detenerMonitorDbDev();
-
-  const devDbTab = document.getElementById('devTabDb');
-  if (!devDbTab || !devDbTab.classList.contains('active')) {
-    return;
-  }
-
-  if (window._dbMonitorCargando && !manual) return;
-  window._dbMonitorCargando = true;
-
-  try {
-    const res = await fetch('/api/dev/db-monitor');
-    if (!res.ok) throw new Error('Error al conectar con la telemetría de BD');
-    const data = await res.json();
-
-    // 1. KPI 1: Tamaño Total
-    const kpiMb = document.getElementById('dbKpiTotalMb');
-    const kpiKb = document.getElementById('dbKpiTotalKb');
-    const kpiEngineTag = document.getElementById('dbKpiEngineTag');
-    if (kpiMb) kpiMb.textContent = data.total_mb_formatted || `${data.total_mb} MB`;
-    if (kpiKb) kpiKb.textContent = `Equivalente a ${data.total_kb_formatted || data.total_bytes} (${Number(data.total_bytes).toLocaleString()} bytes)`;
-    if (kpiEngineTag) kpiEngineTag.textContent = data.is_pg ? 'POSTGRESQL CLOUD' : 'SQLITE LOCAL';
-
-    // 2. KPI 2: Latencia Ping
-    const kpiPing = document.getElementById('dbKpiPingMs');
-    const kpiPingSub = document.getElementById('dbKpiPingSub');
-    const kpiPingBadge = document.getElementById('dbKpiPingBadge');
-    if (kpiPing) kpiPing.textContent = `${data.ping_ms} ms`;
-    if (kpiPingSub && kpiPingBadge) {
-      if (data.ping_ms < 80) {
-        kpiPingSub.innerHTML = '🟢 <span style="color:#4ade80;">Latencia ultrarrápida</span>';
-        kpiPingBadge.textContent = '⚡ ULTRA';
-        kpiPingBadge.style.color = '#4ade80';
-      } else if (data.ping_ms < 250) {
-        kpiPingSub.innerHTML = '🟢 <span style="color:#38bdf8;">Respuesta óptima Cloud</span>';
-        kpiPingBadge.textContent = '🟢 ÓPTIMA';
-        kpiPingBadge.style.color = '#38bdf8';
-      } else if (data.ping_ms < 600) {
-        kpiPingSub.innerHTML = '🟡 <span style="color:#fbbf24;">Latencia normal</span>';
-        kpiPingBadge.textContent = '🟡 NORMAL';
-        kpiPingBadge.style.color = '#fbbf24';
-      } else {
-        kpiPingSub.innerHTML = '🔴 <span style="color:#f87171;">Respuesta lenta</span>';
-        kpiPingBadge.textContent = '🔴 ALTA';
-        kpiPingBadge.style.color = '#f87171';
-      }
-    }
-
-    // 3. KPI 3: Motor & Versión
-    const kpiEngine = document.getElementById('dbKpiEngineName');
-    const kpiVersion = document.getElementById('dbKpiEngineVersion');
-    if (kpiEngine) kpiEngine.textContent = data.engine || 'Base de Datos';
-    if (kpiVersion) kpiVersion.textContent = data.version || 'Persistencia Activa';
-
-    // 4. KPI 4: Registros Totales
-    const kpiRows = document.getElementById('dbKpiTotalRows');
-    const kpiRowsSub = document.getElementById('dbKpiTotalRowsSub');
-    const kpiTablasTag = document.getElementById('dbKpiTablasTag');
-    if (kpiRows) kpiRows.textContent = (data.total_rows || 0).toLocaleString();
-    if (kpiRowsSub) kpiRowsSub.textContent = `Distribuidas en ${data.tables_count || 20} tablas activas`;
-    if (kpiTablasTag) kpiTablasTag.textContent = `${data.tables_count || 20} TABLAS`;
-
-    // 5. KPI 5: Conexiones & Uptime
-    const kpiConn = document.getElementById('dbKpiConnections');
-    const kpiUptime = document.getElementById('dbKpiUptime');
-    if (kpiConn) kpiConn.textContent = `${data.active_connections || 1} activas`;
-    if (kpiUptime) {
-      const up = data.uptime_seconds || 0;
-      const mins = Math.floor(up / 60);
-      const segs = up % 60;
-      kpiUptime.textContent = `Uptime proceso: ${mins}m ${segs}s`;
-    }
-
-    // 6. Barra de Almacenamiento
-    const barTotal = document.getElementById('dbStorageBarTotal');
-    const bar = document.getElementById('dbStorageDistributionBar');
-    const legend = document.getElementById('dbStorageLegend');
-    if (barTotal) barTotal.textContent = `Total Base: ${data.total_mb_formatted || (data.total_mb + ' MB')}`;
-
-    const catBytes = {};
-    const catColors = {
-      'Ventas': { cls: 'seg-ventas', dot: '#ec4899' },
-      'Catálogo': { cls: 'seg-catalogo', dot: '#06b6d4' },
-      'Inventario': { cls: 'seg-inventario', dot: '#10b981' },
-      'Salón': { cls: 'seg-salon', dot: '#f59e0b' },
-      'Seguridad': { cls: 'seg-seguridad', dot: '#8b5cf6' },
-      'Caja': { cls: 'seg-inventario', dot: '#34d399' },
-      'Sistema': { cls: 'seg-sistema', dot: '#64748b' },
-      'SaaS': { cls: 'seg-seguridad', dot: '#818cf8' },
-      'Fiscal': { cls: 'seg-sistema', dot: '#94a3b8' },
-      'Auditoría': { cls: 'seg-seguridad', dot: '#fb7185' },
-      'Personalización': { cls: 'seg-catalogo', dot: '#c084fc' }
-    };
-
-    let totalSumBytes = 0;
-    (data.tables || []).forEach(t => {
-      const cat = t.category || 'Sistema';
-      catBytes[cat] = (catBytes[cat] || 0) + (t.total_bytes || 0);
-      totalSumBytes += (t.total_bytes || 0);
-    });
-
-    if (totalSumBytes === 0) totalSumBytes = data.total_bytes || 1;
-
-    if (bar) {
-      let segmentsHtml = '';
-      for (const [cat, bytes] of Object.entries(catBytes)) {
-        const pct = Math.max(1.5, ((bytes / totalSumBytes) * 100)).toFixed(1);
-        const kb = (bytes / 1024).toFixed(1);
-        const mb = (bytes / (1024 * 1024)).toFixed(3);
-        const cfg = catColors[cat] || { cls: 'seg-otros', dot: '#475569' };
-        segmentsHtml += `<div class="db-bar-segment ${cfg.cls}" style="width: ${pct}%;" title="${cat}: ${mb} MB (${kb} KB - ${pct}%)"></div>`;
-      }
-      bar.innerHTML = segmentsHtml;
-    }
-
-    if (legend) {
-      let legendHtml = '';
-      for (const [cat, bytes] of Object.entries(catBytes)) {
-        const pct = ((bytes / totalSumBytes) * 100).toFixed(1);
-        const kb = (bytes / 1024).toFixed(1);
-        const mb = (bytes / (1024 * 1024)).toFixed(2);
-        const cfg = catColors[cat] || { dot: '#94a3b8' };
-        legendHtml += `
-          <div class="db-legend-item">
-            <span class="db-legend-dot" style="background:${cfg.dot};"></span>
-            <strong>${cat}:</strong>
-            <span class="db-legend-mb">${Number(mb) >= 0.01 ? mb + ' MB' : kb + ' KB'}</span>
-            <small style="color:#64748b;">(${pct}%)</small>
-          </div>
-        `;
-      }
-      legend.innerHTML = legendHtml;
-    }
-
-    // 7. Resumen Operativo
-    const sumOrd = document.getElementById('dbSumOrdenes');
-    const sumProd = document.getElementById('dbSumProductos');
-    const sumIns = document.getElementById('dbSumInsumos');
-    const sumUlt = document.getElementById('dbSumUltima');
-
-    if (sumOrd && data.summary) sumOrd.textContent = `${(data.summary.total_ordenes || 0).toLocaleString()} órdenes`;
-    if (sumProd && data.summary) sumProd.textContent = `${data.summary.total_productos || 0} platillos/bebidas`;
-    if (sumIns && data.summary) sumIns.textContent = `${data.summary.total_insumos || 0} insumos (${data.summary.total_movimientos || 0} movs)`;
-    if (sumUlt) {
-      if (data.ultima_orden) {
-        const hora = data.ultima_orden.fecha_apertura ? formatearFechaHoraCR(data.ultima_orden.fecha_apertura) : '-';
-        sumUlt.textContent = `${data.ultima_orden.numero_orden || 'ORD'} • ${hora}`;
-      } else {
-        sumUlt.textContent = 'En espera de órdenes';
-      }
-    }
-
-    // 8. Tablas y Estado
-    window._dbMonitorTablasData = data.tables || [];
-    window.renderizarTablasDbDev();
-
-    // 9. Footer & Timestamp
-    const lastUp = document.getElementById('dbLastUpdatedText');
-    if (lastUp) {
-      const d = new Date();
-      const horaStr = d.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      lastUp.innerHTML = `Última sincronización en vivo: <strong style="color:#f8fafc;">${horaStr}</strong> • Sincronizado con Supabase Cloud`;
-    }
-
-    if (manual && typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('✅ Base de datos sincronizada', `Tamaño actual: ${data.total_mb_formatted} • Latencia: ${data.ping_ms}ms`, 'success');
-    }
-
-  } catch (e) {
-    console.error('Error cargando monitor DB:', e);
-    const badgeText = document.getElementById('dbLiveStatusText');
-    if (badgeText) badgeText.textContent = 'ERROR CONEXIÓN';
-    if (manual && typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('Error de Conexión', 'No se pudo consultar la telemetría de la base de datos.', 'error');
-    }
-  } finally {
-    window._dbMonitorCargando = false;
-    if (window._dbMonitorIntervalMs > 0) {
-      window._dbMonitorTimer = setTimeout(() => {
-        const devTab = document.getElementById('devTabDb');
-        if (devTab && devTab.classList.contains('active')) {
-          window.cargarMonitorDbDev();
-        }
-      }, window._dbMonitorIntervalMs);
-    }
-  }
-};
-
-window.renderizarTablasDbDev = function() {
-  const tbody = document.getElementById('dbTablesTableBody');
-  if (!tbody) return;
-
-  const badgeCount = document.getElementById('dbTablesCountBadge');
-  let list = window._dbMonitorTablasData || [];
-
-  if (window._dbMonitorFiltroCat && window._dbMonitorFiltroCat !== 'todos') {
-    list = list.filter(t => (t.category || '').toLowerCase() === window._dbMonitorFiltroCat.toLowerCase());
-  }
-
-  if (window._dbMonitorBusqueda) {
-    const q = window._dbMonitorBusqueda.toLowerCase();
-    list = list.filter(t => 
-      (t.name || '').toLowerCase().includes(q) ||
-      (t.label || '').toLowerCase().includes(q) ||
-      (t.category || '').toLowerCase().includes(q)
-    );
-  }
-
-  if (badgeCount) {
-    badgeCount.textContent = `${list.length} de ${window._dbMonitorTablasData.length} tablas`;
-  }
-
-  if (list.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="9" style="text-align:center; padding:24px; color:#64748b;">
-          No se encontraron tablas con el filtro actual.
-        </td>
-      </tr>
-    `;
-    return;
-  }
-
-  tbody.innerHTML = list.map((t, idx) => {
-    const cat = t.category || 'Sistema';
-    const catClass = `cat-${cat}`;
-    const pct = Number(t.pct || 0);
-    const mbNum = Number(t.total_mb || 0);
-    const displayMb = mbNum >= 0.01 ? `${t.total_mb} MB` : `${t.total_kb} KB`;
-    const rows = Number(t.rows || 0).toLocaleString();
-    const dataKb = t.table_kb ? `${t.table_kb} KB` : '-';
-    const indexKb = t.index_kb ? `${t.index_kb} KB` : '-';
-
-    return `
-      <tr>
-        <td style="color:#64748b; font-weight:700; width:36px;">${idx + 1}</td>
-        <td>
-          <div class="db-tbl-name">
-            <span style="font-size:1.1rem;">${t.icon || '📄'}</span>
-            <div>
-              <div style="font-weight:700; color:#f8fafc;">${t.label || t.name}</div>
-              <span class="db-tbl-code">${t.name}</span>
-            </div>
-          </div>
-        </td>
-        <td>
-          <span class="db-cat-tag ${catClass}">${cat}</span>
-        </td>
-        <td style="text-align:right; font-weight:700; color:#f1f5f9; font-variant-numeric:tabular-nums;">
-          ${rows}
-        </td>
-        <td style="text-align:right; font-weight:800; color:#38bdf8; font-variant-numeric:tabular-nums;">
-          ${displayMb}
-        </td>
-        <td style="text-align:right; color:#94a3b8; font-size:0.78rem; font-variant-numeric:tabular-nums;">
-          ${dataKb}
-        </td>
-        <td style="text-align:right; color:#a78bfa; font-size:0.78rem; font-variant-numeric:tabular-nums;">
-          ${indexKb}
-        </td>
-        <td style="min-width:110px;">
-          <div class="db-tbl-bar-mini">
-            <div class="db-bar-fill-mini" style="width:${Math.max(4, pct * 3)}px; max-width:60px;"></div>
-            <span style="font-size:0.75rem; color:#94a3b8; font-weight:600;">${pct}%</span>
-          </div>
-        </td>
-        <td style="text-align:center;">
-          <span class="db-health-badge">
-            <span>🟢</span> Óptima
-          </span>
-        </td>
-      </tr>
-    `;
-  }).join('');
-};
-
-window.filtrarTablasDbDev = function(query) {
-  window._dbMonitorBusqueda = (query || '').trim();
-  window.renderizarTablasDbDev();
-};
-
-window.filtrarCategoriaDbDev = function(cat, btn) {
-  window._dbMonitorFiltroCat = cat;
-  document.querySelectorAll('#dbFilterPills .db-pill').forEach(p => p.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  window.renderizarTablasDbDev();
-};
-
-window.probarPingDbDev = async function() {
-  const btn = document.querySelector('.btn-db-ping');
-  if (btn) btn.disabled = true;
-
-  try {
-    const t0 = performance.now();
-    const res = await fetch('/api/dev/db-ping');
-    const elapsed = Math.round(performance.now() - t0);
-    const data = await res.json();
-    const serverPing = data.ping_ms || elapsed;
-
-    const pingElem = document.getElementById('dbKpiPingMs');
-    if (pingElem) {
-      pingElem.textContent = `${serverPing} ms`;
-      pingElem.style.transition = 'transform 0.2s';
-      pingElem.style.transform = 'scale(1.25)';
-      setTimeout(() => { pingElem.style.transform = 'scale(1)'; }, 300);
-    }
-
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚡ Latencia de Base de Datos', `Tiempo de respuesta SQL: ${serverPing} ms (${data.engine || 'Cloud'})`, 'success');
-    }
-  } catch (e) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('Error en Ping', 'No se pudo comunicar con el servidor SQL.', 'error');
-    }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-};
-
-window.optimizarDbDev = async function() {
-  const confirmar = confirm('¿Deseas ejecutar un ciclo de optimización (ANALYZE y actualización de estadísticas) en la base de datos? Esto ayuda al planificador de consultas a mantener el rendimiento óptimo.');
-  if (!confirmar) return;
-
-  const btn = document.querySelector('.btn-db-optimize');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Optimizando...';
-  }
-
-  try {
-    const res = await fetch('/api/dev/db-optimize', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al optimizar');
-
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🧹 Optimización Exitosa', `Base de datos optimizada en ${data.duration_ms} ms (${data.engine}).`, 'success');
-    }
-    await window.cargarMonitorDbDev(true);
-  } catch (e) {
-    alert('Error al optimizar la base de datos: ' + e.message);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '🧹 Optimizar DB';
-    }
-  }
-};
-
 async function cargarNegociosDev() {
   try {
     const res = await fetch('/api/dev/negocios');
     const negocios = await res.json();
     const grid = document.getElementById('devNegociosGrid');
-    if (!grid) return;
 
     grid.innerHTML = negocios.map(n => {
       let modulosCount = 11;
@@ -3586,23 +2930,15 @@ async function cargarNegociosDev() {
       }
 
       const esDev = (estado.usuarioActual?.rol || '').toLowerCase() === 'developer';
-      const esAdmin = ['developer', 'admin', 'administrador'].includes((estado.usuarioActual?.rol || '').toLowerCase());
-      const esActivo = n.activo !== 0 && n.activo !== '0';
-      const puedeEliminar = esDev;
-      const puedeDesactivar = esAdmin;
+      const puedeEliminar = esDev && Number(n.id) !== 1;
       const nombreEscapado = (n.nombre || '').replace(/'/g, "\\'");
 
       return `
-        <div class="negocio-card" style="${!esActivo ? 'opacity: 0.85; border: 1.5px dashed #ef4444; background: rgba(239, 68, 68, 0.04);' : ''}">
+        <div class="negocio-card">
           <div class="negocio-top">
             <img class="negocio-logo-img" src="${n.logo_url || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=100'}" alt="Logo" />
-            <div class="negocio-details" style="flex: 1;">
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-                <h4 style="margin: 0; ${!esActivo ? 'color: #fca5a5;' : ''}">${n.nombre}</h4>
-                <span class="badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; font-weight: 700; ${esActivo ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #059669;' : 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #dc2626;'}">
-                  ${esActivo ? '🟢 Activo' : '⛔ Inactivo'}
-                </span>
-              </div>
+            <div class="negocio-details">
+              <h4>${n.nombre}</h4>
               <small>${n.slogan || 'Restaurante & Bar'}</small>
             </div>
           </div>
@@ -3616,22 +2952,14 @@ async function cargarNegociosDev() {
             <button class="btn-open-pos-as" style="flex: 1 1 100%;" onclick="abrirPosComoNegocio(${n.id})">
               👀 Abrir POS como este Local
             </button>
-            <button class="btn-edit-negocio" style="flex: 1; background: #065f46; border-color: #047857; color: #a7f3d0; font-weight: 700;" onclick="duplicarNegocioDev(${n.id}, '${nombreEscapado}')" title="Clonar este restaurante con todas sus zonas, mesas, categorías y menú">
-              🐑 Duplicar
-            </button>
             <button class="btn-edit-negocio" style="flex: 1; background: #312e81; border-color: #4338ca; color: #e0e7ff; font-weight: 700;" onclick="abrirModalModulosNegocio(${n.id})">
               🧩 Licencia & Módulos
             </button>
             <button class="btn-edit-negocio" style="flex: 1;" onclick="editarNegocioDev(${n.id})">
               ✏️ Editar Datos
             </button>
-            ${puedeDesactivar ? `
-            <button class="btn-toggle-activo-negocio" style="flex: 1; background: ${esActivo ? 'rgba(234, 179, 8, 0.15)' : 'rgba(16, 185, 129, 0.15)'}; border: 1px solid ${esActivo ? '#ca8a04' : '#10b981'}; color: ${esActivo ? '#fde047' : '#6ee7b7'}; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="toggleActivarNegocioDev(${n.id}, ${esActivo ? 0 : 1}, '${nombreEscapado}')">
-              ${esActivo ? '⏸️ Desactivar' : '▶️ Activar'}
-            </button>
-            ` : ''}
             ${puedeEliminar ? `
-            <button class="btn-delete-negocio" style="flex: 1; background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7f1d1d'" onclick="eliminarNegocioDev(${n.id}, '${nombreEscapado}')">
+            <button class="btn-delete-negocio" style="flex: 1 1 100%; background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7f1d1d'" onclick="eliminarNegocioDev(${n.id}, '${nombreEscapado}')">
               🗑️ Eliminar Comercio
             </button>
             ` : ''}
@@ -3643,38 +2971,6 @@ async function cargarNegociosDev() {
     console.error('Error cargando negocios dev:', e);
   }
 }
-
-window.duplicarNegocioDev = async function(negocioId, nombreActual) {
-  const nombreNuevo = prompt(`¿Qué nombre deseas asignarle a la copia de "${nombreActual}"?`, `${nombreActual} (Copia Sandbox)`);
-  if (nombreNuevo === null) return;
-  if (!nombreNuevo.trim()) {
-    alert('El nombre del restaurante clonado no puede estar vacío.');
-    return;
-  }
-
-  try {
-    const res = await fetch(`/api/dev/negocios/${negocioId}/duplicar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombreNuevo: nombreNuevo.trim() })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al duplicar negocio');
-
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(`✅ ${data.message || 'Restaurante clonado exitosamente.'}`, 'success');
-    } else {
-      alert(`✅ ${data.message || 'Restaurante clonado exitosamente.'}`);
-    }
-
-    await cargarNegociosDev();
-    if (typeof window.poblarSelectorNegociosDev === 'function') {
-      await window.poblarSelectorNegociosDev();
-    }
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
-};
 
 // ============================================================================
 // CENTRO DE LICENCIAS Y MÓDULOS SAAS 2026 (DEVELOPER)
@@ -3918,51 +3214,47 @@ window.aplicarRestriccionesModulos = function() {
   const tieneQR = tieneModulo('menu_qr');
   const tieneAutoPago = tieneModulo('auto_pago_qr');
   const tieneOffline = tieneModulo('offline_first');
-  const tieneWhatsApp = tieneModulo('notificaciones_whatsapp');
-  const tieneIA = tieneModulo('inteligencia_artificial');
-  const tieneFacturacion = tieneModulo('facturacion_electronica');
 
   // 1. KDS Cocina & Barra
   document.querySelectorAll('.nav-pill[data-view="kds"], .nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds').forEach(el => {
     el.style.display = tieneKDS ? '' : 'none';
   });
-  if (!tieneKDS) {
-    const activePill = document.querySelector('.nav-pill.active');
-    if (activePill && activePill.dataset.view === 'kds') {
-      document.querySelector('.nav-pill[data-view="salon"]')?.click();
-    }
-    const viewKDS = document.getElementById('view-kds');
-    if (viewKDS && viewKDS.classList.contains('active')) {
-      viewKDS.classList.remove('active');
-      document.getElementById('view-salon')?.classList.add('active');
-      document.querySelector('.nav-pill[data-view="salon"]')?.classList.add('active');
-    }
-  }
 
-  // 2. Facturación Electrónica Legal & Express
-  document.querySelectorAll('.nav-pill[data-view="facturacion"], .nav-btn[data-view="facturacion"], #tabNavFacturacion, [data-view="facturacion"]').forEach(el => {
-    el.style.display = tieneFacturacion ? '' : 'none';
+  // 2. Split Bill (Dividir Cuentas)
+  const btnSplit = document.getElementById('btnAbrirSplitBill');
+  if (btnSplit) {
+    btnSplit.style.display = tieneSplit ? '' : 'none';
+  }
+  document.querySelectorAll('.btn-btn-cmd.split, .btn-split-trigger').forEach(el => {
+    el.style.display = tieneSplit ? '' : 'none';
   });
-  const subtabFact = document.getElementById('subtabBtn_facturacion');
-  if (subtabFact) subtabFact.style.display = tieneFacturacion ? '' : 'none';
-  const subtabContentFact = document.getElementById('subtabContent_facturacion');
-  if (subtabContentFact && !tieneFacturacion) subtabContentFact.style.display = 'none';
 
-  if (!tieneFacturacion) {
-    const activePill = document.querySelector('.nav-pill.active');
-    if (activePill && activePill.dataset.view === 'facturacion') {
-      document.querySelector('.nav-pill[data-view="salon"]')?.click();
-    }
-    const viewFact = document.getElementById('view-facturacion');
-    if (viewFact && viewFact.classList.contains('active')) {
-      viewFact.classList.remove('active');
-      document.getElementById('view-salon')?.classList.add('active');
-      document.querySelector('.nav-pill[data-view="salon"]')?.classList.add('active');
+  // 3. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
+  const btnMoverUnir = document.getElementById('btnAbrirMoverUnirModal');
+  if (btnMoverUnir) {
+    btnMoverUnir.style.display = tieneMesasPromos ? '' : 'none';
+  }
+  const hhSwitch = document.getElementById('hhSwitchInput');
+  if (hhSwitch) {
+    if (!tieneMesasPromos) {
+      hhSwitch.disabled = true;
+      const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
+      if (hhBar) {
+        hhBar.style.opacity = '0.5';
+        hhBar.title = 'Módulo Mesas Avanzadas & Happy Hour no contratado';
+      }
+    } else {
+      hhSwitch.disabled = false;
+      const hhBar = hhSwitch.closest('.hh-status-bar, .setting-row');
+      if (hhBar) {
+        hhBar.style.opacity = '1';
+        hhBar.title = '';
+      }
     }
   }
 
-  // 3. Inventario & Escandallos & Kárdex
-  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-panel-card.card-kardex, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], .admin-view-tab[data-view="kardex"], #tabNavInventario').forEach(el => {
+  // 4. Inventario & Escandallos & Kárdex
+  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-panel-card.card-kardex, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], .admin-view-tab[data-view="kardex"]').forEach(el => {
     el.style.display = tieneInventario ? '' : 'none';
   });
   const btnSubRecetas = document.getElementById('tabBtnInvRecetas');
@@ -3972,85 +3264,18 @@ window.aplicarRestriccionesModulos = function() {
   if (btnSubKardex) btnSubKardex.style.display = tieneInventario ? '' : 'none';
   if (btnSubCompras) btnSubCompras.style.display = tieneInventario ? '' : 'none';
 
-  if (!tieneInventario) {
-    const activePill = document.querySelector('.nav-pill.active');
-    if (activePill && ['inventario', 'recetas', 'kardex'].includes(activePill.dataset.view)) {
-      document.querySelector('.nav-pill[data-view="salon"]')?.click();
-    }
-    const viewInv = document.getElementById('view-inventario');
-    if (viewInv && viewInv.classList.contains('active')) {
-      viewInv.classList.remove('active');
-      document.getElementById('view-salon')?.classList.add('active');
-      document.querySelector('.nav-pill[data-view="salon"]')?.classList.add('active');
-    }
-  }
-
-  // 4. Split Bill (Dividir Cuentas)
-  const btnSplit = document.getElementById('btnAbrirSplitBill');
-  if (btnSplit) {
-    btnSplit.style.display = tieneSplit ? '' : 'none';
-  }
-  document.querySelectorAll('.btn-btn-cmd.split, .btn-split-trigger, .btn-cmd.split, .btn-split').forEach(el => {
-    el.style.display = tieneSplit ? '' : 'none';
-  });
-  if (!tieneSplit) {
-    document.getElementById('modalSplitBill')?.classList.remove('active');
-  }
-
-  // 5. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
-  document.querySelectorAll('#btnAbrirMoverUnirModal, .btn-mover-unir, .btn-unir-mesas, .btn-mover-mesa').forEach(el => {
-    el.style.display = tieneMesasPromos ? '' : 'none';
-  });
-  document.querySelectorAll('.admin-panel-card.card-happyhour, #btnAdminHappyHour, #btnToggleHappyHour, .hh-status-bar, #btnHappyHourTop, .btn-happyhour-top').forEach(el => {
-    el.style.display = tieneMesasPromos ? '' : 'none';
-  });
-  if (!tieneMesasPromos) {
-    document.getElementById('modalAdminHappyHour')?.classList.remove('active');
-    document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
-  }
-
-  // 6. Menú QR & Auto-Pago
+  // 5. Menú QR & Auto-Pago
   const btnVerQRs = document.getElementById('btnVerTodosQRs');
   if (btnVerQRs) btnVerQRs.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
 
   const btnQrMesa = document.getElementById('btnVerQrMesaCliente');
   if (btnQrMesa) btnQrMesa.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
 
-  document.querySelectorAll('.btn-qr-mesa, .card-qr, .qr-card, #btnGenerarQR').forEach(el => {
-    el.style.display = (tieneQR || tieneAutoPago) ? '' : 'none';
-  });
-
-  // 7. Auto-Pago QR & SINPE Móvil
-  document.querySelectorAll('.btn-autopago-qr, .seccion-autopago-qr, #btnAutoPagoSinpe, .btn-sinpe-qr').forEach(el => {
-    el.style.display = tieneAutoPago ? '' : 'none';
-  });
-
-  // 8. Offline-First
+  // 6. Offline-First
   const netBadge = document.getElementById('netStatusBadge');
   if (netBadge) {
     netBadge.style.display = tieneOffline ? '' : 'none';
   }
-  document.querySelectorAll('.offline-indicator, #btnSyncOffline').forEach(el => {
-    el.style.display = tieneOffline ? '' : 'none';
-  });
-
-  // 9. Notificaciones WhatsApp & Bot
-  document.querySelectorAll('.btn-whatsapp, .btn-share-wa, #btnAdminWhatsApp, .card-whatsapp, .btn-notif-whatsapp, .whatsapp-section').forEach(el => {
-    el.style.display = tieneWhatsApp ? '' : 'none';
-  });
-
-  // 10. Inteligencia Artificial Gastronómica (Voice POS & Upselling)
-  document.querySelectorAll('#btnVoicePOS, #btnDictarComanda, .btn-voice-pos, #btnSugerenciasIA, .card-ia, .ai-badge, .btn-ia-suggest, .seccion-ia').forEach(el => {
-    el.style.display = tieneIA ? '' : 'none';
-  });
-
-  // 11. Descuentos & Cortesías con PIN y Auditoría
-  const tieneDescuentos = tieneModulo('descuentos_cortesias_pin');
-  const btnDesc = document.getElementById('btnAbrirModalDescuento');
-  if (btnDesc) btnDesc.style.display = tieneDescuentos ? '' : 'none';
-  document.querySelectorAll('.btn-descuento-trigger, #btnAbrirModalDescuento').forEach(el => {
-    el.style.display = tieneDescuentos ? '' : 'none';
-  });
 };
 
 window.abrirPosComoNegocio = async function(negocioId) {
@@ -4059,16 +3284,6 @@ window.abrirPosComoNegocio = async function(negocioId) {
     const negocios = await res.json();
     const neg = negocios.find(n => n.id === negocioId);
     if (neg) {
-      if (Number(neg.activo) === 0) {
-        const reactivar = confirm(`⚠️ El comercio "${neg.nombre}" se encuentra actualmente DESACTIVADO / INACTIVO.\n\n¿Deseas reactivarlo ahora para abrir el Punto de Venta?`);
-        if (reactivar) {
-          await toggleActivarNegocioDev(neg.id, 1, neg.nombre, false);
-          neg.activo = 1;
-        } else {
-          return;
-        }
-      }
-
       estado.negocioActual = neg;
       sessionStorage.setItem('pos_negocio', JSON.stringify(neg));
       actualizarBrandingNegocio(neg);
@@ -4098,11 +3313,6 @@ window.abrirPosComoNegocio = async function(negocioId) {
       if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
       if (typeof marcarCambiosPendientes === 'function') marcarCambiosPendientes(false);
 
-      // Resetear estado local activo para evitar mezclar datos del comercio previo
-      estado.mesaActiva = null;
-      estado.comandasKDS = [];
-      estado.mesas = [];
-
       // Cargar personalización y piso únicos para este comercio específico
       cargarPersonalizacionPagina(neg.id);
       cargarPisoSalonDesdeBackend(neg.id);
@@ -4125,8 +3335,6 @@ window.abrirModalNuevoNegocio = function() {
   document.getElementById('devNegocioSlogan').value = '';
   document.getElementById('devNegocioLogoUrl').value = '';
   document.getElementById('devNegocioTelefono').value = '';
-  const elActivo = document.getElementById('devNegocioActivo');
-  if (elActivo) elActivo.value = '1';
   document.getElementById('negocioModalTitulo').textContent = '🏬 Registrar Nuevo Comercio';
   document.getElementById('modalDevNegocio').classList.add('active');
 };
@@ -4142,44 +3350,8 @@ window.editarNegocioDev = async function(negocioId) {
   document.getElementById('devNegocioSlogan').value = n.slogan || '';
   document.getElementById('devNegocioLogoUrl').value = n.logo_url || '';
   document.getElementById('devNegocioTelefono').value = n.telefono || '';
-  const elActivo = document.getElementById('devNegocioActivo');
-  if (elActivo) elActivo.value = (Number(n.activo) === 0 ? '0' : '1');
   document.getElementById('negocioModalTitulo').textContent = '✏️ Editar Comercio & Logo';
   document.getElementById('modalDevNegocio').classList.add('active');
-};
-
-window.toggleActivarNegocioDev = async function(negocioId, nuevoEstado, nombre, pedirConfirmacion = true) {
-  const idNum = Number(negocioId);
-  const accion = nuevoEstado === 1 ? 'activar' : 'desactivar';
-  if (pedirConfirmacion) {
-    const confirmado = confirm(`¿Estás seguro de que deseas ${accion} el comercio "${nombre || ('ID ' + idNum)}"?`);
-    if (!confirmado) return;
-  }
-
-  try {
-    const res = await fetch(`/api/dev/negocios/${idNum}/toggle-activo`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-rol': estado.usuarioActual?.rol || 'developer'
-      },
-      body: JSON.stringify({ activo: nuevoEstado })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Error al ${accion} el comercio`);
-
-    if (pedirConfirmacion) {
-      alert(`✅ ${data.message || 'Estado del comercio actualizado exitosamente.'}`);
-    }
-    cargarNegociosDev();
-    if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
-    if (estado.negocioActual && Number(estado.negocioActual.id) === idNum) {
-      estado.negocioActual.activo = nuevoEstado;
-      sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
-    }
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
 };
 
 window.eliminarNegocioDev = async function(negocioId, nombre) {
@@ -4223,8 +3395,6 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
   const slogan = document.getElementById('devNegocioSlogan').value.trim();
   const logo_url = document.getElementById('devNegocioLogoUrl').value.trim();
   const telefono = document.getElementById('devNegocioTelefono').value.trim();
-  const elActivo = document.getElementById('devNegocioActivo');
-  const activo = elActivo ? parseInt(elActivo.value) : 1;
 
   if (!nombre) {
     alert('El nombre del negocio es obligatorio.');
@@ -4238,13 +3408,12 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
     const res = await fetch(endpoint, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, slogan, logo_url, telefono, activo })
+      body: JSON.stringify({ nombre, slogan, logo_url, telefono })
     });
     const data = await res.json();
     alert('🏬 ¡Comercio guardado exitosamente!');
     document.getElementById('modalDevNegocio').classList.remove('active');
     cargarNegociosDev();
-    if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
     if (estado.negocioActual && estado.negocioActual.id === Number(id)) {
       estado.negocioActual = data;
       actualizarBrandingNegocio(data);
@@ -4587,10 +3756,7 @@ document.getElementById('btnGuardarFotoBoton').addEventListener('click', async (
 // ============================================================================
 async function cargarMenuDesdeBackend() {
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/menu?negocio_id=${nid}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
+    const res = await fetch('/api/menu');
     const data = await res.json();
     estado.categorias = data.categorias || [];
     estado.productos = (data.productos || []).map(p => ({
@@ -4631,42 +3797,14 @@ async function cargarMenuDesdeBackend() {
 
 window.categoriaActivaComandero = null; // null = Vista de Categorías Principal
 
-function obtenerModoVistaMenuActual() {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-  const guardado = localStorage.getItem('pos_vista_menu_' + nid);
-  if (guardado) return guardado;
-  // Bistro y Grill La Terraza (negocio_id === 2) inicia en vista con fotos grandes ('large')
-  return (Number(nid) === 2) ? 'large' : 'clasica';
-}
-window.obtenerModoVistaMenuActual = obtenerModoVistaMenuActual;
-
-function cambiarModoVistaMenuComandero(modo) {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-  localStorage.setItem('pos_vista_menu_' + nid, modo);
-
-  const btnFotos = document.getElementById('btnMenuVistaFotos');
-  const btnClasica = document.getElementById('btnMenuVistaClasica');
-  if (btnFotos) btnFotos.classList.toggle('active', modo === 'large');
-  if (btnClasica) btnClasica.classList.toggle('active', modo === 'clasica');
-
-  filtrarProductosComandero();
-}
-window.cambiarModoVistaMenuComandero = cambiarModoVistaMenuComandero;
-
 function renderCatalogoComandero() {
   const chipsContainer = document.getElementById('comCategoryChips');
   if (chipsContainer) {
     chipsContainer.innerHTML = `
-      <button class="cat-chip ${window.categoriaActivaComandero === null ? 'active' : ''}" onclick="volverACategoriasComandero(this)">📂 Todas</button>
+      <button class="cat-chip ${window.categoriaActivaComandero === null ? 'active' : ''}" onclick="volverACategoriasComandero(this)">📂 Categorías</button>
       ${(estado.categorias || []).map(c => `<button class="cat-chip ${window.categoriaActivaComandero === c.id ? 'active' : ''}" onclick="seleccionarCategoriaComandero(${c.id}, this)">${c.icono || '🍽️'} ${c.nombre}</button>`).join('')}
     `;
   }
-
-  const modoVista = obtenerModoVistaMenuActual();
-  const btnFotos = document.getElementById('btnMenuVistaFotos');
-  const btnClasica = document.getElementById('btnMenuVistaClasica');
-  if (btnFotos) btnFotos.classList.toggle('active', modoVista === 'large');
-  if (btnClasica) btnClasica.classList.toggle('active', modoVista === 'clasica');
 
   const txtSearch = document.getElementById('txtBuscarProductoComandero');
   if (txtSearch) txtSearch.value = '';
@@ -4718,8 +3856,6 @@ window.filtrarProductosComandero = function() {
   const btnClear = document.getElementById('btnClearSearchComandero');
   if (btnClear) btnClear.style.display = query ? 'inline-block' : 'none';
 
-  const modoVista = (typeof obtenerModoVistaMenuActual === 'function') ? obtenerModoVistaMenuActual() : 'clasica';
-
   // 1. Si hay búsqueda por texto libre: filtra sobre todo el menú
   if (query) {
     const palabras = query.split(/\s+/);
@@ -4731,14 +3867,8 @@ window.filtrarProductosComandero = function() {
     return;
   }
 
-  // 2. Si no hay búsqueda y no hay categoría seleccionada
+  // 2. Si no hay búsqueda y no hay categoría seleccionada -> Vista de Categorías
   if (window.categoriaActivaComandero === null || window.categoriaActivaComandero === 'categorias') {
-    if (modoVista === 'large') {
-      // En vista de fotos grandes, mostrar todos los productos directamente con categorías arriba
-      const prods = (estado.productos || []).slice().sort((a, b) => (Number(b.total_vendidos) || 0) - (Number(a.total_vendidos) || 0));
-      renderGridProductos(prods, false, null);
-      return;
-    }
     renderGridCategorias();
     return;
   }
@@ -4763,7 +3893,6 @@ window.limpiarBuscadorComandero = function() {
 function renderGridCategorias() {
   const grid = document.getElementById('comProductsGrid');
   if (!grid) return;
-  grid.classList.remove('grid-view-large');
   grid.classList.add('categories-view');
 
   const cats = estado.categorias || [];
@@ -4772,13 +3901,14 @@ function renderGridCategorias() {
   const cardsHtml = cats.map(cat => {
     const totalEnCat = prods.filter(p => p.catId === cat.id || p.categoria_id === cat.id).length;
     return `
-      <div class="com-cat-card" onclick="seleccionarCategoriaComandero(${cat.id})" title="Ver platillos de ${cat.nombre}">
+      <div class="com-cat-card" onclick="seleccionarCategoriaComandero(${cat.id})" title="Ver platillos de ${escapeHtml(cat.nombre)}" style="position: relative;">
+        <button class="btn-card-del-cat" onclick="event.stopPropagation(); confirmarEliminarCategoria(${cat.id})" title="Eliminar categoría ${escapeHtml(cat.nombre)}" style="position: absolute; top: 8px; right: 8px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; z-index: 5;" onmouseover="this.style.background='rgba(239,68,68,0.35)'" onmouseout="this.style.background='rgba(239,68,68,0.15)'">🗑️</button>
         <div class="com-cat-icon-badge">${cat.icono || '🍽️'}</div>
         <div class="com-cat-info">
-          <h4 class="com-cat-title">${cat.nombre}</h4>
+          <h4 class="com-cat-title">${escapeHtml(cat.nombre)}</h4>
           <span class="com-cat-count">${totalEnCat} platillos / bebidas</span>
         </div>
-        <span class="com-cat-arrow">➔</span>
+        <span class="com-cat-arrow" style="margin-right: 28px;">➔</span>
       </div>
     `;
   }).join('');
@@ -4801,23 +3931,19 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
   if (!grid) return;
   grid.classList.remove('categories-view');
 
-  const modoVista = (typeof obtenerModoVistaMenuActual === 'function') ? obtenerModoVistaMenuActual() : 'clasica';
-  if (modoVista === 'large') {
-    grid.classList.add('grid-view-large');
-  } else {
-    grid.classList.remove('grid-view-large');
-  }
-
   let headerNavHtml = '';
   if (!isSearchMode && catId) {
     const cat = (estado.categorias || []).find(c => c.id === catId);
     const catNombre = cat ? `${cat.icono || '🍽️'} ${cat.nombre}` : 'Categoría';
     headerNavHtml = `
-      <div class="com-cat-nav-bar" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 10px 14px; border-radius: 12px; margin-bottom: 6px; border: 1px solid #334155;">
+      <div class="com-cat-nav-bar" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 10px 14px; border-radius: 12px; margin-bottom: 6px; border: 1px solid #334155; flex-wrap: wrap; gap: 8px;">
         <button class="btn-volver-categorias" onclick="volverACategoriasComandero()">
-          ⬅️ Ver Todas las Categorías
+          ⬅️ Volver a Categorías
         </button>
-        <strong style="color: #f8fafc; font-size: 0.95rem;">${catNombre} (${prods.length} productos)</strong>
+        <strong style="color: #f8fafc; font-size: 0.95rem;">${catNombre}</strong>
+        <button class="btn-eliminar-cat-nav" onclick="confirmarEliminarCategoria(${catId})" style="background: rgba(239, 68, 68, 0.18); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; font-weight: 700; display: flex; align-items: center; gap: 6px;" title="Eliminar esta categoría">
+          🗑️ Eliminar Categoría
+        </button>
       </div>
     `;
   } else if (isSearchMode) {
@@ -4880,41 +4006,9 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     const isAgotado = Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1';
     const esCerveza = Boolean(Number(p.happyHour) === 1 || p.happyHour === true || Number(p.happy_hour) === 1 || p.happy_hour === true || p.catId === 4 || p.categoria_id === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(p.nombre || ''));
     const isPromo = estado.happyHourActivo && esCerveza;
-
-    const cat = (estado.categorias || []).find(c => c.id === (p.catId || p.categoria_id));
-    const catBadge = cat ? `${cat.icono || '🍽️'} ${cat.nombre}` : (p.categoria || 'Menú');
-
-    // Blindaje de fotos: Mostrar solo la imagen real asignada explícitamente por el usuario
-    const imgUrl = (p.imagen_url && String(p.imagen_url).trim() !== '') ? p.imagen_url : null;
-
-    if (modoVista === 'large') {
-      const imgLargeHtml = imgUrl 
-        ? `<img class="prod-card-large-img" src="${imgUrl}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
-        : `<div class="prod-card-large-no-img">${cat?.icono || '🍽️'}</div>`;
-
-      const btnEditLargeHtml = esAdminODev
-        ? `<button class="prod-card-large-edit" onclick="event.stopPropagation(); abrirModalEditarProducto(${p.id});" title="Editar producto y vincular al Kárdex">✏️</button>`
-        : '';
-
-      return `
-        <div class="prod-card-large ${isAgotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" title="${escapeHtml(p.nombre)} - ${formatCRC(p.precio)}">
-          ${btnEditLargeHtml}
-          <div class="prod-card-large-media">
-            ${imgLargeHtml}
-            <span class="prod-card-large-price">${formatCRC(p.precio)}</span>
-            ${isPromo ? '<span class="prod-card-large-promo">🍸 2x1</span>' : ''}
-          </div>
-          <div class="prod-card-large-info">
-            <h4 class="prod-card-large-name">${escapeHtml(p.nombre)}</h4>
-          </div>
-        </div>
-      `;
-    }
-
-    // Modo clásico estándar
-    const imgHtml = imgUrl 
-      ? `<img class="prod-card-thumb" src="${imgUrl}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
-      : `<div class="prod-card-no-thumb">${cat?.icono || '🍽️'}</div>`;
+    const imgHtml = p.imagen_url 
+      ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />`
+      : `<div class="prod-card-no-thumb">🍽️</div>`;
 
     const btnEditHtml = esAdminODev
       ? `<button class="btn-card-edit-prod" onclick="event.stopPropagation(); abrirModalEditarProducto(${p.id});" title="Editar producto y vincular al Kárdex">✏️</button>`
@@ -4926,30 +4020,20 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
         ${imgHtml}
         ${isPromo ? '<span class="prod-badge-promo">🍸 2x1</span>' : ''}
         <div class="prod-card-content">
-          <span class="prod-card-name">${escapeHtml(p.nombre)}</span>
+          <span class="prod-card-name">${p.nombre}</span>
           <span class="prod-card-price">${formatCRC(p.precio)}</span>
         </div>
       </div>
     `;
   }).join('');
 
-  const btnAddHtml = esAdminODev ? (
-    modoVista === 'large'
-      ? `
-        <div class="prod-card-large-add" onclick="abrirModalNuevoProducto()" title="Crear nuevo producto y precio">
-          <span style="font-size: 2.5rem; color: #10b981; margin-bottom: 8px;">➕</span>
-          <strong style="color: #f8fafc; font-size: 1.05rem;">Crear Producto</strong>
-          <small style="color: #94a3b8; margin-top: 4px;">Nuevo ítem y precio</small>
-        </div>
-      `
-      : `
-        <div class="prod-card-one-tap" onclick="abrirModalNuevoProducto()" style="border: 2px dashed rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 100px; border-radius: 12px; transition: all 0.2s ease;" title="Agregar nuevo producto y precio">
-          <span style="font-size: 1.6rem; margin-bottom: 4px;">➕</span>
-          <span style="font-weight: 700; font-size: 0.85rem; color: #10b981; text-align: center;">+ Producto</span>
-          <small style="color: #94a3b8; font-size: 0.72rem;">Nuevo precio</small>
-        </div>
-      `
-  ) : '';
+  const btnAddHtml = esAdminODev ? `
+    <div class="prod-card-one-tap" onclick="abrirModalNuevoProducto()" style="border: 2px dashed rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 100px; border-radius: 12px; transition: all 0.2s ease;" title="Agregar nuevo producto y precio">
+      <span style="font-size: 1.6rem; margin-bottom: 4px;">➕</span>
+      <span style="font-weight: 700; font-size: 0.85rem; color: #10b981; text-align: center;">+ Producto</span>
+      <small style="color: #94a3b8; font-size: 0.72rem;">Nuevo precio</small>
+    </div>
+  ` : '';
 
   grid.innerHTML = headerNavHtml + specialCardsHtml + prodsHtml + btnAddHtml;
 }
@@ -5083,6 +4167,98 @@ window.cerrarModalSeleccionVariante = function() {
 window.seleccionarOpcionVariante = function(prodId) {
   cerrarModalSeleccionVariante();
   agregarAlTicketOneTap(prodId);
+};
+
+// ============================================================================
+// GESTIÓN Y ELIMINACIÓN DE CATEGORÍAS DEL MENÚ
+// ============================================================================
+window.confirmarEliminarCategoria = async function(catId) {
+  const cat = (estado.categorias || []).find(c => Number(c.id) === Number(catId));
+  if (!cat) {
+    return alert('Categoría no encontrada');
+  }
+
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '🗑️',
+      titulo: 'Eliminar Categoría del Menú',
+      subtitulo: 'Acceso Restringido',
+      mensaje: `Ingresa el PIN de Administrador (1234) para autorizar la eliminación de la categoría "${cat.nombre}":`
+    });
+    if (!pin) return;
+    window._pinSupervisorActivo = pin;
+  }
+
+  const prods = (estado.productos || []).filter(p => Number(p.catId || p.categoria_id) === Number(catId));
+
+  const elId = document.getElementById('txtEliminarCatId');
+  const elNom = document.getElementById('lblEliminarCatNombre');
+  const elIcono = document.getElementById('lblEliminarCatIcono');
+  const elDestino = document.getElementById('lblEliminarCatDestino');
+  const elCount = document.getElementById('lblEliminarCatProductosCount');
+
+  if (elId) elId.value = cat.id;
+  if (elNom) elNom.textContent = cat.nombre;
+  if (elIcono) elIcono.textContent = `${cat.icono || '🍽️'} ${cat.nombre}`;
+  if (elDestino) elDestino.textContent = (cat.destino || 'cocina').toUpperCase();
+  if (elCount) elCount.textContent = `${prods.length} platillos / productos`;
+
+  window.cerrarTodosLosModales('modalConfirmarEliminarCategoria');
+  const modal = document.getElementById('modalConfirmarEliminarCategoria');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    window._modalActivoId = 'modalConfirmarEliminarCategoria';
+  }
+};
+
+window.cerrarModalEliminarCategoria = function() {
+  const modal = document.getElementById('modalConfirmarEliminarCategoria');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+window.ejecutarEliminarCategoriaConfirmada = async function() {
+  const id = document.getElementById('txtEliminarCatId')?.value;
+  if (!id) return;
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-rol': rol
+    };
+    if (window._pinSupervisorActivo) {
+      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+    }
+
+    const res = await fetch(`/api/categorias/${id}`, {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({
+        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No se pudo eliminar la categoría');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`🗑️ ${data.message || 'Categoría eliminada correctamente'}`, 'success');
+    } else {
+      alert(`🗑️ ${data.message || 'Categoría eliminada correctamente'}`);
+    }
+
+    window.cerrarModalEliminarCategoria();
+    window.volverACategoriasComandero();
+    await cargarMenuDesdeBackend();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
 };
 
 
@@ -5436,10 +4612,7 @@ window.agregarAlTicketOneTap = async function(prodId) {
 // ============================================================================
 async function cargarMesasDesdeBackend() {
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/mesas?negocio_id=${nid}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
+    const res = await fetch('/api/mesas');
     const data = await res.json();
     estado.zonas = data.zonas || [];
     estado.mesas = (data.mesas || []).map(m => {
@@ -5472,11 +4645,7 @@ async function cargarMesasDesdeBackend() {
         grupo_mesas: m.grupo_mesas || null,
         es_mesa_agrupada: Boolean(m.es_mesa_agrupada),
         es_mesa_secundaria_unida: Boolean(m.es_mesa_secundaria_unida),
-        unida_a_numero: m.unida_a_numero || null,
-        minutos_inactiva: m.minutos_inactiva || 0,
-        minutos_comida_lista: m.minutos_comida_lista || 0,
-        semaforo_alerta: m.semaforo_alerta || 'normal',
-        semaforo_activo: Boolean(m.semaforo_activo)
+        unida_a_numero: m.unida_a_numero || null
       };
     });
 
@@ -5566,265 +4735,10 @@ function aplicarEscalaTextoMesa(el, w, h, esSilla) {
 
   const totalEl = el.querySelector('.m-total');
   if (totalEl) totalEl.style.fontSize = totalFontSize;
-
-  const clienteTag = el.querySelector('.m-cliente-tag');
-  if (clienteTag) clienteTag.style.fontSize = subFontSize;
 }
-
-function cambiarModoVistaSalon(modo) {
-  estado.vistaSalonModo = modo || 'plano';
-  try {
-    localStorage.setItem('pos_vista_salon', estado.vistaSalonModo);
-  } catch (_) {}
-
-  const btnPlano = document.getElementById('btnVistaPlano');
-  const btnGrilla = document.getElementById('btnVistaGrilla');
-  const canvas = document.getElementById('mesasCanvasView');
-  const grid = document.getElementById('mesasGridView');
-
-  if (btnPlano) btnPlano.classList.toggle('active', estado.vistaSalonModo === 'plano');
-  if (btnGrilla) btnGrilla.classList.toggle('active', estado.vistaSalonModo === 'grilla');
-
-  if (estado.vistaSalonModo === 'grilla') {
-    if (canvas) canvas.style.display = 'none';
-    if (grid) grid.style.display = 'flex';
-    renderGrillaOrdenada();
-  } else {
-    if (grid) grid.style.display = 'none';
-    if (canvas) canvas.style.display = 'block';
-    renderSalón();
-  }
-}
-window.cambiarModoVistaSalon = cambiarModoVistaSalon;
-
-function renderGrillaOrdenada(filtroZona = null) {
-  const gridContainer = document.getElementById('mesasGridView');
-  const canvas = document.getElementById('mesasCanvasView');
-  if (!gridContainer) return;
-  gridContainer.innerHTML = '';
-
-  if (estado.pisoSalonActual) {
-    aplicarClasePisoSalon(estado.pisoSalonActual);
-  }
-
-  const pisoActivo = estado.pisoActual || 1;
-  actualizarBotonPisoSalon();
-
-  const mesasPiso = estado.mesas.filter(m => {
-    const mesaPiso = m.piso ? Number(m.piso) : (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
-    return mesaPiso === pisoActivo;
-  });
-
-  if (mesasPiso.length === 0) {
-    gridContainer.innerHTML = `
-      <div style="padding: 40px; text-align: center; color: #94a3b8; font-size: 1.1rem; width: 100%;">
-        ℹ️ No hay mesas registradas en este piso (${pisoActivo === 2 ? 'Segundo Piso' : 'Primer Piso'}).
-      </div>
-    `;
-    return;
-  }
-
-  // Agrupar mesas por zonas registradas correspondientes a este piso
-  const mapaZonas = new Map();
-
-  // 1. Inicializar zonas maestras que correspondan al piso activo
-  if (Array.isArray(estado.zonas) && estado.zonas.length > 0) {
-    estado.zonas.forEach(z => {
-      const zNom = (z.nombre || '').trim();
-      if (!zNom) return;
-      const esZonaPiso2 = z.id === 5 || zNom.toLowerCase().includes('segundo');
-      if (pisoActivo === 2 && esZonaPiso2) {
-        if (!mapaZonas.has(zNom)) mapaZonas.set(zNom, []);
-      } else if (pisoActivo === 1 && !esZonaPiso2) {
-        if (!mapaZonas.has(zNom)) mapaZonas.set(zNom, []);
-      }
-    });
-  }
-
-  // 2. Colocar las mesas del piso activo en su respectiva zona
-  mesasPiso.forEach(m => {
-    let zNom = (m.zonaNombre || m.zona || (pisoActivo === 2 ? 'Segundo Piso' : 'Salón Principal')).trim();
-    if (!mapaZonas.has(zNom)) {
-      mapaZonas.set(zNom, []);
-    }
-    mapaZonas.get(zNom).push(m);
-  });
-
-  // 3. Renderizar cada columna de zona del piso activo
-  mapaZonas.forEach((mesasList, zNombre) => {
-    const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const zNomNorm = normalizar(zNombre);
-    const filtroNorm = filtroZona ? normalizar(filtroZona) : '';
-
-    const esBarraZona = zNomNorm.includes('barra') || zNomNorm.includes('bar');
-
-    const col = document.createElement('div');
-    col.className = `zone-grid-column ${mesasList && mesasList.length > 6 ? 'wide-column' : ''}`;
-    col.dataset.zonaNombre = zNomNorm;
-    col.id = `zone-col-${zNomNorm}`;
-
-    if (filtroNorm && filtroNorm !== 'todas' && filtroNorm !== 'segundo' && filtroNorm !== 'segundopiso') {
-      if (!zNomNorm.includes(filtroNorm) && !filtroNorm.includes(zNomNorm)) {
-        col.style.opacity = '0.35';
-      } else {
-        col.style.borderColor = 'rgba(56, 189, 248, 0.6)';
-        col.style.boxShadow = '0 0 20px rgba(56, 189, 248, 0.25)';
-      }
-    }
-
-    const countMesas = mesasList ? mesasList.length : 0;
-    const header = document.createElement('div');
-    header.className = 'zone-grid-header';
-    header.innerHTML = `
-      <h4 class="zone-grid-title">${escapeHtml(zNombre.toUpperCase())}</h4>
-      <span class="zone-grid-count">${countMesas} ${countMesas === 1 ? 'mesa' : 'mesas'}</span>
-    `;
-    col.appendChild(header);
-
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = `zone-grid-cards ${esBarraZona ? 'barra-list' : ''}`;
-
-    if (!mesasList || mesasList.length === 0) {
-      const emptyBox = document.createElement('div');
-      emptyBox.style.cssText = 'color: #64748b; font-size: 0.78rem; font-style: italic; text-align: center; padding: 20px 10px; border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px; margin-top: 6px;';
-      emptyBox.textContent = '📍 Zona activa (Sin mesas asignadas)';
-      cardsContainer.appendChild(emptyBox);
-    } else {
-      mesasList.forEach(m => {
-        const card = document.createElement('div');
-        const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
-        const esCuenta = m.estado === 'cuenta';
-        const estadoClass = esCuenta ? 'cuenta-qr' : m.estado;
-
-        const estadoEtiqueta = {
-          libre: 'Libre',
-          ocupada: 'Ocupada',
-          abierta: 'Abierta',
-          esperando: 'Esperando',
-          esperando_parcial: 'Esperando',
-          activa: 'Activa',
-          cuenta: 'Cuenta Pedida',
-          unida: 'Unida'
-        }[m.estado] || 'Libre';
-
-        const badgeClass = (m.estado === 'libre')
-          ? 'badge-libre'
-          : (esCuenta ? 'badge-cuenta' : 'badge-ocupada');
-
-        const clienteMesa = m.cliente || m.mesa_cliente;
-        let clienteHtml = '';
-        if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
-          clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
-        }
-
-        const cap = m.capacidad ? `${m.capacidad}p` : (esSilla ? '1p' : '4p');
-
-        card.className = `mesa-grid-card ${estadoClass} ${esBarraZona ? 'barra-row' : ''}`;
-        card.dataset.mesaId = m.id;
-
-        let mergedBadgeHtml = '';
-        const esLibre = m.estado === 'libre' || (!m.orden_activa_id && (!m.orden_total || m.orden_total === 0));
-        if (!esLibre) {
-          const origenes = [];
-          if (m.transferida_de) origenes.push(m.transferida_de);
-          if (m.mesas_unidas && m.mesas_unidas.length > 0) {
-            m.mesas_unidas.forEach(u => { if (!origenes.includes(u)) origenes.push(u); });
-          } else if (m.unida_con && !origenes.includes(m.unida_con)) {
-            origenes.push(m.unida_con);
-          }
-          if (origenes.length > 0) {
-            const otros = origenes.map(n => n.toString().trim().replace(/^\+/, '')).join(' + ');
-            mergedBadgeHtml = `<small class="m-merged-badge" style="margin-left:4px;" title="Recibió orden de ${otros}">+${otros}</small>`;
-          }
-        }
-
-        let semaforoBadgeHtml = '';
-        if (m.semaforo_alerta === 'comida_lista') {
-          semaforoBadgeHtml = `<div class="badge-semaforo-comida-lista" style="margin: 4px 0;" title="Platillos listos en cocina hace ${m.minutos_comida_lista} min">🔥 Comida Lista (${m.minutos_comida_lista}m)</div>`;
-        } else if (m.semaforo_alerta === 'inactiva') {
-          semaforoBadgeHtml = `<div class="badge-semaforo-inactiva" style="margin: 4px 0;" title="Mesa ocupada sin comanda reciente (${m.minutos_inactiva} min)">⚠️ ${m.minutos_inactiva}m inactiva</div>`;
-        }
-
-        if (esBarraZona) {
-          card.innerHTML = `
-            <div class="m-grid-header">
-              <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
-              <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
-            </div>
-            ${clienteHtml}
-            ${semaforoBadgeHtml}
-            <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
-          `;
-        } else {
-          card.innerHTML = `
-            <div class="m-grid-header">
-              <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
-              <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
-            </div>
-            ${clienteHtml}
-            ${semaforoBadgeHtml}
-            <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
-            <div class="m-grid-footer">
-              <span class="m-grid-cap">👥 ${cap}</span>
-              <span class="m-grid-zona" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
-            </div>
-          `;
-        }
-
-        // Manejador de clic
-        card.addEventListener('click', () => {
-          const esMesaSinCliente = m.estado === 'libre' || ((!m.cliente || m.cliente === 'Cliente General') && !m.orden_activa_id);
-          if (esMesaSinCliente) {
-            abrirModalPreguntaCliente(m.id);
-          } else {
-            abrirComanderoMesa(m.id);
-          }
-        });
-
-        cardsContainer.appendChild(card);
-      });
-    }
-
-    col.appendChild(cardsContainer);
-    gridContainer.appendChild(col);
-  });
-
-  // Si hay filtro activo de zona, hacer scroll horizontal hacia esa columna
-  if (filtroZona && filtroZona !== 'todas' && filtroZona !== 'segundo' && filtroZona !== 'segundopiso') {
-    const normalizar = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const targetCol = gridContainer.querySelector(`[data-zona-nombre*="${normalizar(filtroZona)}"]`);
-    if (targetCol) {
-      setTimeout(() => {
-        targetCol.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }, 50);
-    }
-  }
-
-  if (typeof aplicarPersonalizacionAlDOM === 'function') {
-    aplicarPersonalizacionAlDOM();
-  }
-}
-window.renderGrillaOrdenada = renderGrillaOrdenada;
 
 function renderSalón(filtroZona = null) {
-  const modo = estado.vistaSalonModo || localStorage.getItem('pos_vista_salon') || 'plano';
-  const btnPlano = document.getElementById('btnVistaPlano');
-  const btnGrilla = document.getElementById('btnVistaGrilla');
-  if (btnPlano) btnPlano.classList.toggle('active', modo === 'plano');
-  if (btnGrilla) btnGrilla.classList.toggle('active', modo === 'grilla');
-
   const canvas = document.getElementById('mesasCanvasView');
-  const grid = document.getElementById('mesasGridView');
-
-  if (modo === 'grilla') {
-    if (canvas) canvas.style.display = 'none';
-    if (grid) grid.style.display = 'flex';
-    return renderGrillaOrdenada(filtroZona);
-  } else {
-    if (grid) grid.style.display = 'none';
-    if (canvas) canvas.style.display = 'block';
-  }
-
   if (!canvas) return;
   canvas.innerHTML = '';
 
@@ -5923,9 +4837,6 @@ function renderSalón(filtroZona = null) {
           <ul class="mesa-tooltip-list">
             ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : p.nombre_producto)}</li>`).join('')}
           </ul>
-          <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px; display:flex; gap:6px;">
-            <button onclick="event.stopPropagation(); window.liberarMesaId(${m.id})" class="btn-tool" style="width:100%; background:rgba(239,68,68,0.25); border:1px solid #ef4444; color:#fca5a5; padding:5px 8px; border-radius:6px; font-size:0.75rem; font-weight:700; cursor:pointer;">🔓 Liberar Mesa ${m.orden_total > 0 ? '(PIN)' : '(₡0)'}</button>
-          </div>
         </div>
       `;
 
@@ -5963,26 +4874,11 @@ function renderSalón(filtroZona = null) {
       `;
     }
 
-    let clienteHtml = '';
-    const clienteMesa = m.cliente || m.mesa_cliente;
-    if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
-      clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
-    }
-
-    let semaforoBadgeHtml = '';
-    if (m.semaforo_alerta === 'comida_lista') {
-      semaforoBadgeHtml = `<div class="badge-semaforo-comida-lista" title="¡Platillos listos en cocina hace ${m.minutos_comida_lista} min!">🔥 Comida Lista (${m.minutos_comida_lista}m)</div>`;
-    } else if (m.semaforo_alerta === 'inactiva') {
-      semaforoBadgeHtml = `<div class="badge-semaforo-inactiva" title="Mesa ocupada sin comanda reciente (${m.minutos_inactiva} min)">⚠️ ${m.minutos_inactiva}m inactiva</div>`;
-    }
-
     card.innerHTML = `
       <div class="m-header">
         <span class="m-num">${m.numero} ${mergedBadgeHtml}</span>
         <span class="m-badge">${estadoEtiqueta}</span>
       </div>
-      ${clienteHtml}
-      ${semaforoBadgeHtml}
       <div class="m-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
       ${cuentaQrHtml}
       ${waitChipHtml}
@@ -6306,12 +5202,7 @@ function agregarDragMesa(card, mesaData, canvas) {
     if (!wasDragging) {
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
       if (dist <= 12) {
-        const esMesaSinCliente = mesaData.estado === 'libre' || ((!mesaData.cliente || mesaData.cliente === 'Cliente General') && !mesaData.orden_activa_id);
-        if (esMesaSinCliente) {
-          abrirModalPreguntaCliente(mesaData.id);
-        } else {
-          abrirComanderoMesa(mesaData.id);
-        }
+        abrirComanderoMesa(mesaData.id);
       }
     }
   });
@@ -6540,30 +5431,29 @@ function mostrarNotificacionCentro(mensaje, tipo = 'info', callback = null) {
   let btnColor = 'var(--primary)';
 
   const mLower = (mensaje || '').toLowerCase();
-  if (tipo === 'warning' || mLower.includes('aviso') || mLower.includes('⚠️') || mLower.includes('incorrect') || mLower.includes('inválid') || mLower.includes('invalid') || mLower.includes('requiere pin') || mLower.includes('ocupada')) {
-    icono = '⚠️';
-    titulo = 'Atención';
-    btnColor = 'linear-gradient(135deg, #f59e0b, #d97706)';
-  } else if (tipo === 'error' || mLower.includes('error') || mLower.includes('❌') || mLower.includes('falló') || mLower.includes('fallo') || mLower.includes('denegad')) {
-    icono = '❌';
-    titulo = 'Atención';
-    btnColor = 'linear-gradient(135deg, #ef4444, #b91c1c)';
-  } else if (tipo === 'success' || (!mLower.includes('incorrect') && (mLower.includes('éxito') || mLower.includes('exito') || mLower.includes('correctamente') || mLower.includes('✅') || mLower.includes('restaurar')))) {
+  if (tipo === 'success' || mLower.includes('éxito') || mLower.includes('correct') || mLower.includes('✅') || mLower.includes('restaurar')) {
     icono = '✅';
     titulo = '¡Completado!';
     btnColor = 'linear-gradient(135deg, #10b981, #059669)';
+  } else if (tipo === 'error' || mLower.includes('error') || mLower.includes('❌') || mLower.includes('falló') || mLower.includes('denegad')) {
+    icono = '❌';
+    titulo = 'Atención';
+    btnColor = 'linear-gradient(135deg, #ef4444, #b91c1c)';
+  } else if (tipo === 'warning' || mLower.includes('aviso') || mLower.includes('⚠️') || mLower.includes('ocupada')) {
+    icono = '⚠️';
+    titulo = 'Aviso';
+    btnColor = 'linear-gradient(135deg, #f59e0b, #d97706)';
   }
 
   if (iconEl) iconEl.textContent = icono;
   if (titEl) titEl.textContent = titulo;
-  if (msgEl) msgEl.textContent = (mensaje || '').replace(/^[✅❌⚠️ℹ️🔒🔄🔗✂️\s\uFFFD]+/, '');
+  if (msgEl) msgEl.textContent = (mensaje || '').replace(/^[✅❌⚠️ℹ️🔄🔗✂️\s]+/, '');
   if (btnEl) btnEl.style.background = btnColor;
 
   let timerAuto = null;
   const cerrar = () => {
     if (timerAuto) clearTimeout(timerAuto);
     modal.classList.remove('active');
-    modal.style.display = '';
     if (callback) callback();
   };
 
@@ -6572,9 +5462,7 @@ function mostrarNotificacionCentro(mensaje, tipo = 'info', callback = null) {
     if (e.target === modal) cerrar();
   };
 
-  modal.style.zIndex = '100500';
   modal.classList.add('active');
-  modal.style.display = 'flex';
 
   if (tipo === 'success' || tipo === 'info') {
     timerAuto = setTimeout(cerrar, 4000);
@@ -6766,24 +5654,15 @@ window.validarPinMesaIngresado = async function() {
     const res = await fetch('/api/auth/validar-pin-mesa', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin, mesaId, negocio_id: estado.negocioActual?.id || 1 })
+      body: JSON.stringify({ pin, mesaId })
     });
     const data = await res.json();
     if (!res.ok) {
-      if (data.comercio_desactivado || (data.error && data.error.toLowerCase().includes('comercio desactivado'))) {
-        alert('⛔ Comercio desactivado, contacte con su proveedor!');
-        cerrarModalPinMesa();
-        if (typeof cerrarSesion === 'function') cerrarSesion();
-        return;
-      }
       throw new Error(data.error || 'PIN incorrecto');
     }
 
     // Actualizar usuario activo con el usuario del PIN
     estado.usuarioActual = data.usuario;
-    if (data.token) {
-      sessionStorage.setItem('pos_token', data.token);
-    }
     sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
 
     const perfilBadge = document.getElementById('userProfileBadge');
@@ -6802,94 +5681,6 @@ window.validarPinMesaIngresado = async function() {
   }
 };
 
-window._mesaParaPreguntaCliente = null;
-
-function abrirModalPreguntaCliente(mesaId) {
-  const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
-  if (!mesa) {
-    abrirComanderoMesa(mesaId);
-    return;
-  }
-  window._mesaParaPreguntaCliente = mesaId;
-  const titEl = document.getElementById('preguntaClienteMesaTitulo') || document.getElementById('modalPreguntaClienteTitulo');
-  if (titEl) titEl.textContent = `Mesa ${mesa.numero || mesaId}`;
-
-  const inp = document.getElementById('txtNombreClienteMesa');
-  if (inp) {
-    inp.value = (mesa.cliente && mesa.cliente !== 'Cliente General') ? mesa.cliente : '';
-  }
-
-  const modal = document.getElementById('modalPreguntaCliente');
-  if (modal) {
-    modal.classList.add('active');
-    modal.style.display = 'flex';
-    window._modalActivoId = 'modalPreguntaCliente';
-    setTimeout(() => {
-      if (inp) {
-        inp.focus();
-        inp.select();
-      }
-    }, 100);
-  }
-}
-window.abrirModalPreguntaCliente = abrirModalPreguntaCliente;
-
-async function responderPreguntaCliente(conNombre) {
-  const modal = document.getElementById('modalPreguntaCliente');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
-
-  const mesaId = window._mesaParaPreguntaCliente;
-  if (!mesaId) return;
-
-  const inp = document.getElementById('txtNombreClienteMesa');
-  const nombre = inp ? inp.value.trim() : '';
-
-  if (conNombre && nombre) {
-    const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
-    if (mesa) {
-      mesa.cliente = nombre;
-    }
-    try {
-      const nid = estado.negocioActual?.id || 1;
-      fetch(`/api/mesas/${mesaId}/cliente`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-        body: JSON.stringify({ cliente: nombre })
-      }).catch(err => console.warn('Error guardando cliente de mesa:', err));
-    } catch (e) {
-      console.warn('Error en fetch cliente:', e);
-    }
-    renderSalón();
-  }
-
-  abrirComanderoMesa(mesaId);
-}
-window.responderPreguntaCliente = responderPreguntaCliente;
-
-function abrirModalEditarClienteActivo() {
-  if (!estado.mesaActiva) return;
-  const actual = (estado.mesaActiva.cliente && estado.mesaActiva.cliente !== 'Cliente General') ? estado.mesaActiva.cliente : '';
-  
-  window._mesaParaPreguntaCliente = estado.mesaActiva.id;
-  const modal = document.getElementById('modalPreguntaCliente');
-  const txtTitulo = document.getElementById('preguntaClienteMesaTitulo');
-  const inp = document.getElementById('txtNombreClienteMesa');
-  
-  if (txtTitulo) txtTitulo.textContent = `Mesa ${estado.mesaActiva.numero || estado.mesaActiva.id}`;
-  if (inp) {
-    inp.value = actual;
-    setTimeout(() => { inp.focus(); inp.select(); }, 120);
-  }
-  if (modal) {
-    modal.style.display = 'flex';
-    modal.classList.add('active');
-  }
-}
-window.abrirModalEditarClienteActivo = abrirModalEditarClienteActivo;
-
 window.abrirComanderoMesa = abrirComanderoMesa;
 async function abrirComanderoMesa(mesaId) {
   const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId)) || { id: Number(mesaId), numero: mesaId, items: [] };
@@ -6902,12 +5693,9 @@ async function abrirComanderoMesa(mesaId) {
   let data = null;
 
   // 1. Intentar consultar orden activa al servidor si creemos que hay red
-  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
   if (navigator.onLine && (!window.PosOfflineSync || window.PosOfflineSync.isOnline)) {
     try {
-      const res = await fetch(`/api/ordenes/mesa/${mesaId}?negocio_id=${nid}`, {
-        headers: { 'x-negocio-id': String(nid) }
-      });
+      const res = await fetch('/api/ordenes/mesa/' + mesaId);
       if (res.ok) {
         data = await res.json();
         if (data && data.orden && window.PosOfflineDB) {
@@ -6962,12 +5750,7 @@ async function abrirComanderoMesa(mesaId) {
         ? 'Orden (Local Offline)' 
         : ('Orden #' + (data.orden.numero_orden || data.orden.id));
       mesa.orden_id = data.orden.id;
-      mesa.orden_activa_id = data.orden.id;
       mesa.modo_happy_hour = data.orden.modo_happy_hour || 'estricto';
-      mesa.descuento_monto = data.orden.descuento_monto || 0;
-      mesa.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
-      mesa.descuento_motivo = data.orden.descuento_motivo || '';
-      mesa.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
       mesa.items = (data.items || []).map(it => ({
         id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
         id: it.producto_id || it.id,
@@ -7010,19 +5793,10 @@ async function abrirComanderoMesa(mesaId) {
         }
       }
     } else {
-      if (mesa.orden_activa_id || mesa.orden_id) {
-        mesa.orden_id = mesa.orden_activa_id || mesa.orden_id;
-        document.getElementById('comTicketOrdenId').textContent = 'Orden #' + (mesa.numero_orden || mesa.orden_id);
-      } else {
-        document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
-        mesa.orden_id = null;
-        mesa.modo_happy_hour = 'estricto';
-        mesa.descuento_monto = 0;
-        mesa.descuento_porcentaje = 0;
-        mesa.descuento_motivo = '';
-        mesa.descuento_autorizado_por = '';
-        mesa.items = [];
-      }
+      document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
+      mesa.orden_id = null;
+      mesa.modo_happy_hour = 'estricto';
+      mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
         bannerEl.style.display = 'none';
@@ -7030,14 +5804,6 @@ async function abrirComanderoMesa(mesaId) {
     }
   } catch (e) {
     console.warn('[Comandero] Error procesando comanda:', e);
-  }
-
-  const nomCliente = (data && data.orden && data.orden.cliente && data.orden.cliente !== 'Cliente General')
-    ? data.orden.cliente
-    : ((mesa.cliente && mesa.cliente !== 'Cliente General') ? mesa.cliente : 'General');
-  const elClienteNom = document.getElementById('comClienteNombre');
-  if (elClienteNom) {
-    elClienteNom.textContent = nomCliente;
   }
 
   renderTicketItems();
@@ -7051,16 +5817,9 @@ async function abrirComanderoMesa(mesaId) {
   if (btnResetMesa) {
     const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre') || (mesa.orden_total > 0));
     btnResetMesa.style.display = tieneCuentaOcupada ? 'inline-flex' : 'none';
-    const esSaldoCero = !mesa.orden_total || Number(mesa.orden_total) === 0;
-    btnResetMesa.innerHTML = esSaldoCero ? '🔓 Liberar Mesa' : '⚠️ Liberar Mesa (PIN)';
-    btnResetMesa.title = esSaldoCero ? 'Liberar mesa pagada y dejar disponible' : 'Liberar mesa con saldo pendiente (Requiere PIN de Administrador)';
   }
 
-  const modCom = document.getElementById('modalComandero');
-  if (modCom) {
-    modCom.classList.add('active');
-    modCom.style.display = 'flex';
-  }
+  document.getElementById('modalComandero').classList.add('active');
   if (typeof aplicarPersonalizacionAlDOM === 'function') {
     aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
   }
@@ -7069,55 +5828,9 @@ async function abrirComanderoMesa(mesaId) {
   }
 }
 
-window.abrirModoParaLlevar = function(clienteNombre = 'Cliente Para Llevar') {
-  const mesaVirtual = {
-    id: 'para_llevar_' + Date.now(),
-    numero: '🛍️ Para Llevar',
-    zonaNombre: 'BARRA / EXPRESS',
-    cliente: clienteNombre,
-    es_para_llevar: true,
-    tipo_orden: 'para_llevar',
-    items: [],
-    orden_id: null,
-    modo_happy_hour: 'estricto',
-    descuento_monto: 0,
-    descuento_porcentaje: 0
-  };
-
-  estado.mesaActiva = mesaVirtual;
-  const elNum = document.getElementById('comMesaNumero');
-  if (elNum) elNum.textContent = '🛍️ Para Llevar';
-  const elZona = document.getElementById('comMesaZona');
-  if (elZona) elZona.textContent = 'BARRA / EXPRESS';
-  const elOrd = document.getElementById('comTicketOrdenId');
-  if (elOrd) elOrd.textContent = 'Nueva Orden Para Llevar';
-  const elCli = document.getElementById('comClienteNombre');
-  if (elCli) elCli.textContent = clienteNombre;
-
-  const bannerEl = document.getElementById('comMergedBanner');
-  if (bannerEl) bannerEl.style.display = 'none';
-
-  const btnResetMesa = document.getElementById('btnResetearMesaComandero');
-  if (btnResetMesa) btnResetMesa.style.display = 'none';
-
-  renderTicketItems();
-  actualizarBotonEnviarComanda();
-  renderCatalogoComandero();
-  if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
-
-  const modCom = document.getElementById('modalComandero');
-  if (modCom) {
-    modCom.classList.add('active');
-    modCom.style.display = 'flex';
-  }
-};
-
 window.cerrarComandero = function() {
   const modal = document.getElementById('modalComandero');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
+  if (modal) modal.classList.remove('active');
   if (typeof cargarMesasDesdeBackend === 'function') {
     cargarMesasDesdeBackend();
   }
@@ -7128,129 +5841,72 @@ if (btnCloseComEl) {
   btnCloseComEl.addEventListener('click', window.cerrarComandero);
 }
 
-window.liberarMesaId = async function(mesaId) {
-  const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(mesaId)) || (estado.mesaActiva?.id === Number(mesaId) ? estado.mesaActiva : null) || { id: Number(mesaId), numero: `Mesa ${mesaId}`, orden_total: 0 };
+window.resetearMesaActualComandero = async function() {
+  const mesa = estado.mesaActiva;
+  if (!mesa) return;
+
   const mesaNom = mesa.numero || `Mesa ${mesa.id}`;
-  const totalMesa = Number(mesa.orden_total) || 0;
-  let pinAutorizado = null;
-
-  if (totalMesa > 0) {
-    const uAct = estado.usuarioActual || estado.usuario;
-    const esAdmin = uAct && (uAct.rol === 'admin' || uAct.rol === 'developer');
-    if (!esAdmin) {
-      pinAutorizado = await window.solicitarPinAdmin({
-        icono: '⚠️',
-        titulo: 'Autorización: Liberar Mesa con Saldo',
-        subtitulo: `La mesa "${mesaNom}" tiene un saldo pendiente de ${formatCRC(totalMesa)}`,
-        mensaje: 'Ingresa el PIN de Administrador/Supervisor para anular el saldo pendiente y liberar la mesa.'
-      });
-      if (!pinAutorizado) return;
-    }
-  }
-
   const confirmado = await confirmarAccion({
-    icono: '🔓',
-    titulo: `¿Liberar ${mesaNom}?`,
-    subtitulo: totalMesa > 0 ? `Se anulará la cuenta pendiente de ${formatCRC(totalMesa)}` : 'La mesa quedará libre y disponible para nuevos clientes',
-    mensaje: totalMesa > 0
-      ? `¿Estás seguro de forzar la liberación de "${mesaNom}"? Se anulará el saldo pendiente de ${formatCRC(totalMesa)}.`
-      : `¿Deseas liberar "${mesaNom}"? La mesa quedará disponible en verde.`,
-    tipo: totalMesa > 0 ? 'peligro' : 'info',
-    txtSi: '🔓 Sí, liberar mesa',
+    icono: '🔄',
+    titulo: '¿Liberar y limpiar mesa?',
+    subtitulo: `Esta acción cancelará cualquier cuenta abierta o trabada en "${mesaNom}"`,
+    mensaje: `¿Estás seguro de que deseas liberar "${mesaNom}"? Se cerrarán las órdenes activas y la mesa quedará totalmente en ₡0 y disponible para nuevos clientes.`,
+    tipo: 'peligro',
+    txtSi: '🔄 Sí, liberar mesa',
     txtNo: 'Cancelar'
   });
   if (!confirmado) return;
 
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (pinAutorizado) headers['x-supervisor-pin'] = pinAutorizado;
-
-    const res = await fetch(`/api/mesas/${mesa.id}/liberar`, {
+    const uAct = estado.usuarioActual || estado.usuario;
+    const userRol = (uAct && (uAct.rol === 'admin' || uAct.rol === 'developer')) ? uAct.rol : 'admin';
+    const res = await fetch(`/api/mesas/${mesa.id}/reset`, {
       method: 'POST',
-      headers,
-      body: JSON.stringify({
-        pinAutorizado,
-        usuarioNombre: estado.usuarioActual?.nombre || 'Personal'
-      })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': userRol
+      }
     });
 
     const data = await res.json();
     if (!res.ok) {
-      if (data.requierePin) {
-        const pinReintentar = await window.solicitarPinAdmin({
-          icono: '⚠️',
-          titulo: 'PIN Requerido',
-          subtitulo: data.error,
-          mensaje: 'Ingresa el PIN de Administrador para confirmar la liberación.'
-        });
-        if (pinReintentar) {
-          const res2 = await fetch(`/api/mesas/${mesa.id}/liberar`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-supervisor-pin': pinReintentar },
-            body: JSON.stringify({ pinAutorizado: pinReintentar })
-          });
-          const data2 = await res2.json();
-          if (res2.ok) {
-            return await procesarExitoLiberacionMesa(mesa, mesaNom);
-          } else {
-            alert('❌ ' + (data2.error || 'No se pudo liberar la mesa'));
-            return;
-          }
-        }
-      }
       alert('❌ ' + (data.error || 'No se pudo liberar la mesa'));
       return;
     }
 
-    await procesarExitoLiberacionMesa(mesa, mesaNom);
+    if (window.PosOfflineDB) {
+      await window.PosOfflineDB.limpiarOrdenMesa(mesa.id).catch(() => {});
+    }
+
+    mesa.estado = 'libre';
+    mesa.items = [];
+    mesa.orden_id = null;
+    mesa.orden_activa_id = null;
+    mesa.orden_total = 0;
+    mesa.pidio_cuenta_qr = 0;
+    mesa.platos_pendientes = [];
+    mesa.items_pendientes = [];
+
+    // Limpiar también en el array global estado.mesas
+    const mesaEnEstado = (estado.mesas || []).find(m => Number(m.id) === Number(mesa.id));
+    if (mesaEnEstado) {
+      mesaEnEstado.estado = 'libre';
+      mesaEnEstado.orden_total = 0;
+      mesaEnEstado.orden_activa_id = null;
+      mesaEnEstado.items = [];
+      mesaEnEstado.platos_pendientes = [];
+      mesaEnEstado.items_pendientes = [];
+    }
+
+    document.getElementById('modalComandero').classList.remove('active');
+    mostrarNotificacionCentro(`🔄 "${mesaNom}" liberada y en ₡0 con éxito`, 'success');
+    await cargarMesasDesdeBackend();
+    if (typeof cargarKDSDesdeBackend === 'function') {
+      cargarKDSDesdeBackend();
+    }
   } catch (e) {
     alert('❌ Error al liberar mesa: ' + e.message);
   }
-};
-
-async function procesarExitoLiberacionMesa(mesa, mesaNom) {
-  if (window.PosOfflineDB) {
-    await window.PosOfflineDB.limpiarOrdenMesa(mesa.id).catch(() => {});
-  }
-
-  mesa.estado = 'libre';
-  mesa.cliente = null;
-  mesa.mesa_cliente = null;
-  mesa.items = [];
-  mesa.orden_id = null;
-  mesa.orden_activa_id = null;
-  mesa.orden_total = 0;
-  mesa.pidio_cuenta_qr = 0;
-  mesa.platos_pendientes = [];
-  mesa.items_pendientes = [];
-
-  const mesaEnEstado = (estado.mesas || []).find(m => Number(m.id) === Number(mesa.id));
-  if (mesaEnEstado) {
-    mesaEnEstado.estado = 'libre';
-    mesaEnEstado.cliente = null;
-    mesaEnEstado.mesa_cliente = null;
-    mesaEnEstado.orden_total = 0;
-    mesaEnEstado.orden_activa_id = null;
-    mesaEnEstado.items = [];
-    mesaEnEstado.platos_pendientes = [];
-    mesaEnEstado.items_pendientes = [];
-  }
-
-  const modCom = document.getElementById('modalComandero');
-  if (modCom && modCom.classList.contains('active') && estado.mesaActiva?.id === mesa.id) {
-    modCom.classList.remove('active');
-  }
-
-  mostrarNotificacionCentro(`🔓 "${mesaNom}" liberada con éxito`, 'success');
-  await cargarMesasDesdeBackend();
-  if (typeof cargarKDSDesdeBackend === 'function') {
-    cargarKDSDesdeBackend();
-  }
-}
-
-window.resetearMesaActualComandero = async function() {
-  if (!estado.mesaActiva) return;
-  return window.liberarMesaId(estado.mesaActiva.id);
 };
 
 function renderTicketItems() {
@@ -7351,12 +6007,11 @@ function recalcularTotalesTicket() {
     document.getElementById('comServicio').textContent = '₡ 0.00';
     document.getElementById('comIva').textContent = '₡ 0.00';
     document.getElementById('comTotal').textContent = '₡ 0.00';
+    document.getElementById('comHappyHourRow').style.display = 'none';
     const hhRow = document.getElementById('comHappyHourRow');
     if (hhRow) hhRow.style.display = 'none';
     const cobroHH = document.getElementById('cobroHappyHourBadgeRow');
     if (cobroHH) cobroHH.style.display = 'none';
-    const rowDescEsp = document.getElementById('rowDescuentoEspecial');
-    if (rowDescEsp) rowDescEsp.style.display = 'none';
     return;
   }
 
@@ -7406,53 +6061,11 @@ function recalcularTotalesTicket() {
     }
   }
 
-  const descuentoEspecial = (estado.mesaActiva && estado.mesaActiva.descuento_monto) ? Number(estado.mesaActiva.descuento_monto) : 0;
-  const rowDescEsp = document.getElementById('rowDescuentoEspecial');
-  const lblDescEsp = document.getElementById('lblDescuentoEspecial');
-  const comDescEsp = document.getElementById('comDescuentoEspecial');
-
-  if (rowDescEsp) {
-    if (descuentoEspecial > 0) {
-      rowDescEsp.style.display = 'flex';
-      if (lblDescEsp) {
-        lblDescEsp.textContent = `🎁 Descuento Especial (${estado.mesaActiva.descuento_porcentaje || 0}%):`;
-      }
-      if (comDescEsp) {
-        comDescEsp.textContent = '-' + formatCRC(descuentoEspecial);
-      }
-    } else {
-      rowDescEsp.style.display = 'none';
-    }
-  }
-
   const totalBruto = sub;
-  const total = Math.max(0, totalBruto - descuentoHH - descuentoEspecial);
-  const esParaLlevar = Boolean(
-    estado.mesaActiva && (
-      estado.mesaActiva.es_para_llevar ||
-      estado.mesaActiva.tipo_orden === 'para_llevar' ||
-      String(estado.mesaActiva.id).startsWith('para_llevar') ||
-      estado.mesaActiva.id === 'para_llevar'
-    )
-  );
-
-  let subtotalBase, servicio, iva;
-  if (esParaLlevar) {
-    // Para Llevar: EXENTO del 10% de Servicio. Solo aplica IVA 13% (1.13)
-    subtotalBase = Math.round(total / 1.13);
-    servicio = 0;
-    iva = total - subtotalBase;
-  } else {
-    // Consumo en Salón / Mesa: 10% Servicio + 13% IVA (1.23)
-    subtotalBase = Math.round(total / 1.23);
-    servicio = Math.round(subtotalBase * 0.10);
-    iva = total - subtotalBase - servicio;
-  }
-
-  const lblServ = document.getElementById('lblComServicio');
-  if (lblServ) {
-    lblServ.textContent = esParaLlevar ? '🛍️ Servicio (Exento 0%):' : 'Servicio Salón (10%):';
-  }
+  const total = Math.max(0, totalBruto - descuentoHH);
+  const subtotalBase = Math.round(total / 1.23);
+  const servicio = Math.round(subtotalBase * 0.10);
+  const iva = total - subtotalBase - servicio;
 
   document.getElementById('comSubtotal').textContent = formatCRC(subtotalBase);
 
@@ -7545,269 +6158,6 @@ window.toggleModoHappyHourActual = async function() {
   }
 };
 
-// ============================================================================
-// ============================================================================
-// MODAL DE DESCUENTOS & CORTESÍAS CON PIN Y AUDITORÍA
-// ============================================================================
-window.abrirModalAplicarDescuento = function() {
-  if (!estado.mesaActiva) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Debes seleccionar una mesa activa para aplicar descuentos.', 'warning');
-    } else {
-      alert('⚠️ Debes seleccionar una mesa activa para aplicar descuentos.');
-    }
-    return;
-  }
-
-  const oId = Number(estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || estado.mesaActiva.ordenId || (estado.ordenActiva && estado.ordenActiva.id));
-  if (!oId || isNaN(oId) || oId <= 0) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.', 'warning');
-    } else {
-      alert('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.');
-    }
-    return;
-  }
-
-  const mod = document.getElementById('modalAplicarDescuento');
-  if (!mod) return;
-
-  const subtitulo = document.getElementById('subtituloDescuentoMesa');
-  if (subtitulo) {
-    const totalActual = estado.mesaActiva.orden_total || 0;
-    subtitulo.textContent = `Mesa ${estado.mesaActiva.numero || ''} • Total actual: ${formatCRC(totalActual)}`;
-  }
-
-  const txtVal = document.getElementById('txtValorDescuentoManual');
-  const txtMotivo = document.getElementById('txtMotivoDescuento');
-  const txtPin = document.getElementById('txtPinSupervisorDescuento');
-  const selTipo = document.getElementById('selTipoDescuentoManual');
-
-  if (txtVal) txtVal.value = '';
-  if (txtMotivo) txtMotivo.value = '';
-  if (txtPin) txtPin.value = '';
-  if (selTipo) selTipo.value = 'porcentaje';
-
-  window.actualizarModoDescuentoManual();
-
-  mod.classList.add('active');
-  mod.style.display = 'flex';
-};
-
-window.cerrarModalAplicarDescuento = function() {
-  const mod = document.getElementById('modalAplicarDescuento');
-  if (mod) {
-    mod.classList.remove('active');
-    mod.style.display = 'none';
-  }
-};
-
-window.seleccionarPresetDescuento = function(tipo, valor) {
-  const selTipo = document.getElementById('selTipoDescuentoManual');
-  const txtVal = document.getElementById('txtValorDescuentoManual');
-
-  if (selTipo) selTipo.value = tipo;
-  if (txtVal) txtVal.value = valor;
-
-  window.actualizarModoDescuentoManual();
-
-  document.querySelectorAll('.btn-desc-preset').forEach(b => b.classList.remove('active'));
-  if (typeof event !== 'undefined' && event && event.target) {
-    const btnClickeado = event.target.closest('.btn-desc-preset');
-    if (btnClickeado) btnClickeado.classList.add('active');
-  }
-};
-
-window.actualizarModoDescuentoManual = function() {
-  const selTipo = document.getElementById('selTipoDescuentoManual');
-  const boxVal = document.getElementById('boxValorDescuentoManual');
-  const txtVal = document.getElementById('txtValorDescuentoManual');
-  const lblVal = boxVal ? boxVal.querySelector('label') : null;
-
-  if (!selTipo || !boxVal || !txtVal) return;
-
-  if (selTipo.value === 'cortesia') {
-    boxVal.style.opacity = '0.4';
-    txtVal.disabled = true;
-    txtVal.value = '100';
-    if (lblVal) lblVal.textContent = 'Cortesía Completa (100%):';
-  } else if (selTipo.value === 'porcentaje') {
-    boxVal.style.opacity = '1';
-    txtVal.disabled = false;
-    txtVal.placeholder = 'Ej: 15';
-    txtVal.min = '1';
-    txtVal.max = '100';
-    if (lblVal) lblVal.textContent = 'Porcentaje (%):';
-  } else if (selTipo.value === 'monto') {
-    boxVal.style.opacity = '1';
-    txtVal.disabled = false;
-    txtVal.placeholder = 'Ej: 3000';
-    txtVal.min = '1';
-    txtVal.removeAttribute('max');
-    if (lblVal) lblVal.textContent = 'Monto en Colones (₡):';
-  }
-};
-
-window.confirmarAplicarDescuento = async function() {
-  if (!estado.mesaActiva) return;
-
-  const ordenId = Number(estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || estado.mesaActiva.ordenId || (estado.ordenActiva && estado.ordenActiva.id));
-  if (!ordenId || isNaN(ordenId) || ordenId <= 0) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.', 'warning');
-    } else {
-      alert('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.');
-    }
-    return;
-  }
-
-  const selTipo = document.getElementById('selTipoDescuentoManual');
-  const txtVal = document.getElementById('txtValorDescuentoManual');
-  const txtMotivo = document.getElementById('txtMotivoDescuento');
-  const txtPin = document.getElementById('txtPinSupervisorDescuento');
-
-  const tipo = selTipo ? selTipo.value : 'porcentaje';
-  const valor = txtVal ? Number(txtVal.value) : 0;
-  const motivo = (txtMotivo && txtMotivo.value.trim()) ? txtMotivo.value.trim() : 'Descuento autorizado';
-  const pin = txtPin ? txtPin.value.trim() : '';
-
-  if (tipo !== 'cortesia' && (!valor || valor <= 0 || isNaN(valor))) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Ingresa un valor de descuento válido.', 'warning');
-    } else {
-      alert('⚠️ Ingresa un valor de descuento válido.');
-    }
-    return;
-  }
-
-  if (!pin || String(pin).trim() === '') {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🔒 Se requiere ingresar el PIN de Administrador/Supervisor para autorizar el descuento.', 'warning');
-    } else {
-      alert('🔒 Se requiere ingresar el PIN de Administrador/Supervisor para autorizar el descuento.');
-    }
-    if (txtPin) txtPin.focus();
-    return;
-  }
-
-  const uAct = estado.usuarioActual || estado.usuario;
-  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
-  const targetUrl = (ordenId && !isNaN(ordenId) && ordenId > 0) 
-    ? `/api/ordenes/${ordenId}/descuento` 
-    : `/api/ordenes/0/descuento`;
-
-  try {
-    const res = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid),
-        'x-user-rol': (uAct && uAct.rol) ? uAct.rol : 'mesero'
-      },
-      body: JSON.stringify({ 
-        tipo, 
-        valor, 
-        motivo, 
-        pin, 
-        negocio_id: Number(nid),
-        mesaId: estado.mesaActiva?.id,
-        mesa_id: estado.mesaActiva?.id
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      const msgError = data.error || 'Error al aplicar descuento';
-      const esPinError = Boolean(data.pinInvalido || data.requierePin || (msgError && msgError.toLowerCase().includes('pin')));
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(msgError, esPinError ? 'warning' : 'error');
-      } else {
-        alert(msgError);
-      }
-      if (txtPin && esPinError) {
-        txtPin.value = '';
-        txtPin.focus();
-      }
-      return;
-    }
-
-    if (data.orden) {
-      estado.mesaActiva.orden_id = data.orden.id;
-      estado.mesaActiva.orden_activa_id = data.orden.id;
-      estado.mesaActiva.descuento_monto = data.orden.descuento_monto || 0;
-      estado.mesaActiva.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
-      estado.mesaActiva.descuento_motivo = data.orden.descuento_motivo || '';
-      estado.mesaActiva.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
-      estado.mesaActiva.orden_total = data.orden.total || 0;
-    }
-
-    window.cerrarModalAplicarDescuento();
-    renderTicketItems();
-    if (typeof cargarMesasDesdeBackend === 'function') {
-      cargarMesasDesdeBackend();
-    }
-
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('✅ ' + (data.message || 'Descuento aplicado con éxito'), 'success');
-    } else {
-      alert('✅ ' + (data.message || 'Descuento aplicado con éxito'));
-    }
-  } catch (e) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('❌ Error de conexión al aplicar descuento: ' + e.message, 'error');
-    } else {
-      alert('❌ Error de conexión al aplicar descuento: ' + e.message);
-    }
-  }
-};
-
-window.quitarDescuentoOrdenActual = async function() {
-  if (!estado.mesaActiva) return;
-  const ordenId = Number(estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || estado.mesaActiva.ordenId || (estado.ordenActiva && estado.ordenActiva.id));
-  if (!ordenId || isNaN(ordenId) || ordenId <= 0) return;
-
-  const confirmar = confirm('¿Deseas quitar el descuento aplicado a esta orden?');
-  if (!confirmar) return;
-
-  const uAct = estado.usuarioActual || estado.usuario;
-  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
-  try {
-    const res = await fetch(`/api/ordenes/${ordenId}/descuento`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid),
-        'x-user-rol': uAct ? uAct.rol : 'admin'
-      },
-      body: JSON.stringify({ tipo: 'porcentaje', valor: 0, motivo: 'Descuento eliminado', negocio_id: Number(nid) })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      alert('❌ ' + (data.error || 'Error al quitar descuento'));
-      return;
-    }
-
-    if (data.orden) {
-      estado.mesaActiva.descuento_monto = 0;
-      estado.mesaActiva.descuento_porcentaje = 0;
-      estado.mesaActiva.descuento_motivo = '';
-      estado.mesaActiva.descuento_autorizado_por = '';
-      estado.mesaActiva.orden_total = data.orden.total || 0;
-    }
-
-    renderTicketItems();
-    if (typeof cargarMesasDesdeBackend === 'function') {
-      cargarMesasDesdeBackend();
-    }
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('✅ Descuento removido', 'success');
-    }
-  } catch (e) {
-    alert('❌ Error al quitar descuento: ' + e.message);
-  }
-};
-
 // Enviar Comanda a Cocina o Guardar (cierra el menú de una vez) con soporte Offline-First
 // Enviar Comanda a Cocina o Guardar (mantiene el comandero abierto con productos marcados) con soporte Offline-First
 document.getElementById('btnEnviarComandaCocina').addEventListener('click', async () => {
@@ -7839,29 +6189,11 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
 
   const idempotencyKey = 'cmd_' + (estado.mesaActiva.id || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
 
-  const nidComanda = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-  const clienteActivoComanda = (estado.mesaActiva && estado.mesaActiva.cliente && estado.mesaActiva.cliente !== 'Cliente General')
-    ? estado.mesaActiva.cliente
-    : (document.getElementById('comClienteNombre')?.textContent !== 'General' ? (document.getElementById('comClienteNombre')?.textContent || 'Cliente General') : 'Cliente General');
-
-  const esParaLlevarActiva = Boolean(
-    estado.mesaActiva && (
-      estado.mesaActiva.es_para_llevar ||
-      estado.mesaActiva.tipo_orden === 'para_llevar' ||
-      String(estado.mesaActiva.id).startsWith('para_llevar') ||
-      estado.mesaActiva.id === 'para_llevar'
-    )
-  );
-
   const payloadComanda = {
     mesaId: estado.mesaActiva.id,
     mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
-    cliente: clienteActivoComanda,
     items: estado.mesaActiva.items,
     happyHourActivo: estado.happyHourActivo,
-    negocio_id: nidComanda,
-    tipo_orden: esParaLlevarActiva ? 'para_llevar' : 'mesa',
-    es_para_llevar: esParaLlevarActiva,
     idempotencyKey
   };
 
@@ -7882,8 +6214,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     });
 
     const tot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-    const sub = esParaLlevarActiva ? Math.round(tot / 1.13) : Math.round(tot / 1.23);
-    const serv = esParaLlevarActiva ? 0 : Math.round(sub * 0.10);
+    const sub = Math.round(tot / 1.23);
+    const serv = Math.round(sub * 0.10);
     const iva = tot - sub - serv;
 
     estado.mesaActiva.estado = tieneNuevosCocina ? 'esperando' : 'abierta';
@@ -7966,7 +6298,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     // Fallback directo
     const res = await fetch('/api/comandas/enviar', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payloadComanda)
     });
     if (!res.ok) {
@@ -8005,14 +6337,10 @@ async function cargarKDSDesdeBackend() {
   try {
     const activeTab = document.querySelector('.kds-tab.active');
     const dest = activeTab ? activeTab.dataset.kdsDest : 'cocina';
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/kds?destino=${dest}&negocio_id=${nid}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
+    const res = await fetch('/api/kds?destino=' + dest);
     estado.comandasKDS = await res.json();
     renderKDS();
-    const counter = document.getElementById('kdsCounter');
-    if (counter) counter.textContent = Array.isArray(estado.comandasKDS) ? estado.comandasKDS.length : 0;
+    document.getElementById('kdsCounter').textContent = estado.comandasKDS.length;
   } catch (e) {}
 }
 
@@ -8050,69 +6378,59 @@ function renderKDS() {
   const cursoLabels = { 1: 'Bebida', 2: 'Entrada', 3: 'Plato Fuerte', 4: 'Postre', 5: 'Café', 6: 'Otros' };
   const cursoClasses = { 1: 'c-bebida', 2: 'c-entrada', 3: 'c-fuerte', 4: 'c-postre', 5: 'c-cafe', 6: 'c-otros' };
 
-  window._kdsSeleccionadosMap = window._kdsSeleccionadosMap || {};
-
   ticketsOrder.forEach((key) => {
     const t = ticketsMap[key];
     const card = document.createElement('div');
     card.className = 'kds-card';
     card.dataset.kdsKey = key;
 
-    const itemIds = t.items.map(i => i.id);
-    const itemIdsJson = JSON.stringify(itemIds);
-    const selectedSet = window._kdsSeleccionadosMap[key] || new Set();
-    const selectedCount = Array.from(selectedSet).filter(id => itemIds.includes(id)).length;
-
-    const esParaLlevarKds = Boolean(
-      (t.mesaNumero && t.mesaNumero.includes('Para Llevar')) ||
-      t.items.some(i => i.es_para_llevar || i.tipo_orden === 'para_llevar')
-    );
-    const badgeParaLlevarHtml = esParaLlevarKds
-      ? `<span class="badge-para-llevar" style="background:rgba(236,72,153,0.22); color:#f472b6; border:1px solid rgba(236,72,153,0.45); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">🛍️ PARA LLEVAR</span>`
-      : '';
+    const itemIdsJson = JSON.stringify(t.items.map(i => i.id));
 
     card.innerHTML = `
       <div class="kds-top">
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="kds-mesa-label">${escapeHtml(t.mesaNumero)}</span>
-          ${badgeParaLlevarHtml}
           <span class="badge-comanda-num" style="background:rgba(59,130,246,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">Comanda #${t.comandaNumero}</span>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="kds-stopwatch">⏱️ ${t.horaPedido ? t.horaPedido.slice(11, 16) : 'Ahora'}</span>
+          <label style="display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; color:#94a3b8; cursor:pointer;" title="Seleccionar todos los platillos de esta comanda">
+            <input type="checkbox" class="kds-select-all-check" onchange="toggleSeleccionarTodosKDS('${key}', this.checked)" style="cursor:pointer;" />
+            <span>Todos</span>
+          </label>
         </div>
       </div>
 
-      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+      <div class="kds-items-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
         ${t.items.map(c => {
           const originTag = (c.origen_mesa_numero && String(c.origen_mesa_numero) !== String(t.mesaNumero))
             ? `<span class="mesa-origin-badge" style="font-size:0.72rem; margin-right:4px;" title="Pedido originalmente en ${escapeHtml(c.origen_mesa_numero)}">[${escapeHtml(c.origen_mesa_numero)}]</span>`
             : '';
           const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c-fuerte'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
-          const isSelected = selectedSet.has(c.id);
           return `
-            <div class="kds-item-row ${isSelected ? 'selected' : ''}" id="kdsItemRow_${c.id}" data-item-id="${c.id}" onclick="toggleSeleccionItemKDS('${key}', ${c.id})">
-              <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
-                <div style="font-size:0.92rem; font-weight:700; color:var(--text-main); line-height:1.3; flex:1; min-width:0;">
+            <div class="kds-item-row" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.07);">
+              <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="checkbox" class="kds-item-checkbox" data-item-id="${c.id}" data-kds-key="${key}" onchange="actualizarContadorSeleccionKDS('${key}')" style="cursor:pointer; width:18px; height:18px; accent-color:#10b981;" />
+                <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); line-height:1.25; flex:1;">
                   <span style="color:#f59e0b; font-weight:800; margin-right:4px;">${c.cantidad}x</span>
                   ${originTag}${escapeHtml(c.nombre_producto || c.platillo)} ${badge}
                   ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
                 </div>
               </div>
-              <button type="button" class="btn-kds-check-item kds-item-checkbox ${isSelected ? 'selected' : ''}" id="btnKdsCheck_${c.id}" title="Seleccionar platillo" onclick="event.stopPropagation(); toggleSeleccionItemKDS('${key}', ${c.id})">
-                ${isSelected ? '✓' : ''}
+              <button class="btn-kds-item-ready" title="Marcar este platillo listo" style="background:transparent; border:1px solid rgba(16,185,129,0.4); color:#34d399; border-radius:6px; padding:3px 8px; font-size:0.75rem; cursor:pointer; font-weight:800; margin-left:8px;" onclick="despacharKDSBackend(${c.id})">
+                ✓
               </button>
             </div>
           `;
         }).join('')}
       </div>
 
-      <div class="kds-actions-bar" id="kdsActionsBar_${key}" style="display:flex; gap:8px;">
-        <button class="btn-kds-ready btn-kds-despachar-sel" id="btnDespacharSel_${key}" style="flex:1.2; display:${selectedCount > 0 && selectedCount < t.items.length ? 'flex' : 'none'}; justify-content:center; align-items:center; background: linear-gradient(135deg, #10b981 0%, #059669 100%); font-weight:700; box-shadow: 0 4px 12px rgba(16,185,129,0.35);" onclick="despacharSeleccionadosKDS('${key}')">
-          🍽️ Servir Seleccionadas (<span class="kds-sel-count">${selectedCount}</span>)
+      <div style="display:flex; gap:6px;">
+        <button class="btn-kds-ready btn-kds-despachar-sel" id="btnDespacharSel_${key}" style="display:none; background:linear-gradient(135deg,#059669,#047857); flex:1;" onclick="despacharSeleccionadosKDS('${key}')">
+          🍽️ Servir Seleccionados (<span class="kds-sel-count">0</span>)
         </button>
-        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1; width:100%; display:flex; justify-content:center; align-items:center;" onclick='despacharComandaCompletaBackend(${itemIdsJson}, "${key}")'>
-          ✅ Servir Todas (${t.items.length})
+        <button class="btn-kds-ready btn-kds-despachar-todo" id="btnDespacharTodo_${key}" style="flex:1;" onclick='despacharComandaCompletaBackend(${itemIdsJson})'>
+          ✅ Servir Todos (${t.items.length})
         </button>
       </div>
     `;
@@ -8127,111 +6445,40 @@ function renderKDS() {
   }
 }
 
-window.toggleSeleccionItemKDS = function(key, itemId) {
-  if (!window._kdsSeleccionadosMap) window._kdsSeleccionadosMap = {};
-  if (!window._kdsSeleccionadosMap[key]) window._kdsSeleccionadosMap[key] = new Set();
-  
-  const set = window._kdsSeleccionadosMap[key];
-  if (set.has(itemId)) {
-    set.delete(itemId);
-  } else {
-    set.add(itemId);
-  }
-  
-  const isSelected = set.has(itemId);
-  const row = document.getElementById(`kdsItemRow_${itemId}`);
-  const btn = document.getElementById(`btnKdsCheck_${itemId}`);
-  
-  if (row) {
-    row.classList.toggle('selected', isSelected);
-  }
-  if (btn) {
-    btn.classList.toggle('selected', isSelected);
-    btn.innerHTML = isSelected ? '✓' : '';
-  }
-  
-  window.actualizarBotonesAccionKDS(key);
-};
-
-window.toggleSeleccionarTodosKDS = function(key) {
-  if (!window._kdsSeleccionadosMap) window._kdsSeleccionadosMap = {};
-  if (!window._kdsSeleccionadosMap[key]) window._kdsSeleccionadosMap[key] = new Set();
-  const set = window._kdsSeleccionadosMap[key];
-  const card = document.querySelector(`.kds-card[data-kds-key="${key}"]`);
-  if (!card) return;
-  const allRows = card.querySelectorAll('.kds-item-row');
-  const allSelected = set.size === allRows.length && allRows.length > 0;
-  if (allSelected) {
-    set.clear();
-  } else {
-    allRows.forEach(row => {
-      const id = Number(row.dataset.itemId);
-      if (id) set.add(id);
-    });
-  }
-  allRows.forEach(row => {
-    const id = Number(row.dataset.itemId);
-    const isSel = set.has(id);
-    row.classList.toggle('selected', isSel);
-    const btn = row.querySelector('.kds-check-item');
-    if (btn) {
-      btn.classList.toggle('selected', isSel);
-      btn.innerHTML = isSel ? '✓' : '';
-    }
-  });
-  window.actualizarBotonesAccionKDS(key);
-  if (typeof window.actualizarContadorSeleccionKDS === 'function') {
-    window.actualizarContadorSeleccionKDS(key);
-  }
+window.toggleSeleccionarTodosKDS = function(key, checked) {
+  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]`);
+  checkboxes.forEach(cb => { cb.checked = checked; });
+  actualizarContadorSeleccionKDS(key);
 };
 
 window.actualizarContadorSeleccionKDS = function(key) {
-  window.actualizarBotonesAccionKDS(key);
-};
-
-window.actualizarBotonesAccionKDS = function(key) {
-  const card = document.querySelector(`.kds-card[data-kds-key="${key}"]`);
-  if (!card) return;
-  
-  const allRows = card.querySelectorAll('.kds-item-row');
-  const totalCount = allRows.length;
-  const set = window._kdsSeleccionadosMap ? window._kdsSeleccionadosMap[key] : null;
-  const selectedCount = set ? set.size : 0;
-  
+  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]:checked`);
+  const totalChecks = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]`);
+  const selectAll = document.querySelector(`.kds-card[data-kds-key="${key}"] .kds-select-all-check`);
+  if (selectAll) {
+    selectAll.checked = checkboxes.length === totalChecks.length && totalChecks.length > 0;
+  }
   const btnSel = document.getElementById(`btnDespacharSel_${key}`);
   const btnTodo = document.getElementById(`btnDespacharTodo_${key}`);
-  
-  if (!btnTodo) return;
-  
-  if (selectedCount === 0) {
-    if (btnSel) btnSel.style.display = 'none';
-    btnTodo.style.display = 'flex';
-    btnTodo.style.flex = '1';
-    btnTodo.style.width = '100%';
-    btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
-  } else if (selectedCount > 0 && selectedCount < totalCount) {
-    if (btnSel) {
-      btnSel.style.display = 'flex';
-      btnSel.innerHTML = `🍽️ Servir Seleccionadas (${selectedCount})`;
+  if (btnSel && btnTodo) {
+    const count = checkboxes.length;
+    if (count > 0) {
+      btnSel.style.display = 'block';
+      const countEl = btnSel.querySelector('.kds-sel-count');
+      if (countEl) countEl.textContent = count;
+      btnTodo.style.display = count === totalChecks.length ? 'none' : 'block';
+    } else {
+      btnSel.style.display = 'none';
+      btnTodo.style.display = 'block';
     }
-    btnTodo.style.display = 'flex';
-    btnTodo.style.flex = '1';
-    btnTodo.style.width = 'auto';
-    btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
-  } else if (selectedCount >= totalCount) {
-    if (btnSel) btnSel.style.display = 'none';
-    btnTodo.style.display = 'flex';
-    btnTodo.style.flex = '1';
-    btnTodo.style.width = '100%';
-    btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
   }
 };
 
 window.despacharSeleccionadosKDS = async function(key) {
-  const set = window._kdsSeleccionadosMap ? window._kdsSeleccionadosMap[key] : null;
-  const itemIds = set ? Array.from(set).map(Number).filter(Boolean) : [];
+  const checkboxes = document.querySelectorAll(`.kds-item-checkbox[data-kds-key="${key}"]:checked`);
+  const itemIds = Array.from(checkboxes).map(cb => Number(cb.dataset.itemId)).filter(Boolean);
   if (!itemIds.length) {
-    mostrarNotificacionCentro('Por favor selecciona al menos un platillo.', 'warning');
+    alert('Por favor selecciona al menos un platillo para servir.');
     return;
   }
   try {
@@ -8248,9 +6495,6 @@ window.despacharSeleccionadosKDS = async function(key) {
           body: JSON.stringify({ estado: 'listo' })
         });
       }
-    }
-    if (window._kdsSeleccionadosMap) {
-      delete window._kdsSeleccionadosMap[key];
     }
     sonarCampanaCocina();
     mostrarNotificacionCentro(`🍽️ ${itemIds.length} platillo(s) marcado(s) como listo(s) y servido(s).`, 'success');
@@ -8278,24 +6522,14 @@ window.despacharKDSBackend = async function(detalleId) {
   }
 };
 
-window.despacharComandaCompletaBackend = async function(itemIds, key) {
+window.despacharComandaCompletaBackend = async function(itemIds) {
   try {
-    const res = await fetch('/api/kds/despachar-lote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemIds, estado: 'listo' })
-    });
-    if (!res.ok) {
-      for (const id of itemIds) {
-        await fetch(`/api/kds/${id}/estado`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ estado: 'listo' })
-        });
-      }
-    }
-    if (key && window._kdsSeleccionadosMap) {
-      delete window._kdsSeleccionadosMap[key];
+    for (const id of itemIds) {
+      await fetch(`/api/kds/${id}/estado`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'listo' })
+      });
     }
     sonarCampanaCocina();
     mostrarNotificacionCentro('🍽️ Comanda marcada como lista y servida.', 'success');
@@ -8303,7 +6537,6 @@ window.despacharComandaCompletaBackend = async function(itemIds, key) {
     cargarMesasDesdeBackend();
   } catch (e) {
     sonarCampanaCocina();
-    cargarKDSDesdeBackend();
   }
 };
 
@@ -8320,33 +6553,19 @@ document.querySelectorAll('.kds-tab').forEach(tab => {
 // ============================================================================
 async function cargarCajaDesdeBackend() {
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/caja/actual?negocio_id=${nid}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
+    const res = await fetch('/api/caja/actual');
     const data = await res.json();
     if (data.caja) {
-      let efect = 0, tarj = 0, sinpe = 0, dolaresCRC = 0, dolaresUSD = 0;
+      let efect = 0, tarj = 0, sinpe = 0;
       (data.ventas || []).forEach(v => {
-        const m = (v.metodo || '').toLowerCase();
-        const tot = Number(v.total) || 0;
-        const totUSD = Number(v.total_usd) || 0;
-        if (m.includes('efectivo')) efect += tot;
-        else if (m.includes('tarjeta')) tarj += tot;
-        else if (m.includes('sinpe') || m.includes('transfer')) sinpe += tot;
-        else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
-          dolaresCRC += tot;
-          dolaresUSD += totUSD;
-        }
+        if (v.metodo === 'Efectivo') efect = v.total;
+        if (v.metodo === 'Tarjeta') tarj = v.total;
+        if (v.metodo === 'SINPE') sinpe = v.total;
       });
 
       document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
       document.getElementById('cajaVentasTarjeta').textContent = formatCRC(tarj);
       document.getElementById('cajaVentasSinpe').textContent = formatCRC(sinpe);
-      const elDolares = document.getElementById('cajaVentasDolares');
-      if (elDolares) {
-        elDolares.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
-      }
       document.getElementById('cajaTotalEfectivo').textContent = formatCRC((data.caja.monto_inicial || 50000) + efect);
       document.getElementById('cajeroTurnoNombre').textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
       let entradas = 0, salidas = 0;
@@ -8356,10 +6575,7 @@ async function cargarCajaDesdeBackend() {
       });
 
       const fondo = data.caja.monto_inicial || 0;
-      const totalEsperadoEfectivo = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
-      const totalEsperadoDolaresUSD = dolaresUSD;
-      const totalEsperadoDolaresCRC = dolaresCRC;
-      const totalGeneralGavetaCRC = Math.round((totalEsperadoEfectivo + totalEsperadoDolaresCRC) * 100) / 100;
+      const totalEsperado = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
 
       const elFondo = document.getElementById('cajaFondoInicial');
       if (elFondo) elFondo.textContent = formatCRC(fondo);
@@ -8379,16 +6595,8 @@ async function cargarCajaDesdeBackend() {
       const elSinpe = document.getElementById('cajaVentasSinpe');
       if (elSinpe) elSinpe.textContent = formatCRC(sinpe);
 
-      const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
-      if (elEspEf) elEspEf.textContent = formatCRC(totalEsperadoEfectivo);
-
-      const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
-      if (elEspDol) {
-        elEspDol.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
-      }
-
       const elTotEf = document.getElementById('cajaTotalEfectivo');
-      if (elTotEf) elTotEf.textContent = formatCRC(totalGeneralGavetaCRC);
+      if (elTotEf) elTotEf.textContent = formatCRC(totalEsperado);
 
       const elCajero = document.getElementById('cajeroTurnoNombre');
       if (elCajero) elCajero.textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
@@ -8399,42 +6607,28 @@ async function cargarCajaDesdeBackend() {
         ventasEfectivo: efect,
         ventasTarjeta: tarj,
         ventasSinpe: sinpe,
-        ventasDolares: dolaresCRC,
-        ventasDolaresUSD: dolaresUSD,
         totalEntradas: entradas,
         totalSalidas: salidas,
-        totalEsperadoEfectivo,
-        totalEsperadoDolaresUSD,
-        totalEsperadoDolaresCRC,
-        totalGeneralGavetaCRC,
-        totalEsperado: totalGeneralGavetaCRC,
+        totalEsperado,
         movimientos: data.movimientos || []
       };
     } else {
       const elFondo = document.getElementById('cajaFondoInicial');
       if (elFondo) elFondo.textContent = 'CERRADA';
-      const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
-      if (elEspEf) elEspEf.textContent = '₡ 0.00';
-      const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
-      if (elEspDol) elEspDol.textContent = '$ 0.00 (₡ 0)';
       const elTotEf = document.getElementById('cajaTotalEfectivo');
       if (elTotEf) elTotEf.textContent = '₡ 0.00';
-      const elVentasEf = document.getElementById('cajaVentasEfectivo');
-      if (elVentasEf) elVentasEf.textContent = '₡ 0.00';
-      const elTarj = document.getElementById('cajaVentasTarjeta');
-      if (elTarj) elTarj.textContent = '₡ 0.00';
-      const elSinpe = document.getElementById('cajaVentasSinpe');
-      if (elSinpe) elSinpe.textContent = '₡ 0.00';
-      const elDolares = document.getElementById('cajaVentasDolares');
-      if (elDolares) elDolares.textContent = '$ 0.00 (₡ 0)';
-      const elEntradas = document.getElementById('cajaEntradasTotal');
-      if (elEntradas) elEntradas.textContent = '+₡ 0.00';
-      const elSalidas = document.getElementById('cajaSalidasTotal');
-      if (elSalidas) elSalidas.textContent = '-₡ 0.00';
       window._cajaActivaData = null;
     }
 
-    estado.meserosReporte = data.tipPool || [];
+    if (data.tipPool && data.tipPool.length) {
+      estado.meserosReporte = data.tipPool;
+    } else {
+      estado.meserosReporte = [
+        { nombre: 'Carlos Solano (Salonero)', mesas: 14, ventas: 115000, propina: 11500 },
+        { nombre: 'Sofía Morales (Salonera)', mesas: 12, ventas: 98000, propina: 9800 },
+        { nombre: 'Roberto Caja (Cajero)', mesas: 6, ventas: 45000, propina: 4500 }
+      ];
+    }
     renderTipPoolTable();
   } catch (e) {
     console.warn('Error cargando caja:', e);
@@ -8499,30 +6693,26 @@ window.guardarMovimientoCaja = async function() {
 
   if (isNaN(monto) || monto <= 0) {
     alert('Por favor ingresa un monto válido mayor a 0');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa un monto válido mayor a 0', 'warning');
     if (txtMonto) txtMonto.focus();
     return;
   }
   if (!concepto) {
     alert('Por favor ingresa el motivo o concepto del movimiento');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa el motivo o concepto del movimiento', 'warning');
     if (txtConcepto) txtConcepto.focus();
     return;
   }
 
   const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
     const res = await fetch('/api/caja/movimiento', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-      body: JSON.stringify({ tipo, monto, concepto, usuarioNombre, negocio_id: nid })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, monto, concepto, usuarioNombre })
     });
     const data = await res.json();
     if (!res.ok) {
       alert('❌ ' + (data.error || 'No se pudo registrar el movimiento'));
-      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo registrar el movimiento'), 'error');
       return;
     }
 
@@ -8531,7 +6721,6 @@ window.guardarMovimientoCaja = async function() {
     await cargarCajaDesdeBackend();
   } catch (e) {
     alert('❌ Error de conexión: ' + e.message);
-    mostrarNotificacionCentro('❌ Error de conexión: ' + e.message, 'error');
   }
 };
 
@@ -8696,9 +6885,8 @@ window.generarCorteX = async function() {
 
   try {
     mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}`, {
-      headers: { 'x-supervisor-pin': pinAutorizado, 'x-negocio-id': String(nid) }
+    const res = await fetch('/api/caja/corte-x', {
+      headers: { 'x-supervisor-pin': pinAutorizado }
     });
     const data = await res.json();
     if (!res.ok) {
@@ -8710,9 +6898,9 @@ window.generarCorteX = async function() {
       tipo: 'corte_x',
       titulo: 'CORTE X (PARCIAL)',
       negocio: {
-        nombre: estado.negocioActual?.nombre || 'GastroBar Fuego & Brasas',
-        slogan: estado.negocioActual?.slogan || 'Sistema de Punto de Venta & Bar',
-        tel: estado.negocioActual?.telefono || '2222-0000 / 8888-9999'
+        nombre: 'GastroBar Fuego & Brasas',
+        slogan: 'Sistema de Punto de Venta & Bar',
+        tel: '2222-0000 / 8888-9999'
       },
       caja_id: data.caja_id,
       cajero: data.cajero || 'Cajero de Turno',
@@ -8745,9 +6933,8 @@ window.abrirModalCierreZ = async function() {
   window._adminPinCierreZ = pinAutorizado;
 
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}`, {
-      headers: { 'x-supervisor-pin': pinAutorizado, 'x-negocio-id': String(nid) }
+    const res = await fetch('/api/caja/corte-x', {
+      headers: { 'x-supervisor-pin': pinAutorizado }
     });
     const data = await res.json();
     if (!res.ok) {
@@ -8755,215 +6942,120 @@ window.abrirModalCierreZ = async function() {
       return;
     }
 
-    window._datosCierreZPrecargados = data;
+    window._datosCierreZ = data;
 
-    const modal = document.getElementById('modalCierreZ');
-    if (!modal) return;
+    const elFondo = document.getElementById('czFondoInicial');
+    if (elFondo) elFondo.textContent = formatCRC(data.fondo_inicial);
+    const elVentas = document.getElementById('czVentasEfectivo');
+    if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo || 0)}`;
+    const elEnt = document.getElementById('czTotalEntradas');
+    if (elEnt) elEnt.textContent = `+${formatCRC(data.total_entradas || 0)}`;
+    const elSal = document.getElementById('czTotalSalidas');
+    if (elSal) elSal.textContent = `-${formatCRC(data.total_salidas || 0)}`;
+    const elEsp = document.getElementById('czTotalEsperado');
+    if (elEsp) elEsp.textContent = formatCRC(data.efectivo_esperado || 0);
 
-    const txtEsperadoCRC = document.getElementById('czEsperadoEfectivoCRC');
-    const txtEsperadoUSD = document.getElementById('czEsperadoDolaresUSD');
-    const txtEsperadoTotal = document.getElementById('czTotalEsperado') || document.getElementById('txtCierreZEsperado');
-    const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
-    const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
+    const txtReal = document.getElementById('txtCierreZEfectivoReal');
+    if (txtReal) txtReal.value = '';
     const txtNotas = document.getElementById('txtCierreZNotas');
-
-    const espCRC = Number(data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : (data.efectivo_esperado || 0));
-    const espUSD = Number(data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0));
-    const espDolCRC = Number(data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0));
-    const espTotal = Number(data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : (espCRC + espDolCRC));
-
-    if (txtEsperadoCRC) txtEsperadoCRC.textContent = formatCRC(espCRC);
-    if (txtEsperadoUSD) txtEsperadoUSD.textContent = `$ ${espUSD.toFixed(2)} (${formatCRC(espDolCRC)})`;
-    if (txtEsperadoTotal) txtEsperadoTotal.textContent = formatCRC(espTotal);
-
-    if (txtRealCRC) {
-      txtRealCRC.value = '';
-      txtRealCRC.placeholder = '0';
-    }
-    if (txtRealUSD) {
-      txtRealUSD.value = '';
-      txtRealUSD.placeholder = '0.00';
-    }
     if (txtNotas) txtNotas.value = '';
 
-    const elFondo = document.getElementById('czFondoInicial') || document.getElementById('cierreZFondoInicial');
-    if (elFondo) elFondo.textContent = formatCRC(data.fondo_inicial || 0);
+    window.calcularDiferenciaCierreZ();
 
-    const elVentas = document.getElementById('czVentasEfectivo') || document.getElementById('cierreZVentasTotal');
-    if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo !== undefined ? data.ventas.efectivo : (data.ventas?.total || 0))}`;
-
-    const elVentasDolares = document.getElementById('czVentasDolares');
-    if (elVentasDolares) {
-      elVentasDolares.textContent = `$ ${espUSD.toFixed(2)} (${formatCRC(espDolCRC)})`;
-    }
-
-    const elVentasTarj = document.getElementById('czVentasTarjeta');
-    if (elVentasTarj) elVentasTarj.textContent = formatCRC(data.ventas?.tarjeta || 0);
-
-    const elVentasSinpe = document.getElementById('czVentasSinpe');
-    if (elVentasSinpe) elVentasSinpe.textContent = formatCRC(data.ventas?.sinpe || 0);
-
-    const elEntradas = document.getElementById('czTotalEntradas') || document.getElementById('cierreZEntradas');
-    if (elEntradas) elEntradas.textContent = `+${formatCRC(data.total_entradas || 0)}`;
-
-    const elSalidas = document.getElementById('czTotalSalidas') || document.getElementById('cierreZSalidas');
-    if (elSalidas) elSalidas.textContent = `-${formatCRC(data.total_salidas || 0)}`;
-
-    const tcActual = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || (espUSD > 0 ? Math.round(espDolCRC / espUSD) : 520);
-    window._tcActualCierreZ = tcActual;
-    const elTC = document.getElementById('czTipoCambioInfo');
-    if (elTC) elTC.textContent = `💱 Tipo de Cambio: ₡${tcActual} / $1 USD`;
-
-    const elTotalComb = document.getElementById('czTotalContadoCombinado');
-    if (elTotalComb) elTotalComb.textContent = `Total Contado: ₡ 0`;
-
-    const elDiferencia = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
-    if (elDiferencia) {
-      elDiferencia.style.display = 'block';
-      elDiferencia.style.background = 'rgba(30,41,59,0.5)';
-      elDiferencia.style.borderColor = '#334155';
-      elDiferencia.style.color = '#94a3b8';
-      elDiferencia.innerHTML = '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.';
-    }
-
-    modal.classList.add('active');
+    const modal = document.getElementById('modalCierreZ');
+    if (modal) modal.classList.add('active');
     setTimeout(() => {
-      if (txtRealCRC) txtRealCRC.focus();
+      if (txtReal) txtReal.focus();
     }, 100);
   } catch (e) {
-    alert('❌ Error al preparar Cierre Z: ' + e.message);
+    alert('❌ Error abriendo cierre Z: ' + e.message);
   }
 };
 
 window.cerrarModalCierreZ = function() {
   const modal = document.getElementById('modalCierreZ');
   if (modal) modal.classList.remove('active');
-  window._datosCierreZPrecargados = null;
 };
 
-window.calcularDiferenciaCierreZ = window.calcularDiferenciaArqueoCierreZ = function() {
-  if (!window._datosCierreZPrecargados) return;
-  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
-  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
-  const box = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
+window.calcularDiferenciaCierreZ = function() {
+  const box = document.getElementById('boxDiferenciaCierreZ');
+  const txtReal = document.getElementById('txtCierreZEfectivoReal');
   if (!box) return;
 
-  const realCRC = parseFloat(txtRealCRC?.value || 0) || 0;
-  const realUSD = parseFloat(txtRealUSD?.value || 0) || 0;
-  const tc = window._tcActualCierreZ || 520;
-  const realUSDEnCRC = Math.round(realUSD * tc);
-  const totalContadoCombinado = Math.round(realCRC + realUSDEnCRC);
+  const esperado = window._datosCierreZ?.efectivo_esperado || 0;
+  const realVal = txtReal ? txtReal.value : '';
 
-  const elTotalComb = document.getElementById('czTotalContadoCombinado');
-  if (elTotalComb) {
-    elTotalComb.textContent = `Total Contado: ${formatCRC(totalContadoCombinado)} (${formatCRC(realCRC)} + $${realUSD.toFixed(2)})`;
-  }
-
-  const data = window._datosCierreZPrecargados;
-  const espCRC = Number(data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : (data.efectivo_esperado || 0));
-  const espUSD = Number(data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0));
-  const espDolCRC = Number(data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0));
-  const espTotal = Number(data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : (espCRC + espDolCRC));
-
-  if (txtRealCRC?.value === '' && txtRealUSD?.value === '') {
-    box.style.display = 'block';
+  if (realVal === '') {
     box.style.background = 'rgba(30,41,59,0.5)';
     box.style.borderColor = '#334155';
     box.style.color = '#94a3b8';
-    box.innerHTML = '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.';
+    box.innerHTML = `⚖️ Esperado en gaveta: <strong>${formatCRC(esperado)}</strong>. Digita el monto contado.`;
     return;
   }
 
-  const diffTotal = Math.round((totalContadoCombinado - espTotal) * 100) / 100;
-  const diffCRC = Math.round((realCRC - espCRC) * 100) / 100;
-  const diffUSD = Math.round((realUSD - espUSD) * 100) / 100;
-
-  box.style.display = 'block';
-  let badgeHtml = '';
-  if (diffTotal === 0) {
-    box.style.background = 'rgba(16, 185, 129, 0.2)';
-    box.style.borderColor = '#10b981';
-    box.style.color = '#6ee7b7';
-    badgeHtml = '✨ <strong>¡Caja Cuadrada Exacta!</strong> (Diferencia: ₡0.00)';
-  } else if (diffTotal > 0) {
-    box.style.background = 'rgba(59, 130, 246, 0.2)';
-    box.style.borderColor = '#3b82f6';
-    box.style.color = '#93c5fd';
-    badgeHtml = `🟢 <strong>Sobrante Total en Gaveta:</strong> +${formatCRC(diffTotal)}`;
-  } else {
-    box.style.background = 'rgba(239, 68, 68, 0.2)';
-    box.style.borderColor = '#dc2626';
-    box.style.color = '#f87171';
-    badgeHtml = `🔴 <strong>Faltante Total en Gaveta:</strong> -${formatCRC(Math.abs(diffTotal))}`;
+  const real = parseFloat(realVal);
+  if (isNaN(real)) {
+    box.innerHTML = '⚠️ Ingrese un valor numérico válido.';
+    return;
   }
 
-  const detalleCRC = diffCRC === 0 ? '₡ 0' : (diffCRC > 0 ? `+${formatCRC(diffCRC)}` : `-${formatCRC(Math.abs(diffCRC))}`);
-  const detalleUSD = diffUSD === 0 ? '$ 0.00' : (diffUSD > 0 ? `+$${diffUSD.toFixed(2)}` : `-$${Math.abs(diffUSD).toFixed(2)}`);
-
-  box.innerHTML = `
-    <div>${badgeHtml}</div>
-    <div style="font-size:0.8rem; margin-top:4px; opacity:0.9;">
-      <span>• Colones: <strong>${detalleCRC}</strong></span> &nbsp;|&nbsp; 
-      <span>• Dólares: <strong>${detalleUSD}</strong></span>
-    </div>
-  `;
+  const diff = Math.round((real - esperado) * 100) / 100;
+  if (diff === 0) {
+    box.style.background = 'rgba(16, 185, 129, 0.15)';
+    box.style.borderColor = '#10b981';
+    box.style.color = '#34d399';
+    box.innerHTML = `✅ <strong>Caja Cuadrada Perfecta</strong> (Diferencia: ₡0)`;
+  } else if (diff > 0) {
+    box.style.background = 'rgba(56, 189, 248, 0.15)';
+    box.style.borderColor = '#0284c7';
+    box.style.color = '#38bdf8';
+    box.innerHTML = `🟢 <strong>Sobrante en Caja:</strong> +${formatCRC(diff)}`;
+  } else {
+    box.style.background = 'rgba(239, 68, 68, 0.15)';
+    box.style.borderColor = '#dc2626';
+    box.style.color = '#f87171';
+    box.innerHTML = `🔴 <strong>Faltante en Caja:</strong> -${formatCRC(Math.abs(diff))}`;
+  }
 };
 
 window.ejecutarCierreZ = async function() {
-  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
-  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
+  const txtReal = document.getElementById('txtCierreZEfectivoReal');
   const txtNotas = document.getElementById('txtCierreZNotas');
 
-  const valCRC = txtRealCRC ? txtRealCRC.value.trim() : '';
-  const valUSD = txtRealUSD ? txtRealUSD.value.trim() : '';
-
-  if (valCRC === '' && valUSD === '') {
-    alert('Por favor ingresa el dinero físico contado en la gaveta (Colones y/o Dólares).');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa el monto contado en la gaveta.', 'warning');
-    if (txtRealCRC) txtRealCRC.focus();
+  const realVal = txtReal ? txtReal.value : '';
+  if (realVal === '') {
+    alert('Por favor ingresa el monto de efectivo real contado en la gaveta.');
+    if (txtReal) txtReal.focus();
     return;
   }
 
-  const realCRC = parseFloat(valCRC || 0) || 0;
-  const realUSD = parseFloat(valUSD || 0) || 0;
-  const tc = window._tcActualCierreZ || 520;
-  const totalContadoCRC = Math.round(realCRC + (realUSD * tc));
+  const efectivo_real_contado = parseFloat(realVal);
+  if (isNaN(efectivo_real_contado) || efectivo_real_contado < 0) {
+    alert('Por favor ingresa un monto válido.');
+    return;
+  }
 
   const notas = txtNotas ? txtNotas.value.trim() : '';
   const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
 
-  const confirmarCierre = await window.confirmarAccion({
-    icono: '🔒',
-    titulo: '¿Ejecutar Cierre Z Definitivo?',
-    subtitulo: 'Cierre oficial de turno y arqueo de caja',
-    mensaje: `¿Estás seguro de realizar el CIERRE Z DEFINITIVO? Total contado: ${formatCRC(totalContadoCRC)} (${formatCRC(realCRC)} + $${realUSD.toFixed(2)} USD). Esta acción cerrará la caja en el sistema e imprimirá el reporte final.`,
-    txtSi: '🔒 Sí, Cerrar Turno',
-    txtNo: 'Cancelar',
-    tipo: 'peligro'
-  });
-  if (!confirmarCierre) return;
+  if (!confirm('⚠️ ¿Estás seguro de realizar el CIERRE Z DEFINITIVO del turno? Esta acción cerrará la caja en el sistema e imprimirá el reporte oficial final.')) {
+    return;
+  }
 
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const res = await fetch('/api/caja/cierre-z', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        efectivo_real_contado: totalContadoCRC,
-        efectivo_real_contado_crc: realCRC,
-        dolares_real_contado: realUSD,
-        dolares_real_contado_usd: realUSD,
-        tipo_cambio: tc,
+        efectivo_real_contado,
         notas,
         usuarioNombre,
-        adminPin: window._adminPinCierreZ || '1234',
-        negocio_id: nid
+        adminPin: window._adminPinCierreZ || '1234'
       })
     });
     const data = await res.json();
     if (!res.ok) {
       alert('❌ ' + (data.error || 'No se pudo ejecutar el cierre Z'));
-      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo ejecutar el cierre Z'), 'error');
       return;
     }
 
@@ -8975,9 +7067,9 @@ window.ejecutarCierreZ = async function() {
       tipo: 'cierre_z',
       titulo: 'CIERRE Z (FINAL DEFINITIVO)',
       negocio: {
-        nombre: estado.negocioActual?.nombre || 'GastroBar Fuego & Brasas',
-        slogan: estado.negocioActual?.slogan || 'Sistema de Punto de Venta & Bar',
-        tel: estado.negocioActual?.telefono || '2222-0000 / 8888-9999'
+        nombre: 'GastroBar Fuego & Brasas',
+        slogan: 'Sistema de Punto de Venta & Bar',
+        tel: '2222-0000 / 8888-9999'
       },
       caja_id: data.caja_id,
       cajero: data.cajero || 'Cajero de Turno',
@@ -9000,24 +7092,14 @@ window.ejecutarCierreZ = async function() {
     window.mostrarVisorTicketTermico(ticketData);
     await cargarCajaDesdeBackend();
 
-    setTimeout(async () => {
-      const abrirSiguiente = await window.confirmarAccion({
-        icono: '🔓',
-        titulo: 'Turno Cerrado Exitosamente',
-        subtitulo: 'Apertura de Nuevo Turno de Caja',
-        mensaje: 'La caja actual ha sido cerrada y liquidada. ¿Deseas realizar la apertura del siguiente turno de caja ahora?',
-        txtSi: '🔓 Abrir Nuevo Turno',
-        txtNo: 'Más tarde',
-        tipo: 'exito'
-      });
-      if (abrirSiguiente) {
+    setTimeout(() => {
+      if (confirm('🔒 Turno cerrado exitosamente. ¿Deseas realizar la apertura del siguiente turno de caja ahora?')) {
         window.abrirModalAperturaCaja();
       }
     }, 1200);
 
   } catch (e) {
     alert('❌ Error ejecutando Cierre Z: ' + e.message);
-    mostrarNotificacionCentro('❌ Error ejecutando Cierre Z: ' + e.message, 'error');
   }
 };
 
@@ -9053,22 +7135,19 @@ window.ejecutarAperturaCaja = async function() {
 
   if (isNaN(monto_inicial) || monto_inicial < 0) {
     alert('Por favor ingresa un fondo inicial válido.');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa un fondo inicial válido.', 'warning');
     if (txtMonto) txtMonto.focus();
     return;
   }
 
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const res = await fetch('/api/caja/abrir', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-      body: JSON.stringify({ cajero, monto_inicial, negocio_id: nid })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cajero, monto_inicial })
     });
     const data = await res.json();
     if (!res.ok) {
       alert('❌ ' + (data.error || 'No se pudo abrir la caja'));
-      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo abrir la caja'), 'error');
       return;
     }
 
@@ -9077,12 +7156,10 @@ window.ejecutarAperturaCaja = async function() {
     await cargarCajaDesdeBackend();
   } catch (e) {
     alert('❌ Error abriendo caja: ' + e.message);
-    mostrarNotificacionCentro('❌ Error abriendo caja: ' + e.message, 'error');
   }
 };
 
 // Listeners para botones de caja
-document.getElementById('btnAbrirCaja')?.addEventListener('click', () => window.abrirModalAperturaCaja());
 document.getElementById('btnEntradaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('entrada'));
 document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('salida'));
 document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());
@@ -9218,7 +7295,7 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
   const btnCobrar = document.getElementById('btnFinalizarCobro');
   if (btnCobrar) {
     if (estado.enviarCocinaEnCobro) {
-      btnCobrar.textContent = '🔥 Enviar a Cocina, Liquidar & Mantener Ocupada';
+      btnCobrar.textContent = '🔥 Enviar a Cocina, Liquidar & Liberar Mesa';
       btnCobrar.className = 'btn-pri warning';
     } else {
       btnCobrar.textContent = '✅ Liquidar, Imprimir & Liberar Mesa';
@@ -9249,60 +7326,8 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
     }
   }
 
-    inicializarPanelesCobroModal(totalTxt);
   document.getElementById('modalCobro').classList.add('active');
 });
-
-function inicializarPanelesCobroModal(totalTxt) {
-  let totalNum = parseCRC(totalTxt || document.getElementById('cobroTotalDisplay')?.textContent || '0');
-  if (totalNum <= 0 && estado.mesaActiva) {
-    totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
-  }
-
-  // Activar pestaña por defecto (Efectivo)
-  document.querySelectorAll('.pay-method-tab').forEach(b => b.classList.remove('active'));
-  const tabEf = document.querySelector('.pay-method-tab[data-method="Efectivo"]');
-  if (tabEf) tabEf.classList.add('active');
-
-  document.querySelectorAll('.pay-panel').forEach(p => p.classList.remove('active'));
-  const pnlEf = document.getElementById('cobroEfectivoPanel');
-  if (pnlEf) pnlEf.classList.add('active');
-
-  // Panel Efectivo
-  const txtEf = document.getElementById('txtEfectivoRecibido');
-  if (txtEf) txtEf.value = '';
-  const elVuelto = document.getElementById('cobroVueltoDisplay');
-  if (elVuelto) elVuelto.textContent = '₡ 0';
-
-  // Panel Tarjeta
-  const elTarj = document.getElementById('cobroTarjetaMontoDisplay');
-  if (elTarj) elTarj.textContent = formatCRC(totalNum);
-  const refTarj = document.getElementById('txtTarjetaReferencia');
-  if (refTarj) refTarj.value = '';
-
-  // Panel SINPE
-  const elSinpe = document.getElementById('cobroSinpeMontoDisplay');
-  if (elSinpe) elSinpe.textContent = formatCRC(totalNum);
-  const refSinpe = document.getElementById('txtSinpeReferencia');
-  if (refSinpe) refSinpe.value = '';
-
-  // Panel Dólares
-  const txtTC = document.getElementById('txtTipoCambioUSD');
-  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
-  const totalUSD = (totalNum / tc).toFixed(2);
-  const elTotUSD = document.getElementById('cobroTotalUSDDisplay');
-  if (elTotUSD) elTotUSD.textContent = `$ ${totalUSD}`;
-  const txtRecUSD = document.getElementById('txtDolaresRecibidos');
-  if (txtRecUSD) txtRecUSD.value = '';
-  calcularCobroDolares();
-
-  // Panel Mixto - Limpiar al abrir modal
-  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  calcularPagoMixto();
-}
 
 document.getElementById('btnCloseCobroModal').addEventListener('click', () => {
   document.getElementById('modalCobro').classList.remove('active');
@@ -9320,50 +7345,13 @@ document.getElementById('btnCancelarCobro').addEventListener('click', () => {
   }
 });
 
-// Selector interactivo de pestañas de pago
 document.querySelectorAll('.pay-method-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.pay-method-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    
-    // Activar el panel correspondiente
-    const method = btn.dataset.method;
-    document.querySelectorAll('.pay-panel').forEach(p => p.classList.remove('active'));
-
-    const panelMap = {
-      'Efectivo': 'cobroEfectivoPanel',
-      'Tarjeta': 'cobroTarjetaPanel',
-      'SINPE': 'cobroSinpePanel',
-      'Dolares': 'cobroDolaresPanel',
-      'Mixto': 'cobroMixtoPanel'
-    };
-
-    const targetPanelId = panelMap[method] || 'cobroEfectivoPanel';
-    const targetPanel = document.getElementById(targetPanelId);
-    if (targetPanel) {
-      targetPanel.classList.add('active');
-    }
-
-    // Actualizar montos de la pestaña activa sin reiniciar entradas del usuario
-    const totalTxt = document.getElementById('cobroTotalDisplay')?.textContent || '0';
-    const totalNum = parseCRC(totalTxt);
-    if (method === 'Tarjeta') {
-      const elTarj = document.getElementById('cobroTarjetaMontoDisplay');
-      if (elTarj) elTarj.textContent = formatCRC(totalNum);
-    } else if (method === 'SINPE') {
-      const elSinpe = document.getElementById('cobroSinpeMontoDisplay');
-      if (elSinpe) elSinpe.textContent = formatCRC(totalNum);
-    } else if (method === 'Dolares') {
-      calcularCobroDolares();
-    } else if (method === 'Mixto') {
-      calcularPagoMixto();
-    } else if (method === 'Efectivo') {
-      calcularVueltoCobro();
-    }
   });
 });
 
-// Chips rápidos de efectivo colones
 document.querySelectorAll('.cash-chip[data-amt]').forEach(chip => {
   chip.addEventListener('click', () => {
     document.getElementById('txtEfectivoRecibido').value = Number(chip.dataset.amt);
@@ -9371,321 +7359,20 @@ document.querySelectorAll('.cash-chip[data-amt]').forEach(chip => {
   });
 });
 
-const btnPagoExactoEl = document.getElementById('btnPagoExacto');
-if (btnPagoExactoEl) {
-  btnPagoExactoEl.addEventListener('click', () => {
-    const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
-    document.getElementById('txtEfectivoRecibido').value = totalNum;
-    calcularVueltoCobro();
-  });
-}
+document.getElementById('btnPagoExacto').addEventListener('click', () => {
+  const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
+  document.getElementById('txtEfectivoRecibido').value = totalNum;
+  calcularVueltoCobro();
+});
 
-const txtEfectivoRecibidoEl = document.getElementById('txtEfectivoRecibido');
-if (txtEfectivoRecibidoEl) {
-  txtEfectivoRecibidoEl.addEventListener('input', calcularVueltoCobro);
-}
+document.getElementById('txtEfectivoRecibido').addEventListener('input', calcularVueltoCobro);
 
 function calcularVueltoCobro() {
   const total = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
   const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || 0;
   const vuelto = Math.max(0, recibido - total);
-  const elVuelto = document.getElementById('cobroVueltoDisplay');
-  if (elVuelto) elVuelto.textContent = formatCRC(vuelto);
+  document.getElementById('cobroVueltoDisplay').textContent = formatCRC(vuelto);
 }
-
-// Cálculo y chips para Dólares ($ USD)
-function calcularCobroDolares() {
-  const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-  const txtTC = document.getElementById('txtTipoCambioUSD');
-  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
-  const totalUSD = totalCRC > 0 ? (totalCRC / tc) : 0;
-  
-  const elTotUSD = document.getElementById('cobroTotalUSDDisplay');
-  if (elTotUSD) elTotUSD.textContent = `$ ${totalUSD.toFixed(2)}`;
-
-  const txtRec = document.getElementById('txtDolaresRecibidos');
-  const recUSD = txtRec ? (parseFloat(txtRec.value) || 0) : 0;
-  
-  const vueltoUSD = Math.max(0, recUSD - totalUSD);
-  const vueltoCRC = Math.max(0, Math.round(vueltoUSD * tc));
-
-  const elVueltoCRC = document.getElementById('cobroVueltoUSDEnColones');
-  if (elVueltoCRC) elVueltoCRC.textContent = formatCRC(vueltoCRC);
-
-  const elVueltoUSD = document.getElementById('cobroVueltoUSDDisplay');
-  if (elVueltoUSD) elVueltoUSD.textContent = `$ ${vueltoUSD.toFixed(2)}`;
-}
-
-document.querySelectorAll('.chip-usd[data-usd]').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const txtRec = document.getElementById('txtDolaresRecibidos');
-    if (txtRec) {
-      txtRec.value = chip.dataset.usd;
-      calcularCobroDolares();
-    }
-  });
-});
-
-const btnPagoExactoUSDEl = document.getElementById('btnPagoExactoUSD');
-if (btnPagoExactoUSDEl) {
-  btnPagoExactoUSDEl.addEventListener('click', () => {
-    const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-    const txtTC = document.getElementById('txtTipoCambioUSD');
-    const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
-    const totalUSD = totalCRC > 0 ? (totalCRC / tc) : 0;
-    const txtRec = document.getElementById('txtDolaresRecibidos');
-    if (txtRec) {
-      txtRec.value = totalUSD.toFixed(2);
-      calcularCobroDolares();
-    }
-  });
-}
-
-const txtDolaresRecibidosEl = document.getElementById('txtDolaresRecibidos');
-if (txtDolaresRecibidosEl) {
-  txtDolaresRecibidosEl.addEventListener('input', calcularCobroDolares);
-}
-const txtTipoCambioUSDEl = document.getElementById('txtTipoCambioUSD');
-if (txtTipoCambioUSDEl) {
-  txtTipoCambioUSDEl.addEventListener('input', () => {
-    calcularCobroDolares();
-    calcularPagoMixto();
-  });
-}
-
-// Funciones para Pago Mixto
-window.limpiarCamposMixto = function() {
-  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  calcularPagoMixto();
-};
-
-window.splitMixto5050 = function(tipo1, tipo2) {
-  let totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-  if (totalCRC <= 0 && estado.mesaActiva) {
-    totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
-  }
-  if (totalCRC <= 0) return;
-  limpiarCamposMixto();
-  const mitad1 = Math.ceil(totalCRC / 2);
-  const mitad2 = totalCRC - mitad1;
-
-  if (tipo1 === 'efectivo') {
-    const el = document.getElementById('txtMixtoEfectivo');
-    if (el) {
-      el.value = mitad1;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }
-  if (tipo2 === 'tarjeta') {
-    const el = document.getElementById('txtMixtoTarjeta');
-    if (el) {
-      el.value = mitad2;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  } else if (tipo2 === 'sinpe') {
-    const el = document.getElementById('txtMixtoSinpe');
-    if (el) {
-      el.value = mitad2;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }
-  calcularPagoMixto();
-};
-
-function calcularPagoMixto() {
-  let totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-  if (totalCRC <= 0 && estado.mesaActiva) {
-    totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
-  }
-  const txtTC = document.getElementById('txtTipoCambioUSD');
-  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
-
-  const mEfectivo = parseFloat(document.getElementById('txtMixtoEfectivo')?.value) || 0;
-  const mTarjeta = parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0;
-  const mSinpe = parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0;
-  const mUSD = parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0;
-
-  const mUSDEnCRC = Math.round(mUSD * tc);
-  const elUSDEquiv = document.getElementById('txtMixtoUSDEquiv');
-  if (elUSDEquiv) {
-    elUSDEquiv.textContent = mUSD > 0 ? `Equiv: ${formatCRC(mUSDEnCRC)}` : '₡ 0';
-  }
-
-  const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
-  const elAsig = document.getElementById('cobroMixtoAsignadoDisplay');
-  if (elAsig) elAsig.textContent = formatCRC(totalAsignado);
-
-  const elRestLbl = document.getElementById('cobroMixtoRestanteLabel');
-  const elRestVal = document.getElementById('cobroMixtoRestanteDisplay');
-  const badge = document.getElementById('cobroMixtoEstadoBadge');
-  const hint = document.getElementById('cobroMixtoHint');
-
-  const faltante = Math.max(0, totalCRC - totalAsignado);
-
-  if (totalAsignado >= totalCRC && totalCRC > 0) {
-    const vuelto = totalAsignado - totalCRC;
-    if (vuelto > 0) {
-      if (elRestLbl) elRestLbl.textContent = 'Vuelto / Cambio';
-      if (elRestVal) {
-        elRestVal.textContent = formatCRC(vuelto);
-        elRestVal.style.color = '#34d399';
-      }
-      if (badge) {
-        badge.textContent = `✅ Cubierto (Vuelto: ${formatCRC(vuelto)})`;
-        badge.style.color = '#34d399';
-      }
-    } else {
-      if (elRestLbl) elRestLbl.textContent = 'Restante';
-      if (elRestVal) {
-        elRestVal.textContent = '₡ 0';
-        elRestVal.style.color = '#34d399';
-      }
-      if (badge) {
-        badge.textContent = '✅ Total Cubierto';
-        badge.style.color = '#34d399';
-      }
-    }
-    if (hint) {
-      hint.innerHTML = '🎉 <strong>¡Total completamente cubierto!</strong> Puedes presionar el botón verde <em>Liquidar, Imprimir & Liberar Mesa</em> abajo.';
-      hint.style.color = '#34d399';
-      hint.style.background = 'rgba(16,185,129,0.1)';
-      hint.style.borderColor = 'rgba(16,185,129,0.3)';
-    }
-  } else {
-    if (elRestLbl) elRestLbl.textContent = 'Falta por Cubrir';
-    if (elRestVal) {
-      elRestVal.textContent = formatCRC(faltante);
-      elRestVal.style.color = totalAsignado > 0 ? '#f87171' : '#9ca3af';
-    }
-    if (badge) {
-      if (totalAsignado > 0) {
-        badge.textContent = `⚠️ Falta ${formatCRC(faltante)}`;
-        badge.style.color = '#f87171';
-      } else {
-        badge.textContent = 'Pendiente';
-        badge.style.color = '#fbbf24';
-      }
-    }
-    if (hint) {
-      if (totalAsignado > 0) {
-        hint.innerHTML = `💡 Has asignado <strong>${formatCRC(totalAsignado)}</strong>. Falta <strong>${formatCRC(faltante)}</strong> por cubrir. Haz clic en <em>⚡ Cubrir Resto</em> en el método deseado.`;
-        hint.style.color = '#fbbf24';
-        hint.style.background = 'rgba(245,158,11,0.1)';
-        hint.style.borderColor = 'rgba(245,158,11,0.3)';
-      } else {
-        hint.innerHTML = '💡 Digita el monto en un método o haz clic en <strong>⚡ Cubrir Resto</strong> para autoasignar el saldo.';
-        hint.style.color = '#93c5fd';
-        hint.style.background = 'rgba(59,130,246,0.1)';
-        hint.style.borderColor = 'rgba(59,130,246,0.25)';
-      }
-    }
-  }
-
-  // Actualizar en tiempo real el texto y estilo de cada botón de cubrir
-  actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante, tc);
-}
-
-function actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante, tc) {
-  const filas = [
-    { id: 'txtMixtoEfectivo', btnId: 'btnCubrirMixtoEfectivo', tipo: 'efectivo', esUSD: false },
-    { id: 'txtMixtoTarjeta', btnId: 'btnCubrirMixtoTarjeta', tipo: 'tarjeta', esUSD: false },
-    { id: 'txtMixtoSinpe', btnId: 'btnCubrirMixtoSinpe', tipo: 'sinpe', esUSD: false },
-    { id: 'txtMixtoUSD', btnId: 'btnCubrirMixtoUSD', tipo: 'usd', esUSD: true }
-  ];
-
-  filas.forEach(f => {
-    const inp = document.getElementById(f.id);
-    const btn = document.getElementById(f.btnId);
-    if (!btn || !inp) return;
-
-    const val = parseFloat(inp.value) || 0;
-
-    if (val > 0) {
-      btn.innerHTML = `✓ ${f.esUSD ? '$ ' + val.toFixed(2) : formatCRC(val)}`;
-      btn.title = `Monto asignado. Haz clic para limpiar este campo.`;
-      btn.style.background = 'rgba(16,185,129,0.2)';
-      btn.style.border = '1px solid #10b981';
-      btn.style.color = '#34d399';
-    } else {
-      if (faltante > 0) {
-        const textoFaltante = f.esUSD ? `$ ${(faltante / tc).toFixed(2)}` : formatCRC(faltante);
-        btn.innerHTML = `⚡ Cubrir (${textoFaltante})`;
-        btn.title = `Asignar los ${textoFaltante} restantes a este método`;
-        btn.style.background = '#0284c7';
-        btn.style.border = '1px solid #38bdf8';
-        btn.style.color = '#ffffff';
-      } else {
-        btn.innerHTML = 'Cubrir';
-        btn.title = 'Total ya cubierto';
-        btn.style.background = '#1e293b';
-        btn.style.border = '1px solid #475569';
-        btn.style.color = '#94a3b8';
-      }
-    }
-  });
-}
-
-['input', 'change', 'keyup'].forEach(ev => {
-  document.querySelectorAll('.mixto-calc-trigger').forEach(inp => {
-    inp.addEventListener(ev, calcularPagoMixto);
-  });
-});
-
-window.autoAsignarRestanteMixto = function(tipo) {
-  let totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-  if (totalCRC <= 0 && estado.mesaActiva) {
-    totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
-  }
-  if (totalCRC <= 0) return;
-
-  const txtTC = document.getElementById('txtTipoCambioUSD');
-  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
-
-  const inputMap = {
-    efectivo: document.getElementById('txtMixtoEfectivo'),
-    tarjeta: document.getElementById('txtMixtoTarjeta'),
-    sinpe: document.getElementById('txtMixtoSinpe'),
-    usd: document.getElementById('txtMixtoUSD')
-  };
-
-  const targetInput = inputMap[tipo];
-  if (!targetInput) return;
-
-  const valActual = parseFloat(targetInput.value) || 0;
-
-  // Si el usuario hace clic en un botón que YA tiene un valor asignado, lo limpia para permitir reescribir/reasignar
-  if (valActual > 0) {
-    targetInput.value = '';
-    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-    calcularPagoMixto();
-    return;
-  }
-
-  // Calcular cuánto hay asignado en los OTROS campos
-  const mEfec = tipo === 'efectivo' ? 0 : (parseFloat(inputMap.efectivo?.value) || 0);
-  const mTarj = tipo === 'tarjeta' ? 0 : (parseFloat(inputMap.tarjeta?.value) || 0);
-  const mSinpe = tipo === 'sinpe' ? 0 : (parseFloat(inputMap.sinpe?.value) || 0);
-  const mUSD = tipo === 'usd' ? 0 : (parseFloat(inputMap.usd?.value) || 0);
-
-  const yaAsignadoEnOtros = mEfec + mTarj + mSinpe + Math.round(mUSD * tc);
-  const faltante = Math.max(0, totalCRC - yaAsignadoEnOtros);
-
-  if (faltante > 0) {
-    if (tipo === 'usd') {
-      targetInput.value = +(faltante / tc).toFixed(2);
-    } else {
-      targetInput.value = faltante;
-    }
-    targetInput.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-
-  calcularPagoMixto();
-};
-
-// Los botones de Pago Mixto utilizan handlers globales window.autoAsignarRestanteMixto, window.splitMixto5050 y window.limpiarCamposMixto
 
 document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
   const btnFinalizar = document.getElementById('btnFinalizarCobro');
@@ -9695,75 +7382,11 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   btnFinalizar.innerHTML = '⏳ Procesando Cobro...';
 
   try {
-    let totalNum = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-    if (totalNum <= 0 && estado.mesaActiva) {
-      totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
-    }
+    const totalNum = parseCRC(document.getElementById('cobroTotalDisplay').textContent);
     const metodoActivo = document.querySelector('.pay-method-tab.active');
-    const metodoKey = metodoActivo ? (metodoActivo.dataset.method || 'Efectivo') : 'Efectivo';
-    
-    let metodoFinal = 'Efectivo';
-    let recibido = totalNum;
-    let cambio = 0;
-    let referencia = null;
-    let tipo_cambio = 1;
-    let monto_usd = 0;
-    let pagosArray = [];
-
-    const txtTC = document.getElementById('txtTipoCambioUSD');
-    const tcActual = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
-
-    if (metodoKey === 'Efectivo') {
-      metodoFinal = 'Efectivo';
-      recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
-      cambio = Math.max(0, recibido - totalNum);
-    } else if (metodoKey === 'Tarjeta') {
-      metodoFinal = 'Tarjeta';
-      referencia = document.getElementById('txtTarjetaReferencia')?.value.trim() || null;
-      recibido = totalNum;
-      cambio = 0;
-    } else if (metodoKey === 'SINPE') {
-      metodoFinal = 'SINPE';
-      referencia = document.getElementById('txtSinpeReferencia')?.value.trim() || null;
-      recibido = totalNum;
-      cambio = 0;
-    } else if (metodoKey === 'Dolares') {
-      metodoFinal = 'Dólares';
-      tipo_cambio = tcActual;
-      monto_usd = totalNum > 0 ? Number((totalNum / tcActual).toFixed(2)) : 0;
-      const recUSD = parseFloat(document.getElementById('txtDolaresRecibidos')?.value) || monto_usd;
-      recibido = Math.round(recUSD * tcActual);
-      cambio = Math.max(0, recibido - totalNum);
-    } else if (metodoKey === 'Mixto') {
-      metodoFinal = 'Mixto';
-      const mEfectivo = parseFloat(document.getElementById('txtMixtoEfectivo')?.value) || 0;
-      const mTarjeta = parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0;
-      const mSinpe = parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0;
-      const mUSD = parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0;
-      const refTarjeta = document.getElementById('txtMixtoTarjetaRef')?.value.trim() || null;
-      const refSinpe = document.getElementById('txtMixtoSinpeRef')?.value.trim() || null;
-
-      const mUSDEnCRC = Math.round(mUSD * tcActual);
-      const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
-
-      if (totalAsignado < totalNum && (totalNum - totalAsignado) > 1) {
-        alert(`⚠️ El monto asignado (${formatCRC(totalAsignado)}) no cubre el total de la cuenta (${formatCRC(totalNum)}).\n\nFaltan por cubrir: ${formatCRC(totalNum - totalAsignado)}`);
-        btnFinalizar.disabled = false;
-        btnFinalizar.innerHTML = textoOriginal;
-        return;
-      }
-
-      if (mEfectivo > 0) pagosArray.push({ metodo: 'Efectivo', monto: mEfectivo });
-      if (mTarjeta > 0) pagosArray.push({ metodo: 'Tarjeta', monto: mTarjeta, referencia: refTarjeta });
-      if (mSinpe > 0) pagosArray.push({ metodo: 'SINPE', monto: mSinpe, referencia: refSinpe });
-      if (mUSD > 0) pagosArray.push({ metodo: 'Dólares', monto: mUSDEnCRC, monto_usd: mUSD, tipo_cambio: tcActual });
-
-      if (pagosArray.length === 0) {
-        pagosArray.push({ metodo: 'Efectivo', monto: totalNum });
-      }
-      recibido = totalAsignado;
-      cambio = Math.max(0, totalAsignado - totalNum);
-    }
+    const metodo = metodoActivo ? metodoActivo.dataset.method : 'Efectivo';
+    const recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
+    const cambio = Math.max(0, recibido - totalNum);
 
     const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
     const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
@@ -9786,61 +7409,41 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
     const itemsMesa = (estado.mesaActiva && estado.mesaActiva.items) ? estado.mesaActiva.items : [];
     const idempotencyKey = 'pay_' + (mesaId || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    const esParaLlevarCobro = Boolean(
-      estado.mesaActiva && (
-        estado.mesaActiva.es_para_llevar ||
-        estado.mesaActiva.tipo_orden === 'para_llevar' ||
-        String(estado.mesaActiva.id).startsWith('para_llevar') ||
-        estado.mesaActiva.id === 'para_llevar'
-      )
-    );
 
     const payloadCobro = {
       ordenId,
       mesaId,
       items: itemsMesa,
-      metodo: metodoFinal,
-      metodoPago: metodoFinal,
+      metodo,
       monto: totalNum,
-      recibido,
-      cambio,
-      referencia,
-      tipo_cambio,
-      monto_usd,
-      pagos: pagosArray.length > 0 ? pagosArray : undefined,
       propina: Math.round(totalNum * 0.10),
+      cambio,
       mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
       liquidar_total: esLiquidacionFinal,
       items_pagados: personaCobrada ? personaCobrada.items : [],
       happyHourActivo: Boolean(estado.happyHourActivo),
       enviar_cocina: Boolean(estado.enviarCocinaEnCobro),
       enviarCocina: Boolean(estado.enviarCocinaEnCobro),
-      tipo_orden: esParaLlevarCobro ? 'para_llevar' : 'mesa',
-      es_para_llevar: esParaLlevarCobro,
       idempotencyKey
     };
 
     const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
 
-    let cobroResData = null;
     if (window.PosOfflineSync) {
-      cobroResData = await window.PosOfflineSync.ejecutarConRespaldo({
+      await window.PosOfflineSync.ejecutarConRespaldo({
         tipo: 'COBRAR_ORDEN',
         endpoint: endpointCobro,
         metodo: 'POST',
         payload: payloadCobro,
-        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodoFinal})`
+        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodo})`
       });
     } else {
       try {
-        const res = await fetch(endpointCobro, {
+        await fetch(endpointCobro, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadCobro)
         });
-        if (res.ok) {
-          cobroResData = await res.json().catch(() => null);
-        }
       } catch (e) {
         console.error('Error al registrar cobro:', e);
       }
@@ -9853,8 +7456,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
         }
         estado.mesaActiva.estado = 'libre';
-        estado.mesaActiva.cliente = null;
-        estado.mesaActiva.mesa_cliente = null;
         estado.mesaActiva.items = [];
         estado.mesaActiva.orden_id = null;
         estado.mesaActiva.orden_activa_id = null;
@@ -9862,17 +7463,6 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         estado.mesaActiva.pidio_cuenta_qr = 0;
         estado.mesaActiva.cuenta_pedida = false;
       }
-      const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
-      if (mesaEnLista) {
-        mesaEnLista.cliente = null;
-        mesaEnLista.mesa_cliente = null;
-        mesaEnLista.estado = 'libre';
-        mesaEnLista.orden_total = 0;
-        mesaEnLista.orden_activa_id = null;
-        mesaEnLista.items = [];
-      }
-      const elNom = document.getElementById('comClienteNombre');
-      if (elNom) elNom.textContent = 'General';
       estado.cobroSplitPersonaIndex = null;
       document.getElementById('modalCobro').classList.remove('active');
       document.getElementById('modalComandero').classList.remove('active');
@@ -9889,38 +7479,31 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       }
 
       // Disparar automáticamente la impresión del tiquete final de cliente
-      const subTicket = esParaLlevarCobro ? Math.round(totalNum / 1.13) : Math.round(totalNum / 1.23);
-      const servTicket = esParaLlevarCobro ? 0 : Math.round(subTicket * 0.10);
-      const ivaTicket = totalNum - subTicket - servTicket;
-
-      const ticketFinal = (cobroResData && cobroResData.ticket) ? cobroResData.ticket : {
-        tipo: 'cuenta_total',
-        titulo: 'COMPROBANTE DE PAGO / FACTURA',
+      const ticketFinal = {
+        tipo: 'liquidacion',
         negocio: {
           nombre: 'GastroBar Fuego & Brasas',
           slogan: 'Restaurante, Bar & Lounge',
-          tel: '2222-3344',
-          dir: 'San Jose, Costa Rica',
-          cedula: '3-101-789458'
+          tel: '2222-0000 / 8888-9999'
         },
         numeroOrden: ordenId || 'ORD-1',
         ordenId: ordenId || 'ORD-1',
         mesa: mesaNumero,
-        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'General'),
+        mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'Juan Jival'),
         cliente: 'Cliente General',
         fechaHora: formatearFechaHoraCR(new Date()),
         items: itemsMesa.map(it => ({
-          cantidad: Number(it.cantidad) || 1,
-          nombre: it.nombre || it.nombre_producto || 'Producto',
-          precioUnitario: Number(it.precio || it.precio_unitario) || 0,
-          totalLinea: Number(it.subtotal || it.totalLinea || ((it.precio || it.precio_unitario || 0) * (it.cantidad || 1))),
+          cantidad: it.cantidad,
+          nombre: it.nombre,
+          precioUnitario: it.precio,
+          totalLinea: it.precio * it.cantidad,
           notas: it.notas || ''
         })),
-        subtotal: subTicket,
-        servicio: servTicket,
-        iva: ivaTicket,
+        subtotal: Math.round(totalNum / 1.23),
+        servicio: Math.round((totalNum / 1.23) * 0.10),
+        iva: totalNum - Math.round(totalNum / 1.23) - Math.round((totalNum / 1.23) * 0.10),
         total: totalNum,
-        metodoPago: metodoFinal,
+        metodoPago: metodo,
         recibido: recibido,
         cambio: cambio
       };
@@ -9953,7 +7536,19 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       });
       if (window.PosOfflineDB) {
         const remTot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-        window.PosOfflineDB.guardarItemsMesa(estado.mesaActiva.id, estado.mesaActiva.items, remTot).catch(() => {});
+        const remSub = Math.round(remTot / 1.23);
+        const remServ = Math.round(remSub * 0.10);
+        const remIva = remTot - remSub - remServ;
+        window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, {
+          id: estado.mesaActiva.orden_id,
+          numero_orden: estado.mesaActiva.numero,
+          mesa_id: estado.mesaActiva.id,
+          subtotal: remSub,
+          servicio_10: remServ,
+          iva_13: remIva,
+          total: remTot,
+          estado: 'esperando'
+        }, estado.mesaActiva.items).catch(() => {});
       }
     }
 
@@ -9981,7 +7576,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       subtotal: Math.round(totalNum / 1.23),
       impuestos: totalNum - Math.round(totalNum / 1.23),
       total: totalNum,
-      metodoPago: metodoFinal,
+      metodoPago: metodo,
       saldoRestanteMesa: estado.mesaActiva ? estado.mesaActiva.items.reduce((a, b) => a + (b.precio * b.cantidad), 0) : 0
     };
     if (typeof window.mostrarVisorTicketTermico === 'function') {
@@ -10902,7 +8497,6 @@ window.cobrarPersonaSplit = function(personaIndex) {
   document.getElementById('cobroTotalDisplay').textContent = formatCRCSinDecimales(p.total);
   document.getElementById('txtEfectivoRecibido').value = '';
   document.getElementById('cobroVueltoDisplay').textContent = '₡ 0';
-  inicializarPanelesCobroModal(p.total);
   document.getElementById('modalCobro').classList.add('active');
 };
 
@@ -11384,22 +8978,17 @@ function renderEditorPlano() {
 async function autoGuardarPosicionMesa(m) {
   if (!m || !m.id) return;
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
     await fetch('/api/mesas/posiciones/auto', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: m.id,
         x: Math.round(m.x),
         y: Math.round(m.y),
         ancho: Math.round(m.ancho || (esSilla ? 85 : 135)),
         alto: Math.round(m.alto || (esSilla ? 95 : 115)),
-        piso: m.piso || (estado.pisoActualEditor || 1),
-        negocio_id: nid
+        piso: m.piso || (estado.pisoActualEditor || 1)
       })
     });
   } catch (_) {}
@@ -11420,7 +9009,6 @@ window.cambiarTamanoMesa = function(mesaId, delta) {
 
 
 document.getElementById('btnGuardarPlano').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const posiciones = estado.mesas.map(m => {
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
     return {
@@ -11435,11 +9023,8 @@ document.getElementById('btnGuardarPlano').addEventListener('click', async () =>
   try {
     const res = await fetch('/api/mesas/posiciones', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
-      body: JSON.stringify({ posiciones, negocio_id: nid })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ posiciones })
     });
     mostrarNotificacionCentro('💾 ¡Distribución física guardada permanentemente para todos los usuarios!', 'success');
   } catch (e) {
@@ -11460,15 +9045,7 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
   });
   if (!confirmado) return;
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch('/api/mesas/posiciones/reorganizar-cuadricula', { 
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
-      body: JSON.stringify({ negocio_id: nid })
-    });
+    const res = await fetch('/api/mesas/posiciones/reorganizar-cuadricula', { method: 'POST' });
     const data = await res.json();
     if (data.ok) {
       mostrarNotificacionCentro('✨ Salón reorganizado perfectamente en cuadrícula sin solapes', 'success');
@@ -11481,23 +9058,16 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
 });
 
 document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const pisoActivo = estado.pisoActualEditor || 1;
-  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 || m.zona_id === 105 ? 2 : 1)) === pisoActivo);
+  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === pisoActivo);
   const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
-  const zonaPiso = (estado.zonas || []).find(z => pisoActivo === 2 ? z.nombre.toLowerCase().includes('segundo') : !z.nombre.toLowerCase().includes('segundo')) || (estado.zonas || [])[0];
-  const zonaId = zonaPiso ? zonaPiso.id : (pisoActivo === 2 ? 5 : 1);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        negocio_id: nid,
         numero: num, 
-        zona_id: zonaId, 
+        zona_id: pisoActivo === 2 ? 5 : 1, 
         capacidad: 4, 
         forma: 'square', 
         x: 60, 
@@ -11512,23 +9082,16 @@ document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', asyn
 });
 
 document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const pisoActivo = estado.pisoActualEditor || 1;
-  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 || m.zona_id === 105 ? 2 : 1)) === pisoActivo);
+  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === pisoActivo);
   const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
-  const zonaPiso = (estado.zonas || []).find(z => pisoActivo === 2 ? z.nombre.toLowerCase().includes('segundo') : !z.nombre.toLowerCase().includes('segundo')) || (estado.zonas || [])[0];
-  const zonaId = zonaPiso ? zonaPiso.id : (pisoActivo === 2 ? 5 : 1);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        negocio_id: nid,
         numero: num, 
-        zona_id: zonaId, 
+        zona_id: pisoActivo === 2 ? 5 : 1, 
         capacidad: 4, 
         forma: 'round', 
         x: 80, 
@@ -11543,23 +9106,16 @@ document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async
 });
 
 document.getElementById('btnAgregarBarra').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const pisoActivo = estado.pisoActualEditor || 1;
   const totalBarras = estado.mesas.filter(m => m.numero.includes('Barra')).length + 1;
   const num = pisoActivo === 2 ? `Barra P2-${totalBarras}` : `Silla Barra ${totalBarras}`;
-  const zonaBarra = (estado.zonas || []).find(z => z.nombre.toLowerCase().includes('barra')) || (estado.zonas || [])[0];
-  const zonaId = zonaBarra ? zonaBarra.id : (pisoActivo === 2 ? 5 : 2);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        negocio_id: nid,
         numero: num, 
-        zona_id: zonaId, 
+        zona_id: pisoActivo === 2 ? 5 : 2, 
         capacidad: 1, 
         forma: 'silla', 
         x: 620, 
@@ -11574,24 +9130,16 @@ document.getElementById('btnAgregarBarra').addEventListener('click', async () =>
 });
 
 // Agotados (86)
-window.abrirModalAgotados = function() {
-  if (typeof cerrarPanelAdmin === 'function') cerrarPanelAdmin();
-  if (typeof renderListaAgotados === 'function') renderListaAgotados();
-  const modal = document.getElementById('modalAgotados');
-  if (modal) modal.classList.add('active');
-};
-
 function initAgotados86() {
-  document.querySelectorAll('#btnGestionarAgotados, .btnGestionarAgotados, #btnAgotadosInventario').forEach(btn => {
-    btn.addEventListener('click', () => {
-      window.abrirModalAgotados();
-    });
+  document.getElementById('btnGestionarAgotados').addEventListener('click', () => {
+    renderListaAgotados();
+    document.getElementById('modalAgotados').classList.add('active');
   });
 
-  document.getElementById('btnCloseAgotadosModal')?.addEventListener('click', () => document.getElementById('modalAgotados')?.classList.remove('active'));
-  document.getElementById('btnGuardarAgotados')?.addEventListener('click', () => {
-    document.getElementById('modalAgotados')?.classList.remove('active');
-    if (typeof renderGridProductos === 'function') renderGridProductos(estado.productos);
+  document.getElementById('btnCloseAgotadosModal').addEventListener('click', () => document.getElementById('modalAgotados').classList.remove('active'));
+  document.getElementById('btnGuardarAgotados').addEventListener('click', () => {
+    document.getElementById('modalAgotados').classList.remove('active');
+    renderGridProductos(estado.productos);
   });
 }
 
@@ -11669,113 +9217,45 @@ async function initHappyHour() {
     }
   } catch (e) { /* servidor no disponible */ }
 
-  // 2. Click corto → alternar activo/inactivo (Protegido por Rol y PIN)
+  // 2. Click corto → alternar activo/inactivo
   btnHH.addEventListener('click', async (e) => {
     // Si hay modal de config abierto, no toggle
-    const modalCfg = document.getElementById('modalAdminHappyHour') || document.getElementById('modalHHConfig');
-    if (modalCfg && (modalCfg.classList.contains('active') || modalCfg.style.display === 'flex')) return;
-
-    const uAct = estado.usuarioActual || estado.usuario;
-    const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
-    let pinAutorizacion = null;
-
-    if (!esAdminODev) {
-      const pin = await window.solicitarPinAdmin({
-        icono: '🍸',
-        titulo: 'Autorización Happy Hour',
-        subtitulo: 'Solo Administrador o Cajero autorizados',
-        mensaje: 'Solo Administrador o Cajero pueden activar o desactivar el Happy Hour. Ingresa el PIN de Administrador (1234):'
-      });
-      if (!pin) return;
-      pinAutorizacion = pin;
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
-      }
-    }
+    const modalCfg = document.getElementById('modalHHConfig');
+    if (modalCfg && modalCfg.classList.contains('active')) return;
 
     const nuevoActivo = !estado.happyHourActivo;
     try {
       const res = await fetch('/api/happy-hour', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-user-rol': uAct ? uAct.rol : (pinAutorizacion ? 'admin' : 'salonero'),
-          'x-admin-pin': pinAutorizacion || ''
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           activo: nuevoActivo,
           horaInicio: btnHH.dataset.horaInicio || '16:00',
-          horaFin: btnHH.dataset.horaFin || '19:00',
-          userRol: uAct ? uAct.rol : (pinAutorizacion ? 'admin' : 'salonero'),
-          pin: pinAutorizacion
+          horaFin: btnHH.dataset.horaFin || '19:00'
         })
       });
       const data = await res.json();
-      if (!res.ok) {
-        if (typeof mostrarNotificacionCentro === 'function') {
-          mostrarNotificacionCentro('🔒 ' + (data.error || 'Permiso denegado'), 'error');
-        } else {
-          alert('🔒 ' + (data.error || 'Permiso denegado'));
-        }
-        return;
-      }
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
       btnHH.dataset.horaInicio = data.horaInicio;
       btnHH.dataset.horaFin = data.horaFin;
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(data.activo ? '🍸 Happy Hour 2x1 ACTIVADO' : '🍸 Happy Hour DESACTIVADO', data.activo ? 'success' : 'info');
-      }
     } catch (e) {
-      if (esAdminODev || pinAutorizacion) {
-        estado.happyHourActivo = nuevoActivo;
-        aplicarEstadoHappyHour(nuevoActivo, btnHH.dataset.horaInicio, btnHH.dataset.horaFin);
-        if (estado.mesaActiva) recalcularTotalesTicket();
-      }
+      // Fallback local
+      estado.happyHourActivo = nuevoActivo;
+      renderGridProductos(estado.productos);
+      if (estado.mesaActiva) recalcularTotalesTicket();
     }
   });
 
-  // 3. Click largo (>600ms) → abrir configurador de horario (Protegido por Rol y PIN)
+  // 3. Click largo (>600ms) → abrir configurador de horario
   let hhLongTimer = null;
   btnHH.addEventListener('mousedown', () => {
-    hhLongTimer = setTimeout(async () => {
-      const uAct = estado.usuarioActual || estado.usuario;
-      const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
-      if (esAdminODev) {
-        abrirConfigHappyHour();
-      } else {
-        const pin = await window.solicitarPinAdmin({
-          icono: '🍸',
-          titulo: 'Configuración Happy Hour',
-          subtitulo: 'Acceso Restringido',
-          mensaje: 'Ingresa el PIN de Administrador (1234) para configurar los horarios y reglas de Happy Hour:'
-        });
-        if (pin) {
-          abrirConfigHappyHour();
-        }
-      }
-    }, 600);
+    hhLongTimer = setTimeout(() => abrirConfigHappyHour(), 600);
   });
   ['mouseup', 'mouseleave'].forEach(ev => {
     btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
   });
   btnHH.addEventListener('touchstart', () => {
-    hhLongTimer = setTimeout(async () => {
-      const uAct = estado.usuarioActual || estado.usuario;
-      const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
-      if (esAdminODev) {
-        abrirConfigHappyHour();
-      } else {
-        const pin = await window.solicitarPinAdmin({
-          icono: '🍸',
-          titulo: 'Configuración Happy Hour',
-          subtitulo: 'Acceso Restringido',
-          mensaje: 'Ingresa el PIN de Administrador (1234) para configurar los horarios y reglas de Happy Hour:'
-        });
-        if (pin) {
-          abrirConfigHappyHour();
-        }
-      }
-    }, 600);
+    hhLongTimer = setTimeout(() => abrirConfigHappyHour(), 600);
   });
   ['touchend', 'touchcancel'].forEach(ev => {
     btnHH.addEventListener(ev, () => clearTimeout(hhLongTimer));
@@ -11783,210 +9263,66 @@ async function initHappyHour() {
 }
 
 function abrirConfigHappyHour() {
-  abrirModalAdminHappyHour();
-}
+  const btnHH = document.getElementById('btnToggleHappyHour');
+  const horaInicio = btnHH.dataset.horaInicio || '16:00';
+  const horaFin = btnHH.dataset.horaFin || '19:00';
 
-window.abrirModalAdminHappyHour = async function() {
-  const modal = document.getElementById('modalAdminHappyHour');
-  if (!modal) return;
+  // Crear modal de configuración si no existe
+  let modal = document.getElementById('modalHHConfig');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modalHHConfig';
+    modal.className = 'modal-overlay active';
+    modal.innerHTML = `
+      <div class="modal-box" style="max-width:360px;padding:28px;">
+        <h3 style="margin:0 0 18px;color:#f59e0b;">🍸 Configurar Happy Hour</h3>
+        <label style="display:block;margin-bottom:10px;font-size:14px;">
+          Hora inicio (HH:MM 24h)
+          <input id="hhInputInicio" type="time" value="${horaInicio}" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f9fafb;font-size:16px;">
+        </label>
+        <label style="display:block;margin-bottom:20px;font-size:14px;">
+          Hora fin (HH:MM 24h) — se auto-desactiva al llegar
+          <input id="hhInputFin" type="time" value="${horaFin}" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f9fafb;font-size:16px;">
+        </label>
+        <div style="display:flex;gap:10px;">
+          <button id="btnGuardarHHConfig" style="flex:1;padding:12px;border-radius:10px;background:#f59e0b;color:#000;border:none;font-weight:700;cursor:pointer;">💾 Guardar</button>
+          <button id="btnCerrarHHConfig" style="flex:1;padding:12px;border-radius:10px;background:#374151;color:#f9fafb;border:none;cursor:pointer;">✕ Cancelar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
 
-  // 1. Obtener datos actuales del backend
-  try {
-    const res = await fetch('/api/happy-hour');
-    if (res.ok) {
-      const data = await res.json();
-      estado.happyHourData = data;
-      estado.happyHourActivo = Boolean(data.activo);
-
-      // Horarios
-      const txtInicio = document.getElementById('txtAdminHHHoraInicio');
-      const txtFin = document.getElementById('txtAdminHHHoraFin');
-      if (txtInicio) txtInicio.value = data.horaInicio || '16:00';
-      if (txtFin) txtFin.value = data.horaFin || '19:00';
-
-      // Switch activo
-      const chkActivo = document.getElementById('chkAdminHHActivo');
-      if (chkActivo) chkActivo.checked = Boolean(data.activo);
-      actualizarLabelEstadoHHModal(data.activo);
-
-      // Auto activar
-      const chkAuto = document.getElementById('chkAdminHHAutoActivar');
-      if (chkAuto) chkAuto.checked = data.autoActivar !== false;
-
-      // Días
-      const diasArr = String(data.dias || '1,2,3,4,5,6,0').split(',').map(d => d.trim());
-      document.querySelectorAll('.chk-dia-hh').forEach(chk => {
-        chk.checked = diasArr.includes(chk.value);
-        actualizarEstiloChipDiaHH(chk);
-      });
-
-      // Modo
-      const modo = data.modoDefecto || 'estricto';
-      if (modo === 'flexible') {
-        const rFlexible = document.getElementById('rdoModoFlexible');
-        if (rFlexible) rFlexible.checked = true;
-      } else {
-        const rEstricto = document.getElementById('rdoModoEstricto');
-        if (rEstricto) rEstricto.checked = true;
-      }
-    }
-  } catch (err) {
-    console.warn('Error al cargar config Happy Hour:', err);
-  }
-
-  // Listener para el toggle en vivo
-  const chkActivo = document.getElementById('chkAdminHHActivo');
-  if (chkActivo && !chkActivo.dataset.listenerSet) {
-    chkActivo.dataset.listenerSet = 'true';
-    chkActivo.addEventListener('change', (e) => {
-      actualizarLabelEstadoHHModal(e.target.checked);
+    document.getElementById('btnCerrarHHConfig').addEventListener('click', () => {
+      modal.classList.remove('active');
     });
-  }
-
-  // Listeners para los chips de días
-  document.querySelectorAll('.chk-dia-hh').forEach(chk => {
-    if (!chk.dataset.listenerSet) {
-      chk.dataset.listenerSet = 'true';
-      chk.addEventListener('change', () => actualizarEstiloChipDiaHH(chk));
-    }
-    actualizarEstiloChipDiaHH(chk);
-  });
-
-  modal.classList.add('active');
-  modal.style.display = 'flex';
-};
-
-window.cerrarModalAdminHappyHour = function() {
-  const modal = document.getElementById('modalAdminHappyHour');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
-};
-
-window.actualizarLabelEstadoHHModal = function(activo) {
-  const lbl = document.getElementById('lblAdminHHStatusLive');
-  if (!lbl) return;
-  if (activo) {
-    lbl.innerHTML = '<span class="net-dot online" style="background:#f59e0b; box-shadow:0 0 8px #f59e0b;"></span> Activo Ahora';
-    lbl.style.color = '#fbbf24';
-  } else {
-    lbl.innerHTML = '<span class="net-dot" style="background:#64748b; box-shadow:none;"></span> Desactivado';
-    lbl.style.color = '#94a3b8';
-  }
-};
-
-window.actualizarEstiloChipDiaHH = function(chk) {
-  const parent = chk.closest('.chip-dia-hh');
-  if (!parent) return;
-  if (chk.checked) {
-    parent.style.borderColor = '#f59e0b';
-    parent.style.background = 'rgba(245, 158, 11, 0.15)';
-    parent.style.color = '#fbbf24';
-    parent.style.fontWeight = '700';
-  } else {
-    parent.style.borderColor = '#475569';
-    parent.style.background = '#1e293b';
-    parent.style.color = '#64748b';
-    parent.style.fontWeight = 'normal';
-  }
-};
-
-window.aplicarPresetHorarioHH = function(inicio, fin) {
-  const txtInicio = document.getElementById('txtAdminHHHoraInicio');
-  const txtFin = document.getElementById('txtAdminHHHoraFin');
-  if (txtInicio) txtInicio.value = inicio;
-  if (txtFin) txtFin.value = fin;
-};
-
-window.seleccionarDiasHH = function(tipo) {
-  const dias = document.querySelectorAll('.chk-dia-hh');
-  dias.forEach(chk => {
-    const val = chk.value;
-    if (tipo === 'todos') chk.checked = true;
-    else if (tipo === 'semana') chk.checked = ['1','2','3','4','5'].includes(val);
-    else if (tipo === 'finde') chk.checked = ['6','0'].includes(val);
-    actualizarEstiloChipDiaHH(chk);
-  });
-};
-
-window.guardarAdminHappyHour = async function() {
-  const txtInicio = document.getElementById('txtAdminHHHoraInicio');
-  const txtFin = document.getElementById('txtAdminHHHoraFin');
-  const chkActivo = document.getElementById('chkAdminHHActivo');
-  const chkAuto = document.getElementById('chkAdminHHAutoActivar');
-  
-  const horaInicio = txtInicio?.value || '16:00';
-  const horaFin = txtFin?.value || '19:00';
-  const activo = Boolean(chkActivo?.checked);
-  const autoActivar = Boolean(chkAuto?.checked);
-
-  // Días seleccionados
-  const diasSeleccionados = [];
-  document.querySelectorAll('.chk-dia-hh:checked').forEach(chk => {
-    diasSeleccionados.push(chk.value);
-  });
-  const dias = diasSeleccionados.join(',');
-
-  // Modo
-  const rFlexible = document.getElementById('rdoModoFlexible');
-  const modoDefecto = rFlexible && rFlexible.checked ? 'flexible' : 'estricto';
-
-  const btnGuardar = document.getElementById('btnGuardarAdminHHConfig');
-  if (btnGuardar) {
-    btnGuardar.disabled = true;
-    btnGuardar.textContent = '⏳ Guardando...';
-  }
-
-  const uAct = estado.usuarioActual || estado.usuario;
-  try {
-    const res = await fetch('/api/happy-hour', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-user-rol': uAct ? uAct.rol : 'admin',
-        'x-admin-pin': window._pinSupervisorActivo || '1234'
-      },
-      body: JSON.stringify({
-        activo,
-        horaInicio,
-        horaFin,
-        autoActivar,
-        dias,
-        modoDefecto,
-        userRol: uAct ? uAct.rol : 'admin'
-      })
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('active');
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
-      
-      const btnHH = document.getElementById('btnToggleHappyHour');
-      if (btnHH) {
+    document.getElementById('btnGuardarHHConfig').addEventListener('click', async () => {
+      const ni = document.getElementById('hhInputInicio').value;
+      const nf = document.getElementById('hhInputFin').value;
+      if (!ni || !nf) return alert('Completa ambos horarios.');
+      try {
+        const res = await fetch('/api/happy-hour', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ horaInicio: ni, horaFin: nf, activo: estado.happyHourActivo })
+        });
+        const data = await res.json();
         btnHH.dataset.horaInicio = data.horaInicio;
         btnHH.dataset.horaFin = data.horaFin;
-      }
-
-      cerrarModalAdminHappyHour();
-
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(`🍸 Happy Hour configurado (${data.horaInicio} – ${data.horaFin})`, 'success');
-      } else {
-        alert(`✅ Happy Hour configurado correctamente:\n${data.horaInicio} – ${data.horaFin} (${data.activo ? 'Activo' : 'Desactivado'})`);
-      }
-    } else {
-      alert('❌ Error al guardar la configuración de Happy Hour.');
-    }
-  } catch (err) {
-    alert('❌ Error de conexión al guardar Happy Hour: ' + err.message);
-  } finally {
-    if (btnGuardar) {
-      btnGuardar.disabled = false;
-      btnGuardar.textContent = '💾 Guardar Configuración';
-    }
+        aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
+        modal.classList.remove('active');
+        alert(`✅ Happy Hour configurado: ${data.horaInicio}–${data.horaFin}`);
+      } catch (e) { alert('Error guardando config.'); }
+    });
+  } else {
+    document.getElementById('hhInputInicio').value = horaInicio;
+    document.getElementById('hhInputFin').value = horaFin;
+    modal.classList.add('active');
   }
-};
+}
 
 
 // Navegación General POS
@@ -11994,10 +9330,6 @@ function initNavegacion() {
   document.querySelectorAll('.nav-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       const view = btn.dataset.view;
-      if (view === 'kds' && !tieneModulo('kds_cocina')) return;
-      if (view === 'facturacion' && !tieneModulo('facturacion_electronica')) return;
-      if (['recetas', 'kardex', 'inventario'].includes(view) && !tieneModulo('inventario_recetas')) return;
-
       if (['recetas', 'kardex', 'inventario', 'metricas', 'auditoria', 'editor-plano'].includes(view)) {
         abrirModuloAdmin(view);
         return;
@@ -12224,7 +9556,6 @@ async function cargarDashboardMetricas() {
     console.error('Error cargando métricas:', e);
   }
 }
-window.cargarDashboardMetricas = cargarDashboardMetricas;
 
 // 2. CONTROL DE INVENTARIO
 // 2. CONTROL DE INVENTARIO INTELIGENTE & ESCANDALLOS 2026
@@ -12310,7 +9641,7 @@ function renderTablaKardexGeneral(movimientos) {
   tbody.innerHTML = '';
 
   if (!movimientos || !movimientos.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:28px; color:#9ca3af;">No se encontraron movimientos registrados en el Kárdex con los filtros seleccionados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:28px; color:#9ca3af;">No se encontraron movimientos registrados en el Kárdex con los filtros seleccionados.</td></tr>';
     return;
   }
 
@@ -12329,235 +9660,14 @@ function renderTablaKardexGeneral(movimientos) {
       </td>
       <td><span class="${badgeClass}">${tipoIcon}</span></td>
       <td><strong>${signo}${m.cantidad}</strong> <small style="color:#94a3b8;">${escapeHtml(m.unidad_medida || '')}</small></td>
-      <td><span style="color:#94a3b8;">${m.stock_previo ?? '-'}</span> → <strong style="color:#38bdf8;">${m.stock_nuevo ?? '-'}</strong></td>
+      <td><span style="color:#94a3b8;">${m.stock_previo}</span> → <strong style="color:#38bdf8;">${m.stock_nuevo}</strong></td>
       <td style="color:#34d399; font-weight:700;">${formatCRC(m.costo_total || 0)}</td>
       <td style="font-size:0.85rem;">${escapeHtml(m.motivo || '-')}</td>
       <td style="font-size:0.8rem; color:#9ca3af;">${escapeHtml(m.usuario_nombre || 'Sistema')}</td>
-      <td style="text-align:center; white-space:nowrap;">
-        <button class="btn-tool" style="padding:4px 9px; font-size:0.75rem; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; border-radius:6px; margin-right:4px; font-weight:600; cursor:pointer;" onclick="abrirModalEditarKardex(${m.id})" title="Modificar este movimiento">✏️ Editar</button>
-        <button class="btn-tool" style="padding:4px 9px; font-size:0.75rem; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#f87171; border-radius:6px; font-weight:600; cursor:pointer;" onclick="confirmarEliminarKardex(${m.id})" title="Eliminar este movimiento">🗑️</button>
-      </td>
     `;
     tbody.appendChild(tr);
   });
 }
-
-// --- GESTIÓN (EDITAR / ELIMINAR) KÁRDEX ---
-window.kardexMovimientoAEliminar = null;
-
-window.abrirModalEditarKardex = async function(movId) {
-  const mov = (window.kardexMovimientosActuales || []).find(m => m.id === movId);
-  if (!mov) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ No se encontró la información del movimiento.', 'warning');
-    }
-    return;
-  }
-
-  // Verificar PIN si no es admin / supervisor
-  const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
-  if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '✏️',
-      titulo: 'Modificar Kárdex',
-      subtitulo: 'Autorización Requerida',
-      mensaje: 'Ingresa el PIN de Administrador/Supervisor para modificar este movimiento:'
-    });
-    if (!pin) return;
-    window._pinKardexActivo = pin;
-  } else {
-    window._pinKardexActivo = null;
-  }
-
-  document.getElementById('editKardexId').value = mov.id;
-  document.getElementById('editKardexInsumoId').value = mov.insumo_id;
-  const elInsumoNom = document.getElementById('editKardexInsumoNombre');
-  if (elInsumoNom) {
-    elInsumoNom.textContent = `${mov.insumo_nombre || `Insumo #${mov.insumo_id}`} • Categoría: ${mov.insumo_categoria || 'General'}`;
-  }
-
-  const selTipo = document.getElementById('editKardexTipo');
-  if (selTipo) selTipo.value = mov.tipo || 'entrada';
-
-  const inCant = document.getElementById('editKardexCantidad');
-  if (inCant) inCant.value = mov.cantidad || 0;
-
-  const inCosto = document.getElementById('editKardexCosto');
-  if (inCosto) inCosto.value = mov.costo_total || 0;
-
-  const inMotivo = document.getElementById('editKardexMotivo');
-  if (inMotivo) inMotivo.value = mov.motivo || '';
-
-  const inFecha = document.getElementById('editKardexFecha');
-  if (inFecha) {
-    if (mov.fecha_hora) {
-      try {
-        const d = new Date(mov.fecha_hora);
-        const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        inFecha.value = isoLocal;
-      } catch (e) {
-        inFecha.value = new Date().toISOString().slice(0, 16);
-      }
-    } else {
-      inFecha.value = new Date().toISOString().slice(0, 16);
-    }
-  }
-
-  const chkStock = document.getElementById('editKardexAjustarStock');
-  if (chkStock) chkStock.checked = true;
-
-  document.getElementById('modalEditarKardex')?.classList.add('active');
-};
-
-window.cerrarModalEditarKardex = function() {
-  document.getElementById('modalEditarKardex')?.classList.remove('active');
-};
-
-window.guardarEdicionKardex = async function() {
-  const movId = document.getElementById('editKardexId')?.value;
-  if (!movId) return;
-
-  const tipo = document.getElementById('editKardexTipo')?.value;
-  const cantidad = parseFloat(document.getElementById('editKardexCantidad')?.value);
-  const costo_total = parseFloat(document.getElementById('editKardexCosto')?.value) || 0;
-  const motivo = document.getElementById('editKardexMotivo')?.value;
-  const fecha_hora = document.getElementById('editKardexFecha')?.value;
-  const ajustar_stock = document.getElementById('editKardexAjustarStock')?.checked;
-
-  if (isNaN(cantidad) || cantidad < 0) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Ingrese una cantidad válida mayor o igual a 0.', 'warning');
-    }
-    return;
-  }
-
-  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-user-rol': userRol
-  };
-  if (window._pinKardexActivo) {
-    headers['x-supervisor-pin'] = window._pinKardexActivo;
-  }
-
-  try {
-    const res = await fetch(`/api/admin/inventario/kardex/movimientos/${movId}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({
-        tipo,
-        cantidad,
-        costo_total,
-        motivo,
-        fecha_hora: fecha_hora ? new Date(fecha_hora).toISOString() : new Date().toISOString(),
-        ajustar_stock
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Error al actualizar movimiento de Kárdex');
-    }
-
-    cerrarModalEditarKardex();
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('✅ Movimiento de Kárdex actualizado exitosamente.', 'success');
-    }
-
-    await cargarKardexGeneral();
-    if (typeof cargarInventarioAdmin === 'function') {
-      await cargarInventarioAdmin();
-    }
-  } catch (e) {
-    console.error('Error al editar kardex:', e);
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(`❌ ${e.message}`, 'error');
-    }
-  }
-};
-
-window.confirmarEliminarKardex = async function(movId) {
-  const mov = (window.kardexMovimientosActuales || []).find(m => m.id === movId);
-  if (!mov) return;
-
-  // Verificar PIN si no es admin / supervisor
-  const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
-  if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '🗑️',
-      titulo: 'Eliminar Registro Kárdex',
-      subtitulo: 'Autorización Requerida',
-      mensaje: 'Ingresa el PIN de Administrador/Supervisor para eliminar este movimiento de Kárdex:'
-    });
-    if (!pin) return;
-    window._pinKardexActivo = pin;
-  } else {
-    window._pinKardexActivo = null;
-  }
-
-  window.kardexMovimientoAEliminar = mov;
-  const elInfo = document.getElementById('deleteKardexInfo');
-  if (elInfo) {
-    const insNom = mov.insumo_nombre || `Insumo #${mov.insumo_id}`;
-    elInfo.textContent = `${insNom} • ${mov.tipo.toUpperCase()} • Cantidad: ${mov.cantidad} ${mov.unidad_medida || ''}`;
-  }
-
-  document.getElementById('modalConfirmarEliminarKardex')?.classList.add('active');
-};
-
-window.cerrarModalEliminarKardex = function() {
-  document.getElementById('modalConfirmarEliminarKardex')?.classList.remove('active');
-  window.kardexMovimientoAEliminar = null;
-};
-
-window.ejecutarEliminarKardexConfirmado = async function(revertirStock) {
-  if (!window.kardexMovimientoAEliminar) return;
-  const movId = window.kardexMovimientoAEliminar.id;
-
-  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-user-rol': userRol
-  };
-  if (window._pinKardexActivo) {
-    headers['x-supervisor-pin'] = window._pinKardexActivo;
-  }
-
-  try {
-    const res = await fetch(`/api/admin/inventario/kardex/movimientos/${movId}`, {
-      method: 'DELETE',
-      headers,
-      body: JSON.stringify({ revertir_stock: revertirStock })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Error al eliminar movimiento de Kárdex');
-    }
-
-    cerrarModalEliminarKardex();
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(
-        revertirStock
-          ? '✅ Movimiento eliminado y stock en bodega revertido correctamente.'
-          : '✅ Registro histórico de Kárdex eliminado.',
-        'success'
-      );
-    }
-
-    await cargarKardexGeneral();
-    if (typeof cargarInventarioAdmin === 'function') {
-      await cargarInventarioAdmin();
-    }
-  } catch (e) {
-    console.error('Error al eliminar kardex:', e);
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(`❌ ${e.message}`, 'error');
-    }
-  }
-};
 
 async function cargarInventarioAdmin() {
   try {
@@ -12629,52 +9739,23 @@ function renderTablaInventario(items) {
     const tr = document.createElement('tr');
     const valorTotal = (ins.stock_actual || 0) * (ins.costo_unitario || 0);
 
-    const iconoCat = typeof window.obtenerIconoCategoriaInsumo === 'function' ? window.obtenerIconoCategoriaInsumo(ins.categoria) : '📦';
     let nombreHtml = `<strong>${escapeHtml(ins.nombre)}</strong>`;
     let stockExtraHtml = '';
     let costoExtraHtml = '';
 
-    const unidad = (ins.unidad_medida || 'unidades').toLowerCase();
-
     if (ins.es_licor) {
-      if (unidad === 'kg' || unidad === 'kilogramos') {
-        const pesoEmpaque = ins.capacidad_ml || 1000;
-        const tamPorcion = ins.medida_shot_ml || 200;
-        const rend = ins.rendimiento_shots || (tamPorcion > 0 ? Math.round((pesoEmpaque / tamPorcion) * 10) / 10 : 5);
-        const totalPorciones = Math.round((ins.stock_actual || 0) * rend * 10) / 10;
-        const costoPorcion = rend > 0 ? Math.round((ins.costo_unitario || 0) / rend) : 0;
-
-        nombreHtml += ` <span class="licor-tag" style="background:#064e3b; border-color:#059669; color:#6ee7b7;">${iconoCat} ${pesoEmpaque}g (${rend} porc. de ${tamPorcion}g)</span>`;
-        stockExtraHtml = `<span class="licor-shots-pill" style="background:#064e3b; border-color:#059669; color:#6ee7b7;">🍽️ ${totalPorciones} porciones</span>`;
-        if (costoPorcion > 0) {
-          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#6ee7b7;">(${formatCRC(costoPorcion)}/porción)</span>`;
-        }
-      } else if (unidad === 'litros' || unidad === 'botellas' || (ins.categoria && ins.categoria.toLowerCase().includes('licor'))) {
-        const cap = ins.capacidad_ml || 750;
-        const rend = ins.rendimiento_shots || 25;
-        nombreHtml += ` <span class="licor-tag">🍾 ${cap}ml (${rend} shots)</span>`;
-        const enteras = ins.botellas_enteras !== null && ins.botellas_enteras !== undefined ? ins.botellas_enteras : Math.floor(ins.stock_actual || 0);
-        const remanentes = ins.shots_remanentes !== null && ins.shots_remanentes !== undefined ? ins.shots_remanentes : Math.round(((ins.stock_actual || 0) - enteras) * rend);
-        stockExtraHtml = `<span class="licor-shots-pill">🍸 ${enteras} bot. y ${remanentes} shots</span>`;
-        if (ins.costo_por_shot || (rend > 0 && ins.costo_unitario)) {
-          const cShot = ins.costo_por_shot || Math.round(ins.costo_unitario / rend);
-          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cShot)}/shot)</span>`;
-        }
-      } else {
-        const rend = ins.rendimiento_shots || 1;
-        const totalPorc = Math.round((ins.stock_actual || 0) * rend * 10) / 10;
-        const cPorc = rend > 0 ? Math.round((ins.costo_unitario || 0) / rend) : 0;
-        nombreHtml += ` <span class="licor-tag" style="background:#1e1b4b; border-color:#4338ca; color:#c7d2fe;">🍽️ Rinde ${rend} porc./u</span>`;
-        stockExtraHtml = `<span class="licor-shots-pill">🍽️ ${totalPorc} porciones</span>`;
-        if (cPorc > 0) {
-          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cPorc)}/porción)</span>`;
-        }
+      nombreHtml += ` <span class="licor-tag">🍾 ${ins.capacidad_ml || 750}ml (${ins.rendimiento_shots || 25} shots)</span>`;
+      const enteras = ins.botellas_enteras !== null && ins.botellas_enteras !== undefined ? ins.botellas_enteras : Math.floor(ins.stock_actual || 0);
+      const remanentes = ins.shots_remanentes !== null && ins.shots_remanentes !== undefined ? ins.shots_remanentes : Math.round(((ins.stock_actual || 0) - enteras) * (ins.rendimiento_shots || 25));
+      stockExtraHtml = `<span class="licor-shots-pill">🍸 ${enteras} bot. y ${remanentes} shots</span>`;
+      if (ins.costo_por_shot) {
+        costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(ins.costo_por_shot)}/shot)</span>`;
       }
     }
 
     tr.innerHTML = `
       <td>${nombreHtml}</td>
-      <td><span style="color:#e2e8f0; font-weight:500;">${iconoCat} ${escapeHtml(ins.categoria || 'General')}</span></td>
+      <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
       <td>
         <strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small>
         ${stockExtraHtml}
@@ -12695,7 +9776,6 @@ function renderTablaInventario(items) {
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma', ${ins.id})">- Merma</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#1e293b; border-color:#475569;" onclick="abrirModalKardex(${ins.id})">📜 Kardex</button>
-        <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#991b1b; border-color:#ef4444;" onclick="confirmarEliminarInsumo(${ins.id})" title="Eliminar Insumo de Bodega">🗑️</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -12716,10 +9796,6 @@ function filtrarTablaInventario() {
 
   renderTablaInventario(filtrados);
 }
-window.filtrarTablaInventario = filtrarTablaInventario;
-window.abrirModuloInventario = function() {
-  if (typeof window.abrirModuloAdmin === 'function') window.abrirModuloAdmin('inventario');
-};
 
 // Modales de Inventario
 var tipoAjusteActivo = 'entrada';
@@ -12728,16 +9804,16 @@ window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '📦',
-      titulo: 'Movimiento de Inventario',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para realizar movimientos de stock:'
-    });
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para realizar movimientos de inventario:');
     if (!pin) return;
-    window._pinSupervisorActivo = pin;
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('👑 Movimiento de inventario autorizado con PIN', 'success');
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      window._pinSupervisorActivo = pin.trim();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Movimiento de inventario autorizado con PIN', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
     }
   }
 
@@ -12875,7 +9951,6 @@ function actualizarEtiquetaUnidadAjuste() {
     }
   }
 }
-window.actualizarEtiquetaUnidadAjuste = actualizarEtiquetaUnidadAjuste;
 
 document.getElementById('selectAjusteInsumo')?.addEventListener('change', actualizarEtiquetaUnidadAjuste);
 
@@ -12911,201 +9986,105 @@ window.guardarAjusteInventario = async function() {
   }
 };
 
-// GESTIÓN DE FRACCIONAMIENTO INTELIGENTE
-window.onCambioUnidadInsumo = function(modo) {
-  const selUni = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
-  const unidad = (selUni?.value || 'unidades').toLowerCase();
-  window.actualizarOpcionesFraccionablePorUnidad(modo, unidad);
-  window.actualizarCalculoFraccionable(modo);
-};
-
-window.actualizarOpcionesFraccionablePorUnidad = function(modo, unidad) {
-  const isNuevo = modo === 'nuevo';
-  const selCap = document.getElementById(isNuevo ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
-  const selMed = document.getElementById(isNuevo ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
-  const lblCap = document.getElementById(isNuevo ? 'lblCapacidadTituloNuevo' : 'lblCapacidadTituloEditar');
-  const lblMed = document.getElementById(isNuevo ? 'lblMedidaShotTituloNuevo' : 'lblMedidaShotTituloEditar');
-  const lblTit = document.getElementById(isNuevo ? 'lblTituloFraccionableNuevo' : 'lblTituloFraccionableEditar');
-  const lblIconRend = document.getElementById(isNuevo ? 'lblIconoRendimientoNuevo' : 'lblIconoRendimientoEditar');
-  const lblUniRend = document.getElementById(isNuevo ? 'lblUnidadRendimientoNuevo' : 'lblUnidadRendimientoEditar');
-
-  if (unidad === 'kg') {
-    if (lblTit) lblTit.innerHTML = '⚖️ Fraccionable en Gramos / Porciones (Pescados, Carnes, etc.)';
-    if (lblCap) lblCap.textContent = 'Peso Total por Empaque / Unidad (g):';
-    if (lblMed) lblMed.textContent = 'Tamaño de Porción / Dosis (g):';
-    if (lblIconRend) lblIconRend.textContent = '🍽️';
-    if (lblUniRend) lblUniRend.textContent = 'porciones por kg';
-
-    if (selCap) {
-      selCap.innerHTML = `
-        <option value="1000">1000 g (1 Kilogramo)</option>
-        <option value="500">500 g (Medio Kilo)</option>
-        <option value="2000">2000 g (2 Kilogramos)</option>
-        <option value="2500">2500 g (2.5 Kilos)</option>
-        <option value="5000">5000 g (5 Kilos)</option>
-        <option value="custom">Personalizado (gramos)...</option>
-      `;
-    }
-    if (selMed) {
-      selMed.innerHTML = `
-        <option value="200">200 g (Porción Estándar Ceviche/Carne)</option>
-        <option value="150">150 g (Porción Mediana)</option>
-        <option value="100">100 g (Porción Pequeña / Tapa)</option>
-        <option value="250">250 g (Porción Gourmet 1/4 kg)</option>
-        <option value="300">300 g (Porción Grande / Plato Fuerte)</option>
-        <option value="custom">Personalizado (gramos)...</option>
-      `;
-    }
-  } else if (unidad === 'litros' || unidad === 'botellas') {
-    if (lblTit) lblTit.innerHTML = '🍾 Fraccionable por Shots / Tragos / Copes';
-    if (lblCap) lblCap.textContent = 'Capacidad de la Botella / Envase:';
-    if (lblMed) lblMed.textContent = 'Medida del Shot / Trago:';
-    if (lblIconRend) lblIconRend.textContent = '🍸';
-    if (lblUniRend) lblUniRend.textContent = 'shots por botella';
-
-    if (selCap) {
-      selCap.innerHTML = `
-        <option value="750">750 ml (Estándar de Barra)</option>
-        <option value="1000">1000 ml (1 Litro)</option>
-        <option value="1500">1500 ml (1.5 Litros / Magnum)</option>
-        <option value="1750">1750 ml (1.75 Litros)</option>
-        <option value="375">375 ml (Media Botella / Pacha)</option>
-        <option value="custom">Personalizado (ml)...</option>
-      `;
-    }
-    if (selMed) {
-      selMed.innerHTML = `
-        <option value="30">1 onza (~30 ml - Copa Tradicional CR)</option>
-        <option value="37">1.25 onzas (~37 ml)</option>
-        <option value="45">1.5 onzas (~45 ml - Jigger Coctelería)</option>
-        <option value="60">2 onzas (~60 ml - Trago Doble)</option>
-        <option value="custom">Personalizado (ml)...</option>
-      `;
-    }
-  } else {
-    if (lblTit) lblTit.innerHTML = '🍽️ Fraccionable en Porciones / Raciones';
-    if (lblCap) lblCap.textContent = 'Cantidad / Contenido por Unidad:';
-    if (lblMed) lblMed.textContent = 'Tamaño de Ración / Porción:';
-    if (lblIconRend) lblIconRend.textContent = '🍽️';
-    if (lblUniRend) lblUniRend.textContent = 'porciones por unidad';
-
-    if (selCap) {
-      selCap.innerHTML = `
-        <option value="1">1 Unidad Completa</option>
-        <option value="10">10 Unidades por Paquete</option>
-        <option value="12">12 Unidades (Docena)</option>
-        <option value="24">24 Unidades (Caja)</option>
-        <option value="custom">Personalizado...</option>
-      `;
-    }
-    if (selMed) {
-      selMed.innerHTML = `
-        <option value="1">1 Ración / Porción</option>
-        <option value="0.5">0.5 (Media Ración)</option>
-        <option value="0.25">0.25 (Un Cuarto)</option>
-        <option value="custom">Personalizado...</option>
-      `;
-    }
-  }
-};
-
-window.toggleConfigFraccionable = function(modo, checked) {
-  const isNuevo = modo === 'nuevo';
-  const sec = document.getElementById(isNuevo ? 'seccionConfigLicorNuevo' : 'seccionConfigLicorEditar');
+// CONTROL DE LICORES Y SHOTS - MODAL NUEVO INSUMO
+window.toggleConfigLicorNuevo = function(checked) {
+  const sec = document.getElementById('seccionConfigLicorNuevo');
   if (sec) sec.style.display = checked ? 'block' : 'none';
-  window.actualizarCalculoFraccionable(modo);
+  const selUnidad = document.getElementById('selectNuevoInsumoUnidad');
+  if (checked && selUnidad) {
+    selUnidad.value = 'botellas';
+  }
+  actualizarCalculoShotsNuevo();
 };
 
-window.actualizarCalculoFraccionable = function(modo) {
-  const isNuevo = modo === 'nuevo';
-  const selUni = document.getElementById(isNuevo ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
-  const unidad = (selUni?.value || 'unidades').toLowerCase();
-
-  const selCap = document.getElementById(isNuevo ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
-  const txtCapCustom = document.getElementById(isNuevo ? 'txtNuevoInsumoCapacidadCustom' : 'txtEditarInsumoCapacidadCustom');
+window.actualizarCalculoShotsNuevo = function() {
+  const selCap = document.getElementById('selNuevoInsumoCapacidad');
+  const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
   let cap = 750;
   if (selCap && selCap.value === 'custom') {
     if (txtCapCustom) txtCapCustom.style.display = 'block';
-    cap = parseFloat(txtCapCustom?.value) || (unidad === 'kg' ? 1000 : 750);
+    cap = parseFloat(txtCapCustom?.value) || 750;
   } else {
     if (txtCapCustom) txtCapCustom.style.display = 'none';
-    cap = parseFloat(selCap?.value) || (unidad === 'kg' ? 1000 : 750);
+    cap = parseFloat(selCap?.value) || 750;
   }
 
-  const selShot = document.getElementById(isNuevo ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
-  const txtShotCustom = document.getElementById(isNuevo ? 'txtNuevoInsumoMedidaShotCustom' : 'txtEditarInsumoMedidaShotCustom');
+  const selShot = document.getElementById('selNuevoInsumoMedidaShot');
+  const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
   let shot = 30;
   if (selShot && selShot.value === 'custom') {
     if (txtShotCustom) txtShotCustom.style.display = 'block';
-    shot = parseFloat(txtShotCustom?.value) || (unidad === 'kg' ? 200 : 30);
+    shot = parseFloat(txtShotCustom?.value) || 30;
   } else {
     if (txtShotCustom) txtShotCustom.style.display = 'none';
-    shot = parseFloat(selShot?.value) || (unidad === 'kg' ? 200 : 30);
+    shot = parseFloat(selShot?.value) || 30;
   }
 
-  const costo = parseFloat(document.getElementById(isNuevo ? 'txtNuevoInsumoCosto' : 'txtEditarInsumoCosto')?.value) || 0;
-  const rendimiento = shot > 0 ? Math.round((cap / shot) * 100) / 100 : 0;
-  const costoPorcion = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
+  const costo = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
+  const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
+  const costoShot = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
 
-  const lblRend = document.getElementById(isNuevo ? 'lblRendimientoShotsNuevo' : 'lblRendimientoShotsEditar');
-  const lblCosto = document.getElementById(isNuevo ? 'lblCostoPorShotNuevo' : 'lblCostoPorShotEditar');
+  const lblRend = document.getElementById('lblRendimientoShotsNuevo');
+  const lblCosto = document.getElementById('lblCostoPorShotNuevo');
   if (lblRend) lblRend.textContent = rendimiento;
-  if (lblCosto) lblCosto.textContent = formatCRC(costoPorcion);
+  if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
 };
 
-// Aliases para retrocompatibilidad
-window.toggleConfigLicorNuevo = (c) => window.toggleConfigFraccionable('nuevo', c);
-window.toggleConfigLicorEditar = (c) => window.toggleConfigFraccionable('editar', c);
-window.actualizarCalculoShotsNuevo = () => window.actualizarCalculoFraccionable('nuevo');
-window.actualizarCalculoShotsEditar = () => window.actualizarCalculoFraccionable('editar');
-
-window.abrirModalNuevoInsumo = async function() {
+window.abrirModalNuevoInsumo = function() {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '➕',
-      titulo: 'Registrar Nuevo Insumo',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para registrar nuevos insumos en bodega:'
-    });
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para registrar nuevos insumos:');
     if (!pin) return;
-    window._pinSupervisorActivo = pin;
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      window._pinSupervisorActivo = pin.trim();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Registro de insumo autorizado con PIN', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
     }
   }
 
   const n = document.getElementById('txtNuevoInsumoNombre');
+  const selCat = document.getElementById('selectNuevoInsumoCat');
+  const txtCatManual = document.getElementById('txtNuevoInsumoCatManual');
   const s = document.getElementById('txtNuevoInsumoStock');
   const m = document.getElementById('txtNuevoInsumoMin');
   const cs = document.getElementById('txtNuevoInsumoCosto');
-  const selUni = document.getElementById('selectNuevoInsumoUnidad');
   const chkL = document.getElementById('chkNuevoInsumoEsLicor');
-
+  const selCap = document.getElementById('selNuevoInsumoCapacidad');
+  const selShot = document.getElementById('selNuevoInsumoMedidaShot');
   if (n) n.value = '';
+
+  // Sincronizar con las categorías oficiales del menú
+  if (selCat) {
+    const cats = estado.categorias || [];
+    selCat.innerHTML = cats.map(cat => `
+      <option value="${escapeHtml(cat.nombre)}">${cat.icono || '🍽️'} ${escapeHtml(cat.nombre)}</option>
+    `).join('') + '<option value="__nueva__" style="color:#38bdf8; font-weight:700;">➕ + Nueva Categoría...</option>';
+    if (txtCatManual) {
+      txtCatManual.style.display = 'none';
+      txtCatManual.value = '';
+    }
+  }
+
   if (s) s.value = '10';
   if (m) m.value = '3';
   if (cs) cs.value = '1000';
-  if (selUni) selUni.value = 'unidades';
-
-  window.poblarCategoriasInsumo('selectNuevoInsumoCat', 'General', 'nuevo');
-  window.onCambioUnidadInsumo('nuevo');
-
   if (chkL) chkL.checked = false;
-  window.toggleConfigFraccionable('nuevo', false);
-
+  if (selCap) selCap.value = '750';
+  if (selShot) selShot.value = '30';
+  window.toggleConfigLicorNuevo(false);
   const modal = document.getElementById('modalNuevoInsumo');
   if (modal) modal.classList.add('active');
 };
 
-window.verificarCategoriaInsumoManual = function(modo) {
-  const isNuevo = modo === 'nuevo';
-  const sel = document.getElementById(isNuevo ? 'selectNuevoInsumoCat' : 'selectEditarInsumoCat');
-  const txtManual = document.getElementById(isNuevo ? 'txtNuevoInsumoCatManual' : 'txtEditarInsumoCatManual');
-  if (!sel || !txtManual) return;
-
-  if (sel.value === '__nueva__') {
+window.verificarCategoriaInsumoManual = function(val) {
+  const txtManual = document.getElementById('txtNuevoInsumoCatManual');
+  if (!txtManual) return;
+  if (val === '__nueva__') {
     txtManual.style.display = 'block';
     txtManual.focus();
   } else {
@@ -13127,8 +10106,9 @@ window.guardarNuevoInsumo = async function() {
     categoria = (txtManual?.value || '').trim() || 'General';
   } else if (selCat && selCat.value) {
     categoria = selCat.value;
+  } else {
+    categoria = document.getElementById('txtNuevoInsumoCat')?.value?.trim() || 'General';
   }
-
   const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
   const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
   const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 3;
@@ -13137,21 +10117,21 @@ window.guardarNuevoInsumo = async function() {
   if (!nombre) return alert('El nombre del insumo es obligatorio.');
 
   const es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-  let capacidad_ml = (unidad_medida === 'kg') ? 1000 : 750;
-  let medida_shot_ml = (unidad_medida === 'kg') ? 200 : 30;
+  let capacidad_ml = 750;
+  let medida_shot_ml = 30;
 
   if (es_licor) {
     const selCap = document.getElementById('selNuevoInsumoCapacidad');
     const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
     capacidad_ml = (selCap && selCap.value === 'custom') 
-      ? (parseFloat(txtCapCustom?.value) || capacidad_ml) 
-      : (parseFloat(selCap?.value) || capacidad_ml);
+      ? (parseFloat(txtCapCustom?.value) || 750) 
+      : (parseFloat(selCap?.value) || 750);
 
     const selShot = document.getElementById('selNuevoInsumoMedidaShot');
     const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
     medida_shot_ml = (selShot && selShot.value === 'custom') 
-      ? (parseFloat(txtShotCustom?.value) || medida_shot_ml) 
-      : (parseFloat(selShot?.value) || medida_shot_ml);
+      ? (parseFloat(txtShotCustom?.value) || 30) 
+      : (parseFloat(selShot?.value) || 30);
   }
 
   try {
@@ -13175,7 +10155,7 @@ window.guardarNuevoInsumo = async function() {
   }
 };
 
-// CONTROL DE EDICIÓN DE INSUMO
+// CONTROL DE EDICIÓN DE INSUMO / LICOR
 window.abrirModalEditarInsumo = async function(id) {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
@@ -13187,59 +10167,57 @@ window.abrirModalEditarInsumo = async function(id) {
 
     const elId = document.getElementById('txtEditarInsumoId');
     const elNom = document.getElementById('txtEditarInsumoNombre');
+    const elCat = document.getElementById('txtEditarInsumoCat');
     const elUni = document.getElementById('selectEditarInsumoUnidad');
     const elMin = document.getElementById('txtEditarInsumoMin');
     const elCos = document.getElementById('txtEditarInsumoCosto');
 
     if (elId) elId.value = insumo.id;
     if (elNom) elNom.value = insumo.nombre || '';
+    if (elCat) elCat.value = insumo.categoria || 'General';
     if (elUni) elUni.value = insumo.unidad_medida || 'unidades';
     if (elMin) elMin.value = insumo.stock_minimo ?? 3;
     if (elCos) elCos.value = insumo.costo_unitario ?? 0;
 
-    window.poblarCategoriasInsumo('selectEditarInsumoCat', insumo.categoria || 'General', 'editar');
-    window.onCambioUnidadInsumo('editar');
-
     const chkLicor = document.getElementById('chkEditarInsumoEsLicor');
     if (chkLicor) chkLicor.checked = Boolean(insumo.es_licor);
 
-    // Configurar capacidad y medida
+    // Preset capacidad
     const selCap = document.getElementById('selEditarInsumoCapacidad');
     const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
-    const capVal = String(insumo.capacidad_ml || (insumo.unidad_medida === 'kg' ? 1000 : 750));
+    const capVal = String(insumo.capacidad_ml || 750);
     if (selCap) {
-      let optionExists = Array.from(selCap.options).some(o => o.value === capVal);
-      if (optionExists) {
+      if (['750', '1000', '1500', '1750', '375'].includes(capVal)) {
         selCap.value = capVal;
         if (txtCapCustom) txtCapCustom.style.display = 'none';
       } else {
         selCap.value = 'custom';
         if (txtCapCustom) {
           txtCapCustom.style.display = 'block';
-          txtCapCustom.value = capVal;
+          txtCapCustom.value = insumo.capacidad_ml || 750;
         }
       }
     }
 
+    // Preset medida shot
     const selShot = document.getElementById('selEditarInsumoMedidaShot');
     const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
-    const shotVal = String(insumo.medida_shot_ml || (insumo.unidad_medida === 'kg' ? 200 : 30));
+    const shotVal = String(insumo.medida_shot_ml || 30);
     if (selShot) {
-      let optionExists = Array.from(selShot.options).some(o => o.value === shotVal);
-      if (optionExists) {
+      if (['30', '37', '45', '60'].includes(shotVal)) {
         selShot.value = shotVal;
         if (txtShotCustom) txtShotCustom.style.display = 'none';
       } else {
         selShot.value = 'custom';
         if (txtShotCustom) {
           txtShotCustom.style.display = 'block';
-          txtShotCustom.value = shotVal;
+          txtShotCustom.value = insumo.medida_shot_ml || 30;
         }
       }
     }
 
-    window.toggleConfigFraccionable('editar', Boolean(insumo.es_licor));
-    window.actualizarCalculoFraccionable('editar');
+    toggleConfigLicorEditar(Boolean(insumo.es_licor));
+    actualizarCalculoShotsEditar();
 
     document.getElementById('modalEditarInsumo')?.classList.add('active');
   } catch (e) {
@@ -13251,18 +10229,53 @@ window.cerrarModalEditarInsumo = function() {
   document.getElementById('modalEditarInsumo')?.classList.remove('active');
 };
 
+window.toggleConfigLicorEditar = function(checked) {
+  const sec = document.getElementById('seccionConfigLicorEditar');
+  if (sec) sec.style.display = checked ? 'block' : 'none';
+  const selUnidad = document.getElementById('selectEditarInsumoUnidad');
+  if (checked && selUnidad) {
+    selUnidad.value = 'botellas';
+  }
+  actualizarCalculoShotsEditar();
+};
+
+window.actualizarCalculoShotsEditar = function() {
+  const selCap = document.getElementById('selEditarInsumoCapacidad');
+  const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
+  let cap = 750;
+  if (selCap && selCap.value === 'custom') {
+    if (txtCapCustom) txtCapCustom.style.display = 'block';
+    cap = parseFloat(txtCapCustom?.value) || 750;
+  } else {
+    if (txtCapCustom) txtCapCustom.style.display = 'none';
+    cap = parseFloat(selCap?.value) || 750;
+  }
+
+  const selShot = document.getElementById('selEditarInsumoMedidaShot');
+  const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
+  let shot = 30;
+  if (selShot && selShot.value === 'custom') {
+    if (txtShotCustom) txtShotCustom.style.display = 'block';
+    shot = parseFloat(txtShotCustom?.value) || 30;
+  } else {
+    if (txtShotCustom) txtShotCustom.style.display = 'none';
+    shot = parseFloat(selShot?.value) || 30;
+  }
+
+  const costo = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
+  const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
+  const costoShot = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
+
+  const lblRend = document.getElementById('lblRendimientoShotsEditar');
+  const lblCosto = document.getElementById('lblCostoPorShotEditar');
+  if (lblRend) lblRend.textContent = rendimiento;
+  if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
+};
+
 window.guardarEdicionInsumo = async function() {
   const id = document.getElementById('txtEditarInsumoId')?.value;
   const nombre = (document.getElementById('txtEditarInsumoNombre')?.value || '').trim();
-  const selCat = document.getElementById('selectEditarInsumoCat');
-  const txtManual = document.getElementById('txtEditarInsumoCatManual');
-  let categoria = 'General';
-  if (selCat && selCat.value === '__nueva__') {
-    categoria = (txtManual?.value || '').trim() || 'General';
-  } else if (selCat && selCat.value) {
-    categoria = selCat.value;
-  }
-
+  const categoria = (document.getElementById('txtEditarInsumoCat')?.value || '').trim() || 'General';
   const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
   const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
   const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
@@ -13272,21 +10285,21 @@ window.guardarEdicionInsumo = async function() {
   }
 
   const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-  let capacidad_ml = (unidad_medida === 'kg') ? 1000 : 750;
-  let medida_shot_ml = (unidad_medida === 'kg') ? 200 : 30;
+  let capacidad_ml = 750;
+  let medida_shot_ml = 30;
 
   if (es_licor) {
     const selCap = document.getElementById('selEditarInsumoCapacidad');
     const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
     capacidad_ml = (selCap && selCap.value === 'custom') 
-      ? (parseFloat(txtCapCustom?.value) || capacidad_ml) 
-      : (parseFloat(selCap?.value) || capacidad_ml);
+      ? (parseFloat(txtCapCustom?.value) || 750) 
+      : (parseFloat(selCap?.value) || 750);
 
     const selShot = document.getElementById('selEditarInsumoMedidaShot');
     const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
     medida_shot_ml = (selShot && selShot.value === 'custom') 
-      ? (parseFloat(txtShotCustom?.value) || medida_shot_ml) 
-      : (parseFloat(selShot?.value) || medida_shot_ml);
+      ? (parseFloat(txtShotCustom?.value) || 30) 
+      : (parseFloat(selShot?.value) || 30);
   }
 
   try {
@@ -13305,79 +10318,6 @@ window.guardarEdicionInsumo = async function() {
 
     mostrarNotificacionCentro(`✅ Insumo "${nombre}" actualizado correctamente.`, 'success');
     cerrarModalEditarInsumo();
-    cargarInventarioAdmin();
-  } catch (e) {
-    alert('❌ ' + e.message);
-  }
-};
-
-// ELIMINACIÓN DE INSUMO DE BODEGA
-window.confirmarEliminarInsumo = async function(insumoId) {
-  const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
-  if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '🗑️',
-      titulo: 'Eliminar Insumo de Bodega',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para autorizar la eliminación del insumo:'
-    });
-    if (!pin) return;
-    window._pinSupervisorActivo = pin;
-  }
-
-  const insumo = (estado.inventario || []).find(i => i.id === insumoId);
-  if (!insumo) {
-    return alert('Insumo no encontrado');
-  }
-
-  const elId = document.getElementById('txtEliminarInsumoId');
-  const elNom = document.getElementById('lblEliminarInsumoNombre');
-  const elCat = document.getElementById('lblEliminarInsumoCat');
-  const elStock = document.getElementById('lblEliminarInsumoStock');
-  const elCos = document.getElementById('lblEliminarInsumoCosto');
-
-  if (elId) elId.value = insumo.id;
-  if (elNom) elNom.textContent = insumo.nombre;
-  if (elCat) elCat.textContent = `${window.obtenerIconoCategoriaInsumo(insumo.categoria)} ${insumo.categoria || 'General'}`;
-  if (elStock) elStock.textContent = `${insumo.stock_actual} ${insumo.unidad_medida}`;
-  if (elCos) elCos.textContent = formatCRC(insumo.costo_unitario || 0);
-
-  const modal = document.getElementById('modalConfirmarEliminarInsumo');
-  if (modal) modal.classList.add('active');
-};
-
-window.cerrarModalEliminarInsumo = function() {
-  document.getElementById('modalConfirmarEliminarInsumo')?.classList.remove('active');
-};
-
-window.ejecutarEliminarInsumoConfirmado = async function() {
-  const id = document.getElementById('txtEliminarInsumoId')?.value;
-  if (!id) return;
-
-  try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-user-rol': rol
-    };
-    if (window._pinSupervisorActivo) {
-      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
-    }
-
-    const res = await fetch(`/api/admin/inventario/${id}`, {
-      method: 'DELETE',
-      headers,
-      body: JSON.stringify({
-        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el insumo');
-
-    mostrarNotificacionCentro(`🗑️ ${data.message || 'Insumo eliminado correctamente'}`, 'success');
-    window.cerrarModalEliminarInsumo();
     cargarInventarioAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
@@ -14001,16 +10941,16 @@ window.abrirModalKardex = async function(insumoId) {
   const u = estado.usuarioActual;
   const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
   if (!esAdmin) {
-    const pin = await window.solicitarPinAdmin({
-      icono: '📜',
-      titulo: 'Historial Kárdex',
-      subtitulo: 'Acceso Restringido',
-      mensaje: 'Ingresa el PIN de Administrador (1234) para consultar el Kárdex:'
-    });
+    const pin = prompt('🔒 Acceso de Administrador: Ingresa el PIN (1234) para consultar el Kárdex:');
     if (!pin) return;
-    window._pinSupervisorActivo = pin;
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('👑 Consulta de Kárdex autorizada con PIN', 'success');
+    if (pin.trim() === '1234' || pin.trim() === '9999') {
+      window._pinSupervisorActivo = pin.trim();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('👑 Consulta de Kárdex autorizada con PIN', 'success');
+      }
+    } else {
+      alert('❌ PIN incorrecto.');
+      return;
     }
   }
 
@@ -15126,10 +12066,7 @@ function renderTablaAuditoria(eventos) {
 
   eventos.forEach(ev => {
     const tr = document.createElement('tr');
-    let badgeClass = (ev.tipo_evento || 'operativo').toLowerCase();
-    if (ev.accion === 'cierre_forzado_cuenta' || ev.accion === 'liberacion_forzada_mesa') {
-      badgeClass = 'seguridad';
-    }
+    const badgeClass = ev.tipo_evento || 'operativo';
     const fecha = ev.fecha_hora ? formatearFechaHoraCR(ev.fecha_hora) : 'Reciente';
 
     tr.innerHTML = `
@@ -15158,13 +12095,9 @@ function filtrarTablaAuditoria() {
   const q = (document.getElementById('txtBuscarAuditoria')?.value || '').toLowerCase().trim();
 
   const filtrados = (estado.auditoria || []).filter(ev => {
-    const matchTipo = chipActivo === 'todos' || 
-      ev.accion === chipActivo || 
-      (chipActivo === 'cierre_forzado_cuenta' && (ev.accion === 'cierre_forzado_cuenta' || ev.accion === 'liberacion_forzada_mesa'));
+    const matchTipo = chipActivo === 'todos' || ev.accion === chipActivo;
     const matchQ = !q || 
       (ev.usuario_nombre && ev.usuario_nombre.toLowerCase().includes(q)) ||
-      (ev.accion && ev.accion.toLowerCase().includes(q)) ||
-      (ev.modulo && ev.modulo.toLowerCase().includes(q)) ||
       (ev.detalle && ev.detalle.toLowerCase().includes(q)) ||
       (ev.motivo && ev.motivo.toLowerCase().includes(q));
     return matchTipo && matchQ;
@@ -15172,9 +12105,6 @@ function filtrarTablaAuditoria() {
 
   renderTablaAuditoria(filtrados);
 }
-window.cargarAuditoriaAdmin = cargarAuditoriaAdmin;
-window.filtrarAuditoriaPorChip = filtrarAuditoriaPorChip;
-window.filtrarTablaAuditoria = filtrarTablaAuditoria;
 
 // ============================================================================
 // 13. MOTOR DE IMPRESIÓN TÉRMICA (80MM), VISOR VIRTUAL & MONITOR DE PUERTOS
@@ -15221,56 +12151,50 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     if (txtTitulo) txtTitulo.textContent = `🖨️ ${ticketData.titulo || 'Comanda'}`;
     if (txtSub) txtSub.textContent = `Destino: ${ticketData.destino ? ticketData.destino.toUpperCase() : 'COCINA'} • ESC/POS 80mm`;
 
-    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
-    const totalItems = ticketData.totalItems || listaItems.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0);
-
     html = `
-      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
-        <div style="font-size:1.3rem; margin-bottom:2px;">${ticketData.destino === 'barra' ? '🍸' : '🍳'}</div>
-        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
+      <div class="receipt-header">
+        <div class="receipt-logo">${ticketData.destino === 'barra' ? '🍸' : '🍳'}</div>
+        <div class="receipt-brand-name">*** ${ticketData.titulo || 'COMANDA'} ***</div>
+        <div class="receipt-type-badge">MESA: ${ticketData.mesa}</div>
+        <div class="receipt-sub">Orden #${ticketData.ordenId || 1} • Comanda #${ticketData.comandaNumero || 1}</div>
+        <div class="receipt-sub">Salonero: ${ticketData.mesero || 'General'}</div>
+        <div class="receipt-sub">${ticketData.fechaHora}</div>
       </div>
-      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
-      <div style="text-align:center; margin:4px 0; color:#000000;">
-        <div style="font-size:15px; font-weight:900; letter-spacing:0.5px;">*** ${escapeHtml(ticketData.titulo || (ticketData.destino === 'barra' ? 'COMANDA BARRA' : 'COMANDA COCINA'))} ***</div>
-        <div style="font-size:14px; font-weight:900; margin-top:2px;">MESA: ${ticketData.mesa}</div>
-        ${ticketData.pagada ? `<div style="font-size:11px; font-weight:900; color:#000000;">[ ESTADO: COBRADA / DIRECTO ]</div>` : ''}
+
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th style="width:18%;">CANT</th>
+            <th style="width:62%;">PLATILLO / PRODUCTO</th>
+            <th style="width:20%; text-align:right;">TIEMPO</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(ticketData.items || []).map(it => {
+            const cLabel = it.curso === 1 ? 'Entrada' : it.curso === 3 ? 'Postre' : 'Fuerte';
+            return `
+              <tr>
+                <td><strong>${it.cantidad}x</strong></td>
+                <td>
+                  <span class="receipt-item-title">${escapeHtml(it.nombre)}</span>
+                  ${it.notas ? `<div class="receipt-item-note">⚠️ ${escapeHtml(it.notas)}</div>` : ''}
+                  ${it.origenMesa ? `<div class="receipt-item-note" style="color:#0284c7;">(Orig: Mesa ${it.origenMesa})</div>` : ''}
+                </td>
+                <td style="text-align:right; font-size:10.5px; font-weight:700;">[${cLabel}]</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+
+      <div class="receipt-divider"></div>
+      <div style="display:flex; justify-content:space-between; font-weight:900; font-size:13px; padding:4px 0;">
+        <span>TOTAL ARTÍCULOS:</span>
+        <span>${ticketData.totalItems || (ticketData.items || []).reduce((a, b) => a + Number(b.cantidad), 0)}</span>
       </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
-        <div>Orden #${ticketData.ordenId || 1} | Comanda #${ticketData.comandaNumero || 1}</div>
-        <div>Salonero: ${escapeHtml(ticketData.mesero || 'General')}</div>
-        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
-        <span>CANT  PLATILLO / PRODUCTO</span>
-        <span style="text-align:right;">TIEMPO</span>
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-items-list" style="margin:4px 0;">
-        ${listaItems.map(it => {
-          const cLabel = it.curso === 1 ? '[Entrada]' : it.curso === 3 ? '[Postre]' : '[Fuerte]';
-          return `
-            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:13px; font-weight:900; color:#000000; margin-bottom:2px; line-height:1.25;">
-              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${escapeHtml(it.nombre || it.nombre_producto || 'Producto')}</span>
-              <span style="text-align:right; font-weight:900; white-space:nowrap;">${cLabel}</span>
-            </div>
-            ${it.notas ? `<div class="receipt-item-note" style="font-size:11.5px; font-weight:900; color:#000000; padding-left:14px; margin-bottom:2px;">>> NOTA: ${escapeHtml(it.notas)}</div>` : ''}
-            ${it.origenMesa ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(Orig: Mesa ${it.origenMesa})</div>` : ''}
-          `;
-        }).join('')}
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
-        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL ITEMS:</span>
-        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${totalItems}</span>
-      </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
-        <div>• NOTIFICACIÓN DE ${ticketData.destino ? ticketData.destino.toUpperCase() : 'COCINA'} •</div>
+
+      <div class="receipt-footer">
+        <div>• NOTIFICACIÓN DE COCINA / BARRA •</div>
         <div>Corte automático ejecutado en puerto ESC/POS</div>
       </div>
     `;
@@ -15301,21 +12225,8 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
     const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
     const baseImp = Math.max(0, subNum - descHH);
-    const esParaLlevarTicket = Boolean(
-      ticketData.es_para_llevar ||
-      ticketData.tipo_orden === 'para_llevar' ||
-      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar'))) ||
-      (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) === 0)
-    );
-    let servNum;
-    if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
-      servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
-    } else if (esParaLlevarTicket) {
-      servNum = 0;
-    } else {
-      servNum = Math.round(baseImp * 0.10);
-    }
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const servNum = (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) > 0) ? Math.round(Number(ticketData.servicio)) : Math.round(baseImp * 0.10);
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && Number(ticketData.iva) > 0) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const prop10 = Math.round(subNum * 0.10);
     const prop15 = Math.round(subNum * 0.15);
@@ -15335,11 +12246,10 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ REVISIÓN DE CONSUMOS EN MESA ]</div>
         <div style="font-size:10.5px; font-weight:800;">* NO VÁLIDO COMO FACTURA FISCAL *</div>
       </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
-        <div>Pre-Factura / Orden: #${ticketData.numeroOrden || ticketData.ordenId}</div>
-        <div>MESA: ${ticketData.mesa} | Salonero: ${escapeHtml(ticketData.mesero || 'Don Alberto')}</div>
-        <div>Cliente: ${escapeHtml(ticketData.cliente || 'Cliente General')}</div>
-        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4; text-align:center;">
+        <div style="font-size:13px; font-weight:900;">MESA: ${ticketData.mesa} | Salonero: ${escapeHtml(ticketData.mesero || 'Don Alberto')}</div>
+        <div>Orden #${ticketData.numeroOrden || ticketData.ordenId} • Cliente: ${escapeHtml(ticketData.cliente || 'Cliente General')}</div>
+        <div>${ticketData.fechaHora}</div>
       </div>
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
       <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
@@ -15371,17 +12281,10 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
             <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
           </div>
         ` : ''}
-        ${servNum > 0 ? `
-          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-            <span>10% Servicio (Ley):</span>
-            <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
-          </div>
-        ` : `
-          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#6b7280;">
-            <span>Servicio (0% Para Llevar):</span>
-            <span style="font-weight:900;">EXENTO</span>
-          </div>
-        `}
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>10% Servicio (Ley):</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
+        </div>
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
@@ -15392,7 +12295,6 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL ESTIMADO:</span>
         <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div style="margin:10px 0 6px 0; text-align:center; color:#000000;">
         <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">PROPINA VOLUNTARIA SUGERIDA</div>
         <div style="border:1px dashed #000000; padding:5px 8px; border-radius:4px; display:flex; justify-content:space-around; font-size:12px; font-weight:900;">
@@ -15413,94 +12315,67 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     if (txtTitulo) txtTitulo.textContent = `💵 Pago Parcial - ${ticketData.personaNombre || 'Cliente'}`;
     if (txtSub) txtSub.textContent = `Mesa ${ticketData.mesa} • Comprobante Individual 80mm`;
 
-    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
-    const itemsNormalizados = listaItems.map(it => {
-      const cant = Number(it.cantidad) || 1;
-      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
-      const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
-        ? Number(it.totalLinea)
-        : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
-          ? Number(it.subtotal)
-          : (uPrice * cant);
-      return {
-        cantidad: cant,
-        nombre: it.nombre || it.nombre_producto || it.descripcion || 'Consumo',
-        precioUnitario: uPrice,
-        totalLinea: totLinea,
-        notas: it.notas || ''
-      };
-    });
-
     html = `
-      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
-        <div style="font-size:1.3rem; margin-bottom:2px;">💵</div>
-        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
-        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
+      <div class="receipt-header">
+        <div class="receipt-business-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div>${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div>Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        <div>${ticketData.negocio?.dir || 'San Jose, Costa Rica'}</div>
+        <div>Ced. Juridica: ${ticketData.negocio?.cedula || '3-101-789458'}</div>
       </div>
-      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
-      <div style="text-align:center; margin:4px 0; color:#000000;">
-        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** COMPROBANTE DE PAGO PARCIAL ***</div>
-        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ SPLIT BILL / CUENTA DIVIDIDA ]</div>
+      <div class="receipt-double-line">================================================</div>
+      <div class="receipt-title-badge">COMPROBANTE DE PAGO PARCIAL</div>
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-row"><span>Mesa: ${ticketData.mesa} - ${ticketData.personaNombre ? ticketData.personaNombre.toUpperCase() : 'CLIENTE'}</span></div>
+        <div class="receipt-meta-row"><span>Orden #${ticketData.ordenId} | Salonero: ${ticketData.mesero || 'General'}</span></div>
+        <div class="receipt-meta-row"><span>Fecha/Hora: ${ticketData.fechaHora}</span></div>
       </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
-        <div>Factura / Orden: #${ticketData.ordenId || '001'}</div>
-        <div>MESA: ${ticketData.mesa} - ${(ticketData.personaNombre || 'CLIENTE').toUpperCase()}</div>
-        <div>Salonero: ${escapeHtml(ticketData.mesero || 'General')}</div>
-        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
-        <span>CANT  DESCRIPCIÓN</span>
+      <div class="receipt-dashed-line">------------------------------------------------</div>
+      <div class="receipt-col-header">
+        <span>CANTDESCRIPCION</span>
         <span style="text-align:right;">PRECIO</span>
       </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-items-list" style="margin:4px 0;">
-        ${itemsNormalizados.map(it => {
-          const nom = escapeHtml(it.nombre);
+      <div class="receipt-dashed-line">------------------------------------------------</div>
+      <div class="receipt-items-list">
+        ${(ticketData.items || []).map(it => {
+          const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
+          const cant = Number(it.cantidad) || 1;
+          const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0) ? Number(it.totalLinea) : (uPrice * cant);
+          const nom = escapeHtml(it.nombre || it.nombre_producto || 'Consumo');
           return `
-            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; color:#000000; margin-bottom:3px; line-height:1.25;">
-              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${nom}</span>
-              <span class="receipt-item-price" style="text-align:right; font-weight:900; white-space:nowrap;">${formatCRCSinDecimales(it.totalLinea)}</span>
+            <div class="receipt-item-row">
+              <span class="receipt-item-name">${cant}x  ${nom}</span>
+              <span class="receipt-item-price">${formatCRCSinDecimales(totLinea)}</span>
             </div>
-            ${it.notas ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(${escapeHtml(it.notas)})</div>` : ''}
+            ${it.notas ? `<div class="receipt-item-note">(${escapeHtml(it.notas)})</div>` : ''}
           `;
         }).join('')}
       </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+      <div class="receipt-dashed-line">------------------------------------------------</div>
+      <div class="receipt-calculations">
+        <div class="receipt-calc-line">
           <span>Subtotal Consumo:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.subtotal)}</span>
+          <span>${formatCRCSinDecimales(ticketData.subtotal)}</span>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>10% Serv + 13% IVA:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.impuestos)}</span>
+          <span>${formatCRCSinDecimales(ticketData.impuestos)}</span>
         </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
-        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL PAGADO:</span>
-        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.total)}</span>
+      <div class="receipt-double-line">================================================</div>
+      <div class="receipt-total-block">
+        <div class="receipt-total-label">TOTAL PAGADO:</div>
+        <div class="receipt-total-amount">${formatCRCSinDecimales(ticketData.total)}</div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="margin:6px 0; font-size:12px; font-weight:800; color:#000000; line-height:1.4;">
-        <div style="display:flex; justify-content:space-between;">
-          <span>Método de Pago:</span>
-          <span style="font-weight:900;">${escapeHtml(ticketData.metodoPago || 'Efectivo')}</span>
-        </div>
-        <div style="display:flex; justify-content:space-between; margin-top:2px;">
-          <span>Saldo Restante Mesa:</span>
-          <span style="font-weight:900; color:#000000;">${formatCRCSinDecimales(ticketData.saldoRestanteMesa)}</span>
-        </div>
+      <div class="receipt-double-line">================================================</div>
+      <div class="receipt-payment-info">
+        <div>Metodo de Pago: ${ticketData.metodoPago || 'Efectivo'}</div>
+        <div style="font-weight:700; margin-top:2px;">Saldo Restante Mesa: ${formatCRCSinDecimales(ticketData.saldoRestanteMesa)}</div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
-        <div>Estado: Mesa permanece ABIERTA con consumos pendientes.</div>
-        <div style="font-weight:900; margin-top:2px;">¡Muchas gracias por su preferencia!</div>
-        <div style="font-size:10px; margin-top:2px;">Autorizado mediante resolución DGT-R-033-2019</div>
+      <div class="receipt-footer">
+        <div>Muchas gracias por su preferencia!</div>
+        <div>Esperamos servirle de nuevo muy pronto.</div>
+        <div>Autorizado mediante resolucion DGT-R-033-2019</div>
       </div>
     `;
   } else if (ticketData.tipo === 'corte_x') {
@@ -15512,79 +12387,98 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const fCorte = ticketData.fecha_corte ? formatearFechaHoraCR(ticketData.fecha_corte) : formatearFechaHoraCR(new Date());
 
     html = `
-      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
-        <div style="font-size:1.3rem; margin-bottom:2px;">📑</div>
-        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
-        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
+      <div class="receipt-header">
+        <div class="receipt-logo">📑</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-sub">REPORTE AUDITORÍA PARCIAL (CORTE X)</div>
+        <div class="receipt-type-badge" style="background:#0284c7; color:#fff;">TURNO #${ticketData.caja_id || 1} - EN CURSO</div>
+        <div class="receipt-sub">Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div class="receipt-sub">Apertura: ${fApertura}</div>
+        <div class="receipt-sub">Corte: ${fCorte}</div>
       </div>
-      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
-      <div style="text-align:center; margin:4px 0; color:#000000;">
-        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** CORTE X (PARCIAL) ***</div>
-        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ AUDITORÍA INFORMATIVA DE TURNO ]</div>
-      </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
-        <div>Turno / Caja: #${ticketData.caja_id || 1} | Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
-        <div>Apertura: ${fApertura}</div>
-        <div>Corte: ${fCorte}</div>
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div style="font-size:12px; font-weight:900; color:#000000;">DESGLOSE DE VENTAS</div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💰 DESGLOSE DE VENTAS</div>
+      <div class="receipt-totals-box" style="margin-bottom:8px;">
+        <div class="receipt-calc-line">
           <span>Ventas Efectivo:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>Ventas Tarjeta:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.tarjeta || 0)}</span>
+          <strong>${formatCRC(v.tarjeta || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>Ventas SINPE Móvil:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
+          <strong>${formatCRC(v.sinpe || 0)}</strong>
         </div>
-        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-          <span>Ventas Dólares ($ USD):</span>
-          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
-        </div>
-        ` : ''}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
+        <div class="receipt-calc-line total-destacado">
           <span>TOTAL VENTAS:</span>
-          <span>${formatCRCSinDecimales(v.total || 0)}</span>
+          <span>${formatCRC(v.total || 0)}</span>
         </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="font-size:12px; font-weight:900; color:#000000;">ARQUEO DE EFECTIVO EN GAVETA</div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💵 ARQUEO DE EFECTIVO EN GAVETA</div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
           <span>(+) Fondo Inicial:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.fondo_inicial || 0)}</span>
+          <strong>${formatCRC(ticketData.fondo_inicial || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>(+) Ventas Efectivo:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="color:#059669;">
           <span>(+) Entradas de Efectivo:</span>
-          <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
+          <strong>+${formatCRC(ticketData.total_entradas || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="color:#dc2626;">
           <span>(-) Salidas / Gastos Menores:</span>
-          <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
+          <strong>-${formatCRC(ticketData.total_salidas || 0)}</strong>
+        </div>
+        <div class="receipt-calc-line total-destacado" style="background:#e0f2fe; color:#0369a1;">
+          <span>EFECTIVO ESPERADO:</span>
+          <span>${formatCRC(ticketData.efectivo_esperado || 0)}</span>
         </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
-        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">EFECTIVO ESPERADO:</span>
-        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
-      </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
+
+      ${ticketData.movimientos_detalle && ticketData.movimientos_detalle.length ? `
+        <div class="receipt-divider"></div>
+        <div style="font-size:11px; font-weight:900; margin-bottom:4px;">DETALLE MOVIMIENTOS MENORES:</div>
+        <table class="receipt-items-table" style="font-size:10px;">
+          <tbody>
+            ${ticketData.movimientos_detalle.map(m => `
+              <tr>
+                <td><strong>${m.tipo === 'entrada' ? '📥 Ent' : '📤 Sal'}</strong></td>
+                <td>${escapeHtml(m.concepto)}</td>
+                <td style="text-align:right;"><strong>${formatCRC(m.monto)}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+
+      ${ticketData.tip_pool && ticketData.tip_pool.length ? `
+        <div class="receipt-divider"></div>
+        <div style="font-size:11px; font-weight:900; margin-bottom:4px;">FONDO PROPINAS (TIP POOL 10%):</div>
+        <table class="receipt-items-table" style="font-size:10px;">
+          <tbody>
+            ${ticketData.tip_pool.map(t => `
+              <tr>
+                <td>${escapeHtml(t.nombre)}</td>
+                <td style="text-align:right;"><strong>${formatCRC(t.propina || 0)}</strong></td>
+              </tr>
+            `).join('')}
+            <tr style="font-weight:900; border-top:1px dashed #cbd5e1;">
+              <td>TOTAL PROPINAS:</td>
+              <td style="text-align:right; color:#059669;">${formatCRC(ticketData.total_propinas || 0)}</td>
+            </tr>
+          </tbody>
+        </table>
+      ` : ''}
+
+      <div class="receipt-footer">
         <div>*** ESTADO: TURNO PERMANECE ABIERTO ***</div>
         <div>Corte informativo sin impacto en cierre contable</div>
       </div>
@@ -15596,242 +12490,178 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const v = ticketData.ventas || {};
     const fApertura = ticketData.fecha_apertura ? formatearFechaHoraCR(ticketData.fecha_apertura) : '-';
     const fCierre = ticketData.fecha_cierre ? formatearFechaHoraCR(ticketData.fecha_cierre) : formatearFechaHoraCR(new Date());
-    const diff = Number(ticketData.diferencia) || 0;
+    const diff = ticketData.diferencia || 0;
+    const cuadreColor = diff === 0 ? '#10b981' : (diff > 0 ? '#0284c7' : '#dc2626');
 
     html = `
-      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
-        <div style="font-size:1.3rem; margin-bottom:2px;">🔒</div>
-        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
-        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
+      <div class="receipt-header">
+        <div class="receipt-logo">🔒</div>
+        <div class="receipt-brand-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div class="receipt-sub">COMPROBANTE CIERRE Z DEFINITIVO</div>
+        <div class="receipt-type-badge" style="background:#1e1b4b; color:#fff;">TURNO #${ticketData.caja_id || 1} - CERRADO</div>
+        <div class="receipt-sub">Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div class="receipt-sub">Apertura: ${fApertura}</div>
+        <div class="receipt-sub">Cierre: ${fCierre}</div>
       </div>
-      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
-      <div style="text-align:center; margin:4px 0; color:#000000;">
-        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** CIERRE Z (FINAL) ***</div>
-        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ LIQUIDACIÓN OFICIAL DE TURNO ]</div>
-      </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
-        <div>Turno / Caja: #${ticketData.caja_id || 1} | Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
-        <div>Apertura: ${fApertura}</div>
-        <div>Cierre: ${fCierre}</div>
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div style="font-size:12px; font-weight:900; color:#000000;">VENTAS TOTALES DEL TURNO</div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💰 VENTAS TOTALES DEL TURNO</div>
+      <div class="receipt-totals-box" style="margin-bottom:8px;">
+        <div class="receipt-calc-line">
           <span>Ventas Efectivo:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>Ventas Tarjeta:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.tarjeta || 0)}</span>
+          <strong>${formatCRC(v.tarjeta || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>Ventas SINPE Móvil:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
+          <strong>${formatCRC(v.sinpe || 0)}</strong>
         </div>
-        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-          <span>Ventas Dólares ($ USD):</span>
-          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
-        </div>
-        ` : ''}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
+        <div class="receipt-calc-line total-destacado">
           <span>TOTAL FACTURADO:</span>
-          <span>${formatCRCSinDecimales(v.total || 0)}</span>
+          <span>${formatCRC(v.total || 0)}</span>
         </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="font-size:12px; font-weight:900; color:#000000;">ARQUEO FÍSICO Y CUADRE DE CAJA</div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+
+      <div class="receipt-divider"></div>
+      <div style="font-size:12px; font-weight:900; margin-bottom:4px; color:#1e293b;">💵 ARQUEO FÍSICO Y CUADRE DE CAJA</div>
+      <div class="receipt-totals-box">
+        <div class="receipt-calc-line">
           <span>(+) Fondo Inicial:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.fondo_inicial || 0)}</span>
+          <strong>${formatCRC(ticketData.fondo_inicial || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
           <span>(+) Ventas Efectivo:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
+          <strong>${formatCRC(v.efectivo || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="color:#059669;">
           <span>(+) Entradas Menores:</span>
-          <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
+          <strong>+${formatCRC(ticketData.total_entradas || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="color:#dc2626;">
           <span>(-) Salidas Menores:</span>
-          <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
+          <strong>-${formatCRC(ticketData.total_salidas || 0)}</strong>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; border-top:1px solid #000; padding-top:2px;">
+        <div class="receipt-calc-line" style="border-top:1px solid #cbd5e1; font-weight:700;">
           <span>EFECTIVO ESPERADO:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
+          <span>${formatCRC(ticketData.efectivo_esperado || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line" style="font-weight:900; font-size:13px;">
           <span>EFECTIVO CONTADO:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_real_contado || 0)}</span>
+          <span>${formatCRC(ticketData.efectivo_real_contado || 0)}</span>
         </div>
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; font-weight:900;">
+        <div class="receipt-calc-line total-destacado" style="background:#f1f5f9; color:${cuadreColor};">
           <span>DIFERENCIA (${ticketData.estado_cuadre || 'Cuadre'}):</span>
-          <span>${diff >= 0 ? '+' : ''}${formatCRCSinDecimales(diff)}</span>
+          <span>${diff >= 0 ? '+' : ''}${formatCRC(diff)}</span>
         </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
-        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL LIQUIDADO:</span>
-        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.efectivo_real_contado || 0)}</span>
+
+      ${ticketData.notas ? `
+        <div class="receipt-divider"></div>
+        <div style="font-size:10.5px; color:#334155; font-style:italic;">
+          <strong>Notas:</strong> ${escapeHtml(ticketData.notas)}
+        </div>
+      ` : ''}
+
+      <div class="receipt-divider"></div>
+      <div style="margin: 20px 0 10px; display:flex; justify-content:space-between; font-size:10px;">
+        <div style="text-align:center; width:45%;">
+          <div style="border-bottom:1px solid #000; height:30px;"></div>
+          <div style="margin-top:4px;">Firma Cajero</div>
+        </div>
+        <div style="text-align:center; width:45%;">
+          <div style="border-bottom:1px solid #000; height:30px;"></div>
+          <div style="margin-top:4px;">Firma Administrador</div>
+        </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:12px 0 2px 0;">------------------------------------------------</div>
-      <div style="display:flex; justify-content:space-between; text-align:center; font-size:11px; font-weight:900; color:#000000; margin:4px 0 12px 0;">
-        <span style="flex:1;">Firma Cajero</span>
-        <span style="flex:1;">Firma Administrador</span>
-      </div>
-      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
+
+      <div class="receipt-footer">
         <div>*** TURNO OFICIALMENTE CERRADO ***</div>
         <div>Registro contable y fiscal guardado</div>
       </div>
     `;
   } else {
-    // Factura Final / Comprobante de Pago
-    if (txtTitulo) txtTitulo.textContent = `🧾 Factura / Comprobante - Mesa ${ticketData.mesa}`;
-    if (txtSub) txtSub.textContent = `Factura #${ticketData.numeroOrden || ticketData.ordenId} • Liquidación Final 80mm`;
-
-    const listaItems = Array.isArray(ticketData.items) ? ticketData.items : [];
-    let subCalculado = 0;
-    const itemsNormalizados = listaItems.map(it => {
-      const cant = Number(it.cantidad) || 1;
-      const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.subtotal && cant ? it.subtotal / cant : (it.totalLinea && cant ? it.totalLinea / cant : 0))) || 0;
-      const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0)
-        ? Number(it.totalLinea)
-        : (it.subtotal !== undefined && it.subtotal !== null && Number(it.subtotal) > 0)
-          ? Number(it.subtotal)
-          : (uPrice * cant);
-      subCalculado += totLinea;
-      return {
-        cantidad: cant,
-        nombre: it.nombre || it.nombre_producto || it.descripcion || 'Producto',
-        precioUnitario: uPrice,
-        totalLinea: totLinea,
-        notas: it.notas || ''
-      };
-    });
-
-    const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
-    const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
-    const baseImp = Math.max(0, subNum - descHH);
-    const esParaLlevarTicket = Boolean(
-      ticketData.es_para_llevar ||
-      ticketData.tipo_orden === 'para_llevar' ||
-      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar'))) ||
-      (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) === 0)
-    );
-    let servNum;
-    if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
-      servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
-    } else if (esParaLlevarTicket) {
-      servNum = 0;
-    } else {
-      servNum = Math.round(baseImp * 0.10);
-    }
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
-    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
-    const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;
-    const montoCambio = Number(ticketData.cambio) >= 0 ? Math.round(Number(ticketData.cambio)) : Math.max(0, montoRec - totalNum);
+    // Ticket de Liquidación / Factura Final
+    if (txtTitulo) txtTitulo.textContent = `🧾 Factura / Ticket - Mesa ${ticketData.mesa}`;
+    if (txtSub) txtSub.textContent = `Orden #${ticketData.numeroOrden || ticketData.ordenId} • Liquidación Final 80mm`;
 
     html = `
-      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
-        <div style="font-size:1.3rem; margin-bottom:2px;">🧾</div>
-        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
-        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
-        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
-        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
+      <div class="receipt-header">
+        <div class="receipt-business-name">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div>${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div>Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        <div>${ticketData.negocio?.dir || 'San Jose, Costa Rica'}</div>
+        <div>Ced. Juridica: ${ticketData.negocio?.cedula || '3-101-789458'}</div>
       </div>
-      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
-      <div style="text-align:center; margin:4px 0; color:#000000;">
-        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">COMPROBANTE DE PAGO / FACTURA</div>
+      <div class="receipt-double-line">================================================</div>
+      <div class="receipt-title-badge">COMPROBANTE DE PAGO / FACTURA</div>
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-row"><span>Factura / Orden: #${ticketData.numeroOrden || ticketData.ordenId}</span></div>
+        <div class="receipt-meta-row"><span>Mesa: ${ticketData.mesa} | Salonero: ${ticketData.mesero || 'General'}</span></div>
+        <div class="receipt-meta-row"><span>Cliente: ${escapeHtml(ticketData.cliente || 'Cliente Test')}</span></div>
+        <div class="receipt-meta-row"><span>Fecha/Hora: ${ticketData.fechaHora}</span></div>
       </div>
-      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
-        <div>Factura / Orden: #${ticketData.numeroOrden || ticketData.ordenId || '001'}</div>
-        <div>Mesa: ${ticketData.mesa} | Salonero: ${escapeHtml(ticketData.mesero || 'General')}</div>
-        <div>Cliente: ${escapeHtml(ticketData.cliente || 'Cliente General')}</div>
-        <div>Fecha/Hora: ${ticketData.fechaHora}</div>
-      </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-col-header" style="display:flex; justify-content:space-between; font-weight:900; font-size:12px; color:#000000;">
-        <span>CANT  DESCRIPCIÓN</span>
+      <div class="receipt-dashed-line">------------------------------------------------</div>
+      <div class="receipt-col-header">
+        <span>CANTDESCRIPCION</span>
         <span style="text-align:right;">PRECIO</span>
       </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-items-list" style="margin:4px 0;">
-        ${itemsNormalizados.map(it => {
-          const nom = escapeHtml(it.nombre);
+      <div class="receipt-dashed-line">------------------------------------------------</div>
+      <div class="receipt-items-list">
+        ${(ticketData.items || []).map(it => {
+          const uPrice = Number(it.precio_unitario ?? it.precio ?? it.precioUnitario ?? (it.totalLinea && it.cantidad ? it.totalLinea / it.cantidad : 0)) || 0;
+          const cant = Number(it.cantidad) || 1;
+          const totLinea = (it.totalLinea !== undefined && it.totalLinea !== null && Number(it.totalLinea) > 0) ? Number(it.totalLinea) : (uPrice * cant);
+          const nom = escapeHtml(it.nombre || it.nombre_producto || 'Producto');
           return `
-            <div class="receipt-item-row" style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; color:#000000; margin-bottom:3px; line-height:1.25;">
-              <span class="receipt-item-name" style="flex:1; padding-right:4px;"><strong>${it.cantidad}x</strong>  ${nom}</span>
-              <span class="receipt-item-price" style="text-align:right; font-weight:900; white-space:nowrap;">${formatCRCSinDecimales(it.totalLinea)}</span>
+            <div class="receipt-item-row">
+              <span class="receipt-item-name">${cant}x  ${nom}</span>
+              <span class="receipt-item-price">${formatCRCSinDecimales(totLinea)}</span>
             </div>
-            ${it.notas ? `<div class="receipt-item-note" style="font-size:11px; font-weight:800; color:#000000; padding-left:14px; margin-bottom:2px;">(${escapeHtml(it.notas)})</div>` : ''}
+            ${it.notas ? `<div class="receipt-item-note">(${escapeHtml(it.notas)})</div>` : ''}
           `;
         }).join('')}
       </div>
-      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
-      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+      <div class="receipt-dashed-line">------------------------------------------------</div>
+      <div class="receipt-calculations">
+        <div class="receipt-calc-line">
           <span>Subtotal (Base Imponible):</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(subNum)}</span>
+          <span>${formatCRCSinDecimales(ticketData.subtotal)}</span>
         </div>
-        ${descHH > 0 ? `
-          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        ${ticketData.descuentoHH > 0 ? `
+          <div class="receipt-calc-line">
             <span>Descuento Happy Hour 2x1:</span>
-            <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
+            <span>-${formatCRCSinDecimales(ticketData.descuentoHH)}</span>
           </div>
         ` : ''}
-        ${servNum > 0 ? `
-          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-            <span>10% Servicio (Ley):</span>
-            <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
-          </div>
-        ` : `
-          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#6b7280;">
-            <span>Servicio (0% Para Llevar):</span>
-            <span style="font-weight:900;">EXENTO</span>
-          </div>
-        `}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="receipt-calc-line">
+          <span>10% Servicio (Ley):</span>
+          <span>${formatCRCSinDecimales(ticketData.servicio)}</span>
+        </div>
+        <div class="receipt-calc-line">
           <span>13% I.V.A.:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
+          <span>${formatCRCSinDecimales(ticketData.iva)}</span>
         </div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
-        <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">TOTAL A PAGAR:</span>
-        <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
+      <div class="receipt-double-line">================================================</div>
+      <div class="receipt-total-block">
+        <div class="receipt-total-label">TOTAL A PAGAR:</div>
+        <div class="receipt-total-amount">${formatCRCSinDecimales(ticketData.total)}</div>
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="margin:6px 0; font-size:12px; font-weight:800; color:#000000; line-height:1.4;">
-        <div style="display:flex; justify-content:space-between;">
-          <span>Método de Pago:</span>
-          <span style="font-weight:900;">${escapeHtml(ticketData.metodoPago || 'Efectivo')}</span>
-        </div>
-        ${(ticketData.metodoPago === 'Efectivo' || !ticketData.metodoPago) && montoRec > 0 ? `
-          <div style="display:flex; justify-content:space-between;">
-            <span>Monto Recibido:</span>
-            <span style="font-weight:900;">${formatCRCSinDecimales(montoRec)}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span>Vuelto / Cambio:</span>
-            <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
-          </div>
+      <div class="receipt-double-line">================================================</div>
+      <div class="receipt-payment-info">
+        <div>Metodo de Pago: ${ticketData.metodoPago || 'Efectivo'}</div>
+        ${ticketData.metodoPago === 'Efectivo' && ticketData.recibido > 0 ? `
+          <div>Monto Recibido: ${formatCRCSinDecimales(ticketData.recibido)}</div>
+          <div>Vuelto / Cambio: ${formatCRCSinDecimales(ticketData.cambio)}</div>
         ` : ''}
       </div>
-      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
-        <div style="font-weight:900;">¡Muchas gracias por su preferencia!</div>
+      <div class="receipt-footer">
+        <div>Muchas gracias por su preferencia!</div>
         <div>Esperamos servirle de nuevo muy pronto.</div>
-        <div style="font-size:10px; margin-top:2px;">Autorizado mediante resolución DGT-R-033-2019</div>
+        <div>Autorizado mediante resolucion DGT-R-033-2019</div>
       </div>
     `;
   }
@@ -15839,15 +12669,11 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
   window.ticketTermicoActual = ticketData;
   container.innerHTML = html;
   modal.classList.add('active');
-  modal.style.display = 'flex';
 };
 
 window.cerrarModalVisorTicket = function() {
   const modal = document.getElementById('modalVisorTicket');
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = 'none';
-  }
+  if (modal) modal.classList.remove('active');
 };
 
 window.ejecutarImpresionDirectaTermica = async function(ticketData) {
@@ -16314,9 +13140,6 @@ window.aplicarPersonalizacionAlDOM = function(config) {
   if (config.elementStyles) {
     Object.entries(config.elementStyles).forEach(([selector, styles]) => {
       try {
-        if (selector && (selector.includes('stat-row') || selector.includes('caja-stat-rows'))) {
-          return;
-        }
         const els = document.querySelectorAll(selector);
         if (els.length > 0 && styles) {
           els.forEach(el => {

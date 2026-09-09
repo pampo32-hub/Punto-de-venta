@@ -3276,6 +3276,44 @@ app.post('/api/categorias', async (req, res) => {
   }
 });
 
+// Eliminar categoría del menú
+const handlerEliminarCategoria = async (req, res) => {
+  try {
+    const catId = Number(req.params.id);
+    const cat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+    if (!cat) {
+      return res.status(404).json({ error: 'Categoría no encontrada.' });
+    }
+
+    const otraCat = await dbGet('SELECT id FROM Categorias WHERE id != ? ORDER BY id ASC LIMIT 1', [catId]);
+    const fallbackCatId = otraCat ? otraCat.id : null;
+
+    if (req.body && (req.body.eliminar_productos === true || req.body.eliminarProductos === true)) {
+      await dbRun('UPDATE Productos SET activo = 0 WHERE categoria_id = ?', [catId]);
+    } else if (fallbackCatId) {
+      await dbRun('UPDATE Productos SET categoria_id = ? WHERE categoria_id = ?', [fallbackCatId, catId]);
+    } else {
+      await dbRun('UPDATE Productos SET categoria_id = NULL WHERE categoria_id = ?', [catId]);
+    }
+
+    await dbRun('DELETE FROM Categorias WHERE id = ?', [catId]);
+
+    io.emit('categoria_eliminada', { id: catId, nombre: cat.nombre });
+    io.emit('menu_actualizado');
+
+    res.json({
+      ok: true,
+      message: `Categoría "${cat.nombre}" eliminada exitosamente.`,
+      categoriaId: catId
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al eliminar categoría: ' + e.message });
+  }
+};
+
+app.delete('/api/categorias/:id', verificarAdmin, handlerEliminarCategoria);
+app.delete('/api/admin/categorias/:id', verificarAdmin, handlerEliminarCategoria);
+
 // Agregar nuevo producto y precio al menú (con soporte de enlace a Kárdex / Recetas)
 app.post('/api/productos', async (req, res) => {
   try {

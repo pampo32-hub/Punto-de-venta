@@ -4310,6 +4310,36 @@
     </div>
   </div>
 
+  <!-- MODAL: CONFIRMAR ELIMINAR CATEGORÍA DEL MENÚ -->
+  <div class="modal-backdrop" id="modalConfirmarEliminarCategoria" style="z-index: 100030;">
+    <div class="modal-dialog" style="max-width:440px;">
+      <div class="dialog-header" style="background:#7f1d1d; color:#fff; border-bottom:1px solid #991b1b;">
+        <h3 style="margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+          <span>🗑️ Eliminar Categoría del Menú</span>
+        </h3>
+        <button class="btn-close-modal" onclick="cerrarModalEliminarCategoria()" style="color:#fff;">✕</button>
+      </div>
+      <div class="dialog-body" style="padding:16px;">
+        <input type="hidden" id="txtEliminarCatId" />
+        <p style="margin:0 0 12px; font-size:0.95rem; color:#f3f4f6;">
+          ¿Estás seguro de que deseas eliminar la categoría <strong id="lblEliminarCatNombre" style="color:#f87171;"></strong>?
+        </p>
+        <div style="background:#1e1b4b; border:1px solid #4338ca; border-radius:8px; padding:10px 12px; font-size:0.85rem; color:#c7d2fe; margin-bottom:12px;">
+          <div><strong>🍽️ Ícono:</strong> <span id="lblEliminarCatIcono">-</span></div>
+          <div><strong>📍 Destino:</strong> <span id="lblEliminarCatDestino">-</span></div>
+          <div><strong>📋 Platillos Asociados:</strong> <span id="lblEliminarCatProductosCount">0 platillos</span></div>
+        </div>
+        <p style="margin:0 0 8px; font-size:0.82rem; color:#fca5a5;">
+          ℹ️ <strong>Nota:</strong> Los platillos pertenecientes a esta categoría se reasignarán automáticamente a la categoría principal para que no se pierdan.
+        </p>
+      </div>
+      <div class="dialog-footer" style="padding:12px 16px; background:#111827; border-top:1px solid #374151; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-sec" onclick="cerrarModalEliminarCategoria()">Cancelar</button>
+        <button class="btn-pri" style="background:#dc2626; border-color:#ef4444;" onclick="ejecutarEliminarCategoriaConfirmada()">🗑️ Sí, Eliminar Categoría</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: KARDEX Y MOVIMIENTOS DE INSUMO -->
   <div class="modal-backdrop" id="modalKardexInsumo" style="z-index: 100010;">
     <div class="modal-dialog" style="max-width:760px; width:95%;">
