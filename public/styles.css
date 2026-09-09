@@ -10627,7 +10627,100 @@ body.theme-magma-volcanico .db-pill.active {
   font-weight: 800 !important;
 }
 
+/* =============================================================================
+   TEMA EXTRA: 🍨 BLANCO MARFIL & CREMA LATTE (MINIMALISTA NÓRDICO)
+   Clase: body.theme-crema-marfil
+   Inspirado en estética nórdica minimalista: tarjetas marfil/blancas,
+   chips en crema latte vainilla y botón principal en verde esmeralda fresco.
+   ============================================================================= */
+body.theme-crema-marfil {
+  --primary: #D4BFA9;
+  --primary-glow: #F5EBE1;
+}
 
+body.theme-crema-marfil button,
+body.theme-crema-marfil .btn,
+body.theme-crema-marfil a.btn,
+body.theme-crema-marfil [role="button"],
+body.theme-crema-marfil input[type="button"],
+body.theme-crema-marfil input[type="submit"] {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%) !important;
+  border: 1px solid #E5DFD7 !important;
+  border-bottom: 3px solid #D1C7BB !important;
+  border-radius: 12px !important;
+  color: #26211C !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(120, 100, 80, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-crema-marfil button:hover,
+body.theme-crema-marfil .btn:hover {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5EEE6 100%) !important;
+  border-color: #D4BFA9 !important;
+  color: #1A1512 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(180, 140, 100, 0.2) !important;
+}
+
+/* Botones principales de acción: Cobro / Pay & Close Bill / Guardar (Verde Esmeralda Fresco como en la imagen) */
+body.theme-crema-marfil .btn-pri,
+body.theme-crema-marfil .btn-primary,
+body.theme-crema-marfil .btn-checkout,
+body.theme-crema-marfil #btn-checkout,
+body.theme-crema-marfil #btnPagarModal,
+body.theme-crema-marfil #btnConfirmarCobro,
+body.theme-crema-marfil #btnPagarComanda,
+body.theme-crema-marfil #btnFinalizarCobro,
+body.theme-crema-marfil #btnCobrar,
+body.theme-crema-marfil .cobrar,
+body.theme-crema-marfil .btn-cobro,
+body.theme-crema-marfil .btn-login-submit,
+body.theme-crema-marfil #btnLoginSubmit,
+body.theme-crema-marfil .btn-pay-split,
+body.theme-crema-marfil .guardar,
+body.theme-crema-marfil .btn-save-plan,
+body.theme-crema-marfil #btnGuardarPlano,
+body.theme-crema-marfil button[type="submit"] {
+  background: linear-gradient(180deg, #059669 0%, #047857 50%, #065F46 100%) !important;
+  border: 1px solid #6EE7B7 !important;
+  border-bottom: 4px solid #064E3B !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Botón Cocina y KDS (Crema tostado elegante) */
+body.theme-crema-marfil .btn-enviar-cocina,
+body.theme-crema-marfil #btnEnviarCocina,
+body.theme-crema-marfil #btnEnviarComandaCocina,
+body.theme-crema-marfil .btn-cocina,
+body.theme-crema-marfil .btn-kds-ready {
+  background: linear-gradient(180deg, #FBF6EE 0%, #EFE4D6 100%) !important;
+  border: 1px solid #DBC7B5 !important;
+  border-bottom: 4px solid #BFA993 !important;
+  color: #382A1E !important;
+  font-weight: 800 !important;
+  box-shadow: 0 3px 8px rgba(120, 90, 60, 0.15) !important;
+}
+
+/* Elementos seleccionados / Pestañas activas / Chips activos (Tono Crema Vanilla Latte) */
+body.theme-crema-marfil .nav-btn.active,
+body.theme-crema-marfil .tab-btn.active,
+body.theme-crema-marfil .tab-button.active,
+body.theme-crema-marfil .cat-chip.active,
+body.theme-crema-marfil .db-pill.active,
+body.theme-crema-marfil .pay-method-tab.active {
+  background: linear-gradient(180deg, #FBF6EE 0%, #F5EBE1 50%, #EADDCF 100%) !important;
+  border: 1.5px solid #D4BFA9 !important;
+  border-bottom: 3px solid #BFA993 !important;
+  color: #382A1E !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 8px rgba(180, 140, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
 
 /* =============================================================================
    REGLAS MAESTRAS DE DIMENSIÓN: 2D PLANO vs 3D TÁCTIL (MÁXIMA ESPECIFICIDAD)
