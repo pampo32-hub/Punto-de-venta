@@ -13174,18 +13174,56 @@ window.guardarAjusteInventario = async function() {
       },
       body: JSON.stringify({ tipo, cantidad, motivo, usuarioNombre, negocio_id: nid })
     });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al guardar ajuste');
+
+    mostrarNotificacionCentro(`✅ Ajuste de inventario aplicado correctamente. Stock nuevo: ${data.nuevo_stock}`, 'success');
+    if (typeof cerrarModalAjusteInventario === 'function') cerrarModalAjusteInventario();
+    if (typeof cargarInventarioAdmin === 'function') cargarInventarioAdmin();
+    if (typeof cargarKardexGeneral === 'function') cargarKardexGeneral();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
+window.guardarEdicionInsumo = async function() {
+  const id = document.getElementById('txtEditarInsumoId')?.value;
+  const nombre = document.getElementById('txtEditarInsumoNombre')?.value?.trim();
+  const categoria = document.getElementById('txtEditarInsumoCategoria')?.value?.trim() || 'General';
+  const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
+  const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMinimo')?.value) || 0;
+  const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
+  const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+  const capacidad_ml = es_licor ? (parseFloat(document.getElementById('txtEditarInsumoCapacidadMl')?.value) || (unidad_medida === 'kg' ? 1000 : 750)) : null;
+  const medida_shot_ml = es_licor ? (parseFloat(document.getElementById('txtEditarInsumoMedidaShotMl')?.value) || (unidad_medida === 'kg' ? 200 : 30)) : null;
+
+  if (!id || !nombre) {
+    alert('Por favor indica al menos el nombre del insumo.');
+    return;
+  }
+
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  try {
+    const res = await fetch(`/api/admin/inventario/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-rol': rol,
+        'x-negocio-id': String(nid)
+      },
       body: JSON.stringify({
         nombre, categoria, unidad_medida, stock_minimo, costo_unitario,
         es_licor, capacidad_ml, medida_shot_ml,
-        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
+        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario : 'Admin'
       })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
     mostrarNotificacionCentro(`✅ Insumo "${nombre}" actualizado correctamente.`, 'success');
-    cerrarModalEditarInsumo();
-    cargarInventarioAdmin();
+    if (typeof cerrarModalEditarInsumo === 'function') cerrarModalEditarInsumo();
+    if (typeof cargarInventarioAdmin === 'function') cargarInventarioAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
   }
