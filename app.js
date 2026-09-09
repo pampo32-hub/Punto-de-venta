@@ -18222,6 +18222,8 @@ window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
   // Limpiar clases de tema y dimension
   document.body.classList.remove(
     'theme-gold', 'theme-gold-3d', 'beta-tester-gold',
+    'theme-plata-titanio', 'theme-carbon-grafito',
+    'theme-borgona-imperial', 'theme-cuarzo-minimal',
     'theme-bistro-salvia', 'theme-cafe-caramelo',
     'theme-neon', 'theme-neon-3d',
     'theme-emerald', 'theme-emerald-3d',
@@ -18236,6 +18238,14 @@ window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
   // Aplicar tema
   if (temaKey === 'gold') {
     document.body.classList.add('theme-gold', 'theme-gold-3d', 'beta-tester-gold');
+  } else if (temaKey === 'plata_titanio') {
+    document.body.classList.add('theme-plata-titanio');
+  } else if (temaKey === 'carbon_grafito') {
+    document.body.classList.add('theme-carbon-grafito');
+  } else if (temaKey === 'borgona_imperial') {
+    document.body.classList.add('theme-borgona-imperial');
+  } else if (temaKey === 'cuarzo_minimal') {
+    document.body.classList.add('theme-cuarzo-minimal');
   } else if (temaKey === 'bistro_salvia') {
     document.body.classList.add('theme-bistro-salvia');
   } else if (temaKey === 'cafe_caramelo') {

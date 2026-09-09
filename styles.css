@@ -9884,3 +9884,349 @@ body.theme-amethyst-3d button[type="submit"] {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
   box-shadow: 0 5px 18px rgba(139, 92, 246, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
 }
+
+
+
+/* =============================================================================
+   TEMA EXTRA 1: 🪙 PLATA TITANIO & PLATINO PURO (NUEVO)
+   Clase: body.theme-plata-titanio
+   ============================================================================= */
+body.theme-plata-titanio {
+  --primary: #94A3B8;
+  --primary-glow: #F1F5F9;
+}
+
+body.theme-plata-titanio button,
+body.theme-plata-titanio .btn,
+body.theme-plata-titanio a.btn,
+body.theme-plata-titanio [role="button"],
+body.theme-plata-titanio input[type="button"],
+body.theme-plata-titanio input[type="submit"] {
+  background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%) !important;
+  border: 1px solid rgba(226, 232, 240, 0.4) !important;
+  border-bottom: 3px solid #020617 !important;
+  border-radius: 10px !important;
+  color: #F1F5F9 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-plata-titanio button:hover,
+body.theme-plata-titanio .btn:hover {
+  border-color: #FFFFFF !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(226, 232, 240, 0.35) !important;
+}
+
+body.theme-plata-titanio .btn-pri,
+body.theme-plata-titanio .btn-primary,
+body.theme-plata-titanio .btn-checkout,
+body.theme-plata-titanio #btn-checkout,
+body.theme-plata-titanio #btnPagarModal,
+body.theme-plata-titanio #btnConfirmarCobro,
+body.theme-plata-titanio #btnPagarComanda,
+body.theme-plata-titanio #btnFinalizarCobro,
+body.theme-plata-titanio #btnCobrar,
+body.theme-plata-titanio .cobrar,
+body.theme-plata-titanio .btn-cobro,
+body.theme-plata-titanio .btn-login-submit,
+body.theme-plata-titanio #btnLoginSubmit,
+body.theme-plata-titanio .btn-pay-split,
+body.theme-plata-titanio .guardar,
+body.theme-plata-titanio .btn-save-plan,
+body.theme-plata-titanio #btnGuardarPlano,
+body.theme-plata-titanio button[type="submit"] {
+  background: linear-gradient(180deg, #FFFFFF 0%, #E2E8F0 45%, #94A3B8 100%) !important;
+  border: 1px solid #FFFFFF !important;
+  border-bottom: 4px solid #475569 !important;
+  border-radius: 12px !important;
+  color: #0F172A !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 5px 16px rgba(148, 163, 184, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.9) !important;
+}
+
+body.theme-plata-titanio .btn-enviar-cocina,
+body.theme-plata-titanio #btnEnviarCocina,
+body.theme-plata-titanio #btnEnviarComandaCocina,
+body.theme-plata-titanio .btn-cocina,
+body.theme-plata-titanio .btn-kds-ready {
+  background: linear-gradient(180deg, #334155 0%, #1E293B 100%) !important;
+  border: 1px solid #E2E8F0 !important;
+  border-bottom: 4px solid #0F172A !important;
+  color: #F8FAFC !important;
+  font-weight: 800 !important;
+}
+
+body.theme-plata-titanio .nav-btn.active,
+body.theme-plata-titanio .tab-btn.active,
+body.theme-plata-titanio .tab-button.active,
+body.theme-plata-titanio .cat-chip.active,
+body.theme-plata-titanio .db-pill.active {
+  background: linear-gradient(180deg, #FFFFFF 0%, #E2E8F0 100%) !important;
+  border: 1px solid #FFFFFF !important;
+  border-bottom: 3px solid #64748B !important;
+  color: #0F172A !important;
+  font-weight: 800 !important;
+}
+
+/* =============================================================================
+   TEMA EXTRA 2: 🌫️ CARBÓN GRAFITO & ACERO AHUMADO (NUEVO)
+   Clase: body.theme-carbon-grafito
+   ============================================================================= */
+body.theme-carbon-grafito {
+  --primary: #64748B;
+  --primary-glow: #94A3B8;
+}
+
+body.theme-carbon-grafito button,
+body.theme-carbon-grafito .btn,
+body.theme-carbon-grafito a.btn,
+body.theme-carbon-grafito [role="button"],
+body.theme-carbon-grafito input[type="button"],
+body.theme-carbon-grafito input[type="submit"] {
+  background: linear-gradient(180deg, #18181B 0%, #09090B 100%) !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+  border-bottom: 3px solid #000000 !important;
+  border-radius: 10px !important;
+  color: #CBD5E1 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-carbon-grafito button:hover,
+body.theme-carbon-grafito .btn:hover {
+  border-color: #CBD5E1 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(148, 163, 184, 0.25) !important;
+}
+
+body.theme-carbon-grafito .btn-pri,
+body.theme-carbon-grafito .btn-primary,
+body.theme-carbon-grafito .btn-checkout,
+body.theme-carbon-grafito #btn-checkout,
+body.theme-carbon-grafito #btnPagarModal,
+body.theme-carbon-grafito #btnConfirmarCobro,
+body.theme-carbon-grafito #btnPagarComanda,
+body.theme-carbon-grafito #btnFinalizarCobro,
+body.theme-carbon-grafito #btnCobrar,
+body.theme-carbon-grafito .cobrar,
+body.theme-carbon-grafito .btn-cobro,
+body.theme-carbon-grafito .btn-login-submit,
+body.theme-carbon-grafito #btnLoginSubmit,
+body.theme-carbon-grafito .btn-pay-split,
+body.theme-carbon-grafito .guardar,
+body.theme-carbon-grafito .btn-save-plan,
+body.theme-carbon-grafito #btnGuardarPlano,
+body.theme-carbon-grafito button[type="submit"] {
+  background: linear-gradient(180deg, #64748B 0%, #475569 50%, #334155 100%) !important;
+  border: 1px solid #94A3B8 !important;
+  border-bottom: 4px solid #1E293B !important;
+  border-radius: 12px !important;
+  color: #F8FAFC !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: 0 5px 16px rgba(71, 85, 105, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+body.theme-carbon-grafito .btn-enviar-cocina,
+body.theme-carbon-grafito #btnEnviarCocina,
+body.theme-carbon-grafito #btnEnviarComandaCocina,
+body.theme-carbon-grafito .btn-cocina,
+body.theme-carbon-grafito .btn-kds-ready {
+  background: linear-gradient(180deg, #27272A 0%, #09090B 100%) !important;
+  border: 1px solid #64748B !important;
+  border-bottom: 4px solid #000000 !important;
+  color: #E2E8F0 !important;
+  font-weight: 800 !important;
+}
+
+body.theme-carbon-grafito .nav-btn.active,
+body.theme-carbon-grafito .tab-btn.active,
+body.theme-carbon-grafito .tab-button.active,
+body.theme-carbon-grafito .cat-chip.active,
+body.theme-carbon-grafito .db-pill.active {
+  background: linear-gradient(180deg, #64748B 0%, #334155 100%) !important;
+  border: 1px solid #94A3B8 !important;
+  border-bottom: 3px solid #1E293B !important;
+  color: #F8FAFC !important;
+  font-weight: 800 !important;
+}
+
+/* =============================================================================
+   TEMA EXTRA 3: 🍷 BORGOÑA IMPERIAL & ORO ROSA (NUEVO)
+   Clase: body.theme-borgona-imperial
+   ============================================================================= */
+body.theme-borgona-imperial {
+  --primary: #E11D48;
+  --primary-glow: #FB7185;
+}
+
+body.theme-borgona-imperial button,
+body.theme-borgona-imperial .btn,
+body.theme-borgona-imperial a.btn,
+body.theme-borgona-imperial [role="button"],
+body.theme-borgona-imperial input[type="button"],
+body.theme-borgona-imperial input[type="submit"] {
+  background: linear-gradient(180deg, #2D0C14 0%, #150308 100%) !important;
+  border: 1px solid rgba(251, 113, 133, 0.35) !important;
+  border-bottom: 3px solid #0A0104 !important;
+  border-radius: 10px !important;
+  color: #FECDD3 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-borgona-imperial button:hover,
+body.theme-borgona-imperial .btn:hover {
+  border-color: #FB7185 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(244, 63, 94, 0.35) !important;
+}
+
+body.theme-borgona-imperial .btn-pri,
+body.theme-borgona-imperial .btn-primary,
+body.theme-borgona-imperial .btn-checkout,
+body.theme-borgona-imperial #btn-checkout,
+body.theme-borgona-imperial #btnPagarModal,
+body.theme-borgona-imperial #btnConfirmarCobro,
+body.theme-borgona-imperial #btnPagarComanda,
+body.theme-borgona-imperial #btnFinalizarCobro,
+body.theme-borgona-imperial #btnCobrar,
+body.theme-borgona-imperial .cobrar,
+body.theme-borgona-imperial .btn-cobro,
+body.theme-borgona-imperial .btn-login-submit,
+body.theme-borgona-imperial #btnLoginSubmit,
+body.theme-borgona-imperial .btn-pay-split,
+body.theme-borgona-imperial .guardar,
+body.theme-borgona-imperial .btn-save-plan,
+body.theme-borgona-imperial #btnGuardarPlano,
+body.theme-borgona-imperial button[type="submit"] {
+  background: linear-gradient(180deg, #F43F5E 0%, #BE123C 50%, #881337 100%) !important;
+  border: 1px solid #FFE4E6 !important;
+  border-bottom: 4px solid #4C0519 !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 5px 16px rgba(225, 29, 72, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.7) !important;
+}
+
+body.theme-borgona-imperial .btn-enviar-cocina,
+body.theme-borgona-imperial #btnEnviarCocina,
+body.theme-borgona-imperial #btnEnviarComandaCocina,
+body.theme-borgona-imperial .btn-cocina,
+body.theme-borgona-imperial .btn-kds-ready {
+  background: linear-gradient(180deg, #4C0519 0%, #150308 100%) !important;
+  border: 1px solid #FB7185 !important;
+  border-bottom: 4px solid #0A0104 !important;
+  color: #FFE4E6 !important;
+  font-weight: 800 !important;
+}
+
+body.theme-borgona-imperial .nav-btn.active,
+body.theme-borgona-imperial .tab-btn.active,
+body.theme-borgona-imperial .tab-button.active,
+body.theme-borgona-imperial .cat-chip.active,
+body.theme-borgona-imperial .db-pill.active {
+  background: linear-gradient(180deg, #F43F5E 0%, #BE123C 100%) !important;
+  border: 1px solid #FFE4E6 !important;
+  border-bottom: 3px solid #4C0519 !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
+
+/* =============================================================================
+   TEMA EXTRA 4: 🌸 MÁRMOL & CUARZO MINIMAL (NUEVO)
+   Clase: body.theme-cuarzo-minimal
+   ============================================================================= */
+body.theme-cuarzo-minimal {
+  --primary: #F472B6;
+  --primary-glow: #FBCFE8;
+}
+
+body.theme-cuarzo-minimal button,
+body.theme-cuarzo-minimal .btn,
+body.theme-cuarzo-minimal a.btn,
+body.theme-cuarzo-minimal [role="button"],
+body.theme-cuarzo-minimal input[type="button"],
+body.theme-cuarzo-minimal input[type="submit"] {
+  background: linear-gradient(180deg, #261922 0%, #130A10 100%) !important;
+  border: 1px solid rgba(244, 114, 182, 0.4) !important;
+  border-bottom: 3px solid #0A0307 !important;
+  border-radius: 10px !important;
+  color: #FCE7F3 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-cuarzo-minimal button:hover,
+body.theme-cuarzo-minimal .btn:hover {
+  border-color: #F472B6 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(244, 114, 182, 0.35) !important;
+}
+
+body.theme-cuarzo-minimal .btn-pri,
+body.theme-cuarzo-minimal .btn-primary,
+body.theme-cuarzo-minimal .btn-checkout,
+body.theme-cuarzo-minimal #btn-checkout,
+body.theme-cuarzo-minimal #btnPagarModal,
+body.theme-cuarzo-minimal #btnConfirmarCobro,
+body.theme-cuarzo-minimal #btnPagarComanda,
+body.theme-cuarzo-minimal #btnFinalizarCobro,
+body.theme-cuarzo-minimal #btnCobrar,
+body.theme-cuarzo-minimal .cobrar,
+body.theme-cuarzo-minimal .btn-cobro,
+body.theme-cuarzo-minimal .btn-login-submit,
+body.theme-cuarzo-minimal #btnLoginSubmit,
+body.theme-cuarzo-minimal .btn-pay-split,
+body.theme-cuarzo-minimal .guardar,
+body.theme-cuarzo-minimal .btn-save-plan,
+body.theme-cuarzo-minimal #btnGuardarPlano,
+body.theme-cuarzo-minimal button[type="submit"] {
+  background: linear-gradient(180deg, #FBCFE8 0%, #F472B6 50%, #DB2777 100%) !important;
+  border: 1px solid #FFF1F2 !important;
+  border-bottom: 4px solid #831843 !important;
+  border-radius: 12px !important;
+  color: #500724 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 5px 16px rgba(244, 114, 182, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+
+body.theme-cuarzo-minimal .btn-enviar-cocina,
+body.theme-cuarzo-minimal #btnEnviarCocina,
+body.theme-cuarzo-minimal #btnEnviarComandaCocina,
+body.theme-cuarzo-minimal .btn-cocina,
+body.theme-cuarzo-minimal .btn-kds-ready {
+  background: linear-gradient(180deg, #500724 0%, #1A030C 100%) !important;
+  border: 1px solid #F472B6 !important;
+  border-bottom: 4px solid #0A0104 !important;
+  color: #FCE7F3 !important;
+  font-weight: 800 !important;
+}
+
+body.theme-cuarzo-minimal .nav-btn.active,
+body.theme-cuarzo-minimal .tab-btn.active,
+body.theme-cuarzo-minimal .tab-button.active,
+body.theme-cuarzo-minimal .cat-chip.active,
+body.theme-cuarzo-minimal .db-pill.active {
+  background: linear-gradient(180deg, #FBCFE8 0%, #F472B6 100%) !important;
+  border: 1px solid #FFF1F2 !important;
+  border-bottom: 3px solid #831843 !important;
+  color: #500724 !important;
+  font-weight: 800 !important;
+}
