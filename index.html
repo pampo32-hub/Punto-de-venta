@@ -1624,6 +1624,7 @@
                     <th>Costo Impacto</th>
                     <th>Detalle / Motivo</th>
                     <th>Usuario</th>
+                    <th style="text-align:center; min-width:130px;">Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tbodyKardexGeneral">
@@ -2492,7 +2493,7 @@
 
 
   <!-- LISTA AGOTADOS (86) -->
-  <div class="modal-backdrop" id="modalAgotados">
+  <div class="modal-backdrop" id="modalAgotados" style="z-index: 100020;">
     <div class="modal-dialog agotados-dialog">
       <div class="dialog-header">
         <div>
@@ -2506,6 +2507,105 @@
       </div>
       <div class="dialog-footer">
         <button class="btn-pri" id="btnGuardarAgotados">✅ Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR MOVIMIENTO KARDEX -->
+  <div class="modal-backdrop" id="modalEditarKardex" style="z-index: 100025;">
+    <div class="modal-dialog" style="max-width: 500px; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 1px solid rgba(255,255,255,0.1); padding: 16px 20px;">
+        <div>
+          <h3 style="margin:0; font-size: 1.2rem; color:#fff; display:flex; align-items:center; gap:8px;">
+            ✏️ Modificar Movimiento de Kárdex
+          </h3>
+          <small id="editKardexInsumoNombre" style="color:#94a3b8; font-size:0.82rem;">Insumo seleccionado</small>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalEditarKardex()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px;">
+        <input type="hidden" id="editKardexId" />
+        <input type="hidden" id="editKardexInsumoId" />
+        
+        <div class="field-group" style="margin-bottom: 14px;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:#cbd5e1; margin-bottom:5px;">Tipo de Movimiento:</label>
+          <select id="editKardexTipo" class="select-styled" style="width:100%; padding:10px; background:#1e293b; border:1px solid #334155; color:#fff; border-radius:8px;">
+            <option value="entrada">📥 Entrada (Compra / Ingreso)</option>
+            <option value="merma">⚠️ Merma (Desperdicio / Daño)</option>
+            <option value="venta">🛒 Venta (Comanda / Consumo)</option>
+            <option value="fijar">🔧 Ajuste Manual de Inventario</option>
+          </select>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 14px;">
+          <div class="field-group">
+            <label style="display:block; font-size:0.85rem; font-weight:600; color:#cbd5e1; margin-bottom:5px;">Cantidad:</label>
+            <input type="number" id="editKardexCantidad" step="any" class="input-styled" style="width:100%; padding:10px; background:#1e293b; border:1px solid #334155; color:#fff; border-radius:8px;" />
+          </div>
+          <div class="field-group">
+            <label style="display:block; font-size:0.85rem; font-weight:600; color:#cbd5e1; margin-bottom:5px;">Costo Total (₡):</label>
+            <input type="number" id="editKardexCosto" step="any" class="input-styled" style="width:100%; padding:10px; background:#1e293b; border:1px solid #334155; color:#fff; border-radius:8px;" />
+          </div>
+        </div>
+
+        <div class="field-group" style="margin-bottom: 14px;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:#cbd5e1; margin-bottom:5px;">Motivo / Detalle:</label>
+          <input type="text" id="editKardexMotivo" class="input-styled" style="width:100%; padding:10px; background:#1e293b; border:1px solid #334155; color:#fff; border-radius:8px;" placeholder="Ej: Corrección de factura, ajuste de conteo..." />
+        </div>
+
+        <div class="field-group" style="margin-bottom: 16px;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:#cbd5e1; margin-bottom:5px;">Fecha y Hora:</label>
+          <input type="datetime-local" id="editKardexFecha" class="input-styled" style="width:100%; padding:10px; background:#1e293b; border:1px solid #334155; color:#fff; border-radius:8px;" />
+        </div>
+
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:0.88rem; color:#e2e8f0;">
+            <input type="checkbox" id="editKardexAjustarStock" checked style="width:18px; height:18px; margin-top:2px; accent-color:#38bdf8;" />
+            <div>
+              <strong style="color:#38bdf8; display:block;">Ajustar stock actual en bodega</strong>
+              <span style="font-size:0.78rem; color:#94a3b8;">Si se desmarca, solo se actualizará el texto del registro histórico sin alterar las existencias actuales de insumos.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="dialog-footer" style="background:#0b1120; border-top:1px solid rgba(255,255,255,0.08); padding:14px 20px; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-sec" onclick="cerrarModalEditarKardex()" style="background:#334155; color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:600;">Cancelar</button>
+        <button class="btn-pri" onclick="guardarEdicionKardex()" style="background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; padding:8px 20px; border-radius:8px; font-weight:700;">💾 Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIRMAR ELIMINAR KARDEX -->
+  <div class="modal-backdrop" id="modalConfirmarEliminarKardex" style="z-index: 100030;">
+    <div class="modal-dialog" style="max-width: 480px; background: #0f172a; border: 1px solid rgba(239,68,68,0.3); border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #7f1d1d, #450a0a); border-bottom: 1px solid rgba(239,68,68,0.2); padding: 16px 20px;">
+        <div>
+          <h3 style="margin:0; font-size: 1.15rem; color:#fca5a5; display:flex; align-items:center; gap:8px;">
+            🗑️ Eliminar Movimiento de Kárdex
+          </h3>
+          <small id="deleteKardexInfo" style="color:#fecaca; font-size:0.82rem;">Detalles del movimiento</small>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalEliminarKardex()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px;">
+        <p style="margin:0 0 16px; color:#e2e8f0; font-size:0.92rem; line-height:1.45;">
+          ¿Cómo deseas proceder con el <strong>stock actual en bodega</strong> al eliminar este registro?
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button type="button" class="btn-tool" onclick="ejecutarEliminarKardexConfirmado(true)" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; padding:12px 16px; text-align:left; border-radius:10px; font-size:0.88rem; line-height:1.3; font-weight:600;">
+            <div style="font-weight:700; color:#fff; margin-bottom:2px;">🔄 Revertir Stock en Bodega y Eliminar</div>
+            <span style="font-size:0.78rem; opacity:0.85;">Revertirá automáticamente el impacto del movimiento (resta entradas o devuelve mermas/ventas).</span>
+          </button>
+
+          <button type="button" class="btn-tool" onclick="ejecutarEliminarKardexConfirmado(false)" style="background:rgba(100,116,139,0.15); border:1px solid #64748b; color:#cbd5e1; padding:12px 16px; text-align:left; border-radius:10px; font-size:0.88rem; line-height:1.3; font-weight:600;">
+            <div style="font-weight:700; color:#fff; margin-bottom:2px;">📋 Solo Eliminar Registro Histórico</div>
+            <span style="font-size:0.78rem; opacity:0.85;">Elimina únicamente la línea de Kárdex dejando intacto el stock actual de existencias.</span>
+          </button>
+        </div>
+      </div>
+      <div class="dialog-footer" style="background:#0b1120; border-top:1px solid rgba(255,255,255,0.08); padding:12px 20px; display:flex; justify-content:flex-end;">
+        <button class="btn-sec" onclick="cerrarModalEliminarKardex()" style="background:#334155; color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:600;">Cancelar</button>
       </div>
     </div>
   </div>
@@ -3153,7 +3253,7 @@
           </div>
 
           <!-- 2.3 Lista de Agotados (86) -->
-          <div class="admin-panel-card card-agotados" onclick="abrirModalAgotados()">
+          <div class="admin-panel-card card-agotados" onclick="ejecutarAccionAdmin('agotados')">
             <div class="admin-card-header">
               <div class="admin-card-icon">⛔</div>
               <span class="admin-card-tag" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">Cocina & Barra 86</span>

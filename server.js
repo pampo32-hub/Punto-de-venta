@@ -6071,7 +6071,7 @@ async function verificarAdmin(req, res, next) {
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
 
-  if (rol === 'admin' || rol === 'developer') {
+  if (['admin', 'developer', 'supervisor'].includes(rol)) {
     return next();
   }
 
@@ -6625,6 +6625,137 @@ app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, 
 
     const movimientos = await dbAll(query, params);
     res.json({ movimientos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- MODIFICAR MOVIMIENTO DE KARDEX ---
+app.put('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const movimiento = await dbGet('SELECT * FROM InventarioMovimientos WHERE id = ?', [id]);
+    if (!movimiento) {
+      return res.status(404).json({ error: 'Movimiento de Kárdex no encontrado' });
+    }
+
+    const {
+      tipo,
+      cantidad,
+      costo_total,
+      motivo,
+      fecha_hora,
+      ajustar_stock
+    } = req.body;
+
+    const nuevoTipo = tipo || movimiento.tipo;
+    const nuevaCantidad = cantidad !== undefined ? Number(cantidad) : Number(movimiento.cantidad);
+    const nuevoCosto = costo_total !== undefined ? Number(costo_total) : Number(movimiento.costo_total || 0);
+    const nuevoMotivo = motivo !== undefined ? motivo : movimiento.motivo;
+    const nuevaFecha = fecha_hora || movimiento.fecha_hora || new Date().toISOString();
+
+    const debeAjustarStock = Boolean(
+      ajustar_stock === true ||
+      ajustar_stock === 'true' ||
+      ajustar_stock === 1 ||
+      ajustar_stock === '1'
+    );
+
+    if (debeAjustarStock && movimiento.insumo_id) {
+      const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [movimiento.insumo_id]);
+      if (insumo) {
+        // Delta que aplicó el movimiento original sobre el stock
+        let oldDelta = 0;
+        if (movimiento.tipo === 'entrada') oldDelta = Number(movimiento.cantidad);
+        else if (['merma', 'venta', 'salida'].includes(movimiento.tipo)) oldDelta = -Number(movimiento.cantidad);
+
+        // Delta que aplica el nuevo movimiento sobre el stock
+        let newDelta = 0;
+        if (nuevoTipo === 'entrada') newDelta = Number(nuevaCantidad);
+        else if (['merma', 'venta', 'salida'].includes(nuevoTipo)) newDelta = -Number(nuevaCantidad);
+
+        const diferencia = newDelta - oldDelta;
+        if (diferencia !== 0) {
+          const nuevoStock = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + diferencia) * 1000) / 1000);
+          await dbRun('UPDATE Inventario SET stock_actual = ? WHERE id = ?', [nuevoStock, insumo.id]);
+        }
+      }
+    }
+
+    await dbRun(
+      `UPDATE InventarioMovimientos 
+       SET tipo = ?, cantidad = ?, costo_total = ?, motivo = ?, fecha_hora = ?
+       WHERE id = ?`,
+      [nuevoTipo, nuevaCantidad, nuevoCosto, nuevoMotivo, nuevaFecha, id]
+    );
+
+    const movActualizado = await dbGet(
+      `SELECT m.*, i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida
+       FROM InventarioMovimientos m
+       LEFT JOIN Inventario i ON m.insumo_id = i.id
+       WHERE m.id = ?`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Movimiento de Kárdex actualizado correctamente',
+      movimiento: movActualizado
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- ELIMINAR MOVIMIENTO DE KARDEX ---
+app.delete('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const movimiento = await dbGet('SELECT * FROM InventarioMovimientos WHERE id = ?', [id]);
+    if (!movimiento) {
+      return res.status(404).json({ error: 'Movimiento de Kárdex no encontrado' });
+    }
+
+    const revertirStock = Boolean(
+      req.body?.revertir_stock === true ||
+      req.body?.revertir_stock === 'true' ||
+      req.body?.revertir_stock === 1 ||
+      req.body?.revertir_stock === '1' ||
+      req.query?.revertir_stock === 'true' ||
+      req.query?.revertir_stock === '1'
+    );
+
+    if (revertirStock && movimiento.insumo_id) {
+      const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [movimiento.insumo_id]);
+      if (insumo) {
+        let ajusteReversion = 0;
+        if (movimiento.tipo === 'entrada') {
+          // Revertir una entrada significa restar lo que había ingresado
+          ajusteReversion = -Number(movimiento.cantidad);
+        } else if (['merma', 'venta', 'salida'].includes(movimiento.tipo)) {
+          // Revertir una merma o venta significa devolver el insumo al stock
+          ajusteReversion = Number(movimiento.cantidad);
+        } else if (movimiento.tipo === 'ajuste' || movimiento.tipo === 'fijar') {
+          // Revertir un ajuste devuelve el stock previo
+          if (movimiento.stock_previo !== null && movimiento.stock_nuevo !== null) {
+            ajusteReversion = Number(movimiento.stock_previo) - Number(movimiento.stock_nuevo);
+          }
+        }
+
+        if (ajusteReversion !== 0) {
+          const nuevoStock = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + ajusteReversion) * 1000) / 1000);
+          await dbRun('UPDATE Inventario SET stock_actual = ? WHERE id = ?', [nuevoStock, insumo.id]);
+        }
+      }
+    }
+
+    await dbRun('DELETE FROM InventarioMovimientos WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: 'Movimiento de Kárdex eliminado correctamente',
+      revertir_stock: revertirStock
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

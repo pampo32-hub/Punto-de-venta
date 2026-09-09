@@ -2723,6 +2723,8 @@ window.ejecutarAccionAdmin = function(tipo) {
     if (typeof abrirModalActualizaciones === 'function') abrirModalActualizaciones();
   } else if (tipo === 'impresoras') {
     if (typeof abrirModalMonitorImpresoras === 'function') abrirModalMonitorImpresoras();
+  } else if (tipo === 'agotados') {
+    abrirModalAgotados();
   }
 };
 
@@ -11572,6 +11574,7 @@ document.getElementById('btnAgregarBarra').addEventListener('click', async () =>
 
 // Agotados (86)
 window.abrirModalAgotados = function() {
+  if (typeof cerrarPanelAdmin === 'function') cerrarPanelAdmin();
   if (typeof renderListaAgotados === 'function') renderListaAgotados();
   const modal = document.getElementById('modalAgotados');
   if (modal) modal.classList.add('active');
@@ -12306,7 +12309,7 @@ function renderTablaKardexGeneral(movimientos) {
   tbody.innerHTML = '';
 
   if (!movimientos || !movimientos.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:28px; color:#9ca3af;">No se encontraron movimientos registrados en el Kárdex con los filtros seleccionados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:28px; color:#9ca3af;">No se encontraron movimientos registrados en el Kárdex con los filtros seleccionados.</td></tr>';
     return;
   }
 
@@ -12325,14 +12328,235 @@ function renderTablaKardexGeneral(movimientos) {
       </td>
       <td><span class="${badgeClass}">${tipoIcon}</span></td>
       <td><strong>${signo}${m.cantidad}</strong> <small style="color:#94a3b8;">${escapeHtml(m.unidad_medida || '')}</small></td>
-      <td><span style="color:#94a3b8;">${m.stock_previo}</span> → <strong style="color:#38bdf8;">${m.stock_nuevo}</strong></td>
+      <td><span style="color:#94a3b8;">${m.stock_previo ?? '-'}</span> → <strong style="color:#38bdf8;">${m.stock_nuevo ?? '-'}</strong></td>
       <td style="color:#34d399; font-weight:700;">${formatCRC(m.costo_total || 0)}</td>
       <td style="font-size:0.85rem;">${escapeHtml(m.motivo || '-')}</td>
       <td style="font-size:0.8rem; color:#9ca3af;">${escapeHtml(m.usuario_nombre || 'Sistema')}</td>
+      <td style="text-align:center; white-space:nowrap;">
+        <button class="btn-tool" style="padding:4px 9px; font-size:0.75rem; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; border-radius:6px; margin-right:4px; font-weight:600; cursor:pointer;" onclick="abrirModalEditarKardex(${m.id})" title="Modificar este movimiento">✏️ Editar</button>
+        <button class="btn-tool" style="padding:4px 9px; font-size:0.75rem; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#f87171; border-radius:6px; font-weight:600; cursor:pointer;" onclick="confirmarEliminarKardex(${m.id})" title="Eliminar este movimiento">🗑️</button>
+      </td>
     `;
     tbody.appendChild(tr);
   });
 }
+
+// --- GESTIÓN (EDITAR / ELIMINAR) KÁRDEX ---
+window.kardexMovimientoAEliminar = null;
+
+window.abrirModalEditarKardex = async function(movId) {
+  const mov = (window.kardexMovimientosActuales || []).find(m => m.id === movId);
+  if (!mov) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ No se encontró la información del movimiento.', 'warning');
+    }
+    return;
+  }
+
+  // Verificar PIN si no es admin / supervisor
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
+  if (!esAdmin) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '✏️',
+      titulo: 'Modificar Kárdex',
+      subtitulo: 'Autorización Requerida',
+      mensaje: 'Ingresa el PIN de Administrador/Supervisor para modificar este movimiento:'
+    });
+    if (!pin) return;
+    window._pinKardexActivo = pin;
+  } else {
+    window._pinKardexActivo = null;
+  }
+
+  document.getElementById('editKardexId').value = mov.id;
+  document.getElementById('editKardexInsumoId').value = mov.insumo_id;
+  const elInsumoNom = document.getElementById('editKardexInsumoNombre');
+  if (elInsumoNom) {
+    elInsumoNom.textContent = `${mov.insumo_nombre || `Insumo #${mov.insumo_id}`} • Categoría: ${mov.insumo_categoria || 'General'}`;
+  }
+
+  const selTipo = document.getElementById('editKardexTipo');
+  if (selTipo) selTipo.value = mov.tipo || 'entrada';
+
+  const inCant = document.getElementById('editKardexCantidad');
+  if (inCant) inCant.value = mov.cantidad || 0;
+
+  const inCosto = document.getElementById('editKardexCosto');
+  if (inCosto) inCosto.value = mov.costo_total || 0;
+
+  const inMotivo = document.getElementById('editKardexMotivo');
+  if (inMotivo) inMotivo.value = mov.motivo || '';
+
+  const inFecha = document.getElementById('editKardexFecha');
+  if (inFecha) {
+    if (mov.fecha_hora) {
+      try {
+        const d = new Date(mov.fecha_hora);
+        const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        inFecha.value = isoLocal;
+      } catch (e) {
+        inFecha.value = new Date().toISOString().slice(0, 16);
+      }
+    } else {
+      inFecha.value = new Date().toISOString().slice(0, 16);
+    }
+  }
+
+  const chkStock = document.getElementById('editKardexAjustarStock');
+  if (chkStock) chkStock.checked = true;
+
+  document.getElementById('modalEditarKardex')?.classList.add('active');
+};
+
+window.cerrarModalEditarKardex = function() {
+  document.getElementById('modalEditarKardex')?.classList.remove('active');
+};
+
+window.guardarEdicionKardex = async function() {
+  const movId = document.getElementById('editKardexId')?.value;
+  if (!movId) return;
+
+  const tipo = document.getElementById('editKardexTipo')?.value;
+  const cantidad = parseFloat(document.getElementById('editKardexCantidad')?.value);
+  const costo_total = parseFloat(document.getElementById('editKardexCosto')?.value) || 0;
+  const motivo = document.getElementById('editKardexMotivo')?.value;
+  const fecha_hora = document.getElementById('editKardexFecha')?.value;
+  const ajustar_stock = document.getElementById('editKardexAjustarStock')?.checked;
+
+  if (isNaN(cantidad) || cantidad < 0) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Ingrese una cantidad válida mayor o igual a 0.', 'warning');
+    }
+    return;
+  }
+
+  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-user-rol': userRol
+  };
+  if (window._pinKardexActivo) {
+    headers['x-supervisor-pin'] = window._pinKardexActivo;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/inventario/kardex/movimientos/${movId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        tipo,
+        cantidad,
+        costo_total,
+        motivo,
+        fecha_hora: fecha_hora ? new Date(fecha_hora).toISOString() : new Date().toISOString(),
+        ajustar_stock
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al actualizar movimiento de Kárdex');
+    }
+
+    cerrarModalEditarKardex();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('✅ Movimiento de Kárdex actualizado exitosamente.', 'success');
+    }
+
+    await cargarKardexGeneral();
+    if (typeof cargarInventarioAdmin === 'function') {
+      await cargarInventarioAdmin();
+    }
+  } catch (e) {
+    console.error('Error al editar kardex:', e);
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`❌ ${e.message}`, 'error');
+    }
+  }
+};
+
+window.confirmarEliminarKardex = async function(movId) {
+  const mov = (window.kardexMovimientosActuales || []).find(m => m.id === movId);
+  if (!mov) return;
+
+  // Verificar PIN si no es admin / supervisor
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
+  if (!esAdmin) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '🗑️',
+      titulo: 'Eliminar Registro Kárdex',
+      subtitulo: 'Autorización Requerida',
+      mensaje: 'Ingresa el PIN de Administrador/Supervisor para eliminar este movimiento de Kárdex:'
+    });
+    if (!pin) return;
+    window._pinKardexActivo = pin;
+  } else {
+    window._pinKardexActivo = null;
+  }
+
+  window.kardexMovimientoAEliminar = mov;
+  const elInfo = document.getElementById('deleteKardexInfo');
+  if (elInfo) {
+    const insNom = mov.insumo_nombre || `Insumo #${mov.insumo_id}`;
+    elInfo.textContent = `${insNom} • ${mov.tipo.toUpperCase()} • Cantidad: ${mov.cantidad} ${mov.unidad_medida || ''}`;
+  }
+
+  document.getElementById('modalConfirmarEliminarKardex')?.classList.add('active');
+};
+
+window.cerrarModalEliminarKardex = function() {
+  document.getElementById('modalConfirmarEliminarKardex')?.classList.remove('active');
+  window.kardexMovimientoAEliminar = null;
+};
+
+window.ejecutarEliminarKardexConfirmado = async function(revertirStock) {
+  if (!window.kardexMovimientoAEliminar) return;
+  const movId = window.kardexMovimientoAEliminar.id;
+
+  const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-user-rol': userRol
+  };
+  if (window._pinKardexActivo) {
+    headers['x-supervisor-pin'] = window._pinKardexActivo;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/inventario/kardex/movimientos/${movId}`, {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({ revertir_stock: revertirStock })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al eliminar movimiento de Kárdex');
+    }
+
+    cerrarModalEliminarKardex();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(
+        revertirStock
+          ? '✅ Movimiento eliminado y stock en bodega revertido correctamente.'
+          : '✅ Registro histórico de Kárdex eliminado.',
+        'success'
+      );
+    }
+
+    await cargarKardexGeneral();
+    if (typeof cargarInventarioAdmin === 'function') {
+      await cargarInventarioAdmin();
+    }
+  } catch (e) {
+    console.error('Error al eliminar kardex:', e);
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`❌ ${e.message}`, 'error');
+    }
+  }
+};
 
 async function cargarInventarioAdmin() {
   try {
