@@ -10626,3 +10626,174 @@ body.theme-magma-volcanico .db-pill.active {
   color: #FFFFFF !important;
   font-weight: 800 !important;
 }
+
+
+
+/* =============================================================================
+   REGLAS MAESTRAS DE DIMENSIÓN: 2D PLANO vs 3D TÁCTIL (MÁXIMA ESPECIFICIDAD)
+   ============================================================================= */
+
+/* -------------------------------------------------------------------------
+   MODO 2D PLANO MODERNO:
+   Elimina bordes inferiores gruesos (4px/3px), quita sombras pesadas y
+   reemplaza el desplazamiento 3D por un sutil y elegante scale(0.97).
+   ------------------------------------------------------------------------- */
+body.dim-2d button,
+body.dim-2d .btn,
+body.dim-2d a.btn,
+body.dim-2d [role="button"],
+body.dim-2d input[type="button"],
+body.dim-2d input[type="submit"],
+body.dim-2d .btn-pri,
+body.dim-2d .btn-primary,
+body.dim-2d .btn-checkout,
+body.dim-2d #btn-checkout,
+body.dim-2d #btnPagarModal,
+body.dim-2d #btnConfirmarCobro,
+body.dim-2d #btnPagarComanda,
+body.dim-2d #btnFinalizarCobro,
+body.dim-2d #btnCobrar,
+body.dim-2d .cobrar,
+body.dim-2d .btn-cobro,
+body.dim-2d .btn-enviar-cocina,
+body.dim-2d #btnEnviarCocina,
+body.dim-2d #btnEnviarComandaCocina,
+body.dim-2d .btn-cocina,
+body.dim-2d .btn-kds-ready,
+body.dim-2d .prefactura,
+body.dim-2d .btn-prefactura,
+body.dim-2d #btnPreFactura,
+body.dim-2d .danger,
+body.dim-2d .btn-danger,
+body.dim-2d .btn-cancelar,
+body.dim-2d .nav-btn,
+body.dim-2d .tab-btn,
+body.dim-2d .tab-button,
+body.dim-2d .cat-chip,
+body.dim-2d .db-pill,
+body.dim-2d .calc-key,
+body.dim-2d .num-btn,
+body.dim-2d .numeric-keypad button,
+body.dim-2d .btn-qty,
+body.dim-2d .btn-tool,
+body.dim-2d .btn-sec,
+body.dim-2d .btn-login-submit,
+body.dim-2d #btnLoginSubmit,
+body.dim-2d .btn-pay-split,
+body.dim-2d .btn-balde-count,
+body.dim-2d .btn-split-counter,
+body.dim-2d .cash-chip,
+body.dim-2d .chip-usd,
+body.dim-2d .exact,
+body.dim-2d #btnPagoExacto,
+body.dim-2d #btnPagoExactoUSD,
+body.dim-2d .mob-float-btn,
+body.dim-2d .floating-btn,
+body.dim-2d .modal button {
+  border-bottom-width: 1px !important;
+  border-bottom-style: solid !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+
+body.dim-2d button:hover,
+body.dim-2d .btn:hover,
+body.dim-2d a.btn:hover,
+body.dim-2d [role="button"]:hover,
+body.dim-2d .btn-pri:hover,
+body.dim-2d .btn-primary:hover,
+body.dim-2d .btn-checkout:hover,
+body.dim-2d .btn-enviar-cocina:hover,
+body.dim-2d .prefactura:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25) !important;
+  opacity: 0.95 !important;
+}
+
+body.dim-2d button:active,
+body.dim-2d .btn:active,
+body.dim-2d a.btn:active,
+body.dim-2d [role="button"]:active,
+body.dim-2d .btn-pri:active,
+body.dim-2d .btn-primary:active,
+body.dim-2d .btn-checkout:active,
+body.dim-2d #btn-checkout:active,
+body.dim-2d #btnPagarModal:active,
+body.dim-2d #btnConfirmarCobro:active,
+body.dim-2d #btnPagarComanda:active,
+body.dim-2d #btnFinalizarCobro:active,
+body.dim-2d #btnCobrar:active,
+body.dim-2d .cobrar:active,
+body.dim-2d .btn-cobro:active,
+body.dim-2d .btn-enviar-cocina:active,
+body.dim-2d #btnEnviarCocina:active,
+body.dim-2d #btnEnviarComandaCocina:active,
+body.dim-2d .btn-cocina:active,
+body.dim-2d .btn-kds-ready:active,
+body.dim-2d .prefactura:active,
+body.dim-2d .btn-prefactura:active,
+body.dim-2d #btnPreFactura:active,
+body.dim-2d .calc-key:active,
+body.dim-2d .num-btn:active,
+body.dim-2d .btn-qty:active,
+body.dim-2d .btn-tool:active,
+body.dim-2d .btn-sec:active,
+body.dim-2d .nav-btn:active,
+body.dim-2d .tab-btn:active,
+body.dim-2d .cat-chip:active,
+body.dim-2d .db-pill:active {
+  transform: scale(0.96) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* -------------------------------------------------------------------------
+   MODO 3D TÁCTIL:
+   Relieve rígido de 4px, sombras de elevación y desplazamiento translateY(3px)
+   ------------------------------------------------------------------------- */
+body.dim-3d button:active,
+body.dim-3d .btn:active,
+body.dim-3d a.btn:active,
+body.dim-3d [role="button"]:active,
+body.dim-3d .btn-pri:active,
+body.dim-3d .btn-primary:active,
+body.dim-3d .btn-checkout:active,
+body.dim-3d #btn-checkout:active,
+body.dim-3d #btnPagarModal:active,
+body.dim-3d #btnConfirmarCobro:active,
+body.dim-3d #btnPagarComanda:active,
+body.dim-3d #btnFinalizarCobro:active,
+body.dim-3d #btnCobrar:active,
+body.dim-3d .cobrar:active,
+body.dim-3d .btn-cobro:active,
+body.dim-3d .btn-enviar-cocina:active,
+body.dim-3d #btnEnviarCocina:active,
+body.dim-3d #btnEnviarComandaCocina:active,
+body.dim-3d .btn-cocina:active,
+body.dim-3d .btn-kds-ready:active,
+body.dim-3d .prefactura:active,
+body.dim-3d .btn-prefactura:active,
+body.dim-3d #btnPreFactura:active,
+body.dim-3d .calc-key:active,
+body.dim-3d .num-btn:active,
+body.dim-3d .btn-qty:active,
+body.dim-3d .btn-tool:active,
+body.dim-3d .btn-sec:active,
+body.dim-3d .nav-btn:active,
+body.dim-3d .tab-btn:active,
+body.dim-3d .cat-chip:active,
+body.dim-3d .db-pill:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* Actualización visual de las tarjetas del modal según dimensión */
+#modalSelectorEstilosBotones.preview-dim-2d .theme-option-card div[style*="border-bottom"] {
+  border-bottom-width: 1px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+}
+#modalSelectorEstilosBotones.preview-dim-3d .theme-option-card div[style*="border-bottom"] {
+  border-bottom-width: 3px !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.35) !important;
+}

@@ -18130,6 +18130,13 @@ window.cerrarModalSelectorEstilosBotones = function() {
 
 window.seleccionarDimensionTema = function(dimKey) {
   window.dimensionSeleccionadaTemporal = dimKey;
+
+  const modal = document.getElementById('modalSelectorEstilosBotones');
+  if (modal) {
+    modal.classList.remove('preview-dim-2d', 'preview-dim-3d');
+    modal.classList.add('preview-dim-' + dimKey);
+  }
+
   document.querySelectorAll('.dim-switch-btn').forEach(btn => {
     const isAct = btn.dataset.dim === dimKey;
     btn.classList.toggle('active', isAct);
@@ -18143,6 +18150,7 @@ window.seleccionarDimensionTema = function(dimKey) {
       btn.style.boxShadow = 'none';
     }
   });
+
   window.aplicarTemaVisualEnDOM(window.temaSeleccionadoTemporal || 'gold', dimKey);
 };
 
