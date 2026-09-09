@@ -1,3 +1,17 @@
+window.obtenerIconoCategoriaInsumo = function(categoria) {
+  if (!categoria) return '📦';
+  const c = String(categoria).toLowerCase();
+  if (c.includes('carne') || c.includes('res') || c.includes('cerdo') || c.includes('pollo')) return '🥩';
+  if (c.includes('licor') || c.includes('ron') || c.includes('whisky') || c.includes('tequila') || c.includes('vodka')) return '🍾';
+  if (c.includes('cerveza') || c.includes('bebida') || c.includes('refresco')) return '🍺';
+  if (c.includes('verdura') || c.includes('vegetal') || c.includes('fruta')) return '🥬';
+  if (c.includes('lacteo') || c.includes('queso')) return '🧀';
+  if (c.includes('pan') || c.includes('panaderia')) return '🍞';
+  if (c.includes('marisco') || c.includes('pescado')) return '🦐';
+  if (c.includes('salsa') || c.includes('aderezo') || c.includes('especia')) return '🧂';
+  return '📦';
+};
+
 
 // ============================================================================
 // INTERCEPTOR GLOBAL FETCH CON TOKEN JWT DE SESIÓN
@@ -13242,11 +13256,19 @@ window.confirmarEliminarInsumo = async function(insumoId) {
     });
     if (!pin) return;
     window._pinSupervisorActivo = pin;
+  } else {
+    window._pinSupervisorActivo = null;
   }
 
-  const insumo = (estado.inventario || []).find(i => i.id === insumoId);
+  const insumo = (estado.inventario || []).find(i => Number(i.id) === Number(insumoId)) || 
+                (estado.inventario || []).find(i => String(i.id) === String(insumoId));
   if (!insumo) {
-    return alert('Insumo no encontrado');
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Insumo no encontrado en inventario.', 'warning');
+    } else {
+      alert('Insumo no encontrado');
+    }
+    return;
   }
 
   const elId = document.getElementById('txtEliminarInsumoId');
@@ -13257,16 +13279,25 @@ window.confirmarEliminarInsumo = async function(insumoId) {
 
   if (elId) elId.value = insumo.id;
   if (elNom) elNom.textContent = insumo.nombre;
-  if (elCat) elCat.textContent = `${window.obtenerIconoCategoriaInsumo(insumo.categoria)} ${insumo.categoria || 'General'}`;
-  if (elStock) elStock.textContent = `${insumo.stock_actual} ${insumo.unidad_medida}`;
-  if (elCos) elCos.textContent = formatCRC(insumo.costo_unitario || 0);
+  const iconoCat = typeof window.obtenerIconoCategoriaInsumo === 'function' ? window.obtenerIconoCategoriaInsumo(insumo.categoria) : '📦';
+  if (elCat) elCat.textContent = `${iconoCat} ${insumo.categoria || 'General'}`;
+  if (elStock) elStock.textContent = `${insumo.stock_actual || 0} ${insumo.unidad_medida || 'unidades'}`;
+  if (elCos) elCos.textContent = typeof formatCRC === 'function' ? formatCRC(insumo.costo_unitario || 0) : `₡ ${insumo.costo_unitario || 0}`;
 
   const modal = document.getElementById('modalConfirmarEliminarInsumo');
-  if (modal) modal.classList.add('active');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
 };
 
 window.cerrarModalEliminarInsumo = function() {
-  document.getElementById('modalConfirmarEliminarInsumo')?.classList.remove('active');
+  const modal = document.getElementById('modalConfirmarEliminarInsumo');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  window._pinSupervisorActivo = null;
 };
 
 window.ejecutarEliminarInsumoConfirmado = async function() {
@@ -13274,11 +13305,13 @@ window.ejecutarEliminarInsumoConfirmado = async function() {
   if (!id) return;
 
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const usuarioNombre = estado.usuarioActual ? (estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario || 'Admin') : 'Admin';
     const headers = {
       'Content-Type': 'application/json',
-      'x-user-rol': rol
+      'x-user-rol': rol,
+      'x-negocio-id': String(nid)
     };
     if (window._pinSupervisorActivo) {
       headers['x-supervisor-pin'] = window._pinSupervisorActivo;
@@ -13287,7 +13320,7 @@ window.ejecutarEliminarInsumoConfirmado = async function() {
     const res = await fetch(`/api/admin/inventario/${id}`, {
       method: 'DELETE',
       headers,
-      body: JSON.stringify({ usuarioNombre })
+      body: JSON.stringify({ usuarioNombre, negocio_id: nid })
     });
 
     const data = await res.json();

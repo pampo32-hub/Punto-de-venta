@@ -6415,24 +6415,31 @@ app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Insumo no encontrado' });
     }
 
+    const reqNegocioId = obtenerNegocioIdReq(req);
+    const negocioIdInsumo = insumo.negocio_id || reqNegocioId;
+
     // Limpiar relaciones en recetas y movimientos de kardex
     await dbRun('DELETE FROM InventarioRecetas WHERE insumo_id = ?', [id]);
     await dbRun('DELETE FROM InventarioMovimientos WHERE insumo_id = ?', [id]);
     await dbRun('DELETE FROM Inventario WHERE id = ?', [id]);
 
     await registrarAuditoria({
+      negocioId: negocioIdInsumo,
       usuarioNombre: req.body?.usuarioNombre || 'Administrador',
       accion: 'eliminar_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Eliminación de insumo ID ${id}: "${insumo.nombre}" (Stock final: ${insumo.stock_actual} ${insumo.unidad_medida})`
+      detalle: `Eliminación definitiva de insumo ID ${id}: "${insumo.nombre}" (Stock final: ${insumo.stock_actual} ${insumo.unidad_medida})`
     });
 
-    if (io) io.emit('inventario_actualizado');
+    if (io) {
+      io.emit('inventario_actualizado');
+      io.emit('inventario_eliminado', { id: Number(id), negocio_id: negocioIdInsumo });
+    }
 
     res.json({
       success: true,
-      message: `Insumo "${insumo.nombre}" eliminado correctamente`,
+      message: `Insumo "${insumo.nombre}" eliminado permanentemente de la base de datos`,
       id: Number(id)
     });
   } catch (e) {
