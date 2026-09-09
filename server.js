@@ -6223,9 +6223,9 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     if (!insumoActual) return res.status(404).json({ error: 'Insumo no encontrado' });
 
     const esLic = es_licor !== undefined ? (es_licor ? 1 : 0) : insumoActual.es_licor;
-    const capMl = esLic ? (Number(capacidad_ml) || insumoActual.capacidad_ml || 750) : null;
-    const shotMl = esLic ? (Number(medida_shot_ml) || insumoActual.medida_shot_ml || 30) : null;
-    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 10) / 10 : null;
+    const capMl = esLic ? (Number(capacidad_ml) || insumoActual.capacidad_ml || (unidad_medida === 'kg' ? 1000 : 750)) : null;
+    const shotMl = esLic ? (Number(medida_shot_ml) || insumoActual.medida_shot_ml || (unidad_medida === 'kg' ? 200 : 30)) : null;
+    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 100) / 100 : null;
 
     await dbRun(
       `UPDATE Inventario SET 
@@ -6253,10 +6253,45 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
       accion: 'actualizar_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Modificación de insumo ID ${id}: ${nombre || insumoActual.nombre}`
+      detalle: `Modificación de insumo ID ${id}: ${nombre || insumoActual.nombre} (${categoria || insumoActual.categoria})`
     });
 
+    if (io) io.emit('inventario_actualizado');
+
     res.json({ message: 'Insumo actualizado con éxito', id, es_licor: esLic, rendimiento_shots: rendShots });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
+    if (!insumo) {
+      return res.status(404).json({ error: 'Insumo no encontrado' });
+    }
+
+    // Limpiar relaciones en recetas y movimientos de kardex
+    await dbRun('DELETE FROM InventarioRecetas WHERE insumo_id = ?', [id]);
+    await dbRun('DELETE FROM InventarioMovimientos WHERE insumo_id = ?', [id]);
+    await dbRun('DELETE FROM Inventario WHERE id = ?', [id]);
+
+    await registrarAuditoria({
+      usuarioNombre: req.body?.usuarioNombre || 'Administrador',
+      accion: 'eliminar_insumo',
+      tipoEvento: 'operativo',
+      modulo: 'inventario',
+      detalle: `Eliminación de insumo ID ${id}: "${insumo.nombre}" (Stock final: ${insumo.stock_actual} ${insumo.unidad_medida})`
+    });
+
+    if (io) io.emit('inventario_actualizado');
+
+    res.json({
+      success: true,
+      message: `Insumo "${insumo.nombre}" eliminado correctamente`,
+      id: Number(id)
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -4108,7 +4108,7 @@
 
   <!-- MODAL: REGISTRAR NUEVO INSUMO -->
   <div class="modal-backdrop" id="modalNuevoInsumo" style="z-index: 100020;">
-    <div class="modal-dialog" style="max-width:460px;">
+    <div class="modal-dialog" style="max-width:480px;">
       <div class="dialog-header">
         <h3>➕ Registrar Nuevo Insumo / Artículo</h3>
         <button class="btn-close-modal" onclick="cerrarModalNuevoInsumo()">✕</button>
@@ -4122,14 +4122,14 @@
         <div class="field-row" style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <div>
             <label>Categoría:</label>
-            <select id="selectNuevoInsumoCat" onchange="verificarCategoriaInsumoManual(this.value)" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
-              <!-- Cargado dinámicamente sincronizado con categorías del menú -->
+            <select id="selectNuevoInsumoCat" onchange="verificarCategoriaInsumoManual('nuevo')" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+              <!-- Opciones dinámicas de categorías -->
             </select>
             <input type="text" id="txtNuevoInsumoCatManual" placeholder="Escribe nueva categoría..." style="display:none; width:100%; margin-top:6px; padding:8px 10px; border-radius:6px; background:#1e293b; border:1px solid #38bdf8; color:#fff; font-size:0.85rem;" />
           </div>
           <div>
             <label>Unidad de Medida:</label>
-            <select id="selectNuevoInsumoUnidad" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+            <select id="selectNuevoInsumoUnidad" onchange="onCambioUnidadInsumo('nuevo')" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
               <option value="unidades">Unidades</option>
               <option value="botellas">Botellas</option>
               <option value="kg">Kilogramos (kg)</option>
@@ -4150,47 +4150,38 @@
           </div>
           <div>
             <label>Costo Unitario:</label>
-            <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" oninput="actualizarCalculoShotsNuevo()" />
+            <input type="number" id="txtNuevoInsumoCosto" min="0" step="any" value="1500" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" oninput="actualizarCalculoFraccionable('nuevo')" />
           </div>
         </div>
 
-        <!-- SECCIÓN INTELIGENTE: LICORES, BOTELLAS Y SHOTS -->
+        <!-- SECCIÓN INTELIGENTE: FRACCIONAMIENTO (GRAMOS / PORCIONES / SHOTS / LITROS) -->
         <div class="field-row" style="margin-top:14px; background:#1e1b4b; border:1px solid #4338ca; border-radius:10px; padding:12px;">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; font-weight:700; color:#c7d2fe;">
-            <input type="checkbox" id="chkNuevoInsumoEsLicor" onchange="toggleConfigLicorNuevo(this.checked)" style="width:18px; height:18px; cursor:pointer;" />
-            <span>🍾 ¿Es licor o bebida fraccionable por Shots / Tragos?</span>
+            <input type="checkbox" id="chkNuevoInsumoEsLicor" onchange="toggleConfigFraccionable('nuevo', this.checked)" style="width:18px; height:18px; cursor:pointer;" />
+            <span id="lblTituloFraccionableNuevo">⚖️ Fraccionable en Porciones / Gramos / Shots / Tragos</span>
           </label>
 
           <div id="seccionConfigLicorNuevo" style="display:none; margin-top:12px; border-top:1px solid rgba(99,102,241,0.3); padding-top:12px;">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <div>
-                <label style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Tamaño / Capacidad Botella:</label>
-                <select id="selNuevoInsumoCapacidad" onchange="actualizarCalculoShotsNuevo()" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
-                  <option value="750">750 ml (Estándar de Barra)</option>
-                  <option value="1000">1000 ml (1 Litro)</option>
-                  <option value="1500">1500 ml (1.5 Litros / Magnum)</option>
-                  <option value="1750">1750 ml (1.75 Litros)</option>
-                  <option value="375">375 ml (Media Botella / Pacha)</option>
-                  <option value="custom">Personalizado (ml)...</option>
+                <label id="lblCapacidadTituloNuevo" style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Tamaño / Capacidad Empaque:</label>
+                <select id="selNuevoInsumoCapacidad" onchange="actualizarCalculoFraccionable('nuevo')" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
+                  <!-- Opciones adaptables por unidad -->
                 </select>
-                <input type="number" id="txtNuevoInsumoCapacidadCustom" min="50" step="any" placeholder="Capacidad en ml" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoShotsNuevo()" />
+                <input type="number" id="txtNuevoInsumoCapacidadCustom" min="1" step="any" placeholder="Capacidad personalizada" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoFraccionable('nuevo')" />
               </div>
               <div>
-                <label style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Medida del Shot / Trago:</label>
-                <select id="selNuevoInsumoMedidaShot" onchange="actualizarCalculoShotsNuevo()" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
-                  <option value="30">1 onza (~30 ml - Copa Tradicional CR)</option>
-                  <option value="37">1.25 onzas (~37 ml)</option>
-                  <option value="45">1.5 onzas (~45 ml - Jigger Coctelería)</option>
-                  <option value="60">2 onzas (~60 ml - Trago Doble)</option>
-                  <option value="custom">Personalizado (ml)...</option>
+                <label id="lblMedidaShotTituloNuevo" style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Tamaño Porción / Dosis / Shot:</label>
+                <select id="selNuevoInsumoMedidaShot" onchange="actualizarCalculoFraccionable('nuevo')" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
+                  <!-- Opciones adaptables por unidad -->
                 </select>
-                <input type="number" id="txtNuevoInsumoMedidaShotCustom" min="5" step="any" placeholder="Medida shot en ml" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoShotsNuevo()" />
+                <input type="number" id="txtNuevoInsumoMedidaShotCustom" min="1" step="any" placeholder="Medida personalizada" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoFraccionable('nuevo')" />
               </div>
             </div>
 
             <div style="margin-top:10px; background:rgba(0,0,0,0.25); border-radius:8px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; font-size:0.82rem;">
-              <div>🍹 Rinde: <strong id="lblRendimientoShotsNuevo" style="color:#38bdf8;">25</strong> shots por botella</div>
-              <div>Costo x Shot: <strong id="lblCostoPorShotNuevo" style="color:#34d399;">₡340</strong></div>
+              <div><span id="lblIconoRendimientoNuevo">🍽️</span> Rinde: <strong id="lblRendimientoShotsNuevo" style="color:#38bdf8;">5</strong> <span id="lblUnidadRendimientoNuevo">porciones por unidad</span></div>
+              <div>Costo x Porción: <strong id="lblCostoPorShotNuevo" style="color:#34d399;">₡300</strong></div>
             </div>
           </div>
         </div>
@@ -4202,13 +4193,13 @@
     </div>
   </div>
 
-  <!-- MODAL: EDITAR INSUMO & CONFIGURACIÓN DE SHOTS -->
+  <!-- MODAL: EDITAR INSUMO & CONFIGURACIÓN DE FRACCIONAMIENTO -->
   <div class="modal-backdrop" id="modalEditarInsumo">
     <div class="modal-dialog" style="max-width:480px;">
       <div class="dialog-header">
         <div>
-          <h3 style="margin:0;">✏️ Editar Insumo / Licor</h3>
-          <small style="color:#9ca3af;">Configura existencias, costos y rendimiento de shots</small>
+          <h3 style="margin:0;">✏️ Editar Insumo / Artículo</h3>
+          <small style="color:#9ca3af;">Configura categoría, existencias, costos y porcionamiento</small>
         </div>
         <button class="btn-close-modal" onclick="cerrarModalEditarInsumo()">✕</button>
       </div>
@@ -4222,11 +4213,14 @@
         <div class="field-row" style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <div>
             <label>Categoría:</label>
-            <input type="text" id="txtEditarInsumoCat" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" />
+            <select id="selectEditarInsumoCat" onchange="verificarCategoriaInsumoManual('editar')" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+              <!-- Opciones dinámicas de categorías -->
+            </select>
+            <input type="text" id="txtEditarInsumoCatManual" placeholder="Escribe nueva categoría..." style="display:none; width:100%; margin-top:6px; padding:8px 10px; border-radius:6px; background:#1e293b; border:1px solid #38bdf8; color:#fff; font-size:0.85rem;" />
           </div>
           <div>
             <label>Unidad de Medida:</label>
-            <select id="selectEditarInsumoUnidad" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
+            <select id="selectEditarInsumoUnidad" onchange="onCambioUnidadInsumo('editar')" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
               <option value="unidades">Unidades</option>
               <option value="botellas">Botellas</option>
               <option value="kg">Kilogramos (kg)</option>
@@ -4243,47 +4237,38 @@
           </div>
           <div>
             <label>Costo Unitario (₡):</label>
-            <input type="number" id="txtEditarInsumoCosto" min="0" step="any" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" oninput="actualizarCalculoShotsEditar()" />
+            <input type="number" id="txtEditarInsumoCosto" min="0" step="any" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;" oninput="actualizarCalculoFraccionable('editar')" />
           </div>
         </div>
 
-        <!-- SECCIÓN LICOR EN EDITAR -->
+        <!-- SECCIÓN INTELIGENTE: FRACCIONAMIENTO EN EDITAR -->
         <div class="field-row" style="margin-top:14px; background:#1e1b4b; border:1px solid #4338ca; border-radius:10px; padding:12px;">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; font-weight:700; color:#c7d2fe;">
-            <input type="checkbox" id="chkEditarInsumoEsLicor" onchange="toggleConfigLicorEditar(this.checked)" style="width:18px; height:18px; cursor:pointer;" />
-            <span>🍾 Fraccionable por Shots / Tragos (Copeo)</span>
+            <input type="checkbox" id="chkEditarInsumoEsLicor" onchange="toggleConfigFraccionable('editar', this.checked)" style="width:18px; height:18px; cursor:pointer;" />
+            <span id="lblTituloFraccionableEditar">⚖️ Fraccionable en Porciones / Gramos / Shots / Tragos</span>
           </label>
 
           <div id="seccionConfigLicorEditar" style="display:none; margin-top:12px; border-top:1px solid rgba(99,102,241,0.3); padding-top:12px;">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <div>
-                <label style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Tamaño Botella:</label>
-                <select id="selEditarInsumoCapacidad" onchange="actualizarCalculoShotsEditar()" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
-                  <option value="750">750 ml (Estándar de Barra)</option>
-                  <option value="1000">1000 ml (1 Litro)</option>
-                  <option value="1500">1500 ml (1.5 Litros / Magnum)</option>
-                  <option value="1750">1750 ml (1.75 Litros)</option>
-                  <option value="375">375 ml (Media Botella / Pacha)</option>
-                  <option value="custom">Personalizado (ml)...</option>
+                <label id="lblCapacidadTituloEditar" style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Tamaño / Capacidad Empaque:</label>
+                <select id="selEditarInsumoCapacidad" onchange="actualizarCalculoFraccionable('editar')" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
+                  <!-- Opciones adaptables por unidad -->
                 </select>
-                <input type="number" id="txtEditarInsumoCapacidadCustom" min="50" step="any" placeholder="Capacidad en ml" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoShotsEditar()" />
+                <input type="number" id="txtEditarInsumoCapacidadCustom" min="1" step="any" placeholder="Capacidad personalizada" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoFraccionable('editar')" />
               </div>
               <div>
-                <label style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Medida del Shot / Trago:</label>
-                <select id="selEditarInsumoMedidaShot" onchange="actualizarCalculoShotsEditar()" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
-                  <option value="30">1 onza (~30 ml - Copa Tradicional CR)</option>
-                  <option value="37">1.25 onzas (~37 ml)</option>
-                  <option value="45">1.5 onzas (~45 ml - Jigger Coctelería)</option>
-                  <option value="60">2 onzas (~60 ml - Trago Doble)</option>
-                  <option value="custom">Personalizado (ml)...</option>
+                <label id="lblMedidaShotTituloEditar" style="font-size:0.75rem; color:#a5b4fc; display:block; margin-bottom:4px;">Tamaño Porción / Dosis / Shot:</label>
+                <select id="selEditarInsumoMedidaShot" onchange="actualizarCalculoFraccionable('editar')" style="width:100%; padding:8px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;">
+                  <!-- Opciones adaptables por unidad -->
                 </select>
-                <input type="number" id="txtEditarInsumoMedidaShotCustom" min="5" step="any" placeholder="Medida shot en ml" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoShotsEditar()" />
+                <input type="number" id="txtEditarInsumoMedidaShotCustom" min="1" step="any" placeholder="Medida personalizada" style="display:none; width:100%; padding:8px; margin-top:6px; border-radius:6px; background:#0f172a; border:1px solid #374151; color:#fff; font-size:0.85rem;" oninput="actualizarCalculoFraccionable('editar')" />
               </div>
             </div>
 
             <div style="margin-top:10px; background:rgba(0,0,0,0.25); border-radius:8px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; font-size:0.82rem;">
-              <div>🍹 Rinde: <strong id="lblRendimientoShotsEditar" style="color:#38bdf8;">25</strong> shots por botella</div>
-              <div>Costo x Shot: <strong id="lblCostoPorShotEditar" style="color:#34d399;">₡340</strong></div>
+              <div><span id="lblIconoRendimientoEditar">🍽️</span> Rinde: <strong id="lblRendimientoShotsEditar" style="color:#38bdf8;">5</strong> <span id="lblUnidadRendimientoEditar">porciones por unidad</span></div>
+              <div>Costo x Porción: <strong id="lblCostoPorShotEditar" style="color:#34d399;">₡300</strong></div>
             </div>
           </div>
         </div>
@@ -4291,6 +4276,36 @@
       <div class="dialog-footer">
         <button class="btn-sec" onclick="cerrarModalEditarInsumo()">Cancelar</button>
         <button class="btn-pri" onclick="guardarEdicionInsumo()">💾 Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRMAR ELIMINAR INSUMO DE BODEGA -->
+  <div class="modal-backdrop" id="modalConfirmarEliminarInsumo" style="z-index: 100030;">
+    <div class="modal-dialog" style="max-width:440px;">
+      <div class="dialog-header" style="background:#7f1d1d; color:#fff; border-bottom:1px solid #991b1b;">
+        <h3 style="margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+          <span>🗑️ Eliminar Insumo de Bodega</span>
+        </h3>
+        <button class="btn-close-modal" onclick="cerrarModalEliminarInsumo()" style="color:#fff;">✕</button>
+      </div>
+      <div class="dialog-body" style="padding:16px;">
+        <input type="hidden" id="txtEliminarInsumoId" />
+        <p style="margin:0 0 12px; font-size:0.95rem; color:#f3f4f6;">
+          ¿Estás seguro de que deseas eliminar permanentemente el insumo <strong id="lblEliminarInsumoNombre" style="color:#f87171;"></strong>?
+        </p>
+        <div style="background:#1e1b4b; border:1px solid #4338ca; border-radius:8px; padding:10px 12px; font-size:0.85rem; color:#c7d2fe; margin-bottom:12px;">
+          <div><strong>📦 Categoría:</strong> <span id="lblEliminarInsumoCat">-</span></div>
+          <div><strong>📊 Stock Actual:</strong> <span id="lblEliminarInsumoStock">-</span></div>
+          <div><strong>💰 Costo Unitario:</strong> <span id="lblEliminarInsumoCosto">-</span></div>
+        </div>
+        <p style="margin:0; font-size:0.82rem; color:#fca5a5;">
+          ⚠️ <strong>Advertencia:</strong> Esta acción eliminará el insumo de la lista de existencias en bodega y sus configuraciones asociadas.
+        </p>
+      </div>
+      <div class="dialog-footer" style="padding:12px 16px; background:#111827; border-top:1px solid #374151; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-sec" onclick="cerrarModalEliminarInsumo()">Cancelar</button>
+        <button class="btn-pri" style="background:#dc2626; border-color:#ef4444;" onclick="ejecutarEliminarInsumoConfirmado()">🗑️ Sí, Eliminar Insumo</button>
       </div>
     </div>
   </div>

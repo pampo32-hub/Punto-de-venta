@@ -12628,23 +12628,52 @@ function renderTablaInventario(items) {
     const tr = document.createElement('tr');
     const valorTotal = (ins.stock_actual || 0) * (ins.costo_unitario || 0);
 
+    const iconoCat = typeof window.obtenerIconoCategoriaInsumo === 'function' ? window.obtenerIconoCategoriaInsumo(ins.categoria) : '📦';
     let nombreHtml = `<strong>${escapeHtml(ins.nombre)}</strong>`;
     let stockExtraHtml = '';
     let costoExtraHtml = '';
 
+    const unidad = (ins.unidad_medida || 'unidades').toLowerCase();
+
     if (ins.es_licor) {
-      nombreHtml += ` <span class="licor-tag">🍾 ${ins.capacidad_ml || 750}ml (${ins.rendimiento_shots || 25} shots)</span>`;
-      const enteras = ins.botellas_enteras !== null && ins.botellas_enteras !== undefined ? ins.botellas_enteras : Math.floor(ins.stock_actual || 0);
-      const remanentes = ins.shots_remanentes !== null && ins.shots_remanentes !== undefined ? ins.shots_remanentes : Math.round(((ins.stock_actual || 0) - enteras) * (ins.rendimiento_shots || 25));
-      stockExtraHtml = `<span class="licor-shots-pill">🍸 ${enteras} bot. y ${remanentes} shots</span>`;
-      if (ins.costo_por_shot) {
-        costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(ins.costo_por_shot)}/shot)</span>`;
+      if (unidad === 'kg' || unidad === 'kilogramos') {
+        const pesoEmpaque = ins.capacidad_ml || 1000;
+        const tamPorcion = ins.medida_shot_ml || 200;
+        const rend = ins.rendimiento_shots || (tamPorcion > 0 ? Math.round((pesoEmpaque / tamPorcion) * 10) / 10 : 5);
+        const totalPorciones = Math.round((ins.stock_actual || 0) * rend * 10) / 10;
+        const costoPorcion = rend > 0 ? Math.round((ins.costo_unitario || 0) / rend) : 0;
+
+        nombreHtml += ` <span class="licor-tag" style="background:#064e3b; border-color:#059669; color:#6ee7b7;">${iconoCat} ${pesoEmpaque}g (${rend} porc. de ${tamPorcion}g)</span>`;
+        stockExtraHtml = `<span class="licor-shots-pill" style="background:#064e3b; border-color:#059669; color:#6ee7b7;">🍽️ ${totalPorciones} porciones</span>`;
+        if (costoPorcion > 0) {
+          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#6ee7b7;">(${formatCRC(costoPorcion)}/porción)</span>`;
+        }
+      } else if (unidad === 'litros' || unidad === 'botellas' || (ins.categoria && ins.categoria.toLowerCase().includes('licor'))) {
+        const cap = ins.capacidad_ml || 750;
+        const rend = ins.rendimiento_shots || 25;
+        nombreHtml += ` <span class="licor-tag">🍾 ${cap}ml (${rend} shots)</span>`;
+        const enteras = ins.botellas_enteras !== null && ins.botellas_enteras !== undefined ? ins.botellas_enteras : Math.floor(ins.stock_actual || 0);
+        const remanentes = ins.shots_remanentes !== null && ins.shots_remanentes !== undefined ? ins.shots_remanentes : Math.round(((ins.stock_actual || 0) - enteras) * rend);
+        stockExtraHtml = `<span class="licor-shots-pill">🍸 ${enteras} bot. y ${remanentes} shots</span>`;
+        if (ins.costo_por_shot || (rend > 0 && ins.costo_unitario)) {
+          const cShot = ins.costo_por_shot || Math.round(ins.costo_unitario / rend);
+          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cShot)}/shot)</span>`;
+        }
+      } else {
+        const rend = ins.rendimiento_shots || 1;
+        const totalPorc = Math.round((ins.stock_actual || 0) * rend * 10) / 10;
+        const cPorc = rend > 0 ? Math.round((ins.costo_unitario || 0) / rend) : 0;
+        nombreHtml += ` <span class="licor-tag" style="background:#1e1b4b; border-color:#4338ca; color:#c7d2fe;">🍽️ Rinde ${rend} porc./u</span>`;
+        stockExtraHtml = `<span class="licor-shots-pill">🍽️ ${totalPorc} porciones</span>`;
+        if (cPorc > 0) {
+          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cPorc)}/porción)</span>`;
+        }
       }
     }
 
     tr.innerHTML = `
       <td>${nombreHtml}</td>
-      <td><span style="color:#9ca3af;">${escapeHtml(ins.categoria || 'General')}</span></td>
+      <td><span style="color:#e2e8f0; font-weight:500;">${iconoCat} ${escapeHtml(ins.categoria || 'General')}</span></td>
       <td>
         <strong>${ins.stock_actual}</strong> <small style="color:#9ca3af;">${escapeHtml(ins.unidad_medida)}</small>
         ${stockExtraHtml}
@@ -12665,6 +12694,7 @@ function renderTablaInventario(items) {
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada', ${ins.id})">+ Entrada</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma', ${ins.id})">- Merma</button>
         <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#1e293b; border-color:#475569;" onclick="abrirModalKardex(${ins.id})">📜 Kardex</button>
+        <button class="btn-tool" style="padding:4px 8px; font-size:0.75rem; background:#991b1b; border-color:#ef4444;" onclick="confirmarEliminarInsumo(${ins.id})" title="Eliminar Insumo de Bodega">🗑️</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -12918,15 +12948,157 @@ window.actualizarCalculoShotsNuevo = function() {
   const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
   const costoShot = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
 
-  const lblRend = document.getElementById('lblRendimientoShotsNuevo');
-  const lblCosto = document.getElementById('lblCostoPorShotNuevo');
-  if (lblRend) lblRend.textContent = rendimiento;
-  if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
+// GESTIÓN DE FRACCIONAMIENTO INTELIGENTE
+window.onCambioUnidadInsumo = function(modo) {
+  const selUni = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
+  const unidad = (selUni?.value || 'unidades').toLowerCase();
+  window.actualizarOpcionesFraccionablePorUnidad(modo, unidad);
+  window.actualizarCalculoFraccionable(modo);
 };
+
+window.actualizarOpcionesFraccionablePorUnidad = function(modo, unidad) {
+  const isNuevo = modo === 'nuevo';
+  const selCap = document.getElementById(isNuevo ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
+  const selMed = document.getElementById(isNuevo ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
+  const lblCap = document.getElementById(isNuevo ? 'lblCapacidadTituloNuevo' : 'lblCapacidadTituloEditar');
+  const lblMed = document.getElementById(isNuevo ? 'lblMedidaShotTituloNuevo' : 'lblMedidaShotTituloEditar');
+  const lblTit = document.getElementById(isNuevo ? 'lblTituloFraccionableNuevo' : 'lblTituloFraccionableEditar');
+  const lblIconRend = document.getElementById(isNuevo ? 'lblIconoRendimientoNuevo' : 'lblIconoRendimientoEditar');
+  const lblUniRend = document.getElementById(isNuevo ? 'lblUnidadRendimientoNuevo' : 'lblUnidadRendimientoEditar');
+
+  if (unidad === 'kg') {
+    if (lblTit) lblTit.innerHTML = '⚖️ Fraccionable en Gramos / Porciones (Pescados, Carnes, etc.)';
+    if (lblCap) lblCap.textContent = 'Peso Total por Empaque / Unidad (g):';
+    if (lblMed) lblMed.textContent = 'Tamaño de Porción / Dosis (g):';
+    if (lblIconRend) lblIconRend.textContent = '🍽️';
+    if (lblUniRend) lblUniRend.textContent = 'porciones por kg';
+
+    if (selCap) {
+      selCap.innerHTML = `
+        <option value="1000">1000 g (1 Kilogramo)</option>
+        <option value="500">500 g (Medio Kilo)</option>
+        <option value="2000">2000 g (2 Kilogramos)</option>
+        <option value="2500">2500 g (2.5 Kilos)</option>
+        <option value="5000">5000 g (5 Kilos)</option>
+        <option value="custom">Personalizado (gramos)...</option>
+      `;
+    }
+    if (selMed) {
+      selMed.innerHTML = `
+        <option value="200">200 g (Porción Estándar Ceviche/Carne)</option>
+        <option value="150">150 g (Porción Mediana)</option>
+        <option value="100">100 g (Porción Pequeña / Tapa)</option>
+        <option value="250">250 g (Porción Gourmet 1/4 kg)</option>
+        <option value="300">300 g (Porción Grande / Plato Fuerte)</option>
+        <option value="custom">Personalizado (gramos)...</option>
+      `;
+    }
+  } else if (unidad === 'litros' || unidad === 'botellas') {
+    if (lblTit) lblTit.innerHTML = '🍾 Fraccionable por Shots / Tragos / Copes';
+    if (lblCap) lblCap.textContent = 'Capacidad de la Botella / Envase:';
+    if (lblMed) lblMed.textContent = 'Medida del Shot / Trago:';
+    if (lblIconRend) lblIconRend.textContent = '🍸';
+    if (lblUniRend) lblUniRend.textContent = 'shots por botella';
+
+    if (selCap) {
+      selCap.innerHTML = `
+        <option value="750">750 ml (Estándar de Barra)</option>
+        <option value="1000">1000 ml (1 Litro)</option>
+        <option value="1500">1500 ml (1.5 Litros / Magnum)</option>
+        <option value="1750">1750 ml (1.75 Litros)</option>
+        <option value="375">375 ml (Media Botella / Pacha)</option>
+        <option value="custom">Personalizado (ml)...</option>
+      `;
+    }
+    if (selMed) {
+      selMed.innerHTML = `
+        <option value="30">1 onza (~30 ml - Copa Tradicional CR)</option>
+        <option value="37">1.25 onzas (~37 ml)</option>
+        <option value="45">1.5 onzas (~45 ml - Jigger Coctelería)</option>
+        <option value="60">2 onzas (~60 ml - Trago Doble)</option>
+        <option value="custom">Personalizado (ml)...</option>
+      `;
+    }
+  } else {
+    if (lblTit) lblTit.innerHTML = '🍽️ Fraccionable en Porciones / Raciones';
+    if (lblCap) lblCap.textContent = 'Cantidad / Contenido por Unidad:';
+    if (lblMed) lblMed.textContent = 'Tamaño de Ración / Porción:';
+    if (lblIconRend) lblIconRend.textContent = '🍽️';
+    if (lblUniRend) lblUniRend.textContent = 'porciones por unidad';
+
+    if (selCap) {
+      selCap.innerHTML = `
+        <option value="1">1 Unidad Completa</option>
+        <option value="10">10 Unidades por Paquete</option>
+        <option value="12">12 Unidades (Docena)</option>
+        <option value="24">24 Unidades (Caja)</option>
+        <option value="custom">Personalizado...</option>
+      `;
+    }
+    if (selMed) {
+      selMed.innerHTML = `
+        <option value="1">1 Ración / Porción</option>
+        <option value="0.5">0.5 (Media Ración)</option>
+        <option value="0.25">0.25 (Un Cuarto)</option>
+        <option value="custom">Personalizado...</option>
+      `;
+    }
+  }
+};
+
+window.toggleConfigFraccionable = function(modo, checked) {
+  const isNuevo = modo === 'nuevo';
+  const sec = document.getElementById(isNuevo ? 'seccionConfigLicorNuevo' : 'seccionConfigLicorEditar');
+  if (sec) sec.style.display = checked ? 'block' : 'none';
+  window.actualizarCalculoFraccionable(modo);
+};
+
+window.actualizarCalculoFraccionable = function(modo) {
+  const isNuevo = modo === 'nuevo';
+  const selUni = document.getElementById(isNuevo ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
+  const unidad = (selUni?.value || 'unidades').toLowerCase();
+
+  const selCap = document.getElementById(isNuevo ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
+  const txtCapCustom = document.getElementById(isNuevo ? 'txtNuevoInsumoCapacidadCustom' : 'txtEditarInsumoCapacidadCustom');
+  let cap = 750;
+  if (selCap && selCap.value === 'custom') {
+    if (txtCapCustom) txtCapCustom.style.display = 'block';
+    cap = parseFloat(txtCapCustom?.value) || (unidad === 'kg' ? 1000 : 750);
+  } else {
+    if (txtCapCustom) txtCapCustom.style.display = 'none';
+    cap = parseFloat(selCap?.value) || (unidad === 'kg' ? 1000 : 750);
+  }
+
+  const selShot = document.getElementById(isNuevo ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
+  const txtShotCustom = document.getElementById(isNuevo ? 'txtNuevoInsumoMedidaShotCustom' : 'txtEditarInsumoMedidaShotCustom');
+  let shot = 30;
+  if (selShot && selShot.value === 'custom') {
+    if (txtShotCustom) txtShotCustom.style.display = 'block';
+    shot = parseFloat(txtShotCustom?.value) || (unidad === 'kg' ? 200 : 30);
+  } else {
+    if (txtShotCustom) txtShotCustom.style.display = 'none';
+    shot = parseFloat(selShot?.value) || (unidad === 'kg' ? 200 : 30);
+  }
+
+  const costo = parseFloat(document.getElementById(isNuevo ? 'txtNuevoInsumoCosto' : 'txtEditarInsumoCosto')?.value) || 0;
+  const rendimiento = shot > 0 ? Math.round((cap / shot) * 100) / 100 : 0;
+  const costoPorcion = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
+
+  const lblRend = document.getElementById(isNuevo ? 'lblRendimientoShotsNuevo' : 'lblRendimientoShotsEditar');
+  const lblCosto = document.getElementById(isNuevo ? 'lblCostoPorShotNuevo' : 'lblCostoPorShotEditar');
+  if (lblRend) lblRend.textContent = rendimiento;
+  if (lblCosto) lblCosto.textContent = formatCRC(costoPorcion);
+};
+
+// Aliases para retrocompatibilidad
+window.toggleConfigLicorNuevo = (c) => window.toggleConfigFraccionable('nuevo', c);
+window.toggleConfigLicorEditar = (c) => window.toggleConfigFraccionable('editar', c);
+window.actualizarCalculoShotsNuevo = () => window.actualizarCalculoFraccionable('nuevo');
+window.actualizarCalculoShotsEditar = () => window.actualizarCalculoFraccionable('editar');
 
 window.abrirModalNuevoInsumo = async function() {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '➕',
@@ -12942,43 +13114,35 @@ window.abrirModalNuevoInsumo = async function() {
   }
 
   const n = document.getElementById('txtNuevoInsumoNombre');
-  const selCat = document.getElementById('selectNuevoInsumoCat');
-  const txtCatManual = document.getElementById('txtNuevoInsumoCatManual');
   const s = document.getElementById('txtNuevoInsumoStock');
   const m = document.getElementById('txtNuevoInsumoMin');
   const cs = document.getElementById('txtNuevoInsumoCosto');
+  const selUni = document.getElementById('selectNuevoInsumoUnidad');
   const chkL = document.getElementById('chkNuevoInsumoEsLicor');
-  const selCap = document.getElementById('selNuevoInsumoCapacidad');
-  const selShot = document.getElementById('selNuevoInsumoMedidaShot');
+
   if (n) n.value = '';
-
-  // Sincronizar con las categorías oficiales del menú
-  if (selCat) {
-    const cats = estado.categorias || [];
-    selCat.innerHTML = cats.map(cat => `
-      <option value="${escapeHtml(cat.nombre)}">${cat.icono || '🍽️'} ${escapeHtml(cat.nombre)}</option>
-    `).join('') + '<option value="__nueva__" style="color:#38bdf8; font-weight:700;">➕ + Nueva Categoría...</option>';
-    if (txtCatManual) {
-      txtCatManual.style.display = 'none';
-      txtCatManual.value = '';
-    }
-  }
-
   if (s) s.value = '10';
   if (m) m.value = '3';
   if (cs) cs.value = '1000';
+  if (selUni) selUni.value = 'unidades';
+
+  window.poblarCategoriasInsumo('selectNuevoInsumoCat', 'General', 'nuevo');
+  window.onCambioUnidadInsumo('nuevo');
+
   if (chkL) chkL.checked = false;
-  if (selCap) selCap.value = '750';
-  if (selShot) selShot.value = '30';
-  window.toggleConfigLicorNuevo(false);
+  window.toggleConfigFraccionable('nuevo', false);
+
   const modal = document.getElementById('modalNuevoInsumo');
   if (modal) modal.classList.add('active');
 };
 
-window.verificarCategoriaInsumoManual = function(val) {
-  const txtManual = document.getElementById('txtNuevoInsumoCatManual');
-  if (!txtManual) return;
-  if (val === '__nueva__') {
+window.verificarCategoriaInsumoManual = function(modo) {
+  const isNuevo = modo === 'nuevo';
+  const sel = document.getElementById(isNuevo ? 'selectNuevoInsumoCat' : 'selectEditarInsumoCat');
+  const txtManual = document.getElementById(isNuevo ? 'txtNuevoInsumoCatManual' : 'txtEditarInsumoCatManual');
+  if (!sel || !txtManual) return;
+
+  if (sel.value === '__nueva__') {
     txtManual.style.display = 'block';
     txtManual.focus();
   } else {
@@ -13000,9 +13164,8 @@ window.guardarNuevoInsumo = async function() {
     categoria = (txtManual?.value || '').trim() || 'General';
   } else if (selCat && selCat.value) {
     categoria = selCat.value;
-  } else {
-    categoria = document.getElementById('txtNuevoInsumoCat')?.value?.trim() || 'General';
   }
+
   const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
   const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
   const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 3;
@@ -13011,21 +13174,21 @@ window.guardarNuevoInsumo = async function() {
   if (!nombre) return alert('El nombre del insumo es obligatorio.');
 
   const es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-  let capacidad_ml = 750;
-  let medida_shot_ml = 30;
+  let capacidad_ml = (unidad_medida === 'kg') ? 1000 : 750;
+  let medida_shot_ml = (unidad_medida === 'kg') ? 200 : 30;
 
   if (es_licor) {
     const selCap = document.getElementById('selNuevoInsumoCapacidad');
     const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
     capacidad_ml = (selCap && selCap.value === 'custom') 
-      ? (parseFloat(txtCapCustom?.value) || 750) 
-      : (parseFloat(selCap?.value) || 750);
+      ? (parseFloat(txtCapCustom?.value) || capacidad_ml) 
+      : (parseFloat(selCap?.value) || capacidad_ml);
 
     const selShot = document.getElementById('selNuevoInsumoMedidaShot');
     const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
     medida_shot_ml = (selShot && selShot.value === 'custom') 
-      ? (parseFloat(txtShotCustom?.value) || 30) 
-      : (parseFloat(selShot?.value) || 30);
+      ? (parseFloat(txtShotCustom?.value) || medida_shot_ml) 
+      : (parseFloat(selShot?.value) || medida_shot_ml);
   }
 
   try {
@@ -13049,7 +13212,7 @@ window.guardarNuevoInsumo = async function() {
   }
 };
 
-// CONTROL DE EDICIÓN DE INSUMO / LICOR
+// CONTROL DE EDICIÓN DE INSUMO
 window.abrirModalEditarInsumo = async function(id) {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
@@ -13061,57 +13224,59 @@ window.abrirModalEditarInsumo = async function(id) {
 
     const elId = document.getElementById('txtEditarInsumoId');
     const elNom = document.getElementById('txtEditarInsumoNombre');
-    const elCat = document.getElementById('txtEditarInsumoCat');
     const elUni = document.getElementById('selectEditarInsumoUnidad');
     const elMin = document.getElementById('txtEditarInsumoMin');
     const elCos = document.getElementById('txtEditarInsumoCosto');
 
     if (elId) elId.value = insumo.id;
     if (elNom) elNom.value = insumo.nombre || '';
-    if (elCat) elCat.value = insumo.categoria || 'General';
     if (elUni) elUni.value = insumo.unidad_medida || 'unidades';
     if (elMin) elMin.value = insumo.stock_minimo ?? 3;
     if (elCos) elCos.value = insumo.costo_unitario ?? 0;
 
+    window.poblarCategoriasInsumo('selectEditarInsumoCat', insumo.categoria || 'General', 'editar');
+    window.onCambioUnidadInsumo('editar');
+
     const chkLicor = document.getElementById('chkEditarInsumoEsLicor');
     if (chkLicor) chkLicor.checked = Boolean(insumo.es_licor);
 
-    // Preset capacidad
+    // Configurar capacidad y medida
     const selCap = document.getElementById('selEditarInsumoCapacidad');
     const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
-    const capVal = String(insumo.capacidad_ml || 750);
+    const capVal = String(insumo.capacidad_ml || (insumo.unidad_medida === 'kg' ? 1000 : 750));
     if (selCap) {
-      if (['750', '1000', '1500', '1750', '375'].includes(capVal)) {
+      let optionExists = Array.from(selCap.options).some(o => o.value === capVal);
+      if (optionExists) {
         selCap.value = capVal;
         if (txtCapCustom) txtCapCustom.style.display = 'none';
       } else {
         selCap.value = 'custom';
         if (txtCapCustom) {
           txtCapCustom.style.display = 'block';
-          txtCapCustom.value = insumo.capacidad_ml || 750;
+          txtCapCustom.value = capVal;
         }
       }
     }
 
-    // Preset medida shot
     const selShot = document.getElementById('selEditarInsumoMedidaShot');
     const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
-    const shotVal = String(insumo.medida_shot_ml || 30);
+    const shotVal = String(insumo.medida_shot_ml || (insumo.unidad_medida === 'kg' ? 200 : 30));
     if (selShot) {
-      if (['30', '37', '45', '60'].includes(shotVal)) {
+      let optionExists = Array.from(selShot.options).some(o => o.value === shotVal);
+      if (optionExists) {
         selShot.value = shotVal;
         if (txtShotCustom) txtShotCustom.style.display = 'none';
       } else {
         selShot.value = 'custom';
         if (txtShotCustom) {
           txtShotCustom.style.display = 'block';
-          txtShotCustom.value = insumo.medida_shot_ml || 30;
+          txtShotCustom.value = shotVal;
         }
       }
     }
 
-    toggleConfigLicorEditar(Boolean(insumo.es_licor));
-    actualizarCalculoShotsEditar();
+    window.toggleConfigFraccionable('editar', Boolean(insumo.es_licor));
+    window.actualizarCalculoFraccionable('editar');
 
     document.getElementById('modalEditarInsumo')?.classList.add('active');
   } catch (e) {
@@ -13123,53 +13288,18 @@ window.cerrarModalEditarInsumo = function() {
   document.getElementById('modalEditarInsumo')?.classList.remove('active');
 };
 
-window.toggleConfigLicorEditar = function(checked) {
-  const sec = document.getElementById('seccionConfigLicorEditar');
-  if (sec) sec.style.display = checked ? 'block' : 'none';
-  const selUnidad = document.getElementById('selectEditarInsumoUnidad');
-  if (checked && selUnidad) {
-    selUnidad.value = 'botellas';
-  }
-  actualizarCalculoShotsEditar();
-};
-
-window.actualizarCalculoShotsEditar = function() {
-  const selCap = document.getElementById('selEditarInsumoCapacidad');
-  const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
-  let cap = 750;
-  if (selCap && selCap.value === 'custom') {
-    if (txtCapCustom) txtCapCustom.style.display = 'block';
-    cap = parseFloat(txtCapCustom?.value) || 750;
-  } else {
-    if (txtCapCustom) txtCapCustom.style.display = 'none';
-    cap = parseFloat(selCap?.value) || 750;
-  }
-
-  const selShot = document.getElementById('selEditarInsumoMedidaShot');
-  const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
-  let shot = 30;
-  if (selShot && selShot.value === 'custom') {
-    if (txtShotCustom) txtShotCustom.style.display = 'block';
-    shot = parseFloat(txtShotCustom?.value) || 30;
-  } else {
-    if (txtShotCustom) txtShotCustom.style.display = 'none';
-    shot = parseFloat(selShot?.value) || 30;
-  }
-
-  const costo = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
-  const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
-  const costoShot = rendimiento > 0 ? Math.round(costo / rendimiento) : 0;
-
-  const lblRend = document.getElementById('lblRendimientoShotsEditar');
-  const lblCosto = document.getElementById('lblCostoPorShotEditar');
-  if (lblRend) lblRend.textContent = rendimiento;
-  if (lblCosto) lblCosto.textContent = formatCRC(costoShot);
-};
-
 window.guardarEdicionInsumo = async function() {
   const id = document.getElementById('txtEditarInsumoId')?.value;
   const nombre = (document.getElementById('txtEditarInsumoNombre')?.value || '').trim();
-  const categoria = (document.getElementById('txtEditarInsumoCat')?.value || '').trim() || 'General';
+  const selCat = document.getElementById('selectEditarInsumoCat');
+  const txtManual = document.getElementById('txtEditarInsumoCatManual');
+  let categoria = 'General';
+  if (selCat && selCat.value === '__nueva__') {
+    categoria = (txtManual?.value || '').trim() || 'General';
+  } else if (selCat && selCat.value) {
+    categoria = selCat.value;
+  }
+
   const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
   const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
   const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
@@ -13179,21 +13309,21 @@ window.guardarEdicionInsumo = async function() {
   }
 
   const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-  let capacidad_ml = 750;
-  let medida_shot_ml = 30;
+  let capacidad_ml = (unidad_medida === 'kg') ? 1000 : 750;
+  let medida_shot_ml = (unidad_medida === 'kg') ? 200 : 30;
 
   if (es_licor) {
     const selCap = document.getElementById('selEditarInsumoCapacidad');
     const txtCapCustom = document.getElementById('txtEditarInsumoCapacidadCustom');
     capacidad_ml = (selCap && selCap.value === 'custom') 
-      ? (parseFloat(txtCapCustom?.value) || 750) 
-      : (parseFloat(selCap?.value) || 750);
+      ? (parseFloat(txtCapCustom?.value) || capacidad_ml) 
+      : (parseFloat(selCap?.value) || capacidad_ml);
 
     const selShot = document.getElementById('selEditarInsumoMedidaShot');
     const txtShotCustom = document.getElementById('txtEditarInsumoMedidaShotCustom');
     medida_shot_ml = (selShot && selShot.value === 'custom') 
-      ? (parseFloat(txtShotCustom?.value) || 30) 
-      : (parseFloat(selShot?.value) || 30);
+      ? (parseFloat(txtShotCustom?.value) || medida_shot_ml) 
+      : (parseFloat(selShot?.value) || medida_shot_ml);
   }
 
   try {
@@ -13212,6 +13342,79 @@ window.guardarEdicionInsumo = async function() {
 
     mostrarNotificacionCentro(`✅ Insumo "${nombre}" actualizado correctamente.`, 'success');
     cerrarModalEditarInsumo();
+    cargarInventarioAdmin();
+  } catch (e) {
+    alert('❌ ' + e.message);
+  }
+};
+
+// ELIMINACIÓN DE INSUMO DE BODEGA
+window.confirmarEliminarInsumo = async function(insumoId) {
+  const u = estado.usuarioActual;
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  if (!esAdmin) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '🗑️',
+      titulo: 'Eliminar Insumo de Bodega',
+      subtitulo: 'Acceso Restringido',
+      mensaje: 'Ingresa el PIN de Administrador (1234) para autorizar la eliminación del insumo:'
+    });
+    if (!pin) return;
+    window._pinSupervisorActivo = pin;
+  }
+
+  const insumo = (estado.inventario || []).find(i => i.id === insumoId);
+  if (!insumo) {
+    return alert('Insumo no encontrado');
+  }
+
+  const elId = document.getElementById('txtEliminarInsumoId');
+  const elNom = document.getElementById('lblEliminarInsumoNombre');
+  const elCat = document.getElementById('lblEliminarInsumoCat');
+  const elStock = document.getElementById('lblEliminarInsumoStock');
+  const elCos = document.getElementById('lblEliminarInsumoCosto');
+
+  if (elId) elId.value = insumo.id;
+  if (elNom) elNom.textContent = insumo.nombre;
+  if (elCat) elCat.textContent = `${window.obtenerIconoCategoriaInsumo(insumo.categoria)} ${insumo.categoria || 'General'}`;
+  if (elStock) elStock.textContent = `${insumo.stock_actual} ${insumo.unidad_medida}`;
+  if (elCos) elCos.textContent = formatCRC(insumo.costo_unitario || 0);
+
+  const modal = document.getElementById('modalConfirmarEliminarInsumo');
+  if (modal) modal.classList.add('active');
+};
+
+window.cerrarModalEliminarInsumo = function() {
+  document.getElementById('modalConfirmarEliminarInsumo')?.classList.remove('active');
+};
+
+window.ejecutarEliminarInsumoConfirmado = async function() {
+  const id = document.getElementById('txtEliminarInsumoId')?.value;
+  if (!id) return;
+
+  try {
+    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-user-rol': rol
+    };
+    if (window._pinSupervisorActivo) {
+      headers['x-supervisor-pin'] = window._pinSupervisorActivo;
+    }
+
+    const res = await fetch(`/api/admin/inventario/${id}`, {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({
+        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el insumo');
+
+    mostrarNotificacionCentro(`🗑️ ${data.message || 'Insumo eliminado correctamente'}`, 'success');
+    window.cerrarModalEliminarInsumo();
     cargarInventarioAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
