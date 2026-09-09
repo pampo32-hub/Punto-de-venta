@@ -18222,6 +18222,8 @@ window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
   // Limpiar clases de tema y dimension
   document.body.classList.remove(
     'theme-gold', 'theme-gold-3d', 'beta-tester-gold',
+    'theme-mediterraneo-santorini', 'theme-matcha-zen',
+    'theme-cobre-whiskey', 'theme-pastel-macaron', 'theme-magma-volcanico',
     'theme-plata-titanio', 'theme-carbon-grafito',
     'theme-borgona-imperial', 'theme-cuarzo-minimal',
     'theme-bistro-salvia', 'theme-cafe-caramelo',
@@ -18238,6 +18240,16 @@ window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
   // Aplicar tema
   if (temaKey === 'gold') {
     document.body.classList.add('theme-gold', 'theme-gold-3d', 'beta-tester-gold');
+  } else if (temaKey === 'mediterraneo_santorini') {
+    document.body.classList.add('theme-mediterraneo-santorini');
+  } else if (temaKey === 'matcha_zen') {
+    document.body.classList.add('theme-matcha-zen');
+  } else if (temaKey === 'cobre_whiskey') {
+    document.body.classList.add('theme-cobre-whiskey');
+  } else if (temaKey === 'pastel_macaron') {
+    document.body.classList.add('theme-pastel-macaron');
+  } else if (temaKey === 'magma_volcanico') {
+    document.body.classList.add('theme-magma-volcanico');
   } else if (temaKey === 'plata_titanio') {
     document.body.classList.add('theme-plata-titanio');
   } else if (temaKey === 'carbon_grafito') {

@@ -10230,3 +10230,399 @@ body.theme-cuarzo-minimal .db-pill.active {
   color: #500724 !important;
   font-weight: 800 !important;
 }
+
+
+
+/* =============================================================================
+   5 NUEVOS TEMAS: MEDITERRÁNEO, MATCHA, COBRE, MACARON & MAGMA
+   ============================================================================= */
+
+/* 1. AZUL MEDITERRÁNEO SANTORINI */
+body.theme-mediterraneo-santorini {
+  --primary: #0284C7;
+  --primary-glow: #38BDF8;
+}
+body.theme-mediterraneo-santorini button,
+body.theme-mediterraneo-santorini .btn,
+body.theme-mediterraneo-santorini a.btn,
+body.theme-mediterraneo-santorini [role="button"],
+body.theme-mediterraneo-santorini input[type="button"],
+body.theme-mediterraneo-santorini input[type="submit"] {
+  background: linear-gradient(180deg, #0C1A30 0%, #060D1A 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  border-bottom: 3px solid #030712 !important;
+  border-radius: 10px !important;
+  color: #93C5FD !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+body.theme-mediterraneo-santorini button:hover,
+body.theme-mediterraneo-santorini .btn:hover {
+  border-color: #38BDF8 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(56, 189, 248, 0.35) !important;
+}
+body.theme-mediterraneo-santorini .btn-pri,
+body.theme-mediterraneo-santorini .btn-primary,
+body.theme-mediterraneo-santorini .btn-checkout,
+body.theme-mediterraneo-santorini #btn-checkout,
+body.theme-mediterraneo-santorini #btnPagarModal,
+body.theme-mediterraneo-santorini #btnConfirmarCobro,
+body.theme-mediterraneo-santorini #btnPagarComanda,
+body.theme-mediterraneo-santorini #btnFinalizarCobro,
+body.theme-mediterraneo-santorini #btnCobrar,
+body.theme-mediterraneo-santorini .cobrar,
+body.theme-mediterraneo-santorini .btn-cobro,
+body.theme-mediterraneo-santorini .btn-login-submit,
+body.theme-mediterraneo-santorini #btnLoginSubmit,
+body.theme-mediterraneo-santorini .btn-pay-split,
+body.theme-mediterraneo-santorini .guardar,
+body.theme-mediterraneo-santorini .btn-save-plan,
+body.theme-mediterraneo-santorini #btnGuardarPlano,
+body.theme-mediterraneo-santorini button[type="submit"] {
+  background: linear-gradient(180deg, #38BDF8 0%, #0284C7 50%, #1E40AF 100%) !important;
+  border: 1px solid #BAE6FD !important;
+  border-bottom: 4px solid #172554 !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 5px 16px rgba(2, 132, 199, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+body.theme-mediterraneo-santorini .btn-enviar-cocina,
+body.theme-mediterraneo-santorini #btnEnviarCocina,
+body.theme-mediterraneo-santorini #btnEnviarComandaCocina,
+body.theme-mediterraneo-santorini .btn-cocina,
+body.theme-mediterraneo-santorini .btn-kds-ready {
+  background: linear-gradient(180deg, #EA580C 0%, #C2410C 100%) !important;
+  border: 1px solid #FFEDD5 !important;
+  border-bottom: 4px solid #7C2D12 !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
+body.theme-mediterraneo-santorini .nav-btn.active,
+body.theme-mediterraneo-santorini .tab-btn.active,
+body.theme-mediterraneo-santorini .tab-button.active,
+body.theme-mediterraneo-santorini .cat-chip.active,
+body.theme-mediterraneo-santorini .db-pill.active {
+  background: linear-gradient(180deg, #38BDF8 0%, #0284C7 100%) !important;
+  border: 1px solid #BAE6FD !important;
+  border-bottom: 3px solid #172554 !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
+
+/* 2. MATCHA ZEN & BAMBÚ JAPONÉS */
+body.theme-matcha-zen {
+  --primary: #84CC16;
+  --primary-glow: #A3E635;
+}
+body.theme-matcha-zen button,
+body.theme-matcha-zen .btn,
+body.theme-matcha-zen a.btn,
+body.theme-matcha-zen [role="button"],
+body.theme-matcha-zen input[type="button"],
+body.theme-matcha-zen input[type="submit"] {
+  background: linear-gradient(180deg, #182218 0%, #0E150F 100%) !important;
+  border: 1px solid rgba(163, 230, 53, 0.35) !important;
+  border-bottom: 3px solid #050B05 !important;
+  border-radius: 10px !important;
+  color: #D9F99D !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+body.theme-matcha-zen button:hover,
+body.theme-matcha-zen .btn:hover {
+  border-color: #A3E635 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(163, 230, 53, 0.3) !important;
+}
+body.theme-matcha-zen .btn-pri,
+body.theme-matcha-zen .btn-primary,
+body.theme-matcha-zen .btn-checkout,
+body.theme-matcha-zen #btn-checkout,
+body.theme-matcha-zen #btnPagarModal,
+body.theme-matcha-zen #btnConfirmarCobro,
+body.theme-matcha-zen #btnPagarComanda,
+body.theme-matcha-zen #btnFinalizarCobro,
+body.theme-matcha-zen #btnCobrar,
+body.theme-matcha-zen .cobrar,
+body.theme-matcha-zen .btn-cobro,
+body.theme-matcha-zen .btn-login-submit,
+body.theme-matcha-zen #btnLoginSubmit,
+body.theme-matcha-zen .btn-pay-split,
+body.theme-matcha-zen .guardar,
+body.theme-matcha-zen .btn-save-plan,
+body.theme-matcha-zen #btnGuardarPlano,
+body.theme-matcha-zen button[type="submit"] {
+  background: linear-gradient(180deg, #A3E635 0%, #84CC16 50%, #4D7C0F 100%) !important;
+  border: 1px solid #ECFCCB !important;
+  border-bottom: 4px solid #365314 !important;
+  border-radius: 12px !important;
+  color: #14532D !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 5px 16px rgba(132, 204, 22, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+body.theme-matcha-zen .btn-enviar-cocina,
+body.theme-matcha-zen #btnEnviarCocina,
+body.theme-matcha-zen #btnEnviarComandaCocina,
+body.theme-matcha-zen .btn-cocina,
+body.theme-matcha-zen .btn-kds-ready {
+  background: linear-gradient(180deg, #D97706 0%, #92400E 100%) !important;
+  border: 1px solid #FEF3C7 !important;
+  border-bottom: 4px solid #451A03 !important;
+  color: #FEF3C7 !important;
+  font-weight: 800 !important;
+}
+body.theme-matcha-zen .nav-btn.active,
+body.theme-matcha-zen .tab-btn.active,
+body.theme-matcha-zen .tab-button.active,
+body.theme-matcha-zen .cat-chip.active,
+body.theme-matcha-zen .db-pill.active {
+  background: linear-gradient(180deg, #A3E635 0%, #84CC16 100%) !important;
+  border: 1px solid #ECFCCB !important;
+  border-bottom: 3px solid #365314 !important;
+  color: #14532D !important;
+  font-weight: 800 !important;
+}
+
+/* 3. COBRE AHUMADO & CUERO WHISKEY */
+body.theme-cobre-whiskey {
+  --primary: #EA580C;
+  --primary-glow: #FB923C;
+}
+body.theme-cobre-whiskey button,
+body.theme-cobre-whiskey .btn,
+body.theme-cobre-whiskey a.btn,
+body.theme-cobre-whiskey [role="button"],
+body.theme-cobre-whiskey input[type="button"],
+body.theme-cobre-whiskey input[type="submit"] {
+  background: linear-gradient(180deg, #24140E 0%, #130A07 100%) !important;
+  border: 1px solid rgba(251, 146, 60, 0.4) !important;
+  border-bottom: 3px solid #080302 !important;
+  border-radius: 10px !important;
+  color: #FED7AA !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+body.theme-cobre-whiskey button:hover,
+body.theme-cobre-whiskey .btn:hover {
+  border-color: #FB923C !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(234, 88, 12, 0.35) !important;
+}
+body.theme-cobre-whiskey .btn-pri,
+body.theme-cobre-whiskey .btn-primary,
+body.theme-cobre-whiskey .btn-checkout,
+body.theme-cobre-whiskey #btn-checkout,
+body.theme-cobre-whiskey #btnPagarModal,
+body.theme-cobre-whiskey #btnConfirmarCobro,
+body.theme-cobre-whiskey #btnPagarComanda,
+body.theme-cobre-whiskey #btnFinalizarCobro,
+body.theme-cobre-whiskey #btnCobrar,
+body.theme-cobre-whiskey .cobrar,
+body.theme-cobre-whiskey .btn-cobro,
+body.theme-cobre-whiskey .btn-login-submit,
+body.theme-cobre-whiskey #btnLoginSubmit,
+body.theme-cobre-whiskey .btn-pay-split,
+body.theme-cobre-whiskey .guardar,
+body.theme-cobre-whiskey .btn-save-plan,
+body.theme-cobre-whiskey #btnGuardarPlano,
+body.theme-cobre-whiskey button[type="submit"] {
+  background: linear-gradient(180deg, #FB923C 0%, #EA580C 50%, #9A3412 100%) !important;
+  border: 1px solid #FFEDD5 !important;
+  border-bottom: 4px solid #7C2D12 !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 5px 16px rgba(234, 88, 12, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.7) !important;
+}
+body.theme-cobre-whiskey .btn-enviar-cocina,
+body.theme-cobre-whiskey #btnEnviarCocina,
+body.theme-cobre-whiskey #btnEnviarComandaCocina,
+body.theme-cobre-whiskey .btn-cocina,
+body.theme-cobre-whiskey .btn-kds-ready {
+  background: linear-gradient(180deg, #451A03 0%, #270F03 100%) !important;
+  border: 1px solid #EA580C !important;
+  border-bottom: 4px solid #140701 !important;
+  color: #FED7AA !important;
+  font-weight: 800 !important;
+}
+body.theme-cobre-whiskey .nav-btn.active,
+body.theme-cobre-whiskey .tab-btn.active,
+body.theme-cobre-whiskey .tab-button.active,
+body.theme-cobre-whiskey .cat-chip.active,
+body.theme-cobre-whiskey .db-pill.active {
+  background: linear-gradient(180deg, #FB923C 0%, #EA580C 100%) !important;
+  border: 1px solid #FFEDD5 !important;
+  border-bottom: 3px solid #7C2D12 !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
+
+/* 4. PASTEL MACARON & VAINILLA */
+body.theme-pastel-macaron {
+  --primary: #C084FC;
+  --primary-glow: #E879F9;
+}
+body.theme-pastel-macaron button,
+body.theme-pastel-macaron .btn,
+body.theme-pastel-macaron a.btn,
+body.theme-pastel-macaron [role="button"],
+body.theme-pastel-macaron input[type="button"],
+body.theme-pastel-macaron input[type="submit"] {
+  background: linear-gradient(180deg, #231929 0%, #130D18 100%) !important;
+  border: 1px solid rgba(232, 121, 249, 0.4) !important;
+  border-bottom: 3px solid #08030C !important;
+  border-radius: 10px !important;
+  color: #F5D0FE !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+body.theme-pastel-macaron button:hover,
+body.theme-pastel-macaron .btn:hover {
+  border-color: #E879F9 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(232, 121, 249, 0.35) !important;
+}
+body.theme-pastel-macaron .btn-pri,
+body.theme-pastel-macaron .btn-primary,
+body.theme-pastel-macaron .btn-checkout,
+body.theme-pastel-macaron #btn-checkout,
+body.theme-pastel-macaron #btnPagarModal,
+body.theme-pastel-macaron #btnConfirmarCobro,
+body.theme-pastel-macaron #btnPagarComanda,
+body.theme-pastel-macaron #btnFinalizarCobro,
+body.theme-pastel-macaron #btnCobrar,
+body.theme-pastel-macaron .cobrar,
+body.theme-pastel-macaron .btn-cobro,
+body.theme-pastel-macaron .btn-login-submit,
+body.theme-pastel-macaron #btnLoginSubmit,
+body.theme-pastel-macaron .btn-pay-split,
+body.theme-pastel-macaron .guardar,
+body.theme-pastel-macaron .btn-save-plan,
+body.theme-pastel-macaron #btnGuardarPlano,
+body.theme-pastel-macaron button[type="submit"] {
+  background: linear-gradient(180deg, #E879F9 0%, #C084FC 50%, #9333EA 100%) !important;
+  border: 1px solid #FAE8FF !important;
+  border-bottom: 4px solid #6B21A8 !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 5px 16px rgba(192, 132, 252, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+body.theme-pastel-macaron .btn-enviar-cocina,
+body.theme-pastel-macaron #btnEnviarCocina,
+body.theme-pastel-macaron #btnEnviarComandaCocina,
+body.theme-pastel-macaron .btn-cocina,
+body.theme-pastel-macaron .btn-kds-ready {
+  background: linear-gradient(180deg, #FBBF24 0%, #D97706 100%) !important;
+  border: 1px solid #FEF3C7 !important;
+  border-bottom: 4px solid #78350F !important;
+  color: #451A03 !important;
+  font-weight: 800 !important;
+}
+body.theme-pastel-macaron .nav-btn.active,
+body.theme-pastel-macaron .tab-btn.active,
+body.theme-pastel-macaron .tab-button.active,
+body.theme-pastel-macaron .cat-chip.active,
+body.theme-pastel-macaron .db-pill.active {
+  background: linear-gradient(180deg, #E879F9 0%, #C084FC 100%) !important;
+  border: 1px solid #FAE8FF !important;
+  border-bottom: 3px solid #6B21A8 !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
+
+/* 5. MAGMA VOLCÁNICO & CARBÓN MATE */
+body.theme-magma-volcanico {
+  --primary: #FF5722;
+  --primary-glow: #FF7043;
+}
+body.theme-magma-volcanico button,
+body.theme-magma-volcanico .btn,
+body.theme-magma-volcanico a.btn,
+body.theme-magma-volcanico [role="button"],
+body.theme-magma-volcanico input[type="button"],
+body.theme-magma-volcanico input[type="submit"] {
+  background: linear-gradient(180deg, #1C100D 0%, #0D0604 100%) !important;
+  border: 1px solid rgba(255, 87, 34, 0.4) !important;
+  border-bottom: 3px solid #000000 !important;
+  border-radius: 10px !important;
+  color: #FFCCBC !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+body.theme-magma-volcanico button:hover,
+body.theme-magma-volcanico .btn:hover {
+  border-color: #FF7043 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(255, 87, 34, 0.4) !important;
+}
+body.theme-magma-volcanico .btn-pri,
+body.theme-magma-volcanico .btn-primary,
+body.theme-magma-volcanico .btn-checkout,
+body.theme-magma-volcanico #btn-checkout,
+body.theme-magma-volcanico #btnPagarModal,
+body.theme-magma-volcanico #btnConfirmarCobro,
+body.theme-magma-volcanico #btnPagarComanda,
+body.theme-magma-volcanico #btnFinalizarCobro,
+body.theme-magma-volcanico #btnCobrar,
+body.theme-magma-volcanico .cobrar,
+body.theme-magma-volcanico .btn-cobro,
+body.theme-magma-volcanico .btn-login-submit,
+body.theme-magma-volcanico #btnLoginSubmit,
+body.theme-magma-volcanico .btn-pay-split,
+body.theme-magma-volcanico .guardar,
+body.theme-magma-volcanico .btn-save-plan,
+body.theme-magma-volcanico #btnGuardarPlano,
+body.theme-magma-volcanico button[type="submit"] {
+  background: linear-gradient(180deg, #FF7043 0%, #FF5722 50%, #C2410C 100%) !important;
+  border: 1px solid #FFCC80 !important;
+  border-bottom: 4px solid #7F1D1D !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 5px 16px rgba(255, 87, 34, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+body.theme-magma-volcanico .btn-enviar-cocina,
+body.theme-magma-volcanico #btnEnviarCocina,
+body.theme-magma-volcanico #btnEnviarComandaCocina,
+body.theme-magma-volcanico .btn-cocina,
+body.theme-magma-volcanico .btn-kds-ready {
+  background: linear-gradient(180deg, #1C1917 0%, #0C0A09 100%) !important;
+  border: 1px solid #FF5722 !important;
+  border-bottom: 4px solid #000000 !important;
+  color: #FED7AA !important;
+  font-weight: 800 !important;
+}
+body.theme-magma-volcanico .nav-btn.active,
+body.theme-magma-volcanico .tab-btn.active,
+body.theme-magma-volcanico .tab-button.active,
+body.theme-magma-volcanico .cat-chip.active,
+body.theme-magma-volcanico .db-pill.active {
+  background: linear-gradient(180deg, #FF7043 0%, #FF5722 100%) !important;
+  border: 1px solid #FFCC80 !important;
+  border-bottom: 3px solid #7F1D1D !important;
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}

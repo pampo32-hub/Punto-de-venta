@@ -5350,7 +5350,7 @@
      MODAL DE SELECCIÓN DE ESTILOS DE BOTONES Y TEMAS UI (ADMINISTRADOR)
      ============================================================================= -->
 <div class="modal" id="modalSelectorEstilosBotones" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(6px);">
-  <div class="modal-content" style="background:#0F172A; border:1px solid #334155; border-radius:18px; width:95%; max-width:980px; max-height:92vh; overflow-y:auto; box-shadow:0 25px 50px -12px rgba(0,0,0,0.7); padding:24px; color:#F8FAFC;">
+  <div class="modal-content" style="background:#0F172A; border:1px solid #334155; border-radius:18px; width:95%; max-width:1050px; max-height:92vh; overflow-y:auto; box-shadow:0 25px 50px -12px rgba(0,0,0,0.7); padding:24px; color:#F8FAFC;">
     
     <!-- Encabezado del Modal con Selector 2D / 3D -->
     <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #1E293B; padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -5359,7 +5359,7 @@
           🎨 Personalizador de Estilo de Botones y Tema
         </h2>
         <p style="margin:4px 0 0 0; font-size:0.85rem; color:#94A3B8;">
-          Elige la estética visual y la dimensión táctil de tu restaurante.
+          Elige la estética visual y la dimensión táctil de tu restaurante (16 estilos exclusivos).
         </p>
       </div>
 
@@ -5378,23 +5378,262 @@
       </div>
     </div>
 
-    <!-- Grid de Estilos (11 Temas) -->
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-bottom:24px;" id="gridSelectorTemasBotones">
+    <!-- Grid de Estilos (16 Temas) -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; margin-bottom:24px;" id="gridSelectorTemasBotones">
       
       <!-- 1. Oro Champagne -->
-      <div class="theme-option-card" data-theme="gold" onclick="seleccionarCardTema('gold')" style="background:#18181B; border:2px solid #27272A; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <span style="font-weight:800; font-size:0.95rem; color:#FDE047;">👑 Oro Champagne & Noir</span>
+      <div class="theme-option-card" data-theme="gold" onclick="seleccionarCardTema('gold')" style="background:#18181B; border:2px solid #27272A; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#FDE047;">👑 Oro Champagne & Noir</span>
           <span class="badge-theme-active" style="display:none; background:#D4AF37; color:#18181B; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
         </div>
-        <p style="font-size:0.78rem; color:#A1A1AA; margin-bottom:12px; min-height:34px;">
-          Lujo y alta gama con relieves dorados, biseles de luz y fondos Noir Imperial.
+        <p style="font-size:0.75rem; color:#A1A1AA; margin-bottom:10px; min-height:30px;">
+          Lujo y alta gama con relieves dorados y fondo Noir.
         </p>
-        <div style="display:flex; gap:8px;">
-          <div style="flex:1; background:linear-gradient(180deg,#F5D77F 0%,#D4AF37 50%,#AA820A 100%); border:1px solid #FFF1B0; border-radius:8px; padding:6px; font-size:0.75rem; font-weight:800; color:#261B02; text-align:center;">Cobrar ₡</div>
-          <div style="flex:1; background:linear-gradient(180deg,#27272A 0%,#18181B 100%); border:1px solid #D4AF37; border-radius:8px; padding:6px; font-size:0.75rem; font-weight:700; color:#FEF08A; text-align:center;">🍳 Cocina</div>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#F5D77F 0%,#D4AF37 50%,#AA820A 100%); border:1px solid #FFF1B0; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#261B02; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#27272A 0%,#18181B 100%); border:1px solid #D4AF37; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FEF08A; text-align:center;">🍳 Cocina</div>
         </div>
       </div>
+
+      <!-- 2. Azul Mediterráneo (Nuevo) -->
+      <div class="theme-option-card" data-theme="mediterraneo_santorini" onclick="seleccionarCardTema('mediterraneo_santorini')" style="background:#0C1A30; border:2px solid #1E3A8A; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#38BDF8;">🌊 Mediterráneo Santorini</span>
+          <span class="badge-theme-active" style="display:none; background:#0284C7; color:#FFF; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#93C5FD; margin-bottom:10px; min-height:30px;">
+          Azul cobalto egeo con terracota soleada y frescura marina.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#38BDF8 0%,#0284C7 50%,#1E40AF 100%); border:1px solid #BAE6FD; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#FFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#EA580C 0%,#C2410C 100%); border:1px solid #FFEDD5; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FFF; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 3. Matcha Zen & Bambú (Nuevo) -->
+      <div class="theme-option-card" data-theme="matcha_zen" onclick="seleccionarCardTema('matcha_zen')" style="background:#131C14; border:2px solid #365314; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#A3E635;">🍵 Matcha Zen & Bambú</span>
+          <span class="badge-theme-active" style="display:none; background:#84CC16; color:#14532D; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#D9F99D; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Verde matcha relajante, bambú cálido y estética zen japonesa.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#A3E635 0%,#84CC16 50%,#4D7C0F 100%); border:1px solid #ECFCCB; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#14532D; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#D97706 0%,#92400E 100%); border:1px solid #FEF3C7; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FEF3C7; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 4. Cobre Ahumado & Whiskey (Nuevo) -->
+      <div class="theme-option-card" data-theme="cobre_whiskey" onclick="seleccionarCardTema('cobre_whiskey')" style="background:#1F100B; border:2px solid #7C2D12; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#FB923C;">🔥 Cobre & Cuero Whiskey</span>
+          <span class="badge-theme-active" style="display:none; background:#EA580C; color:#FFF; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#FED7AA; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Cobre metálico brillante, cuero tabaco añejo y bar speakeasy.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#FB923C 0%,#EA580C 50%,#9A3412 100%); border:1px solid #FFEDD5; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#FFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#451A03 0%,#270F03 100%); border:1px solid #EA580C; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FED7AA; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 5. Pastel Macaron & Vainilla (Nuevo) -->
+      <div class="theme-option-card" data-theme="pastel_macaron" onclick="seleccionarCardTema('pastel_macaron')" style="background:#1E1622; border:2px solid #581C87; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#E879F9;">🍦 Pastel Macaron & Vainilla</span>
+          <span class="badge-theme-active" style="display:none; background:#C084FC; color:#3B0764; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#F5D0FE; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Lavanda francesa dulce, crema vainilla y estética parisina.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#E879F9 0%,#C084FC 50%,#9333EA 100%); border:1px solid #FAE8FF; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#FFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#FBBF24 0%,#D97706 100%); border:1px solid #FEF3C7; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#451A03; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 6. Magma Volcánico & Carbón (Nuevo) -->
+      <div class="theme-option-card" data-theme="magma_volcanico" onclick="seleccionarCardTema('magma_volcanico')" style="background:#180B08; border:2px solid #7F1D1D; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#FF5722;">⚡ Magma Volcánico & Grill</span>
+          <span class="badge-theme-active" style="display:none; background:#FF5722; color:#FFF; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#FFCCBC; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Lava incandescente de alta energía, carbón mate y dinamismo.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#FF7043 0%,#FF5722 50%,#C2410C 100%); border:1px solid #FFCC80; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#FFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#1C1917 0%,#0C0A09 100%); border:1px solid #FF5722; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FED7AA; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 7. Plata Titanio & Platino -->
+      <div class="theme-option-card" data-theme="plata_titanio" onclick="seleccionarCardTema('plata_titanio')" style="background:#1E222A; border:2px solid #334155; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#E2E8F0;">🪙 Plata Titanio & Platino</span>
+          <span class="badge-theme-active" style="display:none; background:#E2E8F0; color:#0F172A; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#94A3B8; margin-bottom:10px; min-height:30px;">
+          Platino brillante cepillado y base gris titanio ultra pulcro.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#FFFFFF 0%,#E2E8F0 50%,#94A3B8 100%); border:1px solid #FFFFFF; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#0F172A; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#1E293B 0%,#0F172A 100%); border:1px solid #E2E8F0; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#F1F5F9; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 8. Carbón Grafito & Acero -->
+      <div class="theme-option-card" data-theme="carbon_grafito" onclick="seleccionarCardTema('carbon_grafito')" style="background:#121316; border:2px solid #27272A; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#CBD5E1;">🌫️ Carbón Grafito & Acero</span>
+          <span class="badge-theme-active" style="display:none; background:#64748B; color:#FFFFFF; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#9CA3AF; margin-bottom:10px; min-height:30px;">
+          Minimalismo industrial con acero ahumado y carbón mate.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#64748B 0%,#475569 50%,#334155 100%); border:1px solid #94A3B8; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#F8FAFC; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#18181B 0%,#09090B 100%); border:1px solid #64748B; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#CBD5E1; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 9. Borgoña & Oro Rosa -->
+      <div class="theme-option-card" data-theme="borgona_imperial" onclick="seleccionarCardTema('borgona_imperial')" style="background:#1A080E; border:2px solid #4C0519; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#FB7185;">🍷 Borgoña & Oro Rosa</span>
+          <span class="badge-theme-active" style="display:none; background:#E11D48; color:#FFFFFF; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#FECDD3; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Vino borgoña aterciopelado con reflejos de oro rosa gourmet.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#F43F5E 0%,#BE123C 50%,#881337 100%); border:1px solid #FFE4E6; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#FFFDFD; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#2D0C14 0%,#150308 100%); border:1px solid #FB7185; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FECDD3; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 10. Cuarzo & Mármol -->
+      <div class="theme-option-card" data-theme="cuarzo_minimal" onclick="seleccionarCardTema('cuarzo_minimal')" style="background:#181619; border:2px solid #3E2430; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#F472B6;">🌸 Cuarzo & Mármol Chic</span>
+          <span class="badge-theme-active" style="display:none; background:#F472B6; color:#181619; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#FBCFE8; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Cuarzo rosa minimalista y arena perlada boutique.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#FBCFE8 0%,#F472B6 50%,#DB2777 100%); border:1px solid #FFF1F2; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#500724; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#261922 0%,#130A10 100%); border:1px solid #F472B6; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FCE7F3; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 11. Bistro Salvia & Terracota -->
+      <div class="theme-option-card" data-theme="bistro_salvia" onclick="seleccionarCardTema('bistro_salvia')" style="background:#1E272C; border:2px solid #2F3E46; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#F4A261;">🍂 Bistro Salvia & Terracota</span>
+          <span class="badge-theme-active" style="display:none; background:#F4A261; color:#1E272C; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#CAD2C5; margin-bottom:10px; min-height:30px;">
+          Inspiración botánica nórdica con terracota cálido y salvia.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#F4A261 0%,#E07A5F 50%,#C85A32 100%); border:1px solid #FFE3D8; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#FFFFFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#81B29A 0%,#588157 100%); border:1px solid #A3B18A; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#E9F5ED; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 12. Café Espresso & Caramelo -->
+      <div class="theme-option-card" data-theme="cafe_caramelo" onclick="seleccionarCardTema('cafe_caramelo')" style="background:#1B120C; border:2px solid #3E2723; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#FBBF24;">☕ Café Espresso & Caramelo</span>
+          <span class="badge-theme-active" style="display:none; background:#D97706; color:#FFFBEB; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#D7CCC8; margin-bottom:10px; min-height:30px;">
+          Café de especialidad con caramelo ámbar y espresso noir.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#FBBF24 0%,#D97706 50%,#B45309 100%); border:1px solid #FEF3C7; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#451A03; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#3E2723 0%,#271410 100%); border:1px solid #D97706; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FEF3C7; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 13. Neón Zafiro & Cian -->
+      <div class="theme-option-card" data-theme="neon" onclick="seleccionarCardTema('neon')" style="background:#0F172A; border:2px solid #1E293B; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#38BDF8;">💎 Neón Zafiro & Cian</span>
+          <span class="badge-theme-active" style="display:none; background:#38BDF8; color:#0F172A; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#94A3B8; margin-bottom:10px; min-height:30px;">
+          Futurista con efecto glassmorphism y biseles cian.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#38BDF8 0%,#0284C7 50%,#0369A1 100%); border:1px solid #BAE6FD; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#082F49; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#1E293B 0%,#0F172A 100%); border:1px solid #38BDF8; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#7DD3FC; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 14. Esmeralda & Menta -->
+      <div class="theme-option-card" data-theme="emerald" onclick="seleccionarCardTema('emerald')" style="background:#062319; border:2px solid #064E3B; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#34D399;">🌿 Esmeralda & Menta</span>
+          <span class="badge-theme-active" style="display:none; background:#34D399; color:#062319; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#A7F3D0; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Diseño fresco y natural con gradientes verde bosque.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#6EE7B7 0%,#10B981 50%,#047857 100%); border:1px solid #D1FAE5; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#022C22; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#064E3B 0%,#022C22 100%); border:1px solid #34D399; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#A7F3D0; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 15. Amatista & Velvet -->
+      <div class="theme-option-card" data-theme="amethyst" onclick="seleccionarCardTema('amethyst')" style="background:#1E1035; border:2px solid #3B0764; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#C084FC;">⚡ Amatista & Velvet</span>
+          <span class="badge-theme-active" style="display:none; background:#C084FC; color:#1E1035; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#DDD6FE; opacity:0.85; margin-bottom:10px; min-height:30px;">
+          Elegancia moderna con violeta eléctrico y reflejos lila.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:linear-gradient(180deg,#C084FC 0%,#8B5CF6 50%,#6D28D9 100%); border:1px solid #EDE9FE; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:800; color:#2E1065; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#3B0764 0%,#1E1035 100%); border:1px solid #C084FC; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#E9D5FF; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- 16. Clásico Estándar -->
+      <div class="theme-option-card" data-theme="standard" onclick="seleccionarCardTema('standard')" style="background:#1E293B; border:2px solid #334155; border-radius:14px; padding:14px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; font-size:0.92rem; color:#CBD5E1;">⚪ Clásico Estándar</span>
+          <span class="badge-theme-active" style="display:none; background:#94A3B8; color:#0F172A; font-size:0.68rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.75rem; color:#94A3B8; margin-bottom:10px; min-height:30px;">
+          Interfaz clásica original del sistema, limpia y sobria.
+        </p>
+        <div style="display:flex; gap:6px;">
+          <div style="flex:1; background:#0284C7; border:none; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:700; color:#FFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:#334155; border:1px solid #475569; border-radius:8px; padding:5px; font-size:0.72rem; font-weight:600; color:#CBD5E1; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Botones de Acción del Modal -->
+    <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #1E293B; padding-top:16px;">
+      <button type="button" onclick="cerrarModalSelectorEstilosBotones()" style="background:#334155; border:none; color:#E2E8F0; padding:10px 18px; border-radius:10px; font-weight:700; cursor:pointer;">
+        Cancelar
+      </button>
+      <button type="button" onclick="confirmarGuardarTemaSeleccionado()" style="background:linear-gradient(135deg,#10B981,#059669); border:none; color:#FFF; padding:10px 22px; border-radius:10px; font-weight:800; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.35);">
+        💾 Guardar para este Restaurante
+      </button>
+    </div>
+  </div>
+</div>
 
       <!-- 2. Plata Titanio & Platino Puro (Nuevo) -->
       <div class="theme-option-card" data-theme="plata_titanio" onclick="seleccionarCardTema('plata_titanio')" style="background:#1E222A; border:2px solid #334155; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
