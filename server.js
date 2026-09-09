@@ -3755,7 +3755,7 @@ async function recalcularTotalesOrden(ordenId) {
   );
 
   const rows = await dbAll(
-    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
+    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );
 
@@ -7054,7 +7054,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         AVG(CAST(d.precio_unitario AS DOUBLE PRECISION)) AS precio_promedio
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
-      LEFT JOIN Productos p ON d.producto_id = p.id
+      LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT))
       LEFT JOIN Categorias c ON (p.categoria_id = c.id OR (p.categoria_id IS NULL AND (LOWER(c.nombre) LIKE '%cerveza%' OR c.id = 4)))
       WHERE o.estado = 'pagada'
         AND d.estado_comanda != 'anulado'
@@ -7065,17 +7065,18 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const paramsVentas = [desde, hasta, nid, nid];
 
     if (producto_id) {
-      sqlVentas += ' AND (d.producto_id = ? OR CAST(d.producto_id AS TEXT) = ?)';
-      paramsVentas.push(isNaN(Number(producto_id)) ? producto_id : Number(producto_id));
+      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ?)';
       paramsVentas.push(String(producto_id));
+      paramsVentas.push('%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%');
     }
     if (categoria_id && categoria_id !== 'todas') {
-      sqlVentas += ' AND (p.categoria_id = ? OR (p.categoria_id IS NULL AND LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (\'4\', 4, \'8\', 8, 150, 158, 166, 174, 182)))';
-      paramsVentas.push(Number(categoria_id));
-      paramsVentas.push(Number(categoria_id));
+      const catNum = Number(categoria_id);
+      sqlVentas += ' AND (p.categoria_id = ? OR (p.categoria_id IS NULL AND LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (4, 8, 150, 158, 166, 174, 182)))';
+      paramsVentas.push(catNum);
+      paramsVentas.push(catNum);
     }
 
-    sqlVentas += ' GROUP BY COALESCE(p.id, CASE WHEN LOWER(d.nombre_producto) LIKE \'%balde%\' THEN \'balde_nacional\' ELSE d.producto_id END) ORDER BY total_ingresos DESC';
+    sqlVentas += ' GROUP BY d.producto_id, d.nombre_producto ORDER BY total_ingresos DESC';
 
     const ventasRows = await dbAll(sqlVentas, paramsVentas);
 
@@ -7159,12 +7160,12 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
           SELECT d.notas, d.cantidad, d.nombre_producto
           FROM DetalleOrden d
           JOIN Ordenes o ON d.orden_id = o.id
-          WHERE (d.producto_id = ? OR CAST(d.producto_id AS TEXT) = ? OR LOWER(d.nombre_producto) LIKE '%balde%')
+          WHERE (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE '%balde%')
             AND o.estado = 'pagada'
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-        `, [isNaN(Number(pId)) ? pId : Number(pId), String(pId), desde, hasta]);
+        `, [String(pId || ''), desde, hasta]);
 
         const desgloseCervezas = {};
         let totalCervezasContadas = 0;
@@ -7262,7 +7263,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
           FROM DetalleOrden d
           JOIN Ordenes o ON d.orden_id = o.id
           LEFT JOIN Mesas m ON o.mesa_id = m.id
-          WHERE d.producto_id = ?
+          WHERE (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ?)
             AND o.estado = 'pagada'
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
@@ -7270,7 +7271,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
           ORDER BY fecha_hora DESC
           LIMIT 100
-        `, [Number(producto_id), desde, hasta, nid, nid]);
+        `, [String(producto_id), '%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%', desde, hasta, nid, nid]);
       }
 
       productosDetallados.push({
@@ -7324,8 +7325,9 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     `;
     const paramsUltimas = [desde, hasta, nid, nid];
     if (producto_id) {
-      sqlUltimasOrdenes += ' AND EXISTS (SELECT 1 FROM DetalleOrden d2 WHERE d2.orden_id = o.id AND d2.producto_id = ? AND d2.estado_comanda != \'anulado\')';
-      paramsUltimas.push(Number(producto_id));
+      sqlUltimasOrdenes += ' AND EXISTS (SELECT 1 FROM DetalleOrden d2 WHERE d2.orden_id = o.id AND (CAST(d2.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d2.nombre_producto) LIKE ?) AND d2.estado_comanda != \'anulado\')';
+      paramsUltimas.push(String(producto_id));
+      paramsUltimas.push('%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%');
     }
     sqlUltimasOrdenes += ' ORDER BY COALESCE(o.fecha_cierre, o.fecha_apertura) DESC, o.id DESC LIMIT 150';
 
@@ -7352,7 +7354,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             d.curso,
             d.destino
           FROM DetalleOrden d
-          LEFT JOIN Productos p ON d.producto_id = p.id
+          LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT))
           WHERE d.orden_id IN (${placeholders}) AND d.estado_comanda != 'anulado'
         `, orderIds),
         dbAll(`
