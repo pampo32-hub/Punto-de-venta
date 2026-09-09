@@ -3103,9 +3103,9 @@ textarea:focus, select:focus, input:focus {
 
 .pay-methods-tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 680px) {
@@ -3115,28 +3115,193 @@ textarea:focus, select:focus, input:focus {
 }
 
 .pay-method-tab {
-  background: #1f2937;
-  border: 1px solid var(--border-light);
-  color: var(--text-muted);
-  padding: 10px 4px;
-  border-radius: 8px;
-  font-size: 0.74rem;
-  font-weight: 800;
+  background: #1e293b;
+  border: 1.5px solid #334155;
+  color: #94a3b8;
+  padding: 12px 6px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
   cursor: pointer;
   text-align: center;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .pay-method-tab:hover {
-  background: #374151;
-  color: #fff;
+  background: #334155;
+  border-color: #64748b;
+  color: #f8fafc;
+  transform: translateY(-1px);
 }
 
 .pay-method-tab.active {
-  background: var(--primary);
-  border-color: var(--primary-glow);
-  color: white;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  border: 2px solid #38bdf8 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.75), 0 6px 14px rgba(2, 132, 199, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.6) !important;
+  position: relative;
+  z-index: 2;
+}
+
+.pay-method-tab.active .kbd-sub-shortcut {
+  background: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Iluminación de pestañas de pago según el tema activo */
+body.theme-gold .pay-method-tab.active,
+body.beta-tester-gold .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFF1B0 0%, #F5D77F 40%, #D4AF37 80%, #AA820A 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #684F05 !important;
+  color: #261B02 !important;
+  box-shadow: 0 0 25px rgba(253, 224, 71, 0.9), 0 8px 18px rgba(0, 0, 0, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+body.theme-gold .pay-method-tab.active .kbd-sub-shortcut,
+body.beta-tester-gold .pay-method-tab.active .kbd-sub-shortcut {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-color: #684F05 !important;
+  color: #261B02 !important;
+}
+
+body.theme-crema-marfil .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FBF6EE 35%, #F5EBE1 70%, #EADDCF 100%) !important;
+  border: 2px solid #D4BFA9 !important;
+  border-bottom: 4px solid #BFA993 !important;
+  color: #382A1E !important;
+  box-shadow: 0 0 25px rgba(212, 191, 169, 0.95), 0 8px 18px rgba(120, 90, 60, 0.35), inset 0 1px 2px #FFFFFF !important;
+}
+body.theme-crema-marfil .pay-method-tab.active .kbd-sub-shortcut {
+  background: rgba(56, 42, 30, 0.15) !important;
+  border-color: #BFA993 !important;
+  color: #382A1E !important;
+}
+
+body.theme-mediterraneo-santorini .pay-method-tab.active {
+  background: linear-gradient(180deg, #E0F2FE 0%, #38BDF8 40%, #0284C7 80%, #1E40AF 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #172554 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.9), 0 8px 18px rgba(2, 132, 199, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-matcha-zen .pay-method-tab.active {
+  background: linear-gradient(180deg, #F7FEE7 0%, #A3E635 40%, #84CC16 80%, #4D7C0F 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #365314 !important;
+  color: #14532D !important;
+  box-shadow: 0 0 25px rgba(163, 230, 53, 0.9), 0 8px 18px rgba(77, 124, 15, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-cobre-whiskey .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFF7ED 0%, #FB923C 40%, #EA580C 80%, #9A3412 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #7C2D12 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 25px rgba(251, 146, 60, 0.9), 0 8px 18px rgba(154, 52, 18, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-pastel-macaron .pay-method-tab.active {
+  background: linear-gradient(180deg, #FDF4FF 0%, #F5D0FE 30%, #E879F9 70%, #9333EA 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #6B21A8 !important;
+  color: #3B0764 !important;
+  box-shadow: 0 0 25px rgba(232, 121, 249, 0.9), 0 8px 18px rgba(147, 51, 234, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-magma-volcanico .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFF7ED 0%, #FF7043 40%, #FF5722 80%, #C2410C 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #7F1D1D !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 28px rgba(255, 87, 34, 0.95), 0 8px 18px rgba(194, 65, 12, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-plata-titanio .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F1F5F9 40%, #E2E8F0 75%, #94A3B8 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #475569 !important;
+  color: #0F172A !important;
+  box-shadow: 0 0 25px rgba(226, 232, 240, 0.95), 0 8px 18px rgba(71, 85, 105, 0.5), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-carbon-grafito .pay-method-tab.active {
+  background: linear-gradient(180deg, #F8FAFC 0%, #94A3B8 35%, #64748B 70%, #334155 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #1E293B !important;
+  color: #0F172A !important;
+  box-shadow: 0 0 25px rgba(148, 163, 184, 0.9), 0 8px 18px rgba(30, 41, 59, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-borgona-imperial .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFF1F2 0%, #FB7185 40%, #E11D48 75%, #881337 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #4C0519 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 25px rgba(244, 63, 94, 0.9), 0 8px 18px rgba(136, 19, 55, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-cuarzo-minimal .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFF5F7 0%, #FBCFE8 40%, #F472B6 75%, #DB2777 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #831843 !important;
+  color: #500724 !important;
+  box-shadow: 0 0 25px rgba(244, 114, 182, 0.9), 0 8px 18px rgba(131, 24, 67, 0.5), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-bistro-salvia .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFF3EB 0%, #F4A261 40%, #E07A5F 75%, #C85A32 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #8B3A1C !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 25px rgba(244, 162, 97, 0.9), 0 8px 18px rgba(139, 58, 28, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-cafe-caramelo .pay-method-tab.active {
+  background: linear-gradient(180deg, #FFFBEB 0%, #FDE68A 35%, #FBBF24 70%, #B45309 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #78350F !important;
+  color: #451A03 !important;
+  box-shadow: 0 0 25px rgba(251, 191, 36, 0.9), 0 8px 18px rgba(120, 53, 15, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-neon .pay-method-tab.active,
+body.theme-neon-3d .pay-method-tab.active {
+  background: linear-gradient(180deg, #F0F9FF 0%, #7DD3FC 35%, #38BDF8 70%, #0369A1 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #0C4A6E !important;
+  color: #082F49 !important;
+  box-shadow: 0 0 28px rgba(56, 189, 248, 0.95), 0 8px 18px rgba(2, 132, 199, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-emerald .pay-method-tab.active,
+body.theme-emerald-3d .pay-method-tab.active {
+  background: linear-gradient(180deg, #ECFDF5 0%, #A7F3D0 35%, #34D399 70%, #047857 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #064E3B !important;
+  color: #022C22 !important;
+  box-shadow: 0 0 28px rgba(52, 211, 153, 0.95), 0 8px 18px rgba(6, 78, 59, 0.6), inset 0 1px 2px #FFFFFF !important;
+}
+
+body.theme-amethyst .pay-method-tab.active,
+body.theme-amethyst-3d .pay-method-tab.active {
+  background: linear-gradient(180deg, #FAF5FF 0%, #E9D5FF 35%, #C084FC 70%, #6D28D9 100%) !important;
+  border: 2px solid #FFFFFF !important;
+  border-bottom: 4px solid #4C1D95 !important;
+  color: #2E1065 !important;
+  box-shadow: 0 0 28px rgba(192, 132, 252, 0.95), 0 8px 18px rgba(76, 29, 149, 0.6), inset 0 1px 2px #FFFFFF !important;
 }
 
 .pay-panel {
