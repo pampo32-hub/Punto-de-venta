@@ -8702,9 +8702,22 @@ window.validarPinAdminManual = async function() {
   }
 };
 
+// =========================================================================
+// SISTEMA DE ATAJOS DE TECLADO RÁPIDOS (HOTKEYS) POS
+// =========================================================================
+window.seleccionarMetodoCobro = function(metodo) {
+  const tab = document.querySelector(`.pay-method-tab[data-method="${metodo}"]`);
+  if (tab) {
+    tab.click();
+    return true;
+  }
+  return false;
+};
+
 document.addEventListener('keydown', (e) => {
-  const m = document.getElementById('modalSolicitarPinAdmin');
-  if (m && (m.classList.contains('active') || m.style.display === 'flex')) {
+  // 1. PIN Admin Modal (Máxima prioridad de captura de teclado)
+  const mPin = document.getElementById('modalSolicitarPinAdmin');
+  if (mPin && (mPin.classList.contains('active') || mPin.style.display === 'flex')) {
     if (e.key >= '0' && e.key <= '9') {
       e.preventDefault();
       window.presionarTeclaPinAdmin(e.key);
@@ -8717,6 +8730,215 @@ document.addEventListener('keydown', (e) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       window.validarPinAdminManual();
+    }
+    return;
+  }
+
+  const isInputActive = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+  const mCobro = document.getElementById('modalCobro');
+  const isCobroActive = mCobro && (mCobro.classList.contains('active') || mCobro.style.display === 'flex' || mCobro.style.display === 'block');
+  const mComandero = document.getElementById('modalComandero');
+  const isComanderoActive = mComandero && (mComandero.classList.contains('active') || mComandero.style.display === 'flex' || mComandero.style.display === 'block');
+
+  // -------------------------------------------------------------
+  // TECLAS DE FUNCIÓN Y COMBINACIONES GLOBALES (F8, F9, F10, Ctrl+D, Ctrl+X, Ctrl+Z, Ctrl+K)
+  // -------------------------------------------------------------
+
+  // F8: Enviar comanda a Cocina / Barra
+  if (e.key === 'F8') {
+    e.preventDefault();
+    const btnEnviar = document.getElementById('btnEnviarComandaCocina');
+    if (btnEnviar) {
+      btnEnviar.click();
+    }
+    return;
+  }
+
+  // F9: Pre-factura / Pre-cuenta
+  if (e.key === 'F9') {
+    e.preventDefault();
+    if (typeof window.solicitarPreFacturaMesa === 'function') {
+      window.solicitarPreFacturaMesa();
+    } else {
+      const btnPre = document.getElementById('btnImprimirPreFacturaCobro') || document.getElementById('btnImprimirPreFactura');
+      if (btnPre) btnPre.click();
+    }
+    return;
+  }
+
+  // F10: Cobrar cuenta (Abre el Modal de Cobro)
+  if (e.key === 'F10') {
+    e.preventDefault();
+    const btnCobrar = document.getElementById('btnAbrirCobroModal');
+    if (btnCobrar) {
+      btnCobrar.click();
+    } else if (typeof window.abrirModalCobroDirecto === 'function') {
+      window.abrirModalCobroDirecto();
+    }
+    return;
+  }
+
+  // Ctrl + D / Alt + D: Abrir Descuento / Cortesía con PIN
+  if ((e.ctrlKey || e.altKey) && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault();
+    if (typeof window.abrirModalAplicarDescuento === 'function') {
+      window.abrirModalAplicarDescuento();
+    } else {
+      const btnDesc = document.getElementById('btnAbrirModalDescuento');
+      if (btnDesc) btnDesc.click();
+    }
+    return;
+  }
+
+  // Ctrl + X / Alt + X: Operaciones Admin - Corte X (Parcial)
+  if ((e.ctrlKey || e.altKey) && (e.key === 'x' || e.key === 'X')) {
+    e.preventDefault();
+    if (typeof window.generarCorteX === 'function') {
+      window.generarCorteX();
+    } else {
+      const btnX = document.getElementById('btnCorteX');
+      if (btnX) btnX.click();
+    }
+    return;
+  }
+
+  // Ctrl + Z / Alt + Z: Operaciones Admin - Cierre Z (Final)
+  if ((e.ctrlKey || e.altKey) && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault();
+    if (typeof window.abrirModalCierreZ === 'function') {
+      window.abrirModalCierreZ();
+    } else {
+      const btnZ = document.getElementById('btnCorteZ');
+      if (btnZ) btnZ.click();
+    }
+    return;
+  }
+
+  // Ctrl + K: Enfocar buscador global rápido
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    const inpSearch = document.getElementById('globalSearchInput');
+    if (inpSearch) {
+      inpSearch.focus();
+      inpSearch.select?.();
+    }
+    return;
+  }
+
+  // Escape (Esc): Cerrar modal activo o regresar al Salón desde Comandero
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    e.preventDefault();
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    const searchDrop = document.getElementById('searchDropdown');
+    if (searchDrop) searchDrop.classList.remove('active');
+
+    // 1) Si modalCobro está activo:
+    if (isCobroActive) {
+      const btnCloseCobro = document.getElementById('btnCloseCobroModal') || document.getElementById('btnCancelarCobro');
+      if (btnCloseCobro) {
+        btnCloseCobro.click();
+      } else {
+        mCobro.classList.remove('active');
+        mCobro.style.display = 'none';
+      }
+      return;
+    }
+
+    // 2) Si modalAplicarDescuento está activo:
+    const mDesc = document.getElementById('modalAplicarDescuento');
+    if (mDesc && (mDesc.classList.contains('active') || mDesc.style.display === 'flex')) {
+      if (typeof window.cerrarModalAplicarDescuento === 'function') {
+        window.cerrarModalAplicarDescuento();
+      } else {
+        mDesc.classList.remove('active');
+        mDesc.style.display = 'none';
+      }
+      return;
+    }
+
+    // 3) Buscar cualquier otro modal secundario abierto
+    const activeModals = Array.from(document.querySelectorAll('.modal-backdrop.active, .modal.active, [id^="modal"].active'))
+      .filter(m => m.id !== 'modalComandero' && m.style.display !== 'none');
+    if (activeModals.length > 0) {
+      const topModal = activeModals[activeModals.length - 1];
+      const closeBtn = topModal.querySelector('.btn-icon-close, .btn-close-modal, .btn-close, .modal-close, button[data-dismiss="modal"]');
+      if (closeBtn) {
+        closeBtn.click();
+      } else {
+        topModal.classList.remove('active');
+        topModal.style.display = 'none';
+      }
+      return;
+    }
+
+    // 4) Si no hay sub-modales abiertos y está en Comandero, volver al Salón
+    if (isComanderoActive) {
+      if (typeof window.cerrarComandero === 'function') {
+        window.cerrarComandero();
+      }
+      return;
+    }
+
+    return;
+  }
+
+  // -------------------------------------------------------------
+  // MODAL DE COBRO & CAJA: ATAJOS DE MÉTODO Y LIQUIDACIÓN
+  // -------------------------------------------------------------
+  if (isCobroActive) {
+    // Enter: Liquidar cuenta
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const btnFin = document.getElementById('btnFinalizarCobro');
+      if (btnFin && !btnFin.disabled) {
+        btnFin.click();
+      }
+      return;
+    }
+
+    // Atajos alfanuméricos cuando NO se está digitando texto/monto en un input
+    if (!isInputActive) {
+      if (e.key === '1' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Efectivo');
+        const txtEf = document.getElementById('txtEfectivoRecibido');
+        if (txtEf) { txtEf.focus(); txtEf.select(); }
+        return;
+      }
+      if (e.key === '2' || e.key === 't' || e.key === 'T' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Tarjeta');
+        return;
+      }
+      if (e.key === '3' || e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('SINPE');
+        return;
+      }
+      if (e.key === '4' || e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Dolares');
+        return;
+      }
+      if (e.key === '5' || e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Mixto');
+        return;
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // BUSCADOR RÁPIDO: Tecla "/" global
+  // -------------------------------------------------------------
+  if (e.key === '/' && !isInputActive) {
+    e.preventDefault();
+    const inpSearch = document.getElementById('globalSearchInput');
+    if (inpSearch) {
+      inpSearch.focus();
+      inpSearch.select?.();
     }
   }
 });

@@ -14,6 +14,36 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    /* Atajos de teclado (Hotkeys Badges) */
+    kbd.kbd-shortcut, .kbd-sub-shortcut {
+      display: inline-block;
+      padding: 2px 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1;
+      color: #f1f5f9;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 4px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      margin-left: 6px;
+      vertical-align: middle;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+    .pay-method-tab .kbd-sub-shortcut {
+      font-size: 0.65rem;
+      padding: 1px 5px;
+      background: rgba(0, 0, 0, 0.4);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #93c5fd;
+    }
+    .btn-caja-op kbd.kbd-shortcut {
+      background: rgba(0, 0, 0, 0.3);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
     .btn-preset-fecha {
       background: #0f172a;
       color: #94a3b8;
@@ -1166,8 +1196,8 @@
               </button>
               <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
-              <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()">📑 Corte X (Parcial)</button>
-              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()">🔒 Cierre Z (Final)</button>
+              <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)">📑 Corte X (Parcial) <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
             </div>
           </div>
 
@@ -2027,20 +2057,20 @@
           </div>
 
           <div class="ticket-action-buttons">
-            <button class="btn-btn-cmd guardar" id="btnEnviarComandaCocina">
-              🍳 Enviar a Cocina
+            <button class="btn-btn-cmd guardar" id="btnEnviarComandaCocina" title="Enviar comanda a cocina y barra (F8)">
+              🍳 Enviar a Cocina <kbd class="kbd-shortcut">F8</kbd>
             </button>
             <button class="btn-btn-cmd split" id="btnAbrirSplitBill">
               ✂️ Dividir Cuenta (Split)
             </button>
-            <button class="btn-btn-cmd" id="btnAbrirModalDescuento" onclick="abrirModalAplicarDescuento()" style="background:linear-gradient(135deg, #059669, #047857); border-color:#10b981; color:#ecfdf5; font-weight:800;" title="Aplicar descuento o cortesía con PIN">
-              🎁 Descuento / Cortesía
+            <button class="btn-btn-cmd" id="btnAbrirModalDescuento" onclick="abrirModalAplicarDescuento()" style="background:linear-gradient(135deg, #059669, #047857); border-color:#10b981; color:#ecfdf5; font-weight:800;" title="Aplicar descuento o cortesía con PIN (Ctrl + D)">
+              🎁 Descuento / Cortesía <kbd class="kbd-shortcut">Ctrl+D</kbd>
             </button>
-            <button class="btn-btn-cmd prefactura" id="btnImprimirPreFactura" title="Generar e imprimir pre-cuenta para revisión del cliente">
-              📄 Pre-Factura
+            <button class="btn-btn-cmd prefactura" id="btnImprimirPreFactura" title="Generar e imprimir pre-cuenta para revisión del cliente (F9)">
+              📄 Pre-Factura <kbd class="kbd-shortcut">F9</kbd>
             </button>
-            <button class="btn-btn-cmd cobrar" id="btnAbrirCobroModal">
-              💵 Cobrar Cuenta
+            <button class="btn-btn-cmd cobrar" id="btnAbrirCobroModal" title="Cobrar y liquidar cuenta (F10)">
+              💵 Cobrar Cuenta <kbd class="kbd-shortcut">F10</kbd>
             </button>
           </div>
         </div>
@@ -3881,11 +3911,11 @@
         </div>
         <label class="section-label">Selecciona el Método de Pago:</label>
         <div class="pay-methods-tabs">
-          <button class="pay-method-tab active" data-method="Efectivo">💵 Efectivo</button>
-          <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta</button>
-          <button class="pay-method-tab" data-method="SINPE">📱 SINPE</button>
-          <button class="pay-method-tab" data-method="Dolares">💵 Dólares ($)</button>
-          <button class="pay-method-tab" data-method="Mixto">🔀 Mixto</button>
+          <button class="pay-method-tab active" data-method="Efectivo">💵 Efectivo <kbd class="kbd-sub-shortcut">1 / E</kbd></button>
+          <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta <kbd class="kbd-sub-shortcut">2 / T</kbd></button>
+          <button class="pay-method-tab" data-method="SINPE">📱 SINPE <kbd class="kbd-sub-shortcut">3 / S</kbd></button>
+          <button class="pay-method-tab" data-method="Dolares">💵 Dólares ($) <kbd class="kbd-sub-shortcut">4</kbd></button>
+          <button class="pay-method-tab" data-method="Mixto">🔀 Mixto <kbd class="kbd-sub-shortcut">5</kbd></button>
         </div>
 
         <!-- PANEL 1: EFECTIVO -->
@@ -4054,9 +4084,9 @@
       <div class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div style="display:flex; gap:8px;">
           <button class="btn-sec" id="btnCancelarCobro">Cancelar</button>
-          <button type="button" class="btn-sec" id="btnImprimirPreFacturaCobro" style="background:#0284c7; color:#fff; border:none; font-weight:700;" title="Imprimir pre-factura sin liquidar">📄 Pre-Factura</button>
+          <button type="button" class="btn-sec" id="btnImprimirPreFacturaCobro" style="background:#0284c7; color:#fff; border:none; font-weight:700;" title="Imprimir pre-factura sin liquidar (F9)">📄 Pre-Factura <kbd class="kbd-shortcut">F9</kbd></button>
         </div>
-        <button class="btn-pri success" id="btnFinalizarCobro">✅ Liquidar, Imprimir & Liberar Mesa</button>
+        <button class="btn-pri success" id="btnFinalizarCobro" title="Confirmar y liquidar cobro (Enter)">✅ Liquidar, Imprimir & Liberar Mesa <kbd class="kbd-shortcut">Enter</kbd></button>
       </div>
     </div>
   </div>
