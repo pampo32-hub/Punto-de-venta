@@ -2963,12 +2963,16 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 app.post('/api/ordenes/:id/descuento', async (req, res) => {
   try {
     const ordenId = Number(req.params.id);
+    if (!ordenId || isNaN(ordenId) || ordenId <= 0) {
+      return res.status(400).json({ error: 'ID de orden inválido o inexistente. Debes enviar la comanda a cocina/barra antes de aplicar el descuento.' });
+    }
+
     const { tipo = 'porcentaje', valor = 0, motivo = 'Descuento autorizado', pin = '' } = req.body;
 
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    const negocioId = orden.negocio_id || 1;
+    const negocioId = Number(orden.negocio_id) || 1;
     const moduloActivo = await negocioTieneModulo(negocioId, 'descuentos_cortesias_pin');
     if (!moduloActivo) {
       return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
@@ -2994,7 +2998,10 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 
     // Obtener detalles de la orden para calcular subtotal bruto
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
-    const subtotalBruto = items.reduce((acc, it) => acc + (Number(it.subtotal) || (Number(it.precio_unitario) * Number(it.cantidad))), 0);
+    const subtotalBruto = (items || []).reduce((acc, it) => {
+      const p = Number(it.subtotal != null ? it.subtotal : (Number(it.precio_unitario || it.precio || 0) * (Number(it.cantidad) || 1))) || 0;
+      return acc + p;
+    }, 0);
 
     let descuentoMonto = 0;
     let descuentoPorcentaje = 0;
@@ -3004,32 +3011,36 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
       descuentoMonto = subtotalBruto;
     } else if (tipo === 'porcentaje') {
       descuentoPorcentaje = Math.min(100, Math.max(0, Number(valor) || 0));
-      descuentoMonto = Math.round((subtotalBruto * descuentoPorcentaje) / 100);
+      descuentoMonto = subtotalBruto > 0 ? Math.round((subtotalBruto * descuentoPorcentaje) / 100) : 0;
     } else if (tipo === 'monto') {
       descuentoMonto = Math.min(subtotalBruto, Math.max(0, Number(valor) || 0));
       descuentoPorcentaje = subtotalBruto > 0 ? Math.round((descuentoMonto / subtotalBruto) * 100) : 0;
     }
 
-    const subtotalNeto = Math.max(0, subtotalBruto - descuentoMonto);
-    const servicio10 = Math.round(subtotalNeto * 0.10);
-    const iva13 = Math.round(subtotalNeto * 0.13);
-    const totalFinal = subtotalNeto + servicio10 + iva13;
+    descuentoMonto = Number(descuentoMonto) || 0;
+    descuentoPorcentaje = Number(descuentoPorcentaje) || 0;
+
+    const subtotalNeto = Math.max(0, (subtotalBruto || 0) - descuentoMonto);
+    const servicio10 = Math.round(subtotalNeto * 0.10) || 0;
+    const iva13 = Math.round(subtotalNeto * 0.13) || 0;
+    const totalFinal = (subtotalNeto + servicio10 + iva13) || 0;
 
     await dbRun(
       `UPDATE Ordenes 
        SET subtotal = ?, descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?, servicio_10 = ?, iva_13 = ?, total = ?
        WHERE id = ?`,
-      [subtotalBruto, descuentoMonto, descuentoPorcentaje, motivo, autorizadorNombre, servicio10, iva13, totalFinal, ordenId]
+      [subtotalBruto || 0, descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorNombre, servicio10, iva13, totalFinal, ordenId]
     );
 
     // Registrar en Auditoría
     await registrarAuditoria({
+      negocioId,
       usuarioNombre: autorizadorNombre,
       accion: 'descuento_aplicado',
       tipoEvento: 'SEGURIDAD',
       modulo: 'ventas',
-      detalle: `Descuento de ₡${descuentoMonto.toLocaleString('es-CR')} (${descuentoPorcentaje}%) aplicado a Orden #${orden.numero_orden || orden.id}. Motivo: ${motivo}`,
-      motivo: motivo,
+      detalle: `Descuento de ₡${descuentoMonto.toLocaleString('es-CR')} (${descuentoPorcentaje}%) aplicado a Orden #${orden.numero_orden || orden.id}. Motivo: ${motivo || 'Descuento autorizado'}`,
+      motivo: motivo || 'Descuento autorizado',
       monto: descuentoMonto,
       pinAutorizado: 1
     });

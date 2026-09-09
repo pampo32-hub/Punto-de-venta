@@ -7377,14 +7377,25 @@ window.toggleModoHappyHourActual = async function() {
 };
 
 // ============================================================================
+// ============================================================================
 // MODAL DE DESCUENTOS & CORTESÍAS CON PIN Y AUDITORÍA
 // ============================================================================
 window.abrirModalAplicarDescuento = function() {
-  if (!estado.mesaActiva || (!estado.mesaActiva.orden_id && (!estado.mesaActiva.items || estado.mesaActiva.items.length === 0))) {
+  if (!estado.mesaActiva) {
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Debes tener una orden o platillos activos en la mesa para aplicar descuentos.', 'warning');
+      mostrarNotificacionCentro('⚠️ Debes seleccionar una mesa activa para aplicar descuentos.', 'warning');
     } else {
-      alert('⚠️ Debes tener una orden o platillos activos en la mesa para aplicar descuentos.');
+      alert('⚠️ Debes seleccionar una mesa activa para aplicar descuentos.');
+    }
+    return;
+  }
+
+  const oId = Number(estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || estado.mesaActiva.ordenId || (estado.ordenActiva && estado.ordenActiva.id));
+  if (!oId || isNaN(oId) || oId <= 0) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.', 'warning');
+    } else {
+      alert('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.');
     }
     return;
   }
@@ -7471,12 +7482,12 @@ window.actualizarModoDescuentoManual = function() {
 window.confirmarAplicarDescuento = async function() {
   if (!estado.mesaActiva) return;
 
-  const ordenId = estado.mesaActiva.orden_id;
-  if (!ordenId) {
+  const ordenId = Number(estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || estado.mesaActiva.ordenId || (estado.ordenActiva && estado.ordenActiva.id));
+  if (!ordenId || isNaN(ordenId) || ordenId <= 0) {
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ Primero debes enviar la comanda para crear la orden antes de aplicar el descuento.', 'warning');
+      mostrarNotificacionCentro('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.', 'warning');
     } else {
-      alert('⚠️ Primero debes enviar la comanda para crear la orden antes de aplicar el descuento.');
+      alert('⚠️ Primero debes enviar la comanda a cocina/barra para crear la orden antes de aplicar el descuento.');
     }
     return;
   }
@@ -7491,7 +7502,7 @@ window.confirmarAplicarDescuento = async function() {
   const motivo = (txtMotivo && txtMotivo.value.trim()) ? txtMotivo.value.trim() : 'Descuento autorizado';
   const pin = txtPin ? txtPin.value.trim() : '';
 
-  if (tipo !== 'cortesia' && (!valor || valor <= 0)) {
+  if (tipo !== 'cortesia' && (!valor || valor <= 0 || isNaN(valor))) {
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('⚠️ Ingresa un valor de descuento válido.', 'warning');
     } else {
@@ -7513,14 +7524,17 @@ window.confirmarAplicarDescuento = async function() {
     return;
   }
 
+  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
+
   try {
     const res = await fetch(`/api/ordenes/${ordenId}/descuento`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
         'x-user-rol': uAct ? uAct.rol : 'mesero'
       },
-      body: JSON.stringify({ tipo, valor, motivo, pin })
+      body: JSON.stringify({ tipo, valor, motivo, pin, negocio_id: Number(nid) })
     });
 
     const data = await res.json();
@@ -7562,20 +7576,24 @@ window.confirmarAplicarDescuento = async function() {
 };
 
 window.quitarDescuentoOrdenActual = async function() {
-  if (!estado.mesaActiva || !estado.mesaActiva.orden_id) return;
+  if (!estado.mesaActiva) return;
+  const ordenId = Number(estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || estado.mesaActiva.ordenId || (estado.ordenActiva && estado.ordenActiva.id));
+  if (!ordenId || isNaN(ordenId) || ordenId <= 0) return;
 
   const confirmar = confirm('¿Deseas quitar el descuento aplicado a esta orden?');
   if (!confirmar) return;
 
   const uAct = estado.usuarioActual || estado.usuario;
+  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
   try {
-    const res = await fetch(`/api/ordenes/${estado.mesaActiva.orden_id}/descuento`, {
+    const res = await fetch(`/api/ordenes/${ordenId}/descuento`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
         'x-user-rol': uAct ? uAct.rol : 'admin'
       },
-      body: JSON.stringify({ tipo: 'porcentaje', valor: 0, motivo: 'Descuento eliminado' })
+      body: JSON.stringify({ tipo: 'porcentaje', valor: 0, motivo: 'Descuento eliminado', negocio_id: Number(nid) })
     });
 
     const data = await res.json();

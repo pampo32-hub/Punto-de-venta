@@ -102,7 +102,11 @@ if (process.env.DATABASE_URL && !process.env.POS_DB_PATH) {
   function normalizeParams(params) {
     if (!params) return [];
     if (!Array.isArray(params)) params = [params];
-    return params.map(p => (p === undefined ? null : p));
+    return params.map(p => {
+      if (p === undefined) return null;
+      if (typeof p === 'number' && isNaN(p)) return null;
+      return p;
+    });
   }
 
   db = {
