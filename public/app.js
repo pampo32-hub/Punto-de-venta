@@ -5656,14 +5656,19 @@ window.agregarAlTicketOneTap = async function(prodId) {
   if (existente) {
     existente.cantidad++;
   } else {
-    let itemDest = prod.destino;
-    let itemCurso = prod.curso;
-    const prodCat = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
-    if (prodCat === 4 || prodCat === 5 || prodCat === 6 || prodCat === 7 || /cerveza|imperial|pilsen|bavaria|corona|rock ice|coctel|shot|fresco|refresco|café|cafe|agua|cas|horchata|resbaladera|jugo|batido/i.test(prod.nombre || '')) {
-      itemDest = 'barra';
-    } else if (!itemDest) {
-      itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
+    let itemDest = (prod.destino || '').trim().toLowerCase();
+    let itemCurso = Number(prod.curso) || 2;
+
+    // Si el producto no tiene destino asignado, inferirlo por palabras clave de bebidas
+    if (!itemDest) {
+      if (/\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|rock ice|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|café|cafe|cafes|cafés|agua|aguas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|licor|licores)\b/i.test(prod.nombre || '')) {
+        itemDest = 'barra';
+        itemCurso = 1;
+      } else {
+        itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
+      }
     }
+
     if (!itemCurso) {
       itemCurso = itemDest === 'barra' ? 1 : 3;
     }
@@ -5674,9 +5679,7 @@ window.agregarAlTicketOneTap = async function(prodId) {
       precio: prod.precio,
       cantidad: 1,
       notas: '',
-      destino: prod.destino,
-      curso: prod.curso || 2,
-      destino: itemDest,
+      destino: itemDest || 'cocina',
       curso: itemCurso,
       happyHour: esCervezaOEligible,
       en_happy_hour: esHH,

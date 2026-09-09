@@ -4144,18 +4144,16 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
-    const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(nombre || '') || /rock ice/i.test(nombre || '');
-    const esBebidaCat = (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6 || prodDb.categoria_id === 7 || prodDb.es_licor || prodDb.destino === 'barra')) ||
-      (it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7);
+    // Respetar estrictamente el destino configurado en el producto
+    if (!destino) {
+      const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(nombre || '') || /rock ice/i.test(nombre || '');
+      const esBebidaCat = (prodDb && (prodDb.es_licor || prodDb.destino === 'barra')) || (it.destino === 'barra');
 
-    if (esBebidaCat || esBebidaKeyword) {
-      destino = 'barra';
-      curso = curso || 1;
-    } else if (!destino) {
-      if (curso === 1 || curso === 5 || curso === 6) {
+      if (esBebidaCat || esBebidaKeyword) {
         destino = 'barra';
+        curso = curso || 1;
       } else {
-        destino = 'cocina';
+        destino = (curso === 1 || curso === 5 || curso === 6) ? 'barra' : 'cocina';
       }
     }
 
@@ -4933,12 +4931,14 @@ async function procesarCobroOrden(ordenId, {
       const itNombre = it.nombre_producto || it.nombre || 'Producto';
       const cant = Number(it.cantidad) || 1;
       const subtotal = (Number(it.precio) || 0) * cant;
-      const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);
-      let destItem = it.destino;
-      if (esBebidaKey || it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7) {
-        destItem = 'barra';
-      } else if (!destItem) {
-        destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
+      let destItem = (it.destino || '').trim().toLowerCase();
+      if (!destItem) {
+        const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);
+        if (esBebidaKey) {
+          destItem = 'barra';
+        } else {
+          destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
+        }
       }
       const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
       const estadoComanda = (debeEnviarCocina && esParaCocinaOBarra) ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
