@@ -6808,9 +6808,12 @@ async function abrirComanderoMesa(mesaId) {
   let data = null;
 
   // 1. Intentar consultar orden activa al servidor si creemos que hay red
+  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
   if (navigator.onLine && (!window.PosOfflineSync || window.PosOfflineSync.isOnline)) {
     try {
-      const res = await fetch('/api/ordenes/mesa/' + mesaId);
+      const res = await fetch(`/api/ordenes/mesa/${mesaId}?negocio_id=${nid}`, {
+        headers: { 'x-negocio-id': String(nid) }
+      });
       if (res.ok) {
         data = await res.json();
         if (data && data.orden && window.PosOfflineDB) {
@@ -6865,6 +6868,7 @@ async function abrirComanderoMesa(mesaId) {
         ? 'Orden (Local Offline)' 
         : ('Orden #' + (data.orden.numero_orden || data.orden.id));
       mesa.orden_id = data.orden.id;
+      mesa.orden_activa_id = data.orden.id;
       mesa.modo_happy_hour = data.orden.modo_happy_hour || 'estricto';
       mesa.descuento_monto = data.orden.descuento_monto || 0;
       mesa.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
@@ -6912,14 +6916,19 @@ async function abrirComanderoMesa(mesaId) {
         }
       }
     } else {
-      document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
-      mesa.orden_id = null;
-      mesa.modo_happy_hour = 'estricto';
-      mesa.descuento_monto = 0;
-      mesa.descuento_porcentaje = 0;
-      mesa.descuento_motivo = '';
-      mesa.descuento_autorizado_por = '';
-      mesa.items = [];
+      if (mesa.orden_activa_id || mesa.orden_id) {
+        mesa.orden_id = mesa.orden_activa_id || mesa.orden_id;
+        document.getElementById('comTicketOrdenId').textContent = 'Orden #' + (mesa.numero_orden || mesa.orden_id);
+      } else {
+        document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
+        mesa.orden_id = null;
+        mesa.modo_happy_hour = 'estricto';
+        mesa.descuento_monto = 0;
+        mesa.descuento_porcentaje = 0;
+        mesa.descuento_motivo = '';
+        mesa.descuento_autorizado_por = '';
+        mesa.items = [];
+      }
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
         bannerEl.style.display = 'none';
@@ -7525,16 +7534,27 @@ window.confirmarAplicarDescuento = async function() {
   }
 
   const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
+  const targetUrl = (ordenId && !isNaN(ordenId) && ordenId > 0) 
+    ? `/api/ordenes/${ordenId}/descuento` 
+    : `/api/ordenes/0/descuento`;
 
   try {
-    const res = await fetch(`/api/ordenes/${ordenId}/descuento`, {
+    const res = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-negocio-id': String(nid),
         'x-user-rol': uAct ? uAct.rol : 'mesero'
       },
-      body: JSON.stringify({ tipo, valor, motivo, pin, negocio_id: Number(nid) })
+      body: JSON.stringify({ 
+        tipo, 
+        valor, 
+        motivo, 
+        pin, 
+        negocio_id: Number(nid),
+        mesaId: estado.mesaActiva?.id,
+        mesa_id: estado.mesaActiva?.id
+      })
     });
 
     const data = await res.json();
@@ -7548,6 +7568,8 @@ window.confirmarAplicarDescuento = async function() {
     }
 
     if (data.orden) {
+      estado.mesaActiva.orden_id = data.orden.id;
+      estado.mesaActiva.orden_activa_id = data.orden.id;
       estado.mesaActiva.descuento_monto = data.orden.descuento_monto || 0;
       estado.mesaActiva.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
       estado.mesaActiva.descuento_motivo = data.orden.descuento_motivo || '';

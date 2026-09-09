@@ -2962,7 +2962,21 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 // ============================================================================
 app.post('/api/ordenes/:id/descuento', async (req, res) => {
   try {
-    const ordenId = Number(req.params.id);
+    let ordenId = Number(req.params.id);
+    const negocioId = obtenerNegocioIdReq(req);
+    const mesaId = req.body?.mesaId || req.body?.mesa_id || req.query?.mesa_id;
+
+    // Si ordenId no vino en params o es inválido, intentar resolver la orden activa por mesaId
+    if ((!ordenId || isNaN(ordenId) || ordenId <= 0) && mesaId) {
+      const ordenMesa = await dbGet(
+        "SELECT id FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') ORDER BY id DESC LIMIT 1",
+        [mesaId, negocioId, negocioId]
+      );
+      if (ordenMesa && ordenMesa.id) {
+        ordenId = Number(ordenMesa.id);
+      }
+    }
+
     if (!ordenId || isNaN(ordenId) || ordenId <= 0) {
       return res.status(400).json({ error: 'ID de orden inválido o inexistente. Debes enviar la comanda a cocina/barra antes de aplicar el descuento.' });
     }
@@ -2972,8 +2986,8 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    const negocioId = Number(orden.negocio_id) || 1;
-    const moduloActivo = await negocioTieneModulo(negocioId, 'descuentos_cortesias_pin');
+    const ordenNegocioId = Number(orden.negocio_id) || negocioId || 1;
+    const moduloActivo = await negocioTieneModulo(ordenNegocioId, 'descuentos_cortesias_pin');
     if (!moduloActivo) {
       return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
     }
@@ -3465,7 +3479,7 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
     const mesaId = req.params.mesaId;
     const negocioId = obtenerNegocioIdReq(req);
     const orden = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') ORDER BY id DESC LIMIT 1",
       [mesaId, negocioId, negocioId]
     );
     if (!orden) return res.json({ orden: null, items: [] });
