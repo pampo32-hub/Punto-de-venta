@@ -7089,17 +7089,11 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     let sqlVentas = `
       SELECT 
-        CASE 
-          WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'balde_nacional'
-          ELSE CAST(d.producto_id AS TEXT)
-        END AS producto_id,
-        CASE 
-          WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'Balde Nacional'
-          ELSE COALESCE(MAX(p.nombre), MAX(d.nombre_producto))
-        END AS producto_nombre,
+        d.producto_id,
+        d.nombre_producto,
         COALESCE(MAX(p.categoria_id), MAX(c.id), 4) AS categoria_id,
-        COALESCE(MAX(c.nombre), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN 'Cervezas' ELSE 'General' END) AS categoria_nombre,
-        COALESCE(MAX(c.icono), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN '🍺' ELSE '🍽️' END) AS categoria_icono,
+        COALESCE(MAX(c.nombre), CASE WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'Cervezas' ELSE 'General' END) AS categoria_nombre,
+        COALESCE(MAX(c.icono), CASE WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN '🍺' ELSE '🍽️' END) AS categoria_icono,
         MAX(p.imagen_url) AS imagen_url,
         COALESCE(MAX(p.precio), AVG(CAST(d.precio_unitario AS DOUBLE PRECISION)), 7500) AS precio_actual,
         SUM(d.cantidad) AS cantidad_vendida,
@@ -7119,29 +7113,19 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const paramsVentas = [desde, hasta, nid, nid];
 
     if (producto_id) {
-      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ? OR (LOWER(?) LIKE \'%balde%\' AND LOWER(d.nombre_producto) LIKE \'%balde%\'))';
+      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ? OR (LOWER(CAST(? AS TEXT)) LIKE \'%balde%\' AND LOWER(d.nombre_producto) LIKE \'%balde%\'))';
       paramsVentas.push(String(producto_id));
       paramsVentas.push('%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%');
       paramsVentas.push(String(producto_id));
     }
     if (categoria_id && categoria_id !== 'todas') {
       const catNum = Number(categoria_id);
-      sqlVentas += ' AND (p.categoria_id = ? OR (LOWER(d.nombre_producto) LIKE \'%balde%\' AND (? IN (4, 8, 150, 158, 166, 174, 182) OR EXISTS (SELECT 1 FROM Categorias c2 WHERE c2.id = ? AND (LOWER(c2.nombre) LIKE \'%cerveza%\' OR LOWER(c2.nombre) LIKE \'%bebida%\')))))';
-      paramsVentas.push(catNum);
+      sqlVentas += ' AND (p.categoria_id = ? OR (LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (4, 8, 150, 158, 166, 174, 182)))';
       paramsVentas.push(catNum);
       paramsVentas.push(catNum);
     }
 
-    sqlVentas += ` GROUP BY 
-      CASE 
-        WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'balde_nacional'
-        ELSE CAST(d.producto_id AS TEXT)
-      END,
-      CASE 
-        WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'Balde Nacional'
-        ELSE d.nombre_producto
-      END
-      ORDER BY total_ingresos DESC`;
+    sqlVentas += ' GROUP BY d.producto_id, d.nombre_producto ORDER BY total_ingresos DESC';
 
     const ventasRows = await dbAll(sqlVentas, paramsVentas);
 
@@ -7167,7 +7151,60 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     const todosLosInsumos = await dbAll('SELECT * FROM Inventario');
 
+    // Consolidar entradas de Balde Nacional en una sola fila representativa
+    const productosMap = new Map();
+    let baldeItemConsolidado = null;
+
     for (const fila of ventasRows) {
+      const esBalde = Boolean(
+        (fila.nombre_producto && fila.nombre_producto.toLowerCase().includes('balde')) ||
+        (fila.producto_id && String(fila.producto_id).toLowerCase().includes('balde'))
+      );
+
+      if (esBalde) {
+        if (!baldeItemConsolidado) {
+          baldeItemConsolidado = {
+            producto_id: 'balde_nacional',
+            producto_nombre: 'Balde Nacional',
+            categoria_id: 4,
+            categoria_nombre: 'Cervezas',
+            categoria_icono: '🍺',
+            imagen_url: fila.imagen_url || '',
+            precio_actual: Number(fila.precio_actual) || 7500,
+            precio_promedio: Number(fila.precio_promedio) || 7500,
+            cantidad_vendida: 0,
+            total_ingresos: 0,
+            total_ordenes: 0,
+            es_balde: true
+          };
+        }
+        baldeItemConsolidado.cantidad_vendida += Number(fila.cantidad_vendida) || 0;
+        baldeItemConsolidado.total_ingresos += Number(fila.total_ingresos) || 0;
+        baldeItemConsolidado.total_ordenes += Number(fila.total_ordenes) || 1;
+        if (fila.imagen_url) baldeItemConsolidado.imagen_url = fila.imagen_url;
+      } else {
+        productosMap.set(fila.producto_id + '_' + fila.nombre_producto, {
+          producto_id: fila.producto_id,
+          producto_nombre: fila.nombre_producto,
+          categoria_id: fila.categoria_id,
+          categoria_nombre: fila.categoria_nombre,
+          categoria_icono: fila.categoria_icono,
+          imagen_url: fila.imagen_url,
+          precio_actual: Number(fila.precio_actual) || 0,
+          precio_promedio: Number(fila.precio_promedio) || 0,
+          cantidad_vendida: Number(fila.cantidad_vendida) || 0,
+          total_ingresos: Number(fila.total_ingresos) || 0,
+          total_ordenes: Number(fila.total_ordenes) || 1
+        });
+      }
+    }
+
+    const filasProcesar = Array.from(productosMap.values());
+    if (baldeItemConsolidado && baldeItemConsolidado.cantidad_vendida > 0) {
+      filasProcesar.unshift(baldeItemConsolidado);
+    }
+
+    for (const fila of filasProcesar) {
       const pId = fila.producto_id;
       const cantVendida = Number(fila.cantidad_vendida) || 0;
       const totalIngreso = Number(fila.total_ingresos) || 0;

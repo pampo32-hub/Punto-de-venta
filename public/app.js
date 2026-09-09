@@ -2570,7 +2570,7 @@ function aplicarEnrutamientoPorRol() {
   cargarPersonalizacionPagina(nid);
 
   // Restaurar vista y zona activa guardada en sesión tras recarga (F5)
-  const savedView = sessionStorage.getItem('pos_active_view') || 'salon';
+  const savedView = sessionStorage.getItem('pos_active_view') || localStorage.getItem('pos_active_view') || 'salon';
   let viewToRestore = savedView;
   if (viewToRestore === 'kds' && !tieneModulo('kds_cocina')) viewToRestore = 'salon';
   if (viewToRestore === 'facturacion' && !tieneModulo('facturacion_electronica')) viewToRestore = 'salon';
@@ -2581,6 +2581,10 @@ function aplicarEnrutamientoPorRol() {
 
   if (esVistaAdmin && esAdmin) {
     abrirModuloAdmin(viewToRestore);
+    if (viewToRestore === 'inventario') {
+      const subTabGuardada = sessionStorage.getItem('pos_inventario_subtab') || localStorage.getItem('pos_inventario_subtab') || 'existencias';
+      cambiarSubTabInventario(subTabGuardada);
+    }
   } else {
     const navBtn = document.querySelector(`.nav-pill[data-view="${viewToRestore}"]`);
     if (navBtn) {
@@ -2791,8 +2795,11 @@ window.abrirModuloAdmin = async function(modulo) {
 
   if (modulo === 'metricas') cargarDashboardMetricas();
   if (modulo === 'inventario') {
-    cambiarSubTabInventario('existencias');
-    cargarInventarioAdmin();
+    const subTabGuardada = sessionStorage.getItem('pos_inventario_subtab') || localStorage.getItem('pos_inventario_subtab') || 'existencias';
+    cambiarSubTabInventario(subTabGuardada);
+    if (subTabGuardada === 'existencias') {
+      cargarInventarioAdmin();
+    }
   }
   if (modulo === 'recetas') {
     cambiarSubTabInventario('recetas');
@@ -12037,7 +12044,7 @@ function initNavegacion() {
       const targetView = 'view-' + view;
       const targetEl = document.getElementById(targetView);
       if (targetEl) targetEl.classList.add('active');
-      sessionStorage.setItem('pos_active_view', view);
+      sessionStorage.setItem('pos_active_view', view); localStorage.setItem('pos_active_view', view);
 
       if (view === 'salon') cargarMesasDesdeBackend();
       if (view === 'kds') cargarKDSDesdeBackend();
@@ -12263,6 +12270,12 @@ window.listaComprasActual = [];
 
 window.cambiarSubTabInventario = function(tab) {
   window.subTabInventarioActiva = tab;
+  try {
+    sessionStorage.setItem('pos_inventario_subtab', tab);
+    localStorage.setItem('pos_inventario_subtab', tab);
+    sessionStorage.setItem('pos_active_view', 'inventario');
+    localStorage.setItem('pos_active_view', 'inventario');
+  } catch(e) {}
   document.querySelectorAll('.inv-subnav-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.inv-tab-panel').forEach(p => p.style.display = 'none');
 
