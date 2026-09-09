@@ -5880,6 +5880,54 @@ async function registrarAuditoria({ negocioId = 1, usuarioId = null, usuarioNomb
   }
 }
 
+function resolverInsumoCerveza(todosLosInsumos, subProd, subNombre) {
+  const clean = (s) => (s || '').toLowerCase().replace(/cerveza\s+/gi, '').replace(/\(.*\)/g, '').replace(/unidades/g, '').replace(/\d+x/g, '').trim();
+  const nombreBuscado = clean(subNombre || (subProd ? subProd.nombre : ''));
+  
+  if (subProd && subProd.id) {
+    const porProdId = todosLosInsumos.find(i => i.producto_id && String(i.producto_id) === String(subProd.id));
+    if (porProdId) return porProdId;
+  }
+  
+  const exacta = todosLosInsumos.find(i => clean(i.nombre) === nombreBuscado || clean(i.nombre) === ('cerveza ' + nombreBuscado));
+  if (exacta) return exacta;
+
+  if (nombreBuscado.includes('silver')) {
+    const s = todosLosInsumos.find(i => clean(i.nombre).includes('silver'));
+    if (s) return s;
+  }
+  if (nombreBuscado.includes('ultra')) {
+    const u = todosLosInsumos.find(i => clean(i.nombre).includes('ultra'));
+    if (u) return u;
+  }
+  if (nombreBuscado.includes('light')) {
+    const l = todosLosInsumos.find(i => clean(i.nombre).includes('light'));
+    if (l) return l;
+  }
+  if (nombreBuscado.includes('6.0') || nombreBuscado.includes('60')) {
+    const seis = todosLosInsumos.find(i => clean(i.nombre).includes('6.0') || clean(i.nombre).includes('6'));
+    if (seis) return seis;
+  }
+  if (nombreBuscado.includes('pilsen')) {
+    const p = todosLosInsumos.find(i => clean(i.nombre).includes('pilsen'));
+    if (p) return p;
+  }
+  if (nombreBuscado.includes('bavaria')) {
+    const b = todosLosInsumos.find(i => clean(i.nombre).includes('bavaria'));
+    if (b) return b;
+  }
+  if (nombreBuscado.includes('regular') || nombreBuscado.includes('imperial')) {
+    const imp = todosLosInsumos.find(i => clean(i.nombre).includes('imperial') && !clean(i.nombre).includes('silver') && !clean(i.nombre).includes('light') && !clean(i.nombre).includes('ultra'));
+    if (imp) return imp;
+  }
+
+  const parcial = todosLosInsumos.find(i => clean(i.nombre).includes(nombreBuscado) || (nombreBuscado.length >= 3 && nombreBuscado.includes(clean(i.nombre))));
+  if (parcial) return parcial;
+
+  const algunaCerveza = todosLosInsumos.find(i => (i.categoria && i.categoria.toLowerCase().includes('cerveza')) || /imperial|pilsen/i.test(i.nombre));
+  return algunaCerveza || null;
+}
+
 async function descontarInventarioPorItems(items = []) {
   try {
     let huboCambios = false;
@@ -5909,13 +5957,14 @@ async function descontarInventarioPorItems(items = []) {
           for (const [subIdStr, subCantNum] of Object.entries(desgloseObj)) {
             const subCant = Number(subCantNum) * cant;
             if (subCant <= 0) continue;
-            let subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [subIdStr]);
+            let subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [Number(subIdStr) || 0]);
             let subInsumo = null;
             if (!subProd) {
-              subInsumo = await dbGet('SELECT * FROM Inventario WHERE id = ? OR producto_id = ?', [subIdStr, subIdStr]);
+              subInsumo = await dbGet('SELECT * FROM Inventario WHERE CAST(producto_id AS TEXT) = CAST(? AS TEXT) OR CAST(id AS TEXT) = CAST(? AS TEXT)', [subIdStr, subIdStr]);
             }
             listaCervezas.push({
-              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id || subInsumo.id : subIdStr),
+              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id : null),
+              insumoId: subInsumo ? subInsumo.id : null,
               nombre: subProd ? subProd.nombre : (subInsumo ? subInsumo.nombre : `Cerveza #${subIdStr}`),
               cant: subCant
             });
@@ -5937,93 +5986,109 @@ async function descontarInventarioPorItems(items = []) {
           }
         }
 
-        if (listaCervezas.length > 0) {
-          for (const itemCerveza of listaCervezas) {
-            const subProdId = itemCerveza.prodId;
-            const subCant = itemCerveza.cant;
-            const subNombre = itemCerveza.nombre;
+        if (listaCervezas.length === 0) {
+          listaCervezas.push({
+            prodId: null,
+            nombre: 'Cerveza Imperial Regular',
+            cant: 6 * cant
+          });
+        }
 
-            let descontado = false;
-            // 1. Revisar recetas
-            if (subProdId) {
-              const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [subProdId]);
-              if (recetas && recetas.length > 0) {
-                for (const r of recetas) {
-                  const totalDesc = r.cantidad * subCant;
-                  const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
-                  if (insumo) {
-                    const stockPrevio = insumo.stock_actual;
-                    const stockNuevo = Math.max(0, stockPrevio - totalDesc);
-                    await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, r.insumo_id]);
-                    const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
-                    const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
-                    await dbRun(
-                      `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                       VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                      [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
-                    );
-                    huboCambios = true;
-                    descontado = true;
-                    if (stockNuevo <= insumo.stock_minimo) {
-                      io.emit('inventario_alerta_stock', {
-                        insumoId: insumo.id,
-                        insumo: insumo.nombre,
-                        nombre: insumo.nombre,
-                        stock_actual: stockNuevo,
-                        stock_minimo: insumo.stock_minimo,
-                        unidad: insumo.unidad || 'uds',
-                        estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
-                      });
-                    }
+        const todosLosInsumosActuales = await dbAll('SELECT * FROM Inventario');
+        const negocioIdFinal = Number(it.negocio_id || it.negocioId || 1);
+
+        for (const itemCerveza of listaCervezas) {
+          const subProdId = itemCerveza.prodId;
+          const subCant = itemCerveza.cant;
+          const subNombre = itemCerveza.nombre;
+
+          let insumo = null;
+
+          // 1. Revisar recetas
+          if (subProdId) {
+            const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [subProdId]);
+            if (recetas && recetas.length > 0) {
+              for (const r of recetas) {
+                const totalDesc = r.cantidad * subCant;
+                const ins = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
+                if (ins) {
+                  const stockPrevio = ins.stock_actual;
+                  const stockNuevo = Math.max(0, stockPrevio - totalDesc);
+                  await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, ins.id]);
+                  const costoMov = Math.round(totalDesc * (ins.costo_unitario || 0));
+                  const motivoMov = `Consumo comanda (Balde Nacional): ${ins.nombre || subNombre} (x${subCant})`;
+                  await dbRun(
+                    `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+                     VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+                    [negocioIdFinal, ins.id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+                  );
+                  huboCambios = true;
+                  if (stockNuevo <= ins.stock_minimo) {
+                    io.emit('inventario_alerta_stock', {
+                      insumoId: ins.id,
+                      insumo: ins.nombre,
+                      nombre: ins.nombre,
+                      stock_actual: stockNuevo,
+                      stock_minimo: ins.stock_minimo,
+                      unidad: ins.unidad_medida || 'uds',
+                      estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+                    });
                   }
                 }
               }
-            }
-
-            // 2. Si no hubo receta, buscar insumo directo
-            if (!descontado) {
-              let insumo = null;
-              if (subProdId) {
-                insumo = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [subProdId]);
-                if (!insumo) {
-                  insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [subProdId]);
-                }
-              }
-              if (!insumo && subNombre) {
-                insumo = await dbGet(
-                  'SELECT * FROM Inventario WHERE LOWER(nombre) = LOWER(?) OR LOWER(nombre) = LOWER(?) OR LOWER(nombre) LIKE ? ORDER BY CASE WHEN LOWER(nombre) = LOWER(?) THEN 1 WHEN LOWER(nombre) LIKE ? THEN 2 ELSE 3 END LIMIT 1',
-                  [subNombre, `Cerveza ${subNombre}`, `%${subNombre}%`, subNombre, `%${subNombre}%`]
-                );
-              }
-
-              if (insumo) {
-                const stockPrevio = insumo.stock_actual;
-                const stockNuevo = Math.max(0, stockPrevio - subCant);
-                await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, insumo.id]);
-                const costoMov = Math.round(subCant * (insumo.costo_unitario || 0));
-                const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
-                await dbRun(
-                  `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                   VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                  [insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
-                );
-                huboCambios = true;
-                if (stockNuevo <= insumo.stock_minimo) {
-                  io.emit('inventario_alerta_stock', {
-                    insumoId: insumo.id,
-                    insumo: insumo.nombre,
-                    nombre: insumo.nombre,
-                    stock_actual: stockNuevo,
-                    stock_minimo: insumo.stock_minimo,
-                    unidad: insumo.unidad || 'uds',
-                    estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
-                  });
-                }
-              }
+              continue;
             }
           }
-          continue; // Terminar procesamiento de este item de balde
+
+          // 2. Si no hubo receta, resolver insumo directo usando resolverInsumoCerveza
+          insumo = resolverInsumoCerveza(todosLosInsumosActuales, subProdId ? { id: subProdId, nombre: subNombre } : null, subNombre);
+
+          // 3. Si aún no existe el insumo de cerveza en inventario, auto-crearlo
+          if (!insumo) {
+            const nomNuevo = subNombre || 'Cerveza Imperial Regular';
+            const rCrear = await dbRun(
+              `INSERT INTO Inventario (nombre, unidad_medida, stock_actual, stock_minimo, costo_unitario, categoria, producto_id, negocio_id)
+               VALUES (?, 'botellas', 0, 10, 950, 'Cerveza Nacional', ?, ?)`,
+              [nomNuevo, subProdId || null, negocioIdFinal]
+            );
+            insumo = {
+              id: rCrear.lastID,
+              nombre: nomNuevo,
+              unidad_medida: 'botellas',
+              stock_actual: 0,
+              stock_minimo: 10,
+              costo_unitario: 950
+            };
+            todosLosInsumosActuales.push(insumo);
+          }
+
+          if (insumo) {
+            const stockPrevio = insumo.stock_actual;
+            const stockNuevo = Math.max(0, stockPrevio - subCant);
+            await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, insumo.id]);
+            const costoMov = Math.round(subCant * (insumo.costo_unitario || 0));
+            const motivoMov = `Consumo comanda (Balde Nacional): ${insumo.nombre} (x${subCant})`;
+            await dbRun(
+              `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+               VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+              [negocioIdFinal, insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+            );
+            huboCambios = true;
+            if (stockNuevo <= insumo.stock_minimo) {
+              io.emit('inventario_alerta_stock', {
+                insumoId: insumo.id,
+                insumo: insumo.nombre,
+                nombre: insumo.nombre,
+                stock_actual: stockNuevo,
+                stock_minimo: insumo.stock_minimo,
+                unidad: insumo.unidad_medida || 'uds',
+                estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+              });
+            }
+          }
         }
+
+        continue; // Terminar procesamiento del balde
       }
 
       // 1. Revisar si hay recetas vinculadas en InventarioRecetas
@@ -6040,22 +6105,11 @@ async function descontarInventarioPorItems(items = []) {
               [stockNuevo, ahora, r.insumo_id]
             );
             const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
-            let motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
-            if (insumo.es_licor && insumo.rendimiento_shots > 0) {
-              const shotsDeducidos = Math.round(totalDesc * insumo.rendimiento_shots * 10) / 10;
-              const botEnteras = Math.floor(stockNuevo);
-              const shotsRem = Math.round((stockNuevo - botEnteras) * insumo.rendimiento_shots);
-              if (totalDesc < 1) {
-                motivoMov = `Consumo comanda: ${prodNombre} (-${shotsDeducidos} shot${shotsDeducidos === 1 ? '' : 's'} / ${Math.round(shotsDeducidos * (insumo.medida_shot_ml || 30))}ml) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
-              } else {
-                motivoMov = `Consumo comanda: ${prodNombre} (-${totalDesc} botella${totalDesc === 1 ? '' : 's'} / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
-              }
-            }
-
+            const motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-               VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-              [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+               VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+              [insumo.negocio_id || 1, r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
             );
             huboCambios = true;
             if (stockNuevo <= insumo.stock_minimo) {
@@ -6065,7 +6119,7 @@ async function descontarInventarioPorItems(items = []) {
                 nombre: insumo.nombre,
                 stock_actual: stockNuevo,
                 stock_minimo: insumo.stock_minimo,
-                unidad: insumo.unidad || 'uds',
+                unidad: insumo.unidad_medida || 'uds',
                 estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
               });
             }
@@ -6082,19 +6136,11 @@ async function descontarInventarioPorItems(items = []) {
             [stockNuevo, ahora, insumo.id]
           );
           const costoMov = Math.round(cant * (insumo.costo_unitario || 0));
-
-          let motivoDirecto = `Consumo directo: ${prodNombre} (x${cant})`;
-          if (insumo.es_licor && insumo.rendimiento_shots > 0) {
-            const shotsDeducidos = Math.round(cant * insumo.rendimiento_shots);
-            const botEnteras = Math.floor(stockNuevo);
-            const shotsRem = Math.round((stockNuevo - botEnteras) * insumo.rendimiento_shots);
-            motivoDirecto = `Consumo directo: ${prodNombre} (-${cant} bot. / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
-          }
-
+          const motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
           await dbRun(
             `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-             VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-            [insumo.id, cant, stockPrevio, stockNuevo, motivoDirecto, costoMov, ahora]
+             VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+            [insumo.negocio_id || 1, insumo.id, cant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
           );
           huboCambios = true;
           if (stockNuevo <= insumo.stock_minimo) {
@@ -6104,18 +6150,20 @@ async function descontarInventarioPorItems(items = []) {
               nombre: insumo.nombre,
               stock_actual: stockNuevo,
               stock_minimo: insumo.stock_minimo,
-              unidad: insumo.unidad || 'uds',
+              unidad: insumo.unidad_medida || 'uds',
               estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
             });
           }
         }
       }
     }
+
     if (huboCambios) {
       io.emit('inventario_actualizado');
+      io.emit('kardex_actualizado');
     }
-  } catch (e) {
-    console.error('Error descontando inventario:', e.message);
+  } catch (errDesc) {
+    console.error('Error al descontar inventario:', errDesc.message);
   }
 }
 
@@ -7041,8 +7089,14 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     let sqlVentas = `
       SELECT 
-        d.producto_id,
-        COALESCE(MAX(p.nombre), MAX(d.nombre_producto)) AS producto_nombre,
+        CASE 
+          WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'balde_nacional'
+          ELSE CAST(d.producto_id AS TEXT)
+        END AS producto_id,
+        CASE 
+          WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'Balde Nacional'
+          ELSE COALESCE(MAX(p.nombre), MAX(d.nombre_producto))
+        END AS producto_nombre,
         COALESCE(MAX(p.categoria_id), MAX(c.id), 4) AS categoria_id,
         COALESCE(MAX(c.nombre), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN 'Cervezas' ELSE 'General' END) AS categoria_nombre,
         COALESCE(MAX(c.icono), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN '🍺' ELSE '🍽️' END) AS categoria_icono,
@@ -7065,18 +7119,29 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const paramsVentas = [desde, hasta, nid, nid];
 
     if (producto_id) {
-      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ?)';
+      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ? OR (LOWER(?) LIKE \'%balde%\' AND LOWER(d.nombre_producto) LIKE \'%balde%\'))';
       paramsVentas.push(String(producto_id));
       paramsVentas.push('%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%');
+      paramsVentas.push(String(producto_id));
     }
     if (categoria_id && categoria_id !== 'todas') {
       const catNum = Number(categoria_id);
-      sqlVentas += ' AND (p.categoria_id = ? OR (p.categoria_id IS NULL AND LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (4, 8, 150, 158, 166, 174, 182)))';
+      sqlVentas += ' AND (p.categoria_id = ? OR (LOWER(d.nombre_producto) LIKE \'%balde%\' AND (? IN (4, 8, 150, 158, 166, 174, 182) OR EXISTS (SELECT 1 FROM Categorias c2 WHERE c2.id = ? AND (LOWER(c2.nombre) LIKE \'%cerveza%\' OR LOWER(c2.nombre) LIKE \'%bebida%\')))))';
+      paramsVentas.push(catNum);
       paramsVentas.push(catNum);
       paramsVentas.push(catNum);
     }
 
-    sqlVentas += ' GROUP BY d.producto_id, d.nombre_producto ORDER BY total_ingresos DESC';
+    sqlVentas += ` GROUP BY 
+      CASE 
+        WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'balde_nacional'
+        ELSE CAST(d.producto_id AS TEXT)
+      END,
+      CASE 
+        WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'Balde Nacional'
+        ELSE d.nombre_producto
+      END
+      ORDER BY total_ingresos DESC`;
 
     const ventasRows = await dbAll(sqlVentas, paramsVentas);
 
@@ -7165,7 +7230,8 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-        `, [String(pId || ''), desde, hasta]);
+            AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+        `, [String(pId || ''), desde, hasta, nid, nid]);
 
         const desgloseCervezas = {};
         let totalCervezasContadas = 0;
@@ -7197,11 +7263,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         }
 
         for (const [nomCerveza, cantTotalBotellas] of Object.entries(desgloseCervezas)) {
-          let insumoMatch = todosLosInsumos.find(i => 
-            i.nombre.toLowerCase() === nomCerveza.toLowerCase() ||
-            i.nombre.toLowerCase().includes(nomCerveza.toLowerCase()) ||
-            nomCerveza.toLowerCase().includes(i.nombre.toLowerCase())
-          ) || todosLosInsumos.find(i => i.nombre.toLowerCase().includes('pilsen') || i.nombre.toLowerCase().includes('imperial')) || {
+          let insumoMatch = resolverInsumoCerveza(todosLosInsumos, null, nomCerveza) || {
             id: 'ins_balde_' + nomCerveza,
             nombre: nomCerveza,
             unidad_medida: 'botellas',
