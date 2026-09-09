@@ -10003,7 +10003,7 @@ window.autoAsignarRestanteMixto = function(tipo) {
 
 // Los botones de Pago Mixto utilizan handlers globales window.autoAsignarRestanteMixto, window.splitMixto5050 y window.limpiarCamposMixto
 
-document.getElementById('btnFinalizarCobro').addEventListener('click', async () => {
+window.ejecutarCobroFinal = async function() {
   const btnFinalizar = document.getElementById('btnFinalizarCobro');
   if (!btnFinalizar || btnFinalizar.disabled) return;
   btnFinalizar.disabled = true;
@@ -10011,10 +10011,25 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
   btnFinalizar.innerHTML = '⏳ Procesando Cobro...';
 
   try {
-    let totalNum = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
-    if (totalNum <= 0 && estado.mesaActiva) {
-      totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+    const esCobroSplitPersona = (estado.cobroSplitPersonaIndex != null && splitState && splitState.personas && splitState.personas[estado.cobroSplitPersonaIndex]);
+    let personaCobrada = null;
+    let esLiquidacionFinal = true;
+
+    let totalNum = 0;
+    if (esCobroSplitPersona) {
+      personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
+      personaCobrada.guardada = true;
+      personaCobrada.pagada = true;
+      totalNum = (personaCobrada.total && personaCobrada.total > 0)
+        ? personaCobrada.total
+        : parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+    } else {
+      totalNum = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+      if (totalNum <= 0 && estado.mesaActiva) {
+        totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
+      }
     }
+
     const metodoActivo = document.querySelector('.pay-method-tab.active');
     const metodoKey = metodoActivo ? (metodoActivo.dataset.method || 'Efectivo') : 'Efectivo';
     
@@ -10031,7 +10046,8 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
 
     if (metodoKey === 'Efectivo') {
       metodoFinal = 'Efectivo';
-      recibido = parseFloat(document.getElementById('txtEfectivoRecibido').value) || totalNum;
+      const txtEf = document.getElementById('txtEfectivoRecibido')?.value;
+      recibido = (txtEf && parseFloat(txtEf) > 0) ? parseFloat(txtEf) : totalNum;
       cambio = Math.max(0, recibido - totalNum);
     } else if (metodoKey === 'Tarjeta') {
       metodoFinal = 'Tarjeta';
@@ -10063,9 +10079,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
 
       if (totalAsignado < totalNum && (totalNum - totalAsignado) > 1) {
-        alert(`⚠️ El monto asignado (${formatCRC(totalAsignado)}) no cubre el total de la cuenta (${formatCRC(totalNum)}).\n\nFaltan por cubrir: ${formatCRC(totalNum - totalAsignado)}`);
-        btnFinalizar.disabled = false;
-        btnFinalizar.innerHTML = textoOriginal;
+        mostrarNotificacionCentro(`⚠️ El monto asignado (${formatCRC(totalAsignado)}) no cubre el total (${formatCRC(totalNum)}). Faltan: ${formatCRC(totalNum - totalAsignado)}`, 'warning');
         return;
       }
 
@@ -10084,14 +10098,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
     const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
 
-    const esCobroSplitPersona = (estado.cobroSplitPersonaIndex != null && splitState && splitState.personas && splitState.personas[estado.cobroSplitPersonaIndex]);
-    let personaCobrada = null;
-    let esLiquidacionFinal = true;
-
     if (esCobroSplitPersona) {
-      personaCobrada = splitState.personas[estado.cobroSplitPersonaIndex];
-      personaCobrada.guardada = true;
-      personaCobrada.pagada = true;
       personaCobrada.metodoPago = metodoFinal;
       personaCobrada.montoPagado = totalNum;
       personaCobrada.recibido = recibido;
@@ -10181,16 +10188,17 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     const endpointCobro = ordenId ? `/api/ordenes/${ordenId}/cobrar` : '/api/ordenes/directo/cobrar';
 
     let cobroResData = null;
-    if (window.PosOfflineSync) {
-      cobroResData = await window.PosOfflineSync.ejecutarConRespaldo({
-        tipo: 'COBRAR_ORDEN',
-        endpoint: endpointCobro,
-        metodo: 'POST',
-        payload: payloadCobro,
-        descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodoFinal})`
-      });
-    } else {
-      try {
+    try {
+      if (window.PosOfflineSync) {
+        const syncRes = await window.PosOfflineSync.ejecutarConRespaldo({
+          tipo: 'COBRAR_ORDEN',
+          endpoint: endpointCobro,
+          metodo: 'POST',
+          payload: payloadCobro,
+          descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodoFinal})`
+        });
+        cobroResData = (syncRes && syncRes.datos) ? syncRes.datos : syncRes;
+      } else {
         const res = await fetch(endpointCobro, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -10199,9 +10207,9 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         if (res.ok) {
           cobroResData = await res.json().catch(() => null);
         }
-      } catch (e) {
-        console.error('Error al registrar cobro:', e);
       }
+    } catch (errReq) {
+      console.warn('Error al despachar petición de cobro:', errReq);
     }
 
     if (esCobroSplitPersona) {
@@ -10321,7 +10329,7 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
         // Quedan personas pendientes: re-abrir split modal y avanzar a la siguiente persona
         mostrarNotificacionCentro(`🧾 Factura de ${personaCobrada.nombre} emitida e impresa (${formatCRCSinDecimales(totalNum)} - ${metodoFinal})`, 'success');
 
-        const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && p.items && p.items.length > 0);
+        const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
         if (sigPersonaIdx !== -1) {
           splitState.personaActivaIndex = sigPersonaIdx;
         } else {
@@ -10437,15 +10445,21 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
 
     await cargarMesasDesdeBackend();
     cargarCajaDesdeBackend();
+  } catch (globalErr) {
+    console.error('Error crítico en ejecución de cobro:', globalErr);
+    mostrarNotificacionCentro('❌ Error al procesar el cobro: ' + globalErr.message, 'error');
   } finally {
     if (btnFinalizar) {
       btnFinalizar.disabled = false;
       btnFinalizar.innerHTML = textoOriginal;
     }
   }
-});
+};
 
-// Facturación Express
+const btnCobroElem = document.getElementById('btnFinalizarCobro');
+if (btnCobroElem) {
+  btnCobroElem.onclick = window.ejecutarCobroFinal;
+}// Facturación Express
 document.getElementById('btnBuscarClienteExpress').addEventListener('click', async () => {
   const id = document.getElementById('expressNumeroId').value.trim();
   if (!id) return alert('Ingresa una identificación.');
@@ -11275,6 +11289,9 @@ function renderSplitColaPersonas() {
     const card = document.createElement('div');
     const esActiva = (idx === splitState.personaActivaIndex);
     const yaPagada = p.pagada;
+    const prefacturaLista = Boolean(p.prefacturaEmitida);
+    const tieneItems = (p.items && p.items.length > 0) || (p.total > 0);
+
     card.className = `split-queue-card ${esActiva ? 'active-editing' : ''} ${yaPagada ? 'paid-card' : ''}`;
 
     const totalItems = (p.items || []).reduce((acc, it) => acc + it.cantidad, 0);
@@ -11282,22 +11299,49 @@ function renderSplitColaPersonas() {
       ? p.items.map(it => `${it.cantidad}x ${it.nombre}`).join(', ')
       : 'Sin consumos asignados';
 
+    let estadoBadge = '';
+    if (yaPagada) {
+      estadoBadge = '<small style="color:#10b981; font-weight:bold;">(Pagado ✅)</small>';
+    } else if (prefacturaLista) {
+      estadoBadge = '<small style="color:#38bdf8; font-weight:bold;">(📄 Pre-Factura Impresa)</small>';
+    } else if (esActiva) {
+      estadoBadge = '<small style="color:#34d399;">(Editando)</small>';
+    }
+
+    let botonesAccion = '';
+    if (yaPagada) {
+      botonesAccion = `
+        <button type="button" class="btn-tool" style="padding:6px 12px; font-size:0.78rem; background:#047857; color:#fff; border-radius:6px; border:none; cursor:pointer;" onclick="reimprimirTicketPersonaSplit(${idx})">🖨️ Factura</button>
+        <button type="button" class="btn-pay-split" disabled style="opacity:0.6; background:#10b981; cursor:default;">✅ Pagado</button>
+      `;
+    } else {
+      const btnEditar = `<button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>`;
+      
+      const btnPrefactura = (!prefacturaLista && tieneItems)
+        ? `<button type="button" class="btn-prefactura-split" style="background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; padding:6px 10px; border-radius:8px; font-size:0.78rem; font-weight:700; cursor:pointer; transition:all 0.2s;" onclick="imprimirPrefacturaPersonaSplit(${idx})">📄 Pre-Factura</button>`
+        : '';
+
+      const btnCobrarStyle = prefacturaLista 
+        ? 'background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; box-shadow: 0 0 12px rgba(16,185,129,0.5); font-weight:900;'
+        : '';
+
+      const btnCobrarTexto = prefacturaLista ? '💵 Cobrar y Emitir Factura' : '💵 Cobrar';
+
+      const btnCobrar = `<button type="button" class="btn-pay-split" style="${btnCobrarStyle}" onclick="cobrarPersonaSplit(${idx})">${btnCobrarTexto}</button>`;
+
+      botonesAccion = `${btnEditar} ${btnPrefactura} ${btnCobrar}`;
+    }
+
     card.innerHTML = `
       <div class="card-head">
-        <span>👤 ${p.nombre} ${esActiva ? '<small style="color:#34d399;">(Editando)</small>' : ''} ${yaPagada ? '<small style="color:#10b981; font-weight:bold;">(Pagado ✅)</small>' : ''}</span>
+        <span>👤 ${p.nombre} ${estadoBadge}</span>
         <span class="card-total">${formatCRCSinDecimales(p.total)}</span>
       </div>
       <div class="card-items-summary" title="${escapeHtml(summaryTxt)}">
         ${escapeHtml(summaryTxt)}
       </div>
-      <div class="card-actions">
-        ${yaPagada ? `
-          <button type="button" class="btn-tool" style="padding:6px 12px; font-size:0.78rem; background:#047857; color:#fff; border-radius:6px; border:none; cursor:pointer;" onclick="reimprimirTicketPersonaSplit(${idx})">🖨️ Factura</button>
-          <button type="button" class="btn-pay-split" disabled style="opacity:0.6; background:#10b981; cursor:default;">✅ Pagado</button>
-        ` : `
-          <button type="button" class="btn-edit-split" onclick="seleccionarPersonaSplitParaEditar(${idx})">✏️ Editar</button>
-          <button type="button" class="btn-pay-split" onclick="cobrarPersonaSplit(${idx})">💵 Cobrar</button>
-        `}
+      <div class="card-actions" style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+        ${botonesAccion}
       </div>
     `;
 
@@ -11313,9 +11357,95 @@ window.seleccionarPersonaSplitParaEditar = function(index) {
   }
 };
 
+window.imprimirPrefacturaPersonaSplit = function(personaIndex) {
+  const p = splitState.personas[personaIndex];
+  if (!p || ((!p.items || p.items.length === 0) && (!p.total || p.total <= 0))) {
+    mostrarNotificacionCentro('⚠️ Esta persona no tiene consumos asignados para generar pre-factura.', 'warning');
+    return;
+  }
+
+  const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
+  const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id || 'ORD-1') : 'ORD-1';
+  const esParaLlevarCobro = Boolean(
+    estado.mesaActiva && (
+      estado.mesaActiva.es_para_llevar ||
+      estado.mesaActiva.tipo_orden === 'para_llevar' ||
+      String(estado.mesaActiva.id).startsWith('para_llevar') ||
+      estado.mesaActiva.id === 'para_llevar'
+    )
+  );
+
+  const totalNum = p.total || (p.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  const itemsFacturaPersona = (p.items && p.items.length > 0)
+    ? p.items.map(it => {
+        const cant = Number(it.cantidad) || 1;
+        const uPrice = Number(it.precio || it.precio_unitario || 0);
+        const totalLinea = Number(it.subtotal || it.totalLinea || (uPrice * cant));
+        return {
+          cantidad: cant,
+          nombre: it.nombre || it.nombre_producto || 'Consumo',
+          precioUnitario: uPrice,
+          totalLinea: totalLinea,
+          notas: it.notas || ''
+        };
+      })
+    : [{
+        cantidad: 1,
+        nombre: `Cuota Equitativa (${p.nombre})`,
+        precioUnitario: totalNum,
+        totalLinea: totalNum,
+        notas: ''
+      }];
+
+  const subPersona = esParaLlevarCobro ? Math.round(totalNum / 1.13) : Math.round(totalNum / 1.23);
+  const servPersona = esParaLlevarCobro ? 0 : Math.round(subPersona * 0.10);
+  const ivaPersona = totalNum - subPersona - servPersona;
+  const prop10 = Math.round(subPersona * 0.10);
+  const prop15 = Math.round(subPersona * 0.15);
+
+  const ticketPrefactura = {
+    tipo: 'prefactura',
+    titulo: `PRE-CUENTA / PRE-FACTURA (${p.nombre.toUpperCase()})`,
+    negocio: {
+      nombre: estado.configuracion?.nombreComercio || 'GastroBar Fuego & Brasas',
+      slogan: estado.configuracion?.slogan || 'Restaurante, Bar & Lounge',
+      tel: estado.configuracion?.telefono || '2222-3344',
+      dir: estado.configuracion?.direccion || 'San José, Costa Rica',
+      cedula: estado.configuracion?.cedula || '3-101-789458'
+    },
+    ordenId,
+    numeroOrden: ordenId,
+    mesa: `${mesaNumero} - ${p.nombre.toUpperCase()}`,
+    mesero: estado.usuarioActual ? estado.usuarioActual.nombre : (estado.usuario ? estado.usuario.nombre : 'General'),
+    cliente: p.nombre,
+    fechaHora: formatearFechaHoraCR(new Date()),
+    items: itemsFacturaPersona,
+    subtotal: subPersona,
+    servicio: servPersona,
+    iva: ivaPersona,
+    total: totalNum,
+    propina10: prop10,
+    propina15: prop15
+  };
+
+  // Marcar que la prefactura ya fue emitida para esta persona
+  p.prefacturaEmitida = true;
+
+  // Despachar a impresora térmica en segundo plano sin abrir visor
+  if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+    window.ejecutarImpresionDirectaTermica(ticketPrefactura);
+  }
+
+  mostrarNotificacionCentro(`📄 Pre-Factura de ${p.nombre} enviada a impresora térmica (${formatCRCSinDecimales(totalNum)})`, 'info');
+
+  renderSplitColaPersonas();
+  renderSplitPersonaActiva();
+  calcularSplitIgual();
+};
+
 window.cobrarPersonaSplit = function(personaIndex) {
   const p = splitState.personas[personaIndex];
-  if (!p || !p.items || p.items.length === 0) {
+  if (!p || (!p.items || p.items.length === 0) && (!p.total || p.total <= 0)) {
     mostrarNotificacionCentro('⚠️ Esta persona no tiene productos asignados para cobrar.', 'warning');
     return;
   }
@@ -11333,6 +11463,7 @@ window.cobrarPersonaSplit = function(personaIndex) {
   if (btnCobrar) {
     btnCobrar.textContent = '✅ Cobrar y Emitir Factura';
     btnCobrar.className = 'btn-pri success';
+    btnCobrar.onclick = window.ejecutarCobroFinal;
   }
 
   const mesaNom = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
@@ -11365,7 +11496,8 @@ window.cobrarPersonaSplitEqual = function(personaIndex) {
       impuestos: 0,
       total: 0,
       guardada: false,
-      pagada: false
+      pagada: false,
+      prefacturaEmitida: false
     });
   }
 
@@ -11395,6 +11527,7 @@ window.cobrarPersonaSplitEqual = function(personaIndex) {
   if (btnCobrar) {
     btnCobrar.textContent = '✅ Cobrar y Emitir Factura';
     btnCobrar.className = 'btn-pri success';
+    btnCobrar.onclick = window.ejecutarCobroFinal;
   }
 
   const mesaNom = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
@@ -11439,6 +11572,7 @@ function calcularSplitIgual() {
       id: i + 1,
       nombre: `Persona ${i + 1}`,
       pagada: false,
+      prefacturaEmitida: false,
       total: porPersona
     };
     const row = document.createElement('div');
@@ -11454,17 +11588,44 @@ function calcularSplitIgual() {
       margin-bottom: 8px;
     `;
 
+    const yaPagada = p.pagada;
+    const prefacturaLista = Boolean(p.prefacturaEmitida);
+
+    let estadoBadge = '';
+    if (yaPagada) {
+      estadoBadge = '<span style="color:#34d399; font-size:0.85rem; font-weight:800;">(Pagado ✅)</span>';
+    } else if (prefacturaLista) {
+      estadoBadge = '<span style="color:#38bdf8; font-size:0.85rem; font-weight:800;">(📄 Pre-Factura Impresa)</span>';
+    }
+
+    let acciones = '';
+    if (yaPagada) {
+      acciones = `
+        <button type="button" class="btn-tool" style="padding:6px 14px; font-size:0.82rem; background:#047857; color:#fff; border-radius:6px; border:none; cursor:pointer;" onclick="reimprimirTicketPersonaSplit(${i})">🖨️ Factura</button>
+      `;
+    } else {
+      const btnPrefactura = !prefacturaLista
+        ? `<button type="button" class="btn-tool" style="padding:8px 12px; font-size:0.82rem; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; border-radius:8px; cursor:pointer; font-weight:700;" onclick="imprimirPrefacturaPersonaSplit(${i})">📄 Pre-Factura</button>`
+        : '';
+
+      const btnCobrarStyle = prefacturaLista
+        ? 'background: linear-gradient(135deg, #059669, #10b981); color: #fff; box-shadow: 0 0 12px rgba(16,185,129,0.5); font-weight:900;'
+        : '';
+
+      const btnCobrarTexto = prefacturaLista ? '💵 Cobrar y Emitir Factura' : '💵 Cobrar';
+
+      const btnCobrar = `<button type="button" class="btn-pri" style="padding:8px 16px; font-size:0.85rem; border-radius:8px; cursor:pointer; ${btnCobrarStyle}" onclick="cobrarPersonaSplitEqual(${i})">${btnCobrarTexto}</button>`;
+
+      acciones = `${btnPrefactura} ${btnCobrar}`;
+    }
+
     row.innerHTML = `
       <div style="display:flex; flex-direction:column; text-align:left;">
-        <span style="font-weight:700; color:#f8fafc; font-size:1rem;">👤 ${p.nombre} ${p.pagada ? '<span style="color:#34d399; font-size:0.85rem; font-weight:800;">(Pagado ✅)</span>' : ''}</span>
+        <span style="font-weight:700; color:#f8fafc; font-size:1rem;">👤 ${p.nombre} ${estadoBadge}</span>
         <span style="font-size:0.85rem; color:#94a3b8;">Cuota: <strong style="color:${p.pagada ? '#34d399' : '#38bdf8'}; font-size:0.95rem;">${formatCRCSinDecimales(porPersona)}</strong></span>
       </div>
-      <div style="display:flex; gap:8px;">
-        ${p.pagada ? `
-          <button type="button" class="btn-tool" style="padding:6px 14px; font-size:0.82rem; background:#047857; color:#fff; border-radius:6px; border:none; cursor:pointer;" onclick="reimprimirTicketPersonaSplit(${i})">🖨️ Factura</button>
-        ` : `
-          <button type="button" class="btn-pri" style="padding:8px 16px; font-size:0.85rem; border-radius:8px; cursor:pointer;" onclick="cobrarPersonaSplitEqual(${i})">💵 Cobrar</button>
-        `}
+      <div style="display:flex; gap:8px; align-items:center;">
+        ${acciones}
       </div>
     `;
     container.appendChild(row);
