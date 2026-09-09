@@ -572,6 +572,9 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
       if (u.rol === 'developer') {
         rolDisplay = 'Developer';
         avatar = '🛠️';
+      } else if (u.rol === 'superadmin') {
+        rolDisplay = 'Super Admin';
+        avatar = '👑';
       } else if (u.rol === 'admin') {
         rolDisplay = 'Admin';
         avatar = '👑';
@@ -1818,6 +1821,7 @@ app.get('/api/admin/empleados', async (req, res) => {
     const listado = empleados.map(e => {
       let rolDisplay = e.rol;
       if (e.rol === 'superadmin') rolDisplay = 'Super Administrador';
+      else if (e.rol === 'superadmin') rolDisplay = 'Super Admin';
       else if (e.rol === 'admin') rolDisplay = 'Administrador';
       else if (e.rol === 'cajero') rolDisplay = 'Cajero';
       else if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';

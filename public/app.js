@@ -2576,7 +2576,7 @@ function aplicarEnrutamientoPorRol() {
 
   // Visibilidad de herramientas y pestañas exclusivas de Admin
   const adminTools = document.getElementById('adminExtraActions');
-  const esAdmin = u.rol === 'admin' || u.rol === 'developer';
+  const esAdmin = u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer';
   document.body.classList.toggle('is-admin', esAdmin);
 
   const btnComanderoEditar = document.getElementById('btnComanderoEditarProd');
@@ -2588,7 +2588,7 @@ function aplicarEnrutamientoPorRol() {
     if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'inline-flex';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
     document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'inline-flex');
-    if (perfilBadge && u.rol === 'admin') {
+    if (perfilBadge && (u.rol === 'admin' || u.rol === 'superadmin')) {
       perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(Admin)</small>`;
     }
   } else {
@@ -2709,7 +2709,7 @@ window.obtenerHeadersAuthAdmin = function(extraHeaders = {}) {
 
 window.abrirPanelAdmin = async function() {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '👑',
@@ -2803,7 +2803,7 @@ window.abrirModuloAdmin = async function(modulo) {
   }
 
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '🔒',
@@ -5009,7 +5009,7 @@ function renderGridCategorias() {
 
   const cats = estado.categorias || [];
   const prods = estado.productos || [];
-  const esAdminODev = estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'developer' || estado.usuarioActual.rol === 'supervisor');
+  const esAdminODev = estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'superadmin' || estado.usuarioActual.rol === 'developer' || estado.usuarioActual.rol === 'supervisor');
 
   const cardsHtml = cats.map(cat => {
     const totalEnCat = prods.filter(p => p.catId === cat.id || p.categoria_id === cat.id).length;
@@ -5068,7 +5068,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     grid.classList.remove('grid-view-large');
   }
 
-  const esAdminODev = estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'developer' || estado.usuarioActual.rol === 'supervisor');
+  const esAdminODev = estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'superadmin' || estado.usuarioActual.rol === 'developer' || estado.usuarioActual.rol === 'supervisor');
 
   let headerNavHtml = '';
   if (!isSearchMode && catId) {
@@ -12606,7 +12606,7 @@ async function initHappyHour() {
     if (modalCfg && (modalCfg.classList.contains('active') || modalCfg.style.display === 'flex')) return;
 
     const uAct = estado.usuarioActual || estado.usuario;
-    const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+    const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'superadmin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
     let pinAutorizacion = null;
 
     if (!esAdminODev) {
@@ -13292,7 +13292,7 @@ window.abrirModalEditarKardex = async function(movId) {
 
   // Verificar PIN si no es admin / supervisor
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer' || u.rol === 'supervisor');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '✏️',
@@ -13419,7 +13419,7 @@ window.confirmarEliminarKardex = async function(movId) {
 
   // Verificar PIN si no es admin / supervisor
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer' || u.rol === 'supervisor');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '🗑️',
@@ -13666,7 +13666,7 @@ window.tipoAjusteActivo = 'entrada';
 
 window.abrirModalAjusteRapido = async function(tipo = 'entrada', insumoId = null) {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'supervisor' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '📦',
@@ -13904,7 +13904,7 @@ window.guardarAjusteInventario = async function() {
 // MODAL NUEVO INSUMO
 window.abrirModalNuevoInsumo = async function() {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'supervisor' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '➕',
@@ -14045,7 +14045,7 @@ window.guardarNuevoInsumo = async function() {
 // MODAL EDITAR INSUMO
 window.abrirModalEditarInsumo = async function(insumoId) {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'supervisor' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '✏️',
@@ -14251,7 +14251,7 @@ window.actualizarCalculoFraccionable = function(modo) {
 // ELIMINACIÓN DE INSUMO DE BODEGA
 window.confirmarEliminarInsumo = async function(insumoId) {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'supervisor' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'supervisor' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '🗑️',
@@ -15037,7 +15037,7 @@ window.eliminarIngredienteReceta = async function(productoId, insumoId) {
 // -------------------------------------------------------------
 window.abrirModalKardex = async function(insumoId) {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '📜',
@@ -18500,7 +18500,7 @@ window.confirmarEliminarCategoria = async function(catId) {
   if (!cat) return;
 
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer' || u.rol === 'supervisor');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '🗑️',
@@ -18581,7 +18581,7 @@ window.insumoAEliminarExistenciaId = null;
 
 window.confirmarEliminarExistenciasBodega = async function(insumoId) {
   const u = estado.usuarioActual;
-  const esAdmin = u && (u.rol === 'admin' || u.rol === 'developer' || u.rol === 'supervisor');
+  const esAdmin = u && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer' || u.rol === 'supervisor');
   if (!esAdmin) {
     const pin = await window.solicitarPinAdmin({
       icono: '📦',
