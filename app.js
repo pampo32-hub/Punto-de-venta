@@ -999,7 +999,9 @@ window.guardarNuevoProducto = async function() {
   }
 
   const destino = selDest ? selDest.value : 'cocina';
-  const imagen_url = (txtImg ? txtImg.value : '').trim();
+  const prodExistente = isEditing ? (estado.productos || []).find(p => p.id === prodId) : null;
+  const imagen_url_raw = (txtImg ? txtImg.value : '').trim();
+  const imagen_url = imagen_url_raw !== '' ? imagen_url_raw : (prodExistente && prodExistente.imagen_url ? prodExistente.imagen_url : null);
   const curso = selCurso ? selCurso.value : 2;
   const happy_hour = chkHH && chkHH.checked ? 1 : 0;
   const agotado = chkAgotado && chkAgotado.checked ? 1 : 0;
@@ -4882,11 +4884,8 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     const cat = (estado.categorias || []).find(c => c.id === (p.catId || p.categoria_id));
     const catBadge = cat ? `${cat.icono || '🍽️'} ${cat.nombre}` : (p.categoria || 'Menú');
 
-    let imgUrl = p.imagen_url;
-    if (!imgUrl && estado.presetsFotos) {
-      const matchPreset = estado.presetsFotos.find(pr => (p.nombre || '').toLowerCase().includes(pr.cat.toLowerCase()));
-      if (matchPreset) imgUrl = matchPreset.url;
-    }
+    // Blindaje de fotos: Mostrar solo la imagen real asignada explícitamente por el usuario
+    const imgUrl = (p.imagen_url && String(p.imagen_url).trim() !== '') ? p.imagen_url : null;
 
     if (modoVista === 'large') {
       const imgLargeHtml = imgUrl 
@@ -4913,8 +4912,8 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     }
 
     // Modo clásico estándar
-    const imgHtml = p.imagen_url 
-      ? `<img class="prod-card-thumb" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
+    const imgHtml = imgUrl 
+      ? `<img class="prod-card-thumb" src="${imgUrl}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
       : `<div class="prod-card-no-thumb">${cat?.icono || '🍽️'}</div>`;
 
     const btnEditHtml = esAdminODev

@@ -768,24 +768,7 @@ function initDb() {
       }
     });
 
-    // Sembrar imágenes iniciales de alta calidad para los productos principales
-    const fotosPlatillos = [
-      { id: 1, cod: 'BEB01', img: 'https://images.unsplash.com/photo-1608270110398-319cf887cf45?w=300&auto=format&fit=crop&q=80' }, // Cerveza
-      { id: 2, cod: 'BEB02', img: 'https://images.unsplash.com/photo-1535958636474-b021ee887b13?w=300&auto=format&fit=crop&q=80' }, // Pilsen
-      { id: 3, cod: 'BEB03', img: 'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=300&auto=format&fit=crop&q=80' }, // Corona
-      { id: 5, cod: 'COC01', img: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=300&auto=format&fit=crop&q=80' }, // Mojito
-      { id: 6, cod: 'COC02', img: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=300&auto=format&fit=crop&q=80' }, // Margarita
-      { id: 8, cod: 'ENT01', img: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80' }, // Chifrijo
-      { id: 9, cod: 'ENT02', img: 'https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=300&auto=format&fit=crop&q=80' }, // Alitas
-      { id: 11, cod: 'ENT04', img: 'https://images.unsplash.com/photo-1535400255456-984241443b29?w=300&auto=format&fit=crop&q=80' }, // Ceviche
-      { id: 12, cod: 'PLA01', img: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80' }, // Rib Eye
-      { id: 14, cod: 'HAM01', img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&auto=format&fit=crop&q=80' }, // Hamburguesa
-      { id: 16, cod: 'POS01', img: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=300&auto=format&fit=crop&q=80' }  // Tres Leches
-    ];
-
-    fotosPlatillos.forEach(f => {
-      db.run("UPDATE Productos SET imagen_url = ? WHERE (codigo = ? OR id = ?) AND (imagen_url IS NULL OR TRIM(imagen_url) = '')", [f.img, f.cod, f.id]);
-    });
+    // Blindaje de imágenes: No sobreescribir imágenes de productos al iniciar el servidor
 
     // Sembrar Mesas Iniciales si no existen
     db.get('SELECT COUNT(*) as count FROM Mesas', (err, row) => {

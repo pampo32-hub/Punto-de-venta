@@ -1742,12 +1742,21 @@ app.delete('/api/admin/empleados/:id', async (req, res) => {
 // ============================================================================
 app.put('/api/productos/:id/visual', async (req, res) => {
   try {
-    const { imagen_url, nombre, precio, color_badge } = req.body;
+    const { imagen_url, nombre, precio, color_badge, eliminar_imagen } = req.body;
     const prodId = req.params.id;
+    const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    let finalImg = prod.imagen_url;
+    if (eliminar_imagen || imagen_url === '__borrar__') {
+      finalImg = null;
+    } else if (imagen_url !== undefined && imagen_url !== null && String(imagen_url).trim() !== '') {
+      finalImg = String(imagen_url).trim();
+    }
 
     await dbRun(
       'UPDATE Productos SET imagen_url = ?, nombre = COALESCE(?, nombre), precio = COALESCE(?, precio), color_badge = ? WHERE id = ?',
-      [imagen_url || null, nombre || null, precio || null, color_badge || null, prodId]
+      [finalImg, nombre || null, precio || null, color_badge || null, prodId]
     );
 
     const actualizado = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
@@ -3448,8 +3457,18 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     const precioNum = precio !== undefined ? parseFloat(precio) : prod.precio;
     const catId = categoria_id !== undefined ? Number(categoria_id) : prod.categoria_id;
     const destinoFinal = destino ? destino.trim().toLowerCase() : prod.destino;
-    const cursoNum = curso !== undefined ? Number(curso) : prod.curso;
-    const imgUrl = imagen_url !== undefined ? imagen_url : prod.imagen_url;
+    const cursoNum = curso !== undefined ? Number(curso) : (prod.curso || 2);
+    // Blindaje de fotos/imágenes: Si no se pide eliminar y no viene nueva foto, conservar estrictamente la foto existente
+    let imgUrl = prod.imagen_url;
+    if (req.body.eliminar_imagen === true || req.body.borrar_imagen === true || imagen_url === '__borrar__') {
+      imgUrl = null;
+    } else if (imagen_url !== undefined && imagen_url !== null) {
+      const trimmedImg = String(imagen_url).trim();
+      if (trimmedImg !== '') {
+        imgUrl = trimmedImg;
+      }
+    }
+
     const hhVal = happy_hour !== undefined ? (happy_hour ? 1 : 0) : prod.happy_hour;
     const agotadoVal = agotado !== undefined ? (agotado ? 1 : 0) : prod.agotado;
 
