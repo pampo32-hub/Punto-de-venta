@@ -1397,15 +1397,17 @@ window.guardarNuevoNombreMesa = async function() {
 
   const uAct = estado.usuarioActual || estado.usuario;
   const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
     const res = await fetch('/api/mesas/' + mesaParaRenombrar.id, {
       method: 'PUT',
       headers: { 
         'Content-Type': 'application/json',
-        'x-user-rol': userRol
+        'x-user-rol': userRol,
+        'x-negocio-id': String(nid)
       },
-      body: JSON.stringify({ numero: nuevoNombre })
+      body: JSON.stringify({ numero: nuevoNombre, negocio_id: nid })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1449,11 +1451,15 @@ window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
 
   const uAct = estado.usuarioActual || estado.usuario;
   const userRol = (uAct && uAct.rol) ? uAct.rol : 'admin';
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
     let res = await fetch('/api/mesas/' + mesaId, {
       method: 'DELETE',
-      headers: { 'x-user-rol': userRol }
+      headers: { 
+        'x-user-rol': userRol,
+        'x-negocio-id': String(nid)
+      }
     });
     let data = await res.json();
 
@@ -1471,7 +1477,10 @@ window.eliminarMesaDesdeEditor = async function(mesaId, mesaNumero) {
 
       res = await fetch('/api/mesas/' + mesaId + '?forzar=true', {
         method: 'DELETE',
-        headers: { 'x-user-rol': userRol }
+        headers: { 
+          'x-user-rol': userRol,
+          'x-negocio-id': String(nid)
+        }
       });
       data = await res.json();
     }
@@ -1618,6 +1627,8 @@ try {
       cargarMesasDesdeBackend();
     });
     socket.on('mesa_actualizada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (d && d.mesaId) {
         const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(d.mesaId));
         if (mesa) {
@@ -1632,8 +1643,22 @@ try {
       }
       cargarMesasDesdeBackend();
     });
+    socket.on('nueva_mesa_creada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+    });
+    socket.on('mesa_eliminada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+    });
     socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
-    socket.on('mesa_renombrada', () => cargarMesasDesdeBackend());
+    socket.on('mesa_renombrada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+    });
     socket.on('producto_creado', () => cargarMenuDesdeBackend());
     socket.on('menu_actualizado', () => cargarMenuDesdeBackend());
     socket.on('actualizacion_disponible', (d) => {
@@ -1675,7 +1700,11 @@ try {
       renderGridProductos(estado.productos);
     });
     socket.on('producto_visual_cambiado', () => cargarMenuDesdeBackend());
-    socket.on('mesas_reorganizadas', () => cargarMesasDesdeBackend());
+    socket.on('mesas_reorganizadas', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+    });
     socket.on('happy_hour_cambio', (data) => {
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
     });
@@ -4464,7 +4493,10 @@ document.getElementById('btnGuardarFotoBoton').addEventListener('click', async (
 // ============================================================================
 async function cargarMenuDesdeBackend() {
   try {
-    const res = await fetch('/api/menu');
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/menu?negocio_id=${nid}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
     const data = await res.json();
     estado.categorias = data.categorias || [];
     estado.productos = (data.productos || []).map(p => ({
@@ -11114,17 +11146,22 @@ function renderEditorPlano() {
 async function autoGuardarPosicionMesa(m) {
   if (!m || !m.id) return;
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
     await fetch('/api/mesas/posiciones/auto', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
       body: JSON.stringify({
         id: m.id,
         x: Math.round(m.x),
         y: Math.round(m.y),
         ancho: Math.round(m.ancho || (esSilla ? 85 : 135)),
         alto: Math.round(m.alto || (esSilla ? 95 : 115)),
-        piso: m.piso || (estado.pisoActualEditor || 1)
+        piso: m.piso || (estado.pisoActualEditor || 1),
+        negocio_id: nid
       })
     });
   } catch (_) {}
@@ -11145,6 +11182,7 @@ window.cambiarTamanoMesa = function(mesaId, delta) {
 
 
 document.getElementById('btnGuardarPlano').addEventListener('click', async () => {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const posiciones = estado.mesas.map(m => {
     const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
     return {
@@ -11159,8 +11197,11 @@ document.getElementById('btnGuardarPlano').addEventListener('click', async () =>
   try {
     const res = await fetch('/api/mesas/posiciones', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ posiciones })
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ posiciones, negocio_id: nid })
     });
     mostrarNotificacionCentro('💾 ¡Distribución física guardada permanentemente para todos los usuarios!', 'success');
   } catch (e) {
@@ -11181,7 +11222,15 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
   });
   if (!confirmado) return;
   try {
-    const res = await fetch('/api/mesas/posiciones/reorganizar-cuadricula', { method: 'POST' });
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch('/api/mesas/posiciones/reorganizar-cuadricula', { 
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
     const data = await res.json();
     if (data.ok) {
       mostrarNotificacionCentro('✨ Salón reorganizado perfectamente en cuadrícula sin solapes', 'success');
@@ -11194,16 +11243,23 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
 });
 
 document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', async () => {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const pisoActivo = estado.pisoActualEditor || 1;
-  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === pisoActivo);
+  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 || m.zona_id === 105 ? 2 : 1)) === pisoActivo);
   const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
+  const zonaPiso = (estado.zonas || []).find(z => pisoActivo === 2 ? z.nombre.toLowerCase().includes('segundo') : !z.nombre.toLowerCase().includes('segundo')) || (estado.zonas || [])[0];
+  const zonaId = zonaPiso ? zonaPiso.id : (pisoActivo === 2 ? 5 : 1);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
       body: JSON.stringify({ 
+        negocio_id: nid,
         numero: num, 
-        zona_id: pisoActivo === 2 ? 5 : 1, 
+        zona_id: zonaId, 
         capacidad: 4, 
         forma: 'square', 
         x: 60, 
@@ -11218,16 +11274,23 @@ document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', asyn
 });
 
 document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async () => {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const pisoActivo = estado.pisoActualEditor || 1;
-  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === pisoActivo);
+  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 || m.zona_id === 105 ? 2 : 1)) === pisoActivo);
   const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
+  const zonaPiso = (estado.zonas || []).find(z => pisoActivo === 2 ? z.nombre.toLowerCase().includes('segundo') : !z.nombre.toLowerCase().includes('segundo')) || (estado.zonas || [])[0];
+  const zonaId = zonaPiso ? zonaPiso.id : (pisoActivo === 2 ? 5 : 1);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
       body: JSON.stringify({ 
+        negocio_id: nid,
         numero: num, 
-        zona_id: pisoActivo === 2 ? 5 : 1, 
+        zona_id: zonaId, 
         capacidad: 4, 
         forma: 'round', 
         x: 80, 
@@ -11242,16 +11305,23 @@ document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async
 });
 
 document.getElementById('btnAgregarBarra').addEventListener('click', async () => {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const pisoActivo = estado.pisoActualEditor || 1;
   const totalBarras = estado.mesas.filter(m => m.numero.includes('Barra')).length + 1;
   const num = pisoActivo === 2 ? `Barra P2-${totalBarras}` : `Silla Barra ${totalBarras}`;
+  const zonaBarra = (estado.zonas || []).find(z => z.nombre.toLowerCase().includes('barra')) || (estado.zonas || [])[0];
+  const zonaId = zonaBarra ? zonaBarra.id : (pisoActivo === 2 ? 5 : 2);
   try {
     await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
       body: JSON.stringify({ 
+        negocio_id: nid,
         numero: num, 
-        zona_id: pisoActivo === 2 ? 5 : 2, 
+        zona_id: zonaId, 
         capacidad: 1, 
         forma: 'silla', 
         x: 620, 

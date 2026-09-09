@@ -1682,7 +1682,7 @@ app.put('/api/productos/:id/visual', async (req, res) => {
 app.get('/api/mesas', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR negocio_id IS NULL OR ? = 1) ORDER BY id ASC', [negocioId, negocioId]);
+    const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
     const mesas = await dbAll(`
       SELECT m.*, z.nombre as zonaNombre,
              o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
@@ -1697,38 +1697,8 @@ app.get('/api/mesas', async (req, res) => {
       ORDER BY m.id ASC
     `, [negocioId, negocioId, negocioId, negocioId]);
 
-    // Sincronizar siempre con la distribución física maestra del admin guardada en ConfigNegocio
-    try {
-      if (negocioId === 1) {
-        const cfg = await dbGet("SELECT valor FROM ConfigNegocio WHERE clave = 'distribucion_mesas_admin'");
-        if (cfg && cfg.valor) {
-          const mapAdmin = JSON.parse(cfg.valor);
-          const posById = Object.fromEntries(mapAdmin.map(p => [p.id, p]));
-          for (const m of mesas) {
-            if (posById[m.id]) {
-              m.x = posById[m.id].x;
-              m.y = posById[m.id].y;
-              if (posById[m.id].ancho != null) m.ancho = posById[m.id].ancho;
-              if (posById[m.id].alto != null) m.alto = posById[m.id].alto;
-              if (posById[m.id].forma) m.forma = posById[m.id].forma;
-              if (posById[m.id].piso != null) m.piso = posById[m.id].piso;
-            }
-            m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
-          }
-        } else {
-          for (const m of mesas) {
-            m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
-          }
-        }
-      } else {
-        for (const m of mesas) {
-          m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
-        }
-      }
-    } catch (_) {
-      for (const m of mesas) {
-        m.piso = m.piso || (m.zona_id === 5 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
-      }
+    for (const m of mesas) {
+      m.piso = m.piso || (m.zona_id === 5 || m.zona_id === 105 || (m.zonaNombre && m.zonaNombre.toLowerCase().includes('segundo')) ? 2 : 1);
     }
 
     const activeOrderIds = mesas.map(m => m.orden_activa_id).filter(Boolean);
@@ -1965,7 +1935,8 @@ app.get('/api/mesas', async (req, res) => {
 
 app.post('/api/mesas/posiciones', async (req, res) => {
   try {
-    const { posiciones } = req.body;
+    const { posiciones, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     if (Array.isArray(posiciones)) {
       for (const pos of posiciones) {
         await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto), piso = COALESCE(?, piso) WHERE id = ?', [
@@ -1977,12 +1948,8 @@ app.post('/api/mesas/posiciones', async (req, res) => {
           pos.id
         ]);
       }
-      // Guardar instantáneamente en ConfigNegocio como la distribución maestra oficial del admin
-      await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('distribucion_mesas_admin', ?)", [
-        JSON.stringify(posiciones)
-      ]);
     }
-    io.emit('mesas_reorganizadas', { posiciones });
+    io.emit('mesas_reorganizadas', { posiciones, negocio_id: negocioId });
     res.json({ message: 'Distribución física del salón guardada exitosamente' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1992,7 +1959,8 @@ app.post('/api/mesas/posiciones', async (req, res) => {
 // Auto-guardado instantáneo de una mesa al soltar o redimensionar
 app.post('/api/mesas/posiciones/auto', async (req, res) => {
   try {
-    const { id, x, y, ancho, alto, piso } = req.body;
+    const { id, x, y, ancho, alto, piso, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     if (id != null && x != null && y != null) {
       await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto), piso = COALESCE(?, piso) WHERE id = ?', [
         x,
@@ -2003,13 +1971,7 @@ app.post('/api/mesas/posiciones/auto', async (req, res) => {
         id
       ]);
 
-      // Actualizar el snapshot maestro de mesas en ConfigNegocio
-      const todas = await dbAll('SELECT id, x, y, ancho, alto, piso FROM Mesas');
-      await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('distribucion_mesas_admin', ?)", [
-        JSON.stringify(todas)
-      ]);
-
-      io.emit('mesas_reorganizadas', { mesaId: id, x, y, ancho, alto, piso });
+      io.emit('mesas_reorganizadas', { mesaId: id, x, y, ancho, alto, piso, negocio_id: negocioId });
       return res.json({ ok: true });
     }
     res.status(400).json({ error: 'Datos de posición incompletos' });
@@ -2021,7 +1983,8 @@ app.post('/api/mesas/posiciones/auto', async (req, res) => {
 // Reorganizar automáticamente en una cuadrícula limpia y espaciada (sin solapes)
 app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
   try {
-    const mesas = await dbAll('SELECT * FROM Mesas ORDER BY zona_id ASC, id ASC');
+    const negocioId = obtenerNegocioIdReq(req);
+    const mesas = await dbAll('SELECT * FROM Mesas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY zona_id ASC, id ASC', [negocioId, negocioId]);
     let salonX = 25, salonY = 25;
     let barraX = 530, barraY = 25;
     let terrazaX = 25, terrazaY = 325;
@@ -2031,7 +1994,7 @@ app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
 
     for (const m of mesas) {
       const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
-      const esPiso2 = m.piso === 2 || m.zona_id === 5;
+      const esPiso2 = m.piso === 2 || m.zona_id === 5 || m.zona_id === 105;
       let x, y, w, h;
 
       if (esPiso2) {
@@ -2043,17 +2006,17 @@ app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
           piso2X = 25;
           piso2Y += 145;
         }
-      } else if (m.zona_id === 2 || esSilla) {
+      } else if (m.zona_id === 2 || m.zona_id === 102 || esSilla) {
         // Barra
         w = 85; h = 95;
         x = barraX; y = barraY;
         barraX += 105;
-      } else if (m.zona_id === 3 || (m.numero && m.numero.toLowerCase().includes('terraza'))) {
+      } else if (m.zona_id === 3 || m.zona_id === 103 || (m.numero && m.numero.toLowerCase().includes('terraza'))) {
         // Terraza
         w = 140; h = 120;
         x = terrazaX; y = terrazaY;
         terrazaX += 170;
-      } else if (m.zona_id === 4 || (m.numero && m.numero.toLowerCase().includes('vip'))) {
+      } else if (m.zona_id === 4 || m.zona_id === 104 || (m.numero && m.numero.toLowerCase().includes('vip'))) {
         // VIP
         w = 200; h = 130;
         x = vipX; y = vipY;
@@ -2073,11 +2036,7 @@ app.post('/api/mesas/posiciones/reorganizar-cuadricula', async (req, res) => {
       nuevasPos.push({ id: m.id, x, y, ancho: w, alto: h });
     }
 
-    await dbRun("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('distribucion_mesas_admin', ?)", [
-      JSON.stringify(nuevasPos)
-    ]);
-
-    io.emit('mesas_reorganizadas', { posiciones: nuevasPos });
+    io.emit('mesas_reorganizadas', { posiciones: nuevasPos, negocio_id: negocioId });
     res.json({ ok: true, message: 'Salón reorganizado perfectamente en cuadrícula sin solapes', posiciones: nuevasPos });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2189,9 +2148,12 @@ app.delete('/api/mesas/:id', async (req, res) => {
       }
     }
 
+    const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    const mesaNegocioId = mesaRow ? mesaRow.negocio_id : 1;
+
     await dbRun('UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1', [mesaId, mesaId]);
     await dbRun('DELETE FROM Mesas WHERE id = ?', [mesaId]);
-    io.emit('mesa_eliminada', { id: Number(mesaId) });
+    io.emit('mesa_eliminada', { id: Number(mesaId), negocio_id: mesaNegocioId });
     res.json({ message: 'Mesa o silla eliminada exitosamente', id: mesaId });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2232,7 +2194,19 @@ app.post('/api/mesas/crear', async (req, res) => {
     const { numero, zona_id, capacidad = 4, forma = 'square', x = 100, y = 100, piso = 1, ancho, alto, negocio_id } = req.body;
     const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const numPiso = Number(piso) || 1;
-    const resolvedZonaId = zona_id || (numPiso === 2 ? 5 : 1);
+    
+    let resolvedZonaId = zona_id;
+    if (resolvedZonaId) {
+      const zCheck = await dbGet('SELECT id FROM Zonas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [resolvedZonaId, negocioId, negocioId]);
+      if (!zCheck) resolvedZonaId = null;
+    }
+    if (!resolvedZonaId) {
+      const zDefault = await dbGet(
+        'SELECT id FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1',
+        [negocioId, negocioId]
+      );
+      resolvedZonaId = zDefault ? zDefault.id : (numPiso === 2 ? 5 : 1);
+    }
     const resolvedW = ancho || (forma === 'silla' ? 85 : 135);
     const resolvedH = alto || (forma === 'silla' ? 95 : 115);
 
@@ -2248,6 +2222,7 @@ app.post('/api/mesas/crear', async (req, res) => {
     `, [r.lastID]);
     if (nuevaMesa) {
       nuevaMesa.piso = nuevaMesa.piso || numPiso;
+      nuevaMesa.negocio_id = negocioId;
     }
     io.emit('nueva_mesa_creada', nuevaMesa);
     res.json(nuevaMesa);
@@ -2277,8 +2252,8 @@ app.put('/api/mesas/:id/capacidad', async (req, res) => {
       WHERE m.id = ?
     `, [mesaId]);
 
-    io.emit('mesa_capacidad_cambiada', { id: Number(mesaId), capacidad: numCap });
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), capacidad: numCap });
+    io.emit('mesa_capacidad_cambiada', { id: Number(mesaId), capacidad: numCap, negocio_id: mesa.negocio_id || 1 });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), capacidad: numCap, negocio_id: mesa.negocio_id || 1 });
 
     res.json({ message: `Capacidad de ${mesa.numero} actualizada a ${numCap} personas`, mesa: mesaActualizada });
   } catch (e) {
@@ -2299,8 +2274,9 @@ const handleRenombrarMesa = async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa o silla no encontrada.' });
 
-    // Validar que no exista otra mesa con el mismo nombre
-    const duplicada = await dbGet('SELECT * FROM Mesas WHERE LOWER(numero) = LOWER(?) AND id != ?', [nuevoNombre, mesaId]);
+    const negId = mesa.negocio_id || 1;
+    // Validar que no exista otra mesa con el mismo nombre dentro del mismo negocio
+    const duplicada = await dbGet('SELECT * FROM Mesas WHERE LOWER(numero) = LOWER(?) AND id != ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nuevoNombre, mesaId, negId, negId]);
     if (duplicada) {
       return res.status(400).json({ error: `Ya existe otra mesa o silla con el nombre "${nuevoNombre}".` });
     }
@@ -2308,8 +2284,8 @@ const handleRenombrarMesa = async (req, res) => {
     await dbRun('UPDATE Mesas SET numero = ? WHERE id = ?', [nuevoNombre, mesaId]);
     const mesaActualizada = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
 
-    io.emit('mesa_renombrada', { id: Number(mesaId), numero: nuevoNombre });
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), numero: nuevoNombre });
+    io.emit('mesa_renombrada', { id: Number(mesaId), numero: nuevoNombre, negocio_id: negId });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), numero: nuevoNombre, negocio_id: negId });
 
     res.json({ message: `Nombre actualizado exitosamente a "${nuevoNombre}"`, mesa: mesaActualizada });
   } catch (e) {
@@ -2325,9 +2301,11 @@ app.post('/api/mesas/:id/cliente', async (req, res) => {
     const mesaId = req.params.id;
     const { cliente = '' } = req.body;
     const clienteLimpio = String(cliente || '').trim();
+    const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    const negId = mesaRow ? (mesaRow.negocio_id || 1) : 1;
     await dbRun('UPDATE Mesas SET cliente = ? WHERE id = ?', [clienteLimpio || null, mesaId]);
     await dbRun("UPDATE Ordenes SET cliente = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [clienteLimpio || 'Cliente General', mesaId]);
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), cliente: clienteLimpio || null });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), cliente: clienteLimpio || null, negocio_id: negId });
     res.json({ ok: true, cliente: clienteLimpio });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3078,7 +3056,8 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 // ============================================================================
 app.get('/api/menu', async (req, res) => {
   try {
-    const categorias = await dbAll('SELECT * FROM Categorias ORDER BY id ASC');
+    const negocioId = obtenerNegocioIdReq(req);
+    const categorias = await dbAll('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
     const rawProductos = await dbAll(`
       SELECT 
         p.*,
@@ -3088,10 +3067,11 @@ app.get('/api/menu', async (req, res) => {
         (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT) OR (d.producto_id IS NULL AND LOWER(d.nombre_producto) = LOWER(p.nombre)))
         AND d.estado_comanda != 'anulado'
       )
-      WHERE p.activo = 1 OR p.activo IS NULL
+      WHERE (p.activo = 1 OR p.activo IS NULL)
+        AND (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
       GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
       ORDER BY p.categoria_id ASC, total_vendidos DESC, p.id ASC
-    `);
+    `, [negocioId, negocioId]);
     const productos = rawProductos.map(p => ({
       ...p,
       id: Number(p.id),
@@ -3112,7 +3092,8 @@ app.get('/api/menu', async (req, res) => {
 // Crear nueva categoría en el menú y sincronizar
 app.post('/api/categorias', async (req, res) => {
   try {
-    const { nombre, icono, destino } = req.body;
+    const { nombre, icono, destino, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const nombreLimpio = (nombre || '').trim();
     if (!nombreLimpio) {
       return res.status(400).json({ error: 'El nombre de la categoría es obligatorio.' });
@@ -3120,14 +3101,14 @@ app.post('/api/categorias', async (req, res) => {
     const iconoLimpio = (icono || '🍽️').trim();
     const destinoLimpio = (destino === 'barra') ? 'barra' : 'cocina';
 
-    const existente = await dbGet('SELECT * FROM Categorias WHERE LOWER(nombre) = LOWER(?)', [nombreLimpio]);
+    const existente = await dbGet('SELECT * FROM Categorias WHERE LOWER(nombre) = LOWER(?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nombreLimpio, negocioId, negocioId]);
     if (existente) {
       return res.json({ message: 'Categoría ya existe', categoria: existente });
     }
 
     const result = await dbRun(
-      'INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (1, ?, ?, ?)',
-      [nombreLimpio, iconoLimpio, destinoLimpio]
+      'INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)',
+      [negocioId, nombreLimpio, iconoLimpio, destinoLimpio]
     );
     const nuevaCat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [result.lastID]);
     io.emit('categoria_creada', nuevaCat);
@@ -3152,8 +3133,10 @@ app.post('/api/productos', async (req, res) => {
       kardex_tipo,
       insumo_id,
       ml_shot,
-      cantidad_descuento
+      cantidad_descuento,
+      negocio_id
     } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const nombreLimpio = (nombre || '').trim();
     const precioNum = parseFloat(precio);
 
@@ -3168,12 +3151,12 @@ app.post('/api/productos', async (req, res) => {
     let destinoFinal = (destino || '').trim().toLowerCase();
 
     if (catId) {
-      const cat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+      const cat = await dbGet('SELECT * FROM Categorias WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catId, negocioId, negocioId]);
       if (cat && !destinoFinal) {
         destinoFinal = cat.destino || 'cocina';
       }
     } else {
-      const primeraCat = await dbGet('SELECT * FROM Categorias ORDER BY id ASC LIMIT 1');
+      const primeraCat = await dbGet('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1', [negocioId, negocioId]);
       catId = primeraCat ? primeraCat.id : 1;
       if (!destinoFinal) destinoFinal = primeraCat ? (primeraCat.destino || 'cocina') : 'cocina';
     }
@@ -3186,8 +3169,8 @@ app.post('/api/productos', async (req, res) => {
 
     const result = await dbRun(
       `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, agotado, activo)
-       VALUES (1, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
-      [catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
+      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
     );
 
     const prodId = result.lastID;
