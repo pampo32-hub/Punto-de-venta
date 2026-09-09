@@ -7533,6 +7533,7 @@ window.confirmarAplicarDescuento = async function() {
     return;
   }
 
+  const uAct = estado.usuarioActual || estado.usuario;
   const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
   const targetUrl = (ordenId && !isNaN(ordenId) && ordenId > 0) 
     ? `/api/ordenes/${ordenId}/descuento` 
@@ -7544,7 +7545,7 @@ window.confirmarAplicarDescuento = async function() {
       headers: {
         'Content-Type': 'application/json',
         'x-negocio-id': String(nid),
-        'x-user-rol': uAct ? uAct.rol : 'mesero'
+        'x-user-rol': (uAct && uAct.rol) ? uAct.rol : 'mesero'
       },
       body: JSON.stringify({ 
         tipo, 
@@ -7559,10 +7560,15 @@ window.confirmarAplicarDescuento = async function() {
 
     const data = await res.json();
     if (!res.ok) {
+      const msgError = data.error || 'Error al aplicar descuento';
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('❌ ' + (data.error || 'Error al aplicar descuento'), 'error');
+        mostrarNotificacionCentro(msgError, 'error');
       } else {
-        alert('❌ ' + (data.error || 'Error al aplicar descuento'));
+        alert(msgError);
+      }
+      if (txtPin && (data.pinInvalido || data.requierePin || (msgError && msgError.toLowerCase().includes('pin')))) {
+        txtPin.value = '';
+        txtPin.focus();
       }
       return;
     }
