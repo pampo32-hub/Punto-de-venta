@@ -18080,3 +18080,150 @@ window.aplicarAislamientoTemaBeta = function() {
 document.addEventListener('DOMContentLoaded', () => {
   window.aplicarAislamientoTemaBeta();
 });
+
+
+
+// =============================================================================
+// 🎨 GESTOR DE TEMAS Y ESTILOS DE BOTONES 3D (POR RESTAURANTE)
+// =============================================================================
+window.temaSeleccionadoTemporal = null;
+
+window.abrirModalSelectorEstilosBotones = function() {
+  const modal = document.getElementById('modalSelectorEstilosBotones');
+  if (!modal) return;
+
+  const currentTheme = window.obtenerTemaActualNegocio();
+  window.temaSeleccionadoTemporal = currentTheme;
+
+  document.querySelectorAll('.theme-option-card').forEach(card => {
+    const th = card.dataset.theme;
+    if (th === currentTheme) {
+      card.classList.add('active');
+    } else {
+      card.classList.remove('active');
+    }
+  });
+
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalSelectorEstilosBotones = function() {
+  const modal = document.getElementById('modalSelectorEstilosBotones');
+  if (modal) modal.style.display = 'none';
+  // Revertir a tema real si solo estaba previsualizando
+  window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+};
+
+window.seleccionarCardTema = function(temaKey) {
+  window.temaSeleccionadoTemporal = temaKey;
+  document.querySelectorAll('.theme-option-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.theme === temaKey);
+  });
+  // Previsualización en vivo inmediata
+  window.aplicarTemaVisualEnDOM(temaKey);
+};
+
+window.confirmarGuardarTemaSeleccionado = async function() {
+  const tema = window.temaSeleccionadoTemporal || 'standard';
+  const nid = (typeof estado !== 'undefined' && estado.negocioActual) ? estado.negocioActual.id : 1;
+
+  try {
+    // 1. Obtener config actual de PersonalizacionPagina para no sobreescribir otros valores
+    let configObj = {};
+    try {
+      const resGet = await fetch(`/api/dev/personalizacion-pagina?negocio_id=${nid}`);
+      if (resGet.ok) {
+        const d = await resGet.json();
+        configObj = d.config || {};
+      }
+    } catch(e) {}
+
+    configObj.tema_botones = tema;
+
+    // 2. Guardar en backend
+    const resPost = await fetch('/api/dev/personalizacion-pagina', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        negocio_id: Number(nid),
+        config: configObj
+      })
+    });
+
+    if (resPost.ok) {
+      if (typeof estado !== 'undefined' && estado.negocioActual) {
+        estado.negocioActual.tema_botones = tema;
+      }
+      window.aplicarTemaVisualEnDOM(tema);
+      
+      const modal = document.getElementById('modalSelectorEstilosBotones');
+      if (modal) modal.style.display = 'none';
+
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`🎨 Estilo de botones actualizado para este restaurante`, 'success');
+      }
+    } else {
+      alert('No se pudo guardar el tema en el servidor.');
+    }
+  } catch (err) {
+    console.error('Error al guardar tema:', err);
+    alert('Error de conexión al guardar el estilo.');
+  }
+};
+
+window.obtenerTemaActualNegocio = function() {
+  if (typeof estado !== 'undefined' && estado.negocioActual) {
+    if (estado.negocioActual.tema_botones) return estado.negocioActual.tema_botones;
+    // Si es Beta Tester (Negocio 2) por defecto inicia en Gold 3D
+    if (Number(estado.negocioActual.id) === 2 || (estado.negocioActual.nombre || '').toLowerCase().includes('beta')) {
+      return 'gold';
+    }
+  }
+  return 'standard';
+};
+
+window.aplicarTemaVisualEnDOM = function(temaKey) {
+  // Limpiar clases de temas anteriores
+  document.body.classList.remove('theme-gold-3d', 'theme-neon-3d', 'theme-emerald-3d', 'theme-amethyst-3d', 'beta-tester-gold');
+
+  if (temaKey === 'gold') {
+    document.body.classList.add('theme-gold-3d', 'beta-tester-gold');
+  } else if (temaKey === 'neon') {
+    document.body.classList.add('theme-neon-3d');
+  } else if (temaKey === 'emerald') {
+    document.body.classList.add('theme-emerald-3d');
+  } else if (temaKey === 'amethyst') {
+    document.body.classList.add('theme-amethyst-3d');
+  }
+  // 'standard' no agrega ninguna clase, dejando el diseño limpio original
+};
+
+// Carga automática del tema guardado al cargar la personalización del negocio
+const originalCargarPersonalizacion = window.cargarPersonalizacionPagina;
+window.cargarPersonalizacionPagina = async function(negocioId) {
+  const nid = negocioId || estado.negocioActual?.id || 1;
+  try {
+    const res = await fetch(`/api/dev/personalizacion-pagina?negocio_id=${nid}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.config) {
+        if (data.config.tema_botones) {
+          if (typeof estado !== 'undefined' && estado.negocioActual) {
+            estado.negocioActual.tema_botones = data.config.tema_botones;
+          }
+          window.aplicarTemaVisualEnDOM(data.config.tema_botones);
+        } else {
+          window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+        }
+      } else {
+        window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+      }
+    }
+  } catch (e) {
+    window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+  }
+
+  if (typeof originalCargarPersonalizacion === 'function') {
+    try { originalCargarPersonalizacion(negocioId); } catch(e){}
+  }
+};

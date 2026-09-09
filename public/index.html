@@ -635,7 +635,8 @@
                 </div>
                 <div class="field-group">
                   <label>Piso del Salón Actual:</label>
-                  <button class="btn-tool" onclick="abrirModalSelectorPiso()" style="width:100%; justify-content:center; background:#4338ca; color:#fff; font-weight:700;">🎨 Abrir Selector de Pisos (18 Texturas)</button>
+                  <button class="btn-tool" id="btnAbrirEstilosBotones" onclick="abrirModalSelectorEstilosBotones()" title="Elegir diseño visual de botones y tema del restaurante" style="background:linear-gradient(135deg, rgba(212,175,55,0.25), rgba(99,102,241,0.25)); border-color:#d4af37; color:#fef08a; font-weight:700;">🎨 Estilo de Botones</button>
+            <button class="btn-tool" onclick="abrirModalSelectorPiso()" style="width:100%; justify-content:center; background:#4338ca; color:#fff; font-weight:700;">🎨 Abrir Selector de Pisos (18 Texturas)</button>
                 </div>
               </div>
             </div>
@@ -5340,6 +5341,116 @@
       });
     }
   </script>
+
+<!-- =============================================================================
+     MODAL DE SELECCIÓN DE ESTILOS DE BOTONES Y TEMAS UI (ADMINISTRADOR)
+     ============================================================================= -->
+<div class="modal" id="modalSelectorEstilosBotones" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(6px);">
+  <div class="modal-content" style="background:#0F172A; border:1px solid #334155; border-radius:18px; width:95%; max-width:860px; max-height:90vh; overflow-y:auto; box-shadow:0 25px 50px -12px rgba(0,0,0,0.7); padding:24px; color:#F8FAFC;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1E293B; padding-bottom:16px; margin-bottom:20px;">
+      <div>
+        <h2 style="margin:0; font-size:1.4rem; color:#F8FAFC; display:flex; align-items:center; gap:8px;">
+          🎨 Personalizador de Estilo de Botones y Tema
+        </h2>
+        <p style="margin:4px 0 0 0; font-size:0.85rem; color:#94A3B8;">
+          Elige la estética visual de botones para este restaurante. Los cambios se guardan permanentemente para tu negocio.
+        </p>
+      </div>
+      <button onclick="cerrarModalSelectorEstilosBotones()" style="background:transparent; border:none; color:#94A3B8; font-size:1.6rem; cursor:pointer; padding:4px 8px;">✕</button>
+    </div>
+
+    <!-- Grid de Estilos -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:16px; margin-bottom:24px;" id="gridSelectorTemasBotones">
+      
+      <!-- Opción 1: Oro Champagne -->
+      <div class="theme-option-card" data-theme="gold" onclick="seleccionarCardTema('gold')" style="background:#18181B; border:2px solid #27272A; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:800; font-size:1rem; color:#FDE047;">👑 Oro Champagne & Noir</span>
+          <span class="badge-theme-active" style="display:none; background:#D4AF37; color:#18181B; font-size:0.7rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.8rem; color:#A1A1AA; margin-bottom:14px; min-height:36px;">
+          Estética 3D táctil de alta gama con relieves dorados, biseles de luz y fondos Noir Imperial.
+        </p>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:linear-gradient(180deg,#F5D77F 0%,#D4AF37 50%,#AA820A 100%); border:1px solid #FFF1B0; border-bottom:3px solid #684F05; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:800; color:#261B02; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#27272A 0%,#18181B 100%); border:1px solid #D4AF37; border-bottom:3px solid #713F12; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:700; color:#FEF08A; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- Opción 2: Neón Cyberpunk / Zafiro -->
+      <div class="theme-option-card" data-theme="neon" onclick="seleccionarCardTema('neon')" style="background:#0F172A; border:2px solid #1E293B; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:800; font-size:1rem; color:#38BDF8;">💎 Neón Zafiro & Cian</span>
+          <span class="badge-theme-active" style="display:none; background:#38BDF8; color:#0F172A; font-size:0.7rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.8rem; color:#94A3B8; margin-bottom:14px; min-height:36px;">
+          Futurista con efecto glassmorphism, biseles azul eléctrico fluorescentes y relieves 3D.
+        </p>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:linear-gradient(180deg,#38BDF8 0%,#0284C7 50%,#0369A1 100%); border:1px solid #BAE6FD; border-bottom:3px solid #0C4A6E; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:800; color:#082F49; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#1E293B 0%,#0F172A 100%); border:1px solid #38BDF8; border-bottom:3px solid #0369A1; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:700; color:#7DD3FC; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- Opción 3: Esmeralda Orgánica -->
+      <div class="theme-option-card" data-theme="emerald" onclick="seleccionarCardTema('emerald')" style="background:#062319; border:2px solid #064E3B; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:800; font-size:1rem; color:#34D399;">🌿 Esmeralda & Menta</span>
+          <span class="badge-theme-active" style="display:none; background:#34D399; color:#062319; font-size:0.7rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.8rem; color:#A7F3D0; opacity:0.8; margin-bottom:14px; min-height:36px;">
+          Diseño fresco y moderno con gradientes verde menta, base verde bosque y gran legibilidad.
+        </p>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:linear-gradient(180deg,#6EE7B7 0%,#10B981 50%,#047857 100%); border:1px solid #D1FAE5; border-bottom:3px solid #064E3B; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:800; color:#022C22; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#064E3B 0%,#022C22 100%); border:1px solid #34D399; border-bottom:3px solid #065F46; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:700; color:#A7F3D0; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- Opción 4: Amatista Cósmica -->
+      <div class="theme-option-card" data-theme="amethyst" onclick="seleccionarCardTema('amethyst')" style="background:#1E1035; border:2px solid #3B0764; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:800; font-size:1rem; color:#C084FC;">⚡ Amatista & Velvet</span>
+          <span class="badge-theme-active" style="display:none; background:#C084FC; color:#1E1035; font-size:0.7rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.8rem; color:#DDD6FE; opacity:0.8; margin-bottom:14px; min-height:36px;">
+          Elegancia moderna con gradientes violeta eléctrico, biseles lila y base púrpura medianoche.
+        </p>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:linear-gradient(180deg,#C084FC 0%,#8B5CF6 50%,#6D28D9 100%); border:1px solid #EDE9FE; border-bottom:3px solid #4C1D95; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:800; color:#2E1065; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:linear-gradient(180deg,#3B0764 0%,#1E1035 100%); border:1px solid #C084FC; border-bottom:3px solid #581C87; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:700; color:#E9D5FF; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+      <!-- Opción 5: Clásico Estándar -->
+      <div class="theme-option-card" data-theme="standard" onclick="seleccionarCardTema('standard')" style="background:#1E293B; border:2px solid #334155; border-radius:14px; padding:16px; cursor:pointer; transition:all 0.2s; position:relative;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:800; font-size:1rem; color:#CBD5E1;">⚪ Clásico Estándar</span>
+          <span class="badge-theme-active" style="display:none; background:#94A3B8; color:#0F172A; font-size:0.7rem; font-weight:800; padding:2px 8px; border-radius:9999px;">ACTIVO</span>
+        </div>
+        <p style="font-size:0.8rem; color:#94A3B8; margin-bottom:14px; min-height:36px;">
+          Interfaz clásica original del sistema, limpia, sobria y plana con acentos azules estándar.
+        </p>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:#0284C7; border:none; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:700; color:#FFF; text-align:center;">Cobrar ₡</div>
+          <div style="flex:1; background:#334155; border:1px solid #475569; border-radius:8px; padding:6px 10px; font-size:0.75rem; font-weight:600; color:#CBD5E1; text-align:center;">🍳 Cocina</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Botones de Acción del Modal -->
+    <div style="display:flex; justify-content:flex-end; gap:12px; border-top:1px solid #1E293B; padding-top:16px;">
+      <button type="button" onclick="cerrarModalSelectorEstilosBotones()" style="background:#334155; border:none; color:#E2E8F0; padding:10px 18px; border-radius:10px; font-weight:700; cursor:pointer;">
+        Cancelar
+      </button>
+      <button type="button" onclick="confirmarGuardarTemaSeleccionado()" style="background:linear-gradient(135deg,#10B981,#059669); border:none; color:#FFF; padding:10px 22px; border-radius:10px; font-weight:800; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.35);">
+        💾 Guardar para este Restaurante
+      </button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
 

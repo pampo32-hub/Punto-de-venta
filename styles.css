@@ -9314,3 +9314,414 @@ body.beta-tester-gold .modal-body button,
 body.beta-tester-gold .dev-modal-action {
   border-radius: 10px !important;
 }
+
+
+
+/* =============================================================================
+   SISTEMA MULTI-TEMA 3D: 4 ESTILOS MODERNOS Y BONITOS PARA ADMINISTRADORES
+   ============================================================================= */
+
+/* Estilos de las tarjetas del Modal de Selección */
+.theme-option-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+.theme-option-card.active {
+  border-color: #38BDF8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
+}
+.theme-option-card.active .badge-theme-active {
+  display: inline-block !important;
+}
+
+/* =============================================================================
+   TEMA 1: 👑 ORO CHAMPAGNE & NOIR IMPERIAL (3D LUXURY)
+   Clases: body.theme-gold-3d, body.beta-tester-gold
+   ============================================================================= */
+body.theme-gold-3d,
+body.beta-tester-gold {
+  --primary: #D4AF37;
+  --primary-glow: #FDE047;
+}
+
+body.theme-gold-3d button,
+body.theme-gold-3d .btn,
+body.theme-gold-3d a.btn,
+body.theme-gold-3d [role="button"],
+body.theme-gold-3d input[type="button"],
+body.theme-gold-3d input[type="submit"],
+body.beta-tester-gold button,
+body.beta-tester-gold .btn,
+body.beta-tester-gold a.btn,
+body.beta-tester-gold [role="button"],
+body.beta-tester-gold input[type="button"],
+body.beta-tester-gold input[type="submit"] {
+  background: linear-gradient(180deg, #27272A 0%, #18181B 100%) !important;
+  border: 1px solid rgba(212, 175, 55, 0.4) !important;
+  border-bottom: 3px solid #09090B !important;
+  border-radius: 10px !important;
+  color: #FEF08A !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-gold-3d button:hover,
+body.theme-gold-3d .btn:hover,
+body.beta-tester-gold button:hover,
+body.beta-tester-gold .btn:hover {
+  border-color: #D4AF37 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 14px rgba(212, 175, 55, 0.25) !important;
+}
+
+body.theme-gold-3d button:active,
+body.theme-gold-3d .btn:active,
+body.beta-tester-gold button:active,
+body.beta-tester-gold .btn:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-gold-3d .btn-pri,
+body.theme-gold-3d .btn-primary,
+body.theme-gold-3d .btn-checkout,
+body.theme-gold-3d #btn-checkout,
+body.theme-gold-3d #btnPagarModal,
+body.theme-gold-3d #btnConfirmarCobro,
+body.theme-gold-3d #btnPagarComanda,
+body.theme-gold-3d #btnFinalizarCobro,
+body.theme-gold-3d #btnCobrar,
+body.theme-gold-3d .cobrar,
+body.theme-gold-3d .btn-cobro,
+body.theme-gold-3d .btn-login-submit,
+body.theme-gold-3d #btnLoginSubmit,
+body.theme-gold-3d .btn-pay-split,
+body.theme-gold-3d .guardar,
+body.theme-gold-3d .btn-save-plan,
+body.theme-gold-3d #btnGuardarPlano,
+body.theme-gold-3d button[type="submit"],
+body.beta-tester-gold .btn-pri,
+body.beta-tester-gold .btn-primary,
+body.beta-tester-gold .btn-checkout,
+body.beta-tester-gold #btn-checkout,
+body.beta-tester-gold #btnPagarModal,
+body.beta-tester-gold #btnConfirmarCobro,
+body.beta-tester-gold #btnPagarComanda,
+body.beta-tester-gold #btnFinalizarCobro,
+body.beta-tester-gold #btnCobrar,
+body.beta-tester-gold .cobrar,
+body.beta-tester-gold .btn-cobro,
+body.beta-tester-gold .btn-login-submit,
+body.beta-tester-gold #btnLoginSubmit,
+body.beta-tester-gold .btn-pay-split,
+body.beta-tester-gold .guardar,
+body.beta-tester-gold .btn-save-plan,
+body.beta-tester-gold #btnGuardarPlano,
+body.beta-tester-gold button[type="submit"] {
+  background: linear-gradient(180deg, #F9E7A2 0%, #D4AF37 50%, #AA820A 100%) !important;
+  border: 1px solid #FFF3B8 !important;
+  border-bottom: 4px solid #684F05 !important;
+  border-radius: 12px !important;
+  color: #241802 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 5px 16px rgba(212, 175, 55, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+
+body.theme-gold-3d .btn-pri:hover,
+body.theme-gold-3d .btn-primary:hover,
+body.beta-tester-gold .btn-pri:hover,
+body.beta-tester-gold .btn-primary:hover {
+  background: linear-gradient(180deg, #FFF5C0 0%, #E6C552 50%, #BD9418 100%) !important;
+  transform: translateY(-1px) !important;
+}
+
+body.theme-gold-3d .btn-pri:active,
+body.theme-gold-3d .btn-primary:active,
+body.beta-tester-gold .btn-pri:active,
+body.beta-tester-gold .btn-primary:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+/* =============================================================================
+   TEMA 2: 💎 NEÓN CYBERPUNK / ZAFIRO FUTURISTA (GLASS & NEON GLOW)
+   Clase: body.theme-neon-3d
+   ============================================================================= */
+body.theme-neon-3d {
+  --primary: #0284C7;
+  --primary-glow: #38BDF8;
+}
+
+body.theme-neon-3d button,
+body.theme-neon-3d .btn,
+body.theme-neon-3d a.btn,
+body.theme-neon-3d [role="button"],
+body.theme-neon-3d input[type="button"],
+body.theme-neon-3d input[type="submit"] {
+  background: linear-gradient(180deg, #1E293B 0%, #0F172A 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.45) !important;
+  border-bottom: 3px solid #0369A1 !important;
+  border-radius: 10px !important;
+  color: #7DD3FC !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-neon-3d button:hover,
+body.theme-neon-3d .btn:hover {
+  border-color: #38BDF8 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 16px rgba(56, 189, 248, 0.35) !important;
+}
+
+body.theme-neon-3d button:active,
+body.theme-neon-3d .btn:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-neon-3d .btn-pri,
+body.theme-neon-3d .btn-primary,
+body.theme-neon-3d .btn-checkout,
+body.theme-neon-3d #btn-checkout,
+body.theme-neon-3d #btnPagarModal,
+body.theme-neon-3d #btnConfirmarCobro,
+body.theme-neon-3d #btnPagarComanda,
+body.theme-neon-3d #btnFinalizarCobro,
+body.theme-neon-3d #btnCobrar,
+body.theme-neon-3d .cobrar,
+body.theme-neon-3d .btn-cobro,
+body.theme-neon-3d .btn-login-submit,
+body.theme-neon-3d #btnLoginSubmit,
+body.theme-neon-3d .btn-pay-split,
+body.theme-neon-3d .guardar,
+body.theme-neon-3d .btn-save-plan,
+body.theme-neon-3d #btnGuardarPlano,
+body.theme-neon-3d button[type="submit"] {
+  background: linear-gradient(180deg, #38BDF8 0%, #0284C7 50%, #0369A1 100%) !important;
+  border: 1px solid #BAE6FD !important;
+  border-bottom: 4px solid #0C4A6E !important;
+  border-radius: 12px !important;
+  color: #082F49 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 5px 18px rgba(56, 189, 248, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+
+body.theme-neon-3d .btn-pri:hover,
+body.theme-neon-3d .btn-primary:hover {
+  background: linear-gradient(180deg, #7DD3FC 0%, #0EA5E9 50%, #0284C7 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 7px 22px rgba(56, 189, 248, 0.6) !important;
+}
+
+body.theme-neon-3d .btn-pri:active,
+body.theme-neon-3d .btn-primary:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-neon-3d .nav-btn.active,
+body.theme-neon-3d .tab-btn.active,
+body.theme-neon-3d .tab-button.active,
+body.theme-neon-3d .cat-chip.active,
+body.theme-neon-3d .db-pill.active {
+  background: linear-gradient(180deg, #38BDF8 0%, #0284C7 100%) !important;
+  border: 1px solid #BAE6FD !important;
+  border-bottom: 3px solid #0C4A6E !important;
+  color: #082F49 !important;
+  font-weight: 800 !important;
+}
+
+/* =============================================================================
+   TEMA 3: 🌿 ESMERALDA ORGÁNICA & JADE ROYALE (ECO LUXE 3D)
+   Clase: body.theme-emerald-3d
+   ============================================================================= */
+body.theme-emerald-3d {
+  --primary: #10B981;
+  --primary-glow: #34D399;
+}
+
+body.theme-emerald-3d button,
+body.theme-emerald-3d .btn,
+body.theme-emerald-3d a.btn,
+body.theme-emerald-3d [role="button"],
+body.theme-emerald-3d input[type="button"],
+body.theme-emerald-3d input[type="submit"] {
+  background: linear-gradient(180deg, #064E3B 0%, #022C22 100%) !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+  border-bottom: 3px solid #065F46 !important;
+  border-radius: 10px !important;
+  color: #A7F3D0 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-emerald-3d button:hover,
+body.theme-emerald-3d .btn:hover {
+  border-color: #34D399 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 16px rgba(52, 211, 153, 0.35) !important;
+}
+
+body.theme-emerald-3d button:active,
+body.theme-emerald-3d .btn:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-emerald-3d .btn-pri,
+body.theme-emerald-3d .btn-primary,
+body.theme-emerald-3d .btn-checkout,
+body.theme-emerald-3d #btn-checkout,
+body.theme-emerald-3d #btnPagarModal,
+body.theme-emerald-3d #btnConfirmarCobro,
+body.theme-emerald-3d #btnPagarComanda,
+body.theme-emerald-3d #btnFinalizarCobro,
+body.theme-emerald-3d #btnCobrar,
+body.theme-emerald-3d .cobrar,
+body.theme-emerald-3d .btn-cobro,
+body.theme-emerald-3d .btn-login-submit,
+body.theme-emerald-3d #btnLoginSubmit,
+body.theme-emerald-3d .btn-pay-split,
+body.theme-emerald-3d .guardar,
+body.theme-emerald-3d .btn-save-plan,
+body.theme-emerald-3d #btnGuardarPlano,
+body.theme-emerald-3d button[type="submit"] {
+  background: linear-gradient(180deg, #6EE7B7 0%, #10B981 50%, #047857 100%) !important;
+  border: 1px solid #D1FAE5 !important;
+  border-bottom: 4px solid #064E3B !important;
+  border-radius: 12px !important;
+  color: #022C22 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 5px 18px rgba(16, 185, 129, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+
+body.theme-emerald-3d .btn-pri:hover,
+body.theme-emerald-3d .btn-primary:hover {
+  background: linear-gradient(180deg, #A7F3D0 0%, #34D399 50%, #059669 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 7px 22px rgba(16, 185, 129, 0.55) !important;
+}
+
+body.theme-emerald-3d .btn-pri:active,
+body.theme-emerald-3d .btn-primary:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-emerald-3d .nav-btn.active,
+body.theme-emerald-3d .tab-btn.active,
+body.theme-emerald-3d .tab-button.active,
+body.theme-emerald-3d .cat-chip.active,
+body.theme-emerald-3d .db-pill.active {
+  background: linear-gradient(180deg, #6EE7B7 0%, #10B981 100%) !important;
+  border: 1px solid #D1FAE5 !important;
+  border-bottom: 3px solid #064E3B !important;
+  color: #022C22 !important;
+  font-weight: 800 !important;
+}
+
+/* =============================================================================
+   TEMA 4: ⚡ AMATISTA CÓSMICA & OBSIDIANA (CYBER VELVET 3D)
+   Clase: body.theme-amethyst-3d
+   ============================================================================= */
+body.theme-amethyst-3d {
+  --primary: #8B5CF6;
+  --primary-glow: #C084FC;
+}
+
+body.theme-amethyst-3d button,
+body.theme-amethyst-3d .btn,
+body.theme-amethyst-3d a.btn,
+body.theme-amethyst-3d [role="button"],
+body.theme-amethyst-3d input[type="button"],
+body.theme-amethyst-3d input[type="submit"] {
+  background: linear-gradient(180deg, #3B0764 0%, #1E1035 100%) !important;
+  border: 1px solid rgba(192, 132, 252, 0.45) !important;
+  border-bottom: 3px solid #581C87 !important;
+  border-radius: 10px !important;
+  color: #E9D5FF !important;
+  font-weight: 700 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+body.theme-amethyst-3d button:hover,
+body.theme-amethyst-3d .btn:hover {
+  border-color: #C084FC !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 5px 16px rgba(192, 132, 252, 0.35) !important;
+}
+
+body.theme-amethyst-3d button:active,
+body.theme-amethyst-3d .btn:active {
+  transform: translateY(2px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-amethyst-3d .btn-pri,
+body.theme-amethyst-3d .btn-primary,
+body.theme-amethyst-3d .btn-checkout,
+body.theme-amethyst-3d #btn-checkout,
+body.theme-amethyst-3d #btnPagarModal,
+body.theme-amethyst-3d #btnConfirmarCobro,
+body.theme-amethyst-3d #btnPagarComanda,
+body.theme-amethyst-3d #btnFinalizarCobro,
+body.theme-amethyst-3d #btnCobrar,
+body.theme-amethyst-3d .cobrar,
+body.theme-amethyst-3d .btn-cobro,
+body.theme-amethyst-3d .btn-login-submit,
+body.theme-amethyst-3d #btnLoginSubmit,
+body.theme-amethyst-3d .btn-pay-split,
+body.theme-amethyst-3d .guardar,
+body.theme-amethyst-3d .btn-save-plan,
+body.theme-amethyst-3d #btnGuardarPlano,
+body.theme-amethyst-3d button[type="submit"] {
+  background: linear-gradient(180deg, #C084FC 0%, #8B5CF6 50%, #6D28D9 100%) !important;
+  border: 1px solid #EDE9FE !important;
+  border-bottom: 4px solid #4C1D95 !important;
+  border-radius: 12px !important;
+  color: #2E1065 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 5px 18px rgba(139, 92, 246, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
+}
+
+body.theme-amethyst-3d .btn-pri:hover,
+body.theme-amethyst-3d .btn-primary:hover {
+  background: linear-gradient(180deg, #DDD6FE 0%, #A855F7 50%, #7C3AED 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 7px 22px rgba(139, 92, 246, 0.6) !important;
+}
+
+body.theme-amethyst-3d .btn-pri:active,
+body.theme-amethyst-3d .btn-primary:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
+
+body.theme-amethyst-3d .nav-btn.active,
+body.theme-amethyst-3d .tab-btn.active,
+body.theme-amethyst-3d .tab-button.active,
+body.theme-amethyst-3d .cat-chip.active,
+body.theme-amethyst-3d .db-pill.active {
+  background: linear-gradient(180deg, #C084FC 0%, #8B5CF6 100%) !important;
+  border: 1px solid #EDE9FE !important;
+  border-bottom: 3px solid #4C1D95 !important;
+  color: #2E1065 !important;
+  font-weight: 800 !important;
+}
