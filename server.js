@@ -6577,12 +6577,17 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 // --- RECETAS & ESCANDALLOS ---
 app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
   try {
-    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
+    const negocioId = obtenerNegocioIdReq(req);
+    const productos = await dbAll(
+      'SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 AND (negocio_id = ? OR negocio_id IS NULL) ORDER BY categoria_id ASC, nombre ASC',
+      [negocioId]
+    );
     const recetas = await dbAll(`
       SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-    `);
+      WHERE (i.negocio_id = ? OR i.negocio_id IS NULL)
+    `, [negocioId]);
 
     const costosMap = {};
     const cantIngredientesMap = {};
@@ -6607,6 +6612,7 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
         producto_nombre: p.nombre,
         categoria_id: p.categoria_id,
         precio_venta: pvp,
+        precio: pvp,
         costo_receta: costo,
         margen_bruto: margenBruto,
         margen_porcentaje: margenPorc,
@@ -6627,7 +6633,7 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
 app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
   try {
     const prodId = req.params.productoId;
-    const prod = await dbGet('SELECT id, nombre, precio, categoria_id FROM Productos WHERE id = ?', [prodId]);
+    const prod = await dbGet('SELECT id, nombre, precio, categoria_id, negocio_id FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
     const ingredientes = await dbAll(`
@@ -6735,10 +6741,10 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       return res.status(400).json({ error: 'Insumo y cantidad válida mayor a 0 son requeridos' });
     }
 
-    const prod = await dbGet('SELECT id, nombre FROM Productos WHERE id = ?', [prodId]);
+    const prod = await dbGet('SELECT id, nombre, negocio_id FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    const ins = await dbGet('SELECT id, nombre FROM Inventario WHERE id = ?', [insId]);
+    const ins = await dbGet('SELECT id, nombre, negocio_id FROM Inventario WHERE id = ?', [insId]);
     if (!ins) return res.status(404).json({ error: 'Insumo no encontrado' });
 
     const existente = await dbGet('SELECT id FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
@@ -6754,7 +6760,10 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       );
     }
 
+    const negocioId = prod.negocio_id || ins.negocio_id || obtenerNegocioIdReq(req);
+
     await registrarAuditoria({
+      negocioId,
       usuarioNombre,
       accion: 'modificar_escandallo',
       tipoEvento: 'operativo',
@@ -6762,7 +6771,7 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       detalle: `Ingrediente ${ins.nombre} (${cantNum}) asignado a receta de ${prod.nombre}`
     });
 
-    io.emit('receta_actualizada', { producto_id: prodId });
+    if (io) io.emit('receta_actualizada', { producto_id: prodId, negocio_id: negocioId });
     res.json({ ok: true, message: 'Ingrediente guardado en la receta' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -6785,7 +6794,10 @@ app.put('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdmin,
       [cantNum, Number(merma_porcentaje || 0), prodId, insId]
     );
 
-    io.emit('receta_actualizada', { producto_id: prodId });
+    const prod = await dbGet('SELECT negocio_id FROM Productos WHERE id = ?', [prodId]);
+    const negocioId = prod ? prod.negocio_id : obtenerNegocioIdReq(req);
+
+    if (io) io.emit('receta_actualizada', { producto_id: prodId, negocio_id: negocioId });
     res.json({ ok: true, message: 'Ingrediente actualizado con éxito' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -6799,53 +6811,11 @@ app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdm
 
     await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
 
-    io.emit('receta_actualizada', { producto_id: prodId });
+    const prod = await dbGet('SELECT negocio_id FROM Productos WHERE id = ?', [prodId]);
+    const negocioId = prod ? prod.negocio_id : obtenerNegocioIdReq(req);
+
+    if (io) io.emit('receta_actualizada', { producto_id: prodId, negocio_id: negocioId });
     res.json({ ok: true, message: 'Ingrediente eliminado de la receta' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
-  try {
-    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
-    const recetas = await dbAll(`
-      SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
-      FROM InventarioRecetas r
-      JOIN Inventario i ON r.insumo_id = i.id
-    `);
-
-    const costosMap = {};
-    const cantIngredientesMap = {};
-    recetas.forEach(r => {
-      const mermaFactor = 1 + (Number(r.merma_porcentaje) / 100);
-      const subtotal = Number(r.cantidad) * Number(r.costo_unitario) * mermaFactor;
-      costosMap[r.producto_id] = (costosMap[r.producto_id] || 0) + subtotal;
-      cantIngredientesMap[r.producto_id] = (cantIngredientesMap[r.producto_id] || 0) + 1;
-    });
-
-    const resumen = productos.map(p => {
-      const costo = Math.round((costosMap[p.id] || 0) * 100) / 100;
-      const pvp = Number(p.precio || 0);
-      const margenBruto = Math.round((pvp - costo) * 100) / 100;
-      const margenPorc = pvp > 0 ? Math.round((margenBruto / pvp) * 1000) / 10 : 0;
-      const foodCostPorc = pvp > 0 ? Math.round((costo / pvp) * 1000) / 10 : 0;
-
-      return {
-        id: p.id,
-        nombre: p.nombre,
-        categoria_id: p.categoria_id,
-        precio_venta: pvp,
-        costo_receta: costo,
-        margen_bruto: margenBruto,
-        margen_porcentaje: margenPorc,
-        food_cost_porcentaje: foodCostPorc,
-        total_ingredientes: cantIngredientesMap[p.id] || 0,
-        tiene_receta: Boolean(cantIngredientesMap[p.id])
-      };
-    });
-
-    res.json(resumen);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -13355,7 +13355,7 @@ window.ejecutarEliminarInsumoConfirmado = async function() {
 // -------------------------------------------------------------
 window.productosRecetaDisponibles = [];
 
-function renderOpcionesProductosReceta(lista, valorSeleccionado = null) {
+window.renderOpcionesProductosReceta = function(lista, valorSeleccionado = null) {
   const selectProd = document.getElementById('selectProductoEscandallo');
   const badgeConteo = document.getElementById('badgeConteoRecetas');
   if (!selectProd) return;
@@ -13367,28 +13367,32 @@ function renderOpcionesProductosReceta(lista, valorSeleccionado = null) {
   }
 
   selectProd.innerHTML = lista.map(r => {
-    const countTxt = r.total_ingredientes > 0 ? ` (${r.total_ingredientes} ingredientes)` : ' (Sin receta)';
-    return `<option value="${r.producto_id}">${escapeHtml(r.producto_nombre)} - PVP: ${formatCRC(r.precio_venta)}${countTxt}</option>`;
+    const pid = r.producto_id || r.id;
+    const pnom = r.producto_nombre || r.nombre || 'Platillo';
+    const pvp = Number(r.precio_venta || r.precio || 0);
+    const count = Number(r.total_ingredientes || 0);
+    const countTxt = count > 0 ? ` (${count} ingrediente${count > 1 ? 's' : ''})` : ' (Sin receta)';
+    return `<option value="${pid}">${escapeHtml(pnom)} - PVP: ${formatCRC(pvp)}${countTxt}</option>`;
   }).join('');
 
   if (badgeConteo) {
     badgeConteo.textContent = `(${lista.length} platillos)`;
   }
 
-  if (valorSeleccionado && lista.some(r => String(r.producto_id) === String(valorSeleccionado))) {
-    selectProd.value = valorSeleccionado;
+  if (valorSeleccionado && lista.some(r => String(r.producto_id || r.id) === String(valorSeleccionado))) {
+    selectProd.value = String(valorSeleccionado);
   } else if (lista.length > 0) {
-    selectProd.value = lista[0].producto_id;
+    selectProd.value = String(lista[0].producto_id || lista[0].id);
   }
-}
+};
 
 window.filtrarProductosReceta = function() {
-  const q = (document.getElementById('txtBuscarPlatilloReceta')?.value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const q = (document.getElementById('txtBuscarPlatilloReceta')?.value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
   const selectProd = document.getElementById('selectProductoEscandallo');
   if (!window.productosRecetaDisponibles || window.productosRecetaDisponibles.length === 0) return;
 
   if (!q) {
-    renderOpcionesProductosReceta(window.productosRecetaDisponibles);
+    window.renderOpcionesProductosReceta(window.productosRecetaDisponibles);
     if (selectProd && selectProd.value) {
       window.cargarFichaTecnica(selectProd.value);
     }
@@ -13396,14 +13400,14 @@ window.filtrarProductosReceta = function() {
   }
 
   const filtrados = window.productosRecetaDisponibles.filter(r => {
-    const nom = (r.producto_nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const nom = (r.producto_nombre || r.nombre || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     return nom.includes(q);
   });
 
-  renderOpcionesProductosReceta(filtrados);
+  window.renderOpcionesProductosReceta(filtrados);
 
   if (filtrados.length > 0 && selectProd) {
-    window.cargarFichaTecnica(filtrados[0].producto_id);
+    window.cargarFichaTecnica(filtrados[0].producto_id || filtrados[0].id);
   }
 };
 
@@ -13413,10 +13417,12 @@ window.limpiarBuscadorRecetas = function() {
   window.filtrarProductosReceta();
 };
 
-async function inicializarPanelRecetas() {
+window.inicializarPanelRecetas = async function() {
   const selectProd = document.getElementById('selectProductoEscandallo');
   const selectInsumo = document.getElementById('selectNuevoIngredienteInsumo');
   if (!selectProd) return;
+
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   if (!estado.inventario || !estado.inventario.length) {
     try {
@@ -13434,17 +13440,23 @@ async function inicializarPanelRecetas() {
   // Cargar lista resumida de productos con ficha
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch(`/api/admin/recetas/resumen?negocio_id=${nid}`, { headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) } });
+    const res = await fetch(`/api/admin/recetas/resumen?negocio_id=${nid}`, { 
+      headers: { 
+        'x-user-rol': rol, 
+        'x-negocio-id': String(nid) 
+      } 
+    });
+
     if (res.ok) {
       const recetas = await res.json();
-      if (recetas && recetas.length > 0) {
+      if (Array.isArray(recetas) && recetas.length > 0) {
         window.productosRecetaDisponibles = recetas;
         const currentSearch = document.getElementById('txtBuscarPlatilloReceta')?.value?.trim();
         if (currentSearch) {
           window.filtrarProductosReceta();
         } else {
-          renderOpcionesProductosReceta(recetas);
-          const pid = selectProd.value || recetas[0].producto_id;
+          window.renderOpcionesProductosReceta(recetas);
+          const pid = selectProd.value || recetas[0].producto_id || recetas[0].id;
           window.cargarFichaTecnica(pid);
         }
         return;
@@ -13454,27 +13466,52 @@ async function inicializarPanelRecetas() {
     // Fallback a productos locales
     if (estado.productos && estado.productos.length) {
       const adaptados = estado.productos.map(p => ({
+        id: p.id,
         producto_id: p.id,
+        nombre: p.nombre,
         producto_nombre: p.nombre,
         precio_venta: p.precio,
+        precio: p.precio,
         total_ingredientes: 0,
         costo_receta: 0
       }));
       window.productosRecetaDisponibles = adaptados;
-      renderOpcionesProductosReceta(adaptados);
+      window.renderOpcionesProductosReceta(adaptados);
       window.cargarFichaTecnica(adaptados[0].producto_id);
     }
   } catch (e) {
     console.error('Error al inicializar recetas:', e);
+    // Fallback secundario de seguridad
+    if (estado.productos && estado.productos.length) {
+      const adaptados = estado.productos.map(p => ({
+        id: p.id,
+        producto_id: p.id,
+        nombre: p.nombre,
+        producto_nombre: p.nombre,
+        precio_venta: p.precio,
+        precio: p.precio,
+        total_ingredientes: 0,
+        costo_receta: 0
+      }));
+      window.productosRecetaDisponibles = adaptados;
+      window.renderOpcionesProductosReceta(adaptados);
+      if (selectProd && selectProd.value) {
+        window.cargarFichaTecnica(selectProd.value);
+      }
+    }
   }
-}
+};
 
 window.cargarFichaTecnica = async function(productoId) {
   if (!productoId) return;
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch(`/api/admin/recetas/${productoId}`, {
-      headers: { 'x-user-rol': rol }
+    const res = await fetch(`/api/admin/recetas/${productoId}?negocio_id=${nid}`, {
+      headers: { 
+        'x-user-rol': rol,
+        'x-negocio-id': String(nid)
+      }
     });
     if (!res.ok) throw new Error('Error al consultar ficha técnica');
     const data = await res.json();
@@ -13493,7 +13530,7 @@ window.cargarFichaTecnica = async function(productoId) {
     if (elMargenBruto) elMargenBruto.textContent = formatCRC(data.margen_bruto || 0);
     if (elMargenPorc) elMargenPorc.textContent = `${data.margen_porc || 0}% margen bruto`;
     if (elPorciones) elPorciones.textContent = `${data.porciones_disponibles || 0} platos`;
-    if (elCount) elCount.textContent = `${(data.ingredientes || []).length} ingredientes vinculados`;
+    if (elCount) elCount.textContent = `${(data.ingredientes || []).length} ingrediente${(data.ingredientes || []).length === 1 ? '' : 's'} vinculado${(data.ingredientes || []).length === 1 ? '' : 's'}`;
 
     const tbody = document.getElementById('tbodyIngredientesReceta');
     if (!tbody) return;
@@ -13509,7 +13546,7 @@ window.cargarFichaTecnica = async function(productoId) {
       const cantidadMostrar = ing.medida_amigable ? escapeHtml(ing.medida_amigable) : ing.cantidad_bruta;
       tr.innerHTML = `
         <td><strong>${escapeHtml(ing.insumo_nombre)}</strong></td>
-        <td><span style="color:#9ca3af;">${escapeHtml(ing.categoria || 'General')}</span></td>
+        <td><span style="color:#9ca3af;">${escapeHtml(ing.categoria || ing.insumo_categoria || 'General')}</span></td>
         <td><strong style="color:#38bdf8;">${cantidadMostrar}</strong></td>
         <td><small style="color:#9ca3af;">${escapeHtml(ing.unidad_medida)}</small></td>
         <td>${formatCRC(ing.costo_unitario || 0)}</td>
@@ -13555,9 +13592,9 @@ window.renderOpcionesInsumosReceta = function(lista, idSeleccionado = null) {
   }
 
   if (idSeleccionado && lista.some(i => String(i.id) === String(idSeleccionado))) {
-    selInsumo.value = idSeleccionado;
+    selInsumo.value = String(idSeleccionado);
   } else {
-    selInsumo.value = lista[0].id;
+    selInsumo.value = String(lista[0].id);
   }
 
   window.alCambiarInsumoReceta();
@@ -13565,7 +13602,7 @@ window.renderOpcionesInsumosReceta = function(lista, idSeleccionado = null) {
 
 window.filtrarInsumosRecetaInteligente = function() {
   const inp = document.getElementById('txtBuscarInsumoReceta');
-  const q = (inp?.value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const q = (inp?.value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
   const todos = estado.inventario || [];
 
   if (!q) {
@@ -13579,7 +13616,7 @@ window.filtrarInsumosRecetaInteligente = function() {
     const textoCompleto = `${i.nombre || ''} ${i.categoria || ''} ${i.unidad_medida || ''}`
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+      .replace(/[̀-ͯ]/g, '');
     return palabras.every(p => textoCompleto.includes(p));
   });
 
@@ -13634,7 +13671,7 @@ window.alCambiarInsumoReceta = function() {
   if (!selInsumo || !selTipo) return;
 
   const insId = parseInt(selInsumo.value);
-  const ins = (estado.inventario || []).find(i => i.id === insId);
+  const ins = (estado.inventario || []).find(i => Number(i.id) === insId);
 
   // Si es licor, cambiamos por defecto a Onzas (oz)
   if (ins && ins.es_licor) {
@@ -13664,7 +13701,7 @@ window.actualizarPlaceholderCantidadReceta = function() {
   if (!selInsumo || !selTipo || !txtCant) return;
 
   const insId = parseInt(selInsumo.value);
-  const ins = (estado.inventario || []).find(i => i.id === insId);
+  const ins = (estado.inventario || []).find(i => Number(i.id) === insId);
   const tipo = selTipo.value;
 
   if (tipo === 'oz') {
@@ -13739,7 +13776,7 @@ window.recalcularCostoPreviewReceta = function() {
   if (!selInsumo || !selTipo || !txtCant || !lblPreview) return;
 
   const insId = parseInt(selInsumo.value);
-  const ins = (estado.inventario || []).find(i => i.id === insId);
+  const ins = (estado.inventario || []).find(i => Number(i.id) === insId);
   const cantidad = parseFloat(txtCant.value);
   const merma = parseFloat(txtMerma ? txtMerma.value : 0) || 0;
   const tipo = selTipo.value;
@@ -13849,7 +13886,7 @@ window.guardarIngredienteReceta = async function() {
     return;
   }
 
-  const insumo = (estado.inventario || []).find(i => i.id === parseInt(insumoId));
+  const insumo = (estado.inventario || []).find(i => Number(i.id) === parseInt(insumoId));
   let cantidadDeducir = cantidad;
 
   if (insumo && insumo.es_licor) {
@@ -13873,10 +13910,12 @@ window.guardarIngredienteReceta = async function() {
   }
 
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const rol = (estado.usuarioActual && estado.usuarioActual.rol) ? estado.usuarioActual.rol : 'admin';
     const headers = {
       'Content-Type': 'application/json',
-      'x-user-rol': rol
+      'x-user-rol': rol,
+      'x-negocio-id': String(nid)
     };
     if (window._pinSupervisorActivo) {
       headers['x-supervisor-pin'] = window._pinSupervisorActivo;
@@ -13889,6 +13928,7 @@ window.guardarIngredienteReceta = async function() {
         insumo_id: insumoId,
         cantidad: cantidadDeducir,
         merma_porcentaje: merma,
+        negocio_id: nid,
         usuarioNombre: estado.usuarioActual?.nombre || 'Administrador'
       })
     });
@@ -13917,6 +13957,20 @@ window.guardarIngredienteReceta = async function() {
     // Recargar la tabla de la receta
     await window.cargarFichaTecnica(productoId);
 
+    // Actualizar conteo en el selector de productos
+    try {
+      const resSum = await fetch(`/api/admin/recetas/resumen?negocio_id=${nid}`, { 
+        headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) } 
+      });
+      if (resSum.ok) {
+        const list = await resSum.json();
+        if (Array.isArray(list) && list.length > 0) {
+          window.productosRecetaDisponibles = list;
+          window.renderOpcionesProductosReceta(list, productoId);
+        }
+      }
+    } catch(_) {}
+
     // Resaltar suavemente la fila del ingrediente recién guardado
     const tbody = document.getElementById('tbodyIngredientesReceta');
     if (tbody && tbody.lastElementChild) {
@@ -13943,16 +13997,31 @@ window.guardarIngredienteReceta = async function() {
 window.eliminarIngredienteReceta = async function(productoId, insumoId) {
   if (!confirm('¿Deseas desvincular este insumo de la ficha técnica?')) return;
   try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
     const res = await fetch(`/api/admin/recetas/${productoId}/ingredientes/${insumoId}`, {
       method: 'DELETE',
-      headers: { 'x-user-rol': rol }
+      headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
 
     mostrarNotificacionCentro('✅ Ingrediente removido de la ficha técnica.', 'success');
-    window.cargarFichaTecnica(productoId);
+    await window.cargarFichaTecnica(productoId);
+
+    // Actualizar conteo en el selector de productos
+    try {
+      const resSum = await fetch(`/api/admin/recetas/resumen?negocio_id=${nid}`, { 
+        headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) } 
+      });
+      if (resSum.ok) {
+        const list = await resSum.json();
+        if (Array.isArray(list) && list.length > 0) {
+          window.productosRecetaDisponibles = list;
+          window.renderOpcionesProductosReceta(list, productoId);
+        }
+      }
+    } catch(_) {}
   } catch (e) {
     alert('❌ ' + e.message);
   }
