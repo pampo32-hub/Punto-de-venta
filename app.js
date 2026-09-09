@@ -6472,6 +6472,7 @@ function mostrarNotificacionCentro(mensaje, tipo = 'info', callback = null) {
   const cerrar = () => {
     if (timerAuto) clearTimeout(timerAuto);
     modal.classList.remove('active');
+    modal.style.display = '';
     if (callback) callback();
   };
 
@@ -6480,7 +6481,9 @@ function mostrarNotificacionCentro(mensaje, tipo = 'info', callback = null) {
     if (e.target === modal) cerrar();
   };
 
+  modal.style.zIndex = '100500';
   modal.classList.add('active');
+  modal.style.display = 'flex';
 
   if (tipo === 'success' || tipo === 'info') {
     timerAuto = setTimeout(cerrar, 4000);
