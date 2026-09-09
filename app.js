@@ -18667,7 +18667,7 @@ window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
     'theme-plata-titanio', 'theme-carbon-grafito',
     'theme-borgona-imperial', 'theme-cuarzo-minimal',
     'theme-bistro-salvia', 'theme-cafe-caramelo',
-    'theme-crema-marfil',
+    'theme-crema-marfil', 'theme-capsula-elegance',
     'theme-neon', 'theme-neon-3d',
     'theme-emerald', 'theme-emerald-3d',
     'theme-amethyst', 'theme-amethyst-3d',
@@ -18679,7 +18679,9 @@ window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
   document.body.classList.add(dimension === '2d' ? 'dim-2d' : 'dim-3d');
 
   // Aplicar tema
-  if (temaKey === 'gold') {
+  if (temaKey === 'capsula_elegance') {
+    document.body.classList.add('theme-capsula-elegance');
+  } else if (temaKey === 'gold') {
     document.body.classList.add('theme-gold', 'theme-gold-3d', 'beta-tester-gold');
   } else if (temaKey === 'crema_marfil') {
     document.body.classList.add('theme-crema-marfil');

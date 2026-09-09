@@ -11120,3 +11120,170 @@ body.dim-3d [class*="-btn"]:active {
   transform: translateY(3px) !important;
   border-bottom-width: 1px !important;
 }
+
+
+/* ============================================================================
+   SISTEMA DE BOTONES CÁPSULA / PILL ELEGANTE MINIMALISTA (GAMMA CAPSULE SUITE)
+   ============================================================================ */
+.btn-capsule-secondary,
+.btn-pill-white,
+.btn-split-prefactura-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 50px !important;
+  padding: 10px 20px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 0.92rem !important;
+  line-height: 1.2 !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.btn-capsule-secondary:hover,
+.btn-pill-white:hover,
+.btn-split-prefactura-pill:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0284c7 !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.09) !important;
+}
+
+.btn-capsule-secondary:active,
+.btn-pill-white:active,
+.btn-split-prefactura-pill:active {
+  transform: translateY(1px) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+.btn-capsule-primary,
+.btn-pill-amber,
+.btn-split-cobrar-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  background: linear-gradient(180deg, #d97706 0%, #b45309 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(251, 191, 36, 0.4) !important;
+  border-radius: 50px !important;
+  padding: 10px 22px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-weight: 800 !important;
+  font-size: 0.92rem !important;
+  line-height: 1.2 !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.35) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.btn-capsule-primary:hover,
+.btn-pill-amber:hover,
+.btn-split-cobrar-pill:hover {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 22px rgba(217, 119, 6, 0.5) !important;
+  color: #ffffff !important;
+}
+
+.btn-capsule-primary:active,
+.btn-pill-amber:active,
+.btn-split-cobrar-pill:active {
+  transform: translateY(1px) !important;
+  box-shadow: 0 2px 6px rgba(180, 83, 9, 0.25) !important;
+}
+
+/* Variantes cápsula de la familia */
+.btn-capsule-dark {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border: 1px solid #334155 !important;
+  border-radius: 50px !important;
+  padding: 10px 22px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 0.92rem !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15) !important;
+  transition: all 0.2s ease !important;
+}
+.btn-capsule-dark:hover {
+  background: #1e293b !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25) !important;
+}
+
+.btn-capsule-emerald {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+  border-radius: 50px !important;
+  padding: 10px 22px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-weight: 800 !important;
+  font-size: 0.92rem !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+.btn-capsule-emerald:hover {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.45) !important;
+}
+
+.btn-capsule-pair {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.btn-capsule-pair > button,
+.btn-capsule-pair > a {
+  flex: 1 !important;
+}
+
+/* TEMA GLOBAL DE BOTONES: CÁPSULA MINIMALISTA & ÁMBAR */
+body.theme-capsula-elegance .btn-pri,
+body.theme-capsula-elegance .btn-primary,
+body.theme-capsula-elegance .btn-btn-cmd.cobrar,
+body.theme-capsula-elegance .btn-cobrar-split {
+  background: linear-gradient(180deg, #d97706 0%, #b45309 100%) !important;
+  border: 1px solid rgba(251, 191, 36, 0.4) !important;
+  border-radius: 50px !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.35) !important;
+  border-bottom: none !important;
+}
+
+body.theme-capsula-elegance .btn-sec,
+body.theme-capsula-elegance .btn-secondary,
+body.theme-capsula-elegance .btn-btn-cmd.prefactura,
+body.theme-capsula-elegance .btn-prefactura-split {
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 50px !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05) !important;
+  border-bottom: none !important;
+}
