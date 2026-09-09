@@ -3583,6 +3583,23 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
   }
 });
 
+app.get('/api/ordenes/:id', async (req, res) => {
+  try {
+    const ordenId = req.params.id;
+    if (!ordenId || isNaN(parseInt(ordenId))) return res.status(400).json({ error: 'ID de orden inválido' });
+    const negocioId = obtenerNegocioIdReq(req);
+    const orden = await dbGet(
+      "SELECT * FROM Ordenes WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+      [ordenId, negocioId, negocioId]
+    );
+    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
+    res.json({ orden, items });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================================
 // HAPPY HOUR — ESTADO Y CONFIGURACIÓN
 // ============================================================================
@@ -3634,12 +3651,18 @@ app.get('/api/ping', (req, res) => {
   res.json({ ok: true, timestamp: Date.now() });
 });
 
-// Recalcula y persiste los totales de una orden respetando el 2x1 ganado en Happy Hour
+// Recalcula y persiste los totales de una orden respetando el 2x1 ganado en Happy Hour y exencion de 10% de servicio para Para Llevar
 async function recalcularTotalesOrden(ordenId) {
   const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
-  if (!orden) return { subtotal: 0, descuentoHH: 0, servicio: 0, iva: 0, total: 0, modoHH: 'estricto' };
+  if (!orden) return { subtotal: 0, descuentoHH: 0, servicio: 0, iva: 0, total: 0, modoHH: 'estricto', esParaLlevar: false };
 
   const modoHH = orden.modo_happy_hour || 'estricto';
+  const esParaLlevar = Boolean(
+    orden.tipo_orden === 'para_llevar' ||
+    orden.tipo === 'para_llevar' ||
+    orden.es_para_llevar === 1 ||
+    !orden.mesa_id
+  );
 
   const rows = await dbAll(
     "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON d.producto_id = p.id WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
@@ -3690,45 +3713,76 @@ async function recalcularTotalesOrden(ordenId) {
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
   const total = Math.max(0, totalBruto - descuentoHH);
-  const subtotal = Math.round(total / 1.23);
-  const servicio = Math.round(subtotal * 0.10);
-  const iva = total - subtotal - servicio;
+  let subtotal, servicio, iva;
+  if (esParaLlevar) {
+    // Para Llevar: EXENTO de 10% de Servicio. Solo aplica IVA 13% (1.13)
+    subtotal = Math.round(total / 1.13);
+    servicio = 0;
+    iva = total - subtotal;
+  } else {
+    // Salón / Consumo en mesa: 10% Servicio + 13% IVA (1.23)
+    subtotal = Math.round(total / 1.23);
+    servicio = Math.round(subtotal * 0.10);
+    iva = total - subtotal - servicio;
+  }
 
   await dbRun(
     "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
     [subtotal, descuentoHH, servicio, iva, total, ordenId]
   );
 
-  return { subtotal, descuentoHH, servicio, iva, total, modoHH };
+  return { subtotal, descuentoHH, servicio, iva, total, modoHH, esParaLlevar };
 }
 
-async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null, negocioId = null, usuarioRol = null }) {
-  const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-  if (!mesa) {
-    const err = new Error('Mesa no encontrada');
-    err.status = 404;
-    throw err;
+async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null, negocioId = null, usuarioRol = null, tipo_orden = null, es_para_llevar = false }) {
+  const esParaLlevar = Boolean(
+    tipo_orden === 'para_llevar' ||
+    es_para_llevar === true ||
+    !mesaId ||
+    mesaId === 'para_llevar' ||
+    String(mesaId).startsWith('para_llevar') ||
+    mesaId === 0 ||
+    mesaId === '0'
+  );
+
+  let mesa = null;
+  let mesaNumero = '🛍️ Para Llevar';
+  let mesaIdFinal = null;
+
+  if (!esParaLlevar) {
+    mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+    if (!mesa) {
+      const err = new Error('Mesa no encontrada');
+      err.status = 404;
+      throw err;
+    }
+    if (negocioId && usuarioRol && usuarioRol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(negocioId)) {
+      const err = new Error('Acceso denegado: La mesa pertenece a otro comercio.');
+      err.status = 403;
+      throw err;
+    }
+    mesaNumero = mesa.nombre || mesa.numero || `Mesa ${mesaId}`;
+    mesaIdFinal = mesa.id;
   }
-  if (negocioId && usuarioRol && usuarioRol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(negocioId)) {
-    const err = new Error('Acceso denegado: La mesa pertenece a otro comercio.');
-    err.status = 403;
-    throw err;
-  }
-  const mesaNumero = mesa.nombre || mesa.numero || `Mesa ${mesaId}`;
 
   // 1. Identificar items nuevos no enviados previamente
   const nuevosItems = items.filter(it => !it.id_detalle_existente && !it.enviado);
   if (!nuevosItems.length && items.length > 0) {
-    const ordenExistente = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-      [mesaId]
-    );
+    let ordenExistente = null;
+    if (mesaIdFinal) {
+      ordenExistente = await dbGet(
+        "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+        [mesaIdFinal]
+      );
+    }
     return {
       message: 'Comanda guardada con éxito',
       ordenId: ordenExistente ? ordenExistente.id : null,
       total: ordenExistente ? ordenExistente.total : 0,
-      estado: mesa.estado,
-      tieneCocina: false
+      estado: mesa ? mesa.estado : 'abierta',
+      tieneCocina: false,
+      es_para_llevar: esParaLlevar,
+      mesaNumero
     };
   }
 
@@ -3806,23 +3860,30 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
   // 3. Evaluar si algún nuevo item va a cocina
   const tieneNuevosCocina = itemsProcesados.some(it => it.destino === 'cocina');
-  const negocioIdFinal = Number(negocioId || mesa.negocio_id || 1);
+  const negocioIdFinal = Number(negocioId || (mesa && mesa.negocio_id) || 1);
 
   // 4. Buscar orden activa o crear una nueva
-  let orden = await dbGet(
-    "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-    [mesaId, negocioIdFinal, negocioIdFinal]
-  );
+  let orden = null;
+  if (!esParaLlevar && mesaIdFinal) {
+    orden = await dbGet(
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      [mesaIdFinal, negocioIdFinal, negocioIdFinal]
+    );
+  }
   const ahora = new Date().toISOString();
   let ordenId;
 
   if (!orden) {
     const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
     const estadoInicialOrden = tieneNuevosCocina ? 'esperando' : 'abierta';
+    const tipoFinal = esParaLlevar ? 'para_llevar' : 'mesa';
+    const esParaLlevarInt = esParaLlevar ? 1 : 0;
+    const clienteFinal = cliente || (esParaLlevar ? 'Cliente Para Llevar' : 'Cliente General');
+
     const r = await dbRun(
-      `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, subtotal, total, servicio_10, iva_13, descuento_happy_hour)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0)`,
-      [negocioIdFinal, numOrden, mesaId, cliente, mesero, ahora, estadoInicialOrden]
+      `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, subtotal, total, servicio_10, iva_13, descuento_happy_hour, tipo_orden, tipo, es_para_llevar)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, ?, ?)`,
+      [negocioIdFinal, numOrden, mesaIdFinal, clienteFinal, mesero, ahora, estadoInicialOrden, tipoFinal, tipoFinal, esParaLlevarInt]
     );
     ordenId = r.lastID;
   } else {
@@ -3836,15 +3897,16 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   }
 
   // 5. Determinar nuevo estado de mesa
-  let nuevoEstadoMesa;
-  if (tieneNuevosCocina) {
-    nuevoEstadoMesa = 'esperando';
-  } else {
-    nuevoEstadoMesa = (mesa.estado === 'libre') ? 'abierta' : mesa.estado;
+  let nuevoEstadoMesa = 'abierta';
+  if (mesa && mesaIdFinal) {
+    if (tieneNuevosCocina) {
+      nuevoEstadoMesa = 'esperando';
+    } else {
+      nuevoEstadoMesa = (mesa.estado === 'libre') ? 'abierta' : mesa.estado;
+    }
+    const clienteMesaActual = (cliente && cliente !== 'Cliente General') ? cliente : (mesa.cliente || null);
+    await dbRun("UPDATE Mesas SET estado = ?, mesero = ?, cliente = ? WHERE id = ?", [nuevoEstadoMesa, mesero, clienteMesaActual, mesaIdFinal]);
   }
-
-  const clienteMesaActual = (cliente && cliente !== 'Cliente General') ? cliente : (mesa.cliente || null);
-  await dbRun("UPDATE Mesas SET estado = ?, mesero = ?, cliente = ? WHERE id = ?", [nuevoEstadoMesa, mesero, clienteMesaActual, mesaId]);
 
   // 6. Insertar items nuevos en DetalleOrden con número correlativo de comanda / tanda
   const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
@@ -3877,7 +3939,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   // Descontar existencias de inventario en tiempo real
   await descontarInventarioPorItems(itemsProcesados);
 
-  // 7. Recalcular totales de orden respetando Happy Hour inmutable
+  // 7. Recalcular totales de orden respetando Happy Hour inmutable y exención de servicio
   const totalesOrden = await recalcularTotalesOrden(ordenId);
   const subtotal = totalesOrden.subtotal;
   const descuentoHH = totalesOrden.descuentoHH;
@@ -3888,7 +3950,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
   const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
   if (comandasCocina.length > 0) {
-    io.emit('nueva_comanda', { mesaId, ordenId, comandas: comandasCocina });
+    io.emit('nueva_comanda', { mesaId: mesaIdFinal, ordenId, mesaNumero, comandas: comandasCocina, es_para_llevar: esParaLlevar });
+    io.emit('comanda_nueva', { mesaId: mesaIdFinal, ordenId, mesaNumero, mesero, horaPedido: ahora, items: comandasCocina, es_para_llevar: esParaLlevar });
   }
 
   // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
@@ -3935,8 +3998,10 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     }
   }
 
-  // Notificar siempre al salón de mesa actualizada
-  io.emit('mesa_actualizada', { mesaId, estado: nuevoEstadoMesa, total });
+  // Notificar al salón de mesa actualizada (si aplica mesa física)
+  if (mesaIdFinal) {
+    io.emit('mesa_actualizada', { mesaId: mesaIdFinal, estado: nuevoEstadoMesa, total });
+  }
 
   return {
     message: tieneNuevosCocina ? 'Comanda enviada a cocina' : 'Comanda guardada con éxito',
@@ -3944,6 +4009,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     total,
     estado: nuevoEstadoMesa,
     tieneCocina: tieneNuevosCocina,
+    es_para_llevar: esParaLlevar,
+    mesaNumero,
     ticketCocina: ticketCocina ? ticketCocina.ticketVisual : null,
     ticketBarra: ticketBarra ? ticketBarra.ticketVisual : null
   };
@@ -3973,6 +4040,8 @@ app.post('/api/comandas/enviar', async (req, res) => {
       happyHourActivo,
       idempotencyKey,
       negocioId,
+      tipo_orden: req.body.tipo_orden,
+      es_para_llevar: req.body.es_para_llevar,
       usuarioRol: req.usuario?.rol
     });
 
@@ -4157,7 +4226,8 @@ app.get('/api/kds', async (req, res) => {
     const destino = req.query.destino || 'cocina';
     const negocioId = obtenerNegocioIdReq(req);
     let query = `
-      SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
+      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar,
+        COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
@@ -4183,7 +4253,8 @@ app.get('/api/comandas/activas', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
     const comandas = await dbAll(`
-      SELECT d.*, o.numero_orden, o.mesa_id, m.numero as mesa_numero
+      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar,
+        COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
@@ -4457,13 +4528,21 @@ async function procesarCobroOrden(ordenId, {
       orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [idNum]);
     }
 
-    // Si no se encontró por ID pero se envió mesaId, buscar orden activa en la mesa
-    if (!orden && mesaId) {
+    const esParaLlevarCobro = Boolean(
+      !mesaId ||
+      mesaId === 'para_llevar' ||
+      String(mesaId).startsWith('para_llevar') ||
+      mesaId === 0 ||
+      mesaId === '0'
+    );
+
+    // Si no se encontró por ID pero se envió mesaId físico, buscar orden activa en la mesa
+    if (!orden && mesaId && !esParaLlevarCobro) {
       orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado != 'pagada' AND estado != 'cancelada' ORDER BY id DESC LIMIT 1", [mesaId]);
     }
 
-    // Si aún no hay orden y tenemos mesaId con items (cobro directo sin guardar comanda previamente)
-    if (!orden && mesaId) {
+    // Si aún no hay orden y tenemos mesaId físico con items (cobro directo sin guardar comanda previamente)
+    if (!orden && mesaId && !esParaLlevarCobro) {
       const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
       if (!mesaRow) throw new Error('Mesa no encontrada');
       if (reqNegocioId && usuarioRol && usuarioRol !== 'developer' && mesaRow.negocio_id && Number(mesaRow.negocio_id) !== Number(reqNegocioId)) {
@@ -4473,9 +4552,21 @@ async function procesarCobroOrden(ordenId, {
       }
       const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
       const r = await dbRun(
-        `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado)
-         VALUES (?, ?, ?, ?, ?, ?, 'abierta')`,
+        `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, tipo_orden, tipo, es_para_llevar)
+         VALUES (?, ?, ?, ?, ?, ?, 'abierta', 'mesa', 'mesa', 0)`,
         [mesaRow.negocio_id || reqNegocioId || 1, numOrden, mesaId, 'Cliente', mesero, ahora]
+      );
+      orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
+    }
+
+    // Si es cobro directo de Para Llevar sin orden previa
+    if (!orden && (esParaLlevarCobro || ordenId === 'directo' || !mesaId)) {
+      const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+      const clienteParaLlevar = (persona_nombre && persona_nombre !== 'Cliente') ? persona_nombre : 'Cliente Para Llevar';
+      const r = await dbRun(
+        `INSERT INTO Ordenes (negocio_id, numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, tipo_orden, tipo, es_para_llevar)
+         VALUES (?, ?, NULL, ?, ?, ?, 'abierta', 'para_llevar', 'para_llevar', 1)`,
+        [reqNegocioId || 1, numOrden, clienteParaLlevar, mesero, ahora]
       );
       orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
     }
@@ -4755,7 +4846,7 @@ async function procesarCobroOrden(ordenId, {
   // Obtener información del negocio y mesa para el tiquete impreso
   const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
   const mesa = orden.mesa_id ? await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
-  const mesaNumero = mesa ? mesa.numero : 'Mesa';
+  const mesaNumero = mesa ? mesa.numero : (orden.tipo_orden === 'para_llevar' || !orden.mesa_id ? '🛍️ Para Llevar' : 'Mesa');
 
   let ticketGenerado = null;
 

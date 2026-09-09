@@ -978,6 +978,10 @@
         <button class="nav-pill admin-view-tab" data-view="inventario" id="tabNavInventario" title="Control de Inventario, Insumos, Recetas y Kárdex">
           <span class="pill-icon">📦</span> Inventario
         </button>
+        <!-- Botón Rápido Para Llevar / Barra Express -->
+        <button class="nav-pill btn-para-llevar-nav" id="btnParaLlevarNav" onclick="abrirModoParaLlevar()" style="background: linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.22) 100%); border: 1px solid rgba(236,72,153,0.4); color: #f472b6; font-weight: 700;" title="Tomar pedido rápido para Llevar o Barra sin asignar mesa física">
+          <span class="pill-icon">🛍️</span> Para Llevar
+        </button>
       </nav>
 
       <!-- BOTÓN ÚNICO DEL PANEL DE ADMINISTRACIÓN (ADMIN & DEV CON ACCESO POR PIN) -->
@@ -1053,6 +1057,9 @@
           </div>
 
           <div class="salon-quick-tools">
+            <button class="btn-quick-action" id="btnParaLlevarSalon" onclick="abrirModoParaLlevar()" style="background: linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.25) 100%); border: 1px solid rgba(236,72,153,0.45); color: #f472b6; font-weight: 700;" title="Tomar pedido rápido para Llevar o Barra sin mesa física">
+              🛍️ Para Llevar / Barra
+            </button>
             <button class="btn-quick-action" onclick="abrirModalSelectorPiso()" title="Cambiar textura y piso del salón">
               🎨 Piso del Salón
             </button>
@@ -2012,7 +2019,7 @@
               </div>
               <span id="comDescuentoEspecial" style="color:#34d399; font-weight:700;">-₡ 0</span>
             </div>
-            <div class="calc-line"><span>Servicio Salón (10%):</span><span id="comServicio">₡ 0</span></div>
+            <div class="calc-line"><span id="lblComServicio">Servicio Salón (10%):</span><span id="comServicio">₡ 0</span></div>
             <div class="calc-line"><span>I.V.A (13%):</span><span id="comIva">₡ 0</span></div>
             <div class="calc-line total"><span>TOTAL GENERAL:</span><span id="comTotal">₡ 0</span></div>
           </div>

@@ -7066,6 +7066,49 @@ async function abrirComanderoMesa(mesaId) {
   }
 }
 
+window.abrirModoParaLlevar = function(clienteNombre = 'Cliente Para Llevar') {
+  const mesaVirtual = {
+    id: 'para_llevar_' + Date.now(),
+    numero: '🛍️ Para Llevar',
+    zonaNombre: 'BARRA / EXPRESS',
+    cliente: clienteNombre,
+    es_para_llevar: true,
+    tipo_orden: 'para_llevar',
+    items: [],
+    orden_id: null,
+    modo_happy_hour: 'estricto',
+    descuento_monto: 0,
+    descuento_porcentaje: 0
+  };
+
+  estado.mesaActiva = mesaVirtual;
+  const elNum = document.getElementById('comMesaNumero');
+  if (elNum) elNum.textContent = '🛍️ Para Llevar';
+  const elZona = document.getElementById('comMesaZona');
+  if (elZona) elZona.textContent = 'BARRA / EXPRESS';
+  const elOrd = document.getElementById('comTicketOrdenId');
+  if (elOrd) elOrd.textContent = 'Nueva Orden Para Llevar';
+  const elCli = document.getElementById('comClienteNombre');
+  if (elCli) elCli.textContent = clienteNombre;
+
+  const bannerEl = document.getElementById('comMergedBanner');
+  if (bannerEl) bannerEl.style.display = 'none';
+
+  const btnResetMesa = document.getElementById('btnResetearMesaComandero');
+  if (btnResetMesa) btnResetMesa.style.display = 'none';
+
+  renderTicketItems();
+  actualizarBotonEnviarComanda();
+  renderCatalogoComandero();
+  if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
+
+  const modCom = document.getElementById('modalComandero');
+  if (modCom) {
+    modCom.classList.add('active');
+    modCom.style.display = 'flex';
+  }
+};
+
 window.cerrarComandero = function() {
   const modal = document.getElementById('modalComandero');
   if (modal) {
@@ -7381,9 +7424,32 @@ function recalcularTotalesTicket() {
 
   const totalBruto = sub;
   const total = Math.max(0, totalBruto - descuentoHH - descuentoEspecial);
-  const subtotalBase = Math.round(total / 1.23);
-  const servicio = Math.round(subtotalBase * 0.10);
-  const iva = total - subtotalBase - servicio;
+  const esParaLlevar = Boolean(
+    estado.mesaActiva && (
+      estado.mesaActiva.es_para_llevar ||
+      estado.mesaActiva.tipo_orden === 'para_llevar' ||
+      String(estado.mesaActiva.id).startsWith('para_llevar') ||
+      estado.mesaActiva.id === 'para_llevar'
+    )
+  );
+
+  let subtotalBase, servicio, iva;
+  if (esParaLlevar) {
+    // Para Llevar: EXENTO del 10% de Servicio. Solo aplica IVA 13% (1.13)
+    subtotalBase = Math.round(total / 1.13);
+    servicio = 0;
+    iva = total - subtotalBase;
+  } else {
+    // Consumo en Salón / Mesa: 10% Servicio + 13% IVA (1.23)
+    subtotalBase = Math.round(total / 1.23);
+    servicio = Math.round(subtotalBase * 0.10);
+    iva = total - subtotalBase - servicio;
+  }
+
+  const lblServ = document.getElementById('lblComServicio');
+  if (lblServ) {
+    lblServ.textContent = esParaLlevar ? '🛍️ Servicio (Exento 0%):' : 'Servicio Salón (10%):';
+  }
 
   document.getElementById('comSubtotal').textContent = formatCRC(subtotalBase);
 
@@ -7775,6 +7841,15 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     ? estado.mesaActiva.cliente
     : (document.getElementById('comClienteNombre')?.textContent !== 'General' ? (document.getElementById('comClienteNombre')?.textContent || 'Cliente General') : 'Cliente General');
 
+  const esParaLlevarActiva = Boolean(
+    estado.mesaActiva && (
+      estado.mesaActiva.es_para_llevar ||
+      estado.mesaActiva.tipo_orden === 'para_llevar' ||
+      String(estado.mesaActiva.id).startsWith('para_llevar') ||
+      estado.mesaActiva.id === 'para_llevar'
+    )
+  );
+
   const payloadComanda = {
     mesaId: estado.mesaActiva.id,
     mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
@@ -7782,6 +7857,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     items: estado.mesaActiva.items,
     happyHourActivo: estado.happyHourActivo,
     negocio_id: nidComanda,
+    tipo_orden: esParaLlevarActiva ? 'para_llevar' : 'mesa',
+    es_para_llevar: esParaLlevarActiva,
     idempotencyKey
   };
 
@@ -7802,8 +7879,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     });
 
     const tot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-    const sub = Math.round(tot / 1.23);
-    const serv = Math.round(sub * 0.10);
+    const sub = esParaLlevarActiva ? Math.round(tot / 1.13) : Math.round(tot / 1.23);
+    const serv = esParaLlevarActiva ? 0 : Math.round(sub * 0.10);
     const iva = tot - sub - serv;
 
     estado.mesaActiva.estado = tieneNuevosCocina ? 'esperando' : 'abierta';
@@ -7983,10 +8060,19 @@ function renderKDS() {
     const selectedSet = window._kdsSeleccionadosMap[key] || new Set();
     const selectedCount = Array.from(selectedSet).filter(id => itemIds.includes(id)).length;
 
+    const esParaLlevarKds = Boolean(
+      (t.mesaNumero && t.mesaNumero.includes('Para Llevar')) ||
+      t.items.some(i => i.es_para_llevar || i.tipo_orden === 'para_llevar')
+    );
+    const badgeParaLlevarHtml = esParaLlevarKds
+      ? `<span class="badge-para-llevar" style="background:rgba(236,72,153,0.22); color:#f472b6; border:1px solid rgba(236,72,153,0.45); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">🛍️ PARA LLEVAR</span>`
+      : '';
+
     card.innerHTML = `
       <div class="kds-top">
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="kds-mesa-label">${escapeHtml(t.mesaNumero)}</span>
+          ${badgeParaLlevarHtml}
           <span class="badge-comanda-num" style="background:rgba(59,130,246,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">Comanda #${t.comandaNumero}</span>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -9697,6 +9783,14 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
     const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
     const itemsMesa = (estado.mesaActiva && estado.mesaActiva.items) ? estado.mesaActiva.items : [];
     const idempotencyKey = 'pay_' + (mesaId || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const esParaLlevarCobro = Boolean(
+      estado.mesaActiva && (
+        estado.mesaActiva.es_para_llevar ||
+        estado.mesaActiva.tipo_orden === 'para_llevar' ||
+        String(estado.mesaActiva.id).startsWith('para_llevar') ||
+        estado.mesaActiva.id === 'para_llevar'
+      )
+    );
 
     const payloadCobro = {
       ordenId,
@@ -9718,6 +9812,8 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       happyHourActivo: Boolean(estado.happyHourActivo),
       enviar_cocina: Boolean(estado.enviarCocinaEnCobro),
       enviarCocina: Boolean(estado.enviarCocinaEnCobro),
+      tipo_orden: esParaLlevarCobro ? 'para_llevar' : 'mesa',
+      es_para_llevar: esParaLlevarCobro,
       idempotencyKey
     };
 
@@ -9790,6 +9886,10 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
       }
 
       // Disparar automáticamente la impresión del tiquete final de cliente
+      const subTicket = esParaLlevarCobro ? Math.round(totalNum / 1.13) : Math.round(totalNum / 1.23);
+      const servTicket = esParaLlevarCobro ? 0 : Math.round(subTicket * 0.10);
+      const ivaTicket = totalNum - subTicket - servTicket;
+
       const ticketFinal = (cobroResData && cobroResData.ticket) ? cobroResData.ticket : {
         tipo: 'cuenta_total',
         titulo: 'COMPROBANTE DE PAGO / FACTURA',
@@ -9813,9 +9913,9 @@ document.getElementById('btnFinalizarCobro').addEventListener('click', async () 
           totalLinea: Number(it.subtotal || it.totalLinea || ((it.precio || it.precio_unitario || 0) * (it.cantidad || 1))),
           notas: it.notas || ''
         })),
-        subtotal: Math.round(totalNum / 1.23),
-        servicio: Math.round((totalNum / 1.23) * 0.10),
-        iva: totalNum - Math.round(totalNum / 1.23) - Math.round((totalNum / 1.23) * 0.10),
+        subtotal: subTicket,
+        servicio: servTicket,
+        iva: ivaTicket,
         total: totalNum,
         metodoPago: metodoFinal,
         recibido: recibido,

@@ -365,6 +365,8 @@ function initDb() {
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_porcentaje REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_motivo TEXT", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_autorizado_por TEXT", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN tipo_orden TEXT DEFAULT 'mesa'", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN es_para_llevar INTEGER DEFAULT 0", () => {});
 
     // 8. Detalle de Órdenes (Comandas)
     db.run(`CREATE TABLE IF NOT EXISTS DetalleOrden (
