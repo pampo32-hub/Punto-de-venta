@@ -7520,14 +7520,11 @@ window.confirmarAplicarDescuento = async function() {
     return;
   }
 
-  const uAct = estado.usuarioActual || estado.usuario;
-  const esAdminDev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer'));
-
-  if (!esAdminDev && !pin) {
+  if (!pin || String(pin).trim() === '') {
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🔒 Se requiere el PIN de Administrador/Supervisor para autorizar el descuento.', 'warning');
+      mostrarNotificacionCentro('🔒 Se requiere ingresar el PIN de Administrador/Supervisor para autorizar el descuento.', 'warning');
     } else {
-      alert('🔒 Se requiere el PIN de Administrador/Supervisor para autorizar el descuento.');
+      alert('🔒 Se requiere ingresar el PIN de Administrador/Supervisor para autorizar el descuento.');
     }
     if (txtPin) txtPin.focus();
     return;

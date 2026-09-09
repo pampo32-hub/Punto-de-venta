@@ -2992,23 +2992,19 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
       return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
     }
 
-    // Validar PIN de Administrador/Supervisor
-    const rol = (req.usuario?.rol || req.headers['x-user-rol'] || '').toLowerCase();
-    let autorizado = (rol === 'admin' || rol === 'developer');
-    let autorizadorNombre = req.usuario?.nombre || 'Administrador';
-
-    if (!autorizado) {
-      if (!pin) {
-        return res.status(403).json({ error: 'Se requiere PIN de Administrador/Supervisor para autorizar el descuento.', requierePin: true });
-      }
-      const esValido = await validarPinAdministrador(pin, negocioId);
-      if (!esValido) {
-        return res.status(403).json({ error: 'PIN de Administrador inválido.', requierePin: true });
-      }
-      autorizado = true;
-      const uSupervisor = await dbGet('SELECT nombre_completo, rol FROM Usuarios WHERE (negocio_id = ? OR rol = "developer") AND pin = ? AND (rol = "admin" OR rol = "developer")', [negocioId, String(pin).trim()]);
-      autorizadorNombre = uSupervisor?.nombre_completo || 'Administrador (PIN)';
+    // Validar PIN de Administrador/Supervisor OBLIGATORIO SIEMPRE
+    if (!pin || String(pin).trim() === '') {
+      return res.status(403).json({ error: 'Se requiere PIN de Administrador/Supervisor para autorizar el descuento.', requierePin: true });
     }
+    const esValido = await validarPinAdministrador(pin, ordenNegocioId);
+    if (!esValido) {
+      return res.status(403).json({ error: 'PIN de Administrador/Supervisor inválido.', requierePin: true });
+    }
+    const uSupervisor = await dbGet(
+      'SELECT nombre_completo, rol FROM Usuarios WHERE (negocio_id = ? OR rol = "developer" OR (negocio_id IS NULL AND ? = 1)) AND pin = ? AND (rol = "admin" OR rol = "developer")', 
+      [ordenNegocioId, ordenNegocioId, String(pin).trim()]
+    );
+    const autorizadorNombre = uSupervisor?.nombre_completo || 'Administrador (PIN)';
 
     // Obtener detalles de la orden para calcular subtotal bruto
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);

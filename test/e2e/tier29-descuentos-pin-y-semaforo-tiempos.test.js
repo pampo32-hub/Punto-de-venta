@@ -142,7 +142,8 @@ describe('Tier 29: Descuentos/Cortesías con PIN y Semáforo de Tiempos en Saló
     const resCortesia = await req(`/api/ordenes/${ordenId}/descuento`, 'POST', {
       tipo: 'cortesia',
       valor: 100,
-      motivo: 'Cortesía de la Casa Gerencia'
+      motivo: 'Cortesía de la Casa Gerencia',
+      pin: '9999'
     }, { 'x-negocio-id': '2', 'x-user-rol': 'admin' });
 
     assert.strictEqual(resCortesia.status, 200);
