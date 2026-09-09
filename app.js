@@ -18083,24 +18083,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
 // =============================================================================
-// 🎨 GESTOR DE TEMAS Y ESTILOS DE BOTONES 3D (POR RESTAURANTE)
+// 🎨 GESTOR DE TEMAS Y ESTILOS DE BOTONES (2D / 3D & MULTI-TEMA)
 // =============================================================================
 window.temaSeleccionadoTemporal = null;
+window.dimensionSeleccionadaTemporal = '3d';
 
 window.abrirModalSelectorEstilosBotones = function() {
   const modal = document.getElementById('modalSelectorEstilosBotones');
   if (!modal) return;
 
-  const currentTheme = window.obtenerTemaActualNegocio();
-  window.temaSeleccionadoTemporal = currentTheme;
+  const currentConfig = window.obtenerConfigTemaActualNegocio();
+  window.temaSeleccionadoTemporal = currentConfig.tema;
+  window.dimensionSeleccionadaTemporal = currentConfig.dimension;
 
+  // Actualizar tarjetas
   document.querySelectorAll('.theme-option-card').forEach(card => {
-    const th = card.dataset.theme;
-    if (th === currentTheme) {
-      card.classList.add('active');
+    card.classList.toggle('active', card.dataset.theme === currentConfig.tema);
+  });
+
+  // Actualizar selector 2D/3D
+  document.querySelectorAll('.dim-switch-btn').forEach(btn => {
+    const isAct = btn.dataset.dim === currentConfig.dimension;
+    btn.classList.toggle('active', isAct);
+    if (isAct) {
+      btn.style.background = 'linear-gradient(135deg,#38BDF8,#0284C7)';
+      btn.style.color = '#FFF';
+      btn.style.boxShadow = '0 2px 8px rgba(2,132,199,0.4)';
     } else {
-      card.classList.remove('active');
+      btn.style.background = 'transparent';
+      btn.style.color = '#94A3B8';
+      btn.style.boxShadow = 'none';
     }
   });
 
@@ -18110,8 +18124,26 @@ window.abrirModalSelectorEstilosBotones = function() {
 window.cerrarModalSelectorEstilosBotones = function() {
   const modal = document.getElementById('modalSelectorEstilosBotones');
   if (modal) modal.style.display = 'none';
-  // Revertir a tema real si solo estaba previsualizando
-  window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+  const c = window.obtenerConfigTemaActualNegocio();
+  window.aplicarTemaVisualEnDOM(c.tema, c.dimension);
+};
+
+window.seleccionarDimensionTema = function(dimKey) {
+  window.dimensionSeleccionadaTemporal = dimKey;
+  document.querySelectorAll('.dim-switch-btn').forEach(btn => {
+    const isAct = btn.dataset.dim === dimKey;
+    btn.classList.toggle('active', isAct);
+    if (isAct) {
+      btn.style.background = 'linear-gradient(135deg,#38BDF8,#0284C7)';
+      btn.style.color = '#FFF';
+      btn.style.boxShadow = '0 2px 8px rgba(2,132,199,0.4)';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = '#94A3B8';
+      btn.style.boxShadow = 'none';
+    }
+  });
+  window.aplicarTemaVisualEnDOM(window.temaSeleccionadoTemporal || 'gold', dimKey);
 };
 
 window.seleccionarCardTema = function(temaKey) {
@@ -18119,16 +18151,15 @@ window.seleccionarCardTema = function(temaKey) {
   document.querySelectorAll('.theme-option-card').forEach(card => {
     card.classList.toggle('active', card.dataset.theme === temaKey);
   });
-  // Previsualización en vivo inmediata
-  window.aplicarTemaVisualEnDOM(temaKey);
+  window.aplicarTemaVisualEnDOM(temaKey, window.dimensionSeleccionadaTemporal || '3d');
 };
 
 window.confirmarGuardarTemaSeleccionado = async function() {
-  const tema = window.temaSeleccionadoTemporal || 'standard';
+  const tema = window.temaSeleccionadoTemporal || 'gold';
+  const dim = window.dimensionSeleccionadaTemporal || '3d';
   const nid = (typeof estado !== 'undefined' && estado.negocioActual) ? estado.negocioActual.id : 1;
 
   try {
-    // 1. Obtener config actual de PersonalizacionPagina para no sobreescribir otros valores
     let configObj = {};
     try {
       const resGet = await fetch(`/api/dev/personalizacion-pagina?negocio_id=${nid}`);
@@ -18139,8 +18170,8 @@ window.confirmarGuardarTemaSeleccionado = async function() {
     } catch(e) {}
 
     configObj.tema_botones = tema;
+    configObj.modo_dimension = dim;
 
-    // 2. Guardar en backend
     const resPost = await fetch('/api/dev/personalizacion-pagina', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -18153,17 +18184,18 @@ window.confirmarGuardarTemaSeleccionado = async function() {
     if (resPost.ok) {
       if (typeof estado !== 'undefined' && estado.negocioActual) {
         estado.negocioActual.tema_botones = tema;
+        estado.negocioActual.modo_dimension = dim;
       }
-      window.aplicarTemaVisualEnDOM(tema);
+      window.aplicarTemaVisualEnDOM(tema, dim);
       
       const modal = document.getElementById('modalSelectorEstilosBotones');
       if (modal) modal.style.display = 'none';
 
       if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(`🎨 Estilo de botones actualizado para este restaurante`, 'success');
+        mostrarNotificacionCentro('🎨 Estilo y dimensión de botones guardados con éxito', 'success');
       }
     } else {
-      alert('No se pudo guardar el tema en el servidor.');
+      alert('No se pudo guardar la configuración.');
     }
   } catch (err) {
     console.error('Error al guardar tema:', err);
@@ -18171,31 +18203,50 @@ window.confirmarGuardarTemaSeleccionado = async function() {
   }
 };
 
-window.obtenerTemaActualNegocio = function() {
+window.obtenerConfigTemaActualNegocio = function() {
+  let tema = 'standard';
+  let dim = '3d';
+
   if (typeof estado !== 'undefined' && estado.negocioActual) {
-    if (estado.negocioActual.tema_botones) return estado.negocioActual.tema_botones;
-    // Si es Beta Tester (Negocio 2) por defecto inicia en Gold 3D
-    if (Number(estado.negocioActual.id) === 2 || (estado.negocioActual.nombre || '').toLowerCase().includes('beta')) {
-      return 'gold';
+    if (estado.negocioActual.tema_botones) tema = estado.negocioActual.tema_botones;
+    if (estado.negocioActual.modo_dimension) dim = estado.negocioActual.modo_dimension;
+    else if (Number(estado.negocioActual.id) === 2 || (estado.negocioActual.nombre || '').toLowerCase().includes('beta')) {
+      tema = 'gold';
+      dim = '3d';
     }
   }
-  return 'standard';
+  return { tema, dimension: dim };
 };
 
-window.aplicarTemaVisualEnDOM = function(temaKey) {
-  // Limpiar clases de temas anteriores
-  document.body.classList.remove('theme-gold-3d', 'theme-neon-3d', 'theme-emerald-3d', 'theme-amethyst-3d', 'beta-tester-gold');
+window.aplicarTemaVisualEnDOM = function(temaKey, dimKey) {
+  // Limpiar clases de tema y dimension
+  document.body.classList.remove(
+    'theme-gold', 'theme-gold-3d', 'beta-tester-gold',
+    'theme-bistro-salvia', 'theme-cafe-caramelo',
+    'theme-neon', 'theme-neon-3d',
+    'theme-emerald', 'theme-emerald-3d',
+    'theme-amethyst', 'theme-amethyst-3d',
+    'dim-2d', 'dim-3d'
+  );
 
+  // Aplicar dimension
+  const dimension = dimKey || '3d';
+  document.body.classList.add(dimension === '2d' ? 'dim-2d' : 'dim-3d');
+
+  // Aplicar tema
   if (temaKey === 'gold') {
-    document.body.classList.add('theme-gold-3d', 'beta-tester-gold');
+    document.body.classList.add('theme-gold', 'theme-gold-3d', 'beta-tester-gold');
+  } else if (temaKey === 'bistro_salvia') {
+    document.body.classList.add('theme-bistro-salvia');
+  } else if (temaKey === 'cafe_caramelo') {
+    document.body.classList.add('theme-cafe-caramelo');
   } else if (temaKey === 'neon') {
-    document.body.classList.add('theme-neon-3d');
+    document.body.classList.add('theme-neon', 'theme-neon-3d');
   } else if (temaKey === 'emerald') {
-    document.body.classList.add('theme-emerald-3d');
+    document.body.classList.add('theme-emerald', 'theme-emerald-3d');
   } else if (temaKey === 'amethyst') {
-    document.body.classList.add('theme-amethyst-3d');
+    document.body.classList.add('theme-amethyst', 'theme-amethyst-3d');
   }
-  // 'standard' no agrega ninguna clase, dejando el diseño limpio original
 };
 
 // Carga automática del tema guardado al cargar la personalización del negocio
@@ -18207,20 +18258,22 @@ window.cargarPersonalizacionPagina = async function(negocioId) {
     if (res.ok) {
       const data = await res.json();
       if (data && data.config) {
-        if (data.config.tema_botones) {
-          if (typeof estado !== 'undefined' && estado.negocioActual) {
-            estado.negocioActual.tema_botones = data.config.tema_botones;
-          }
-          window.aplicarTemaVisualEnDOM(data.config.tema_botones);
-        } else {
-          window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+        const tema = data.config.tema_botones || (Number(nid) === 2 ? 'gold' : 'standard');
+        const dim = data.config.modo_dimension || '3d';
+
+        if (typeof estado !== 'undefined' && estado.negocioActual) {
+          estado.negocioActual.tema_botones = tema;
+          estado.negocioActual.modo_dimension = dim;
         }
+        window.aplicarTemaVisualEnDOM(tema, dim);
       } else {
-        window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+        const c = window.obtenerConfigTemaActualNegocio();
+        window.aplicarTemaVisualEnDOM(c.tema, c.dimension);
       }
     }
   } catch (e) {
-    window.aplicarTemaVisualEnDOM(window.obtenerTemaActualNegocio());
+    const c = window.obtenerConfigTemaActualNegocio();
+    window.aplicarTemaVisualEnDOM(c.tema, c.dimension);
   }
 
   if (typeof originalCargarPersonalizacion === 'function') {
