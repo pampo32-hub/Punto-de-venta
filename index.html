@@ -1910,6 +1910,9 @@
               <button class="btn-tool" id="btnComanderoEditarProd" onclick="abrirSelectorEditarProductoComandero()" title="Editar productos y sincronizar con Kárdex" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2,132,199,0.3);">
                 ✏️ Editar Producto
               </button>
+              <button class="btn-tool" id="btnAbrirModalNuevaCategoria" onclick="abrirModalNuevaCategoria()" title="Agregar nueva categoría al menú" style="background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2,132,199,0.3);">
+                ➕ Agregar Categoría
+              </button>
               <button class="btn-tool" id="btnAbrirModalNuevoProducto" onclick="abrirModalNuevoProducto()" title="Agregar nuevo producto y precio al menú" style="background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(16,185,129,0.3);">
                 ➕ Agregar Producto
               </button>
@@ -4659,6 +4662,84 @@
   <!-- ============================================================ -->
   <!-- MODAL: CONFIRMACIÓN PERSONALIZADA (reemplaza confirm() nativo) -->
   <!-- ============================================================ -->
+  
+  <!-- MODAL DE CONFIRMACIÓN DE ELIMINAR EXISTENCIAS EN BODEGA -->
+  <div class="modal-backdrop" id="modalConfirmarEliminarExistencias" style="display:none; z-index:99999;">
+    <div class="modal-card" style="max-width:460px; width:92%; background:#0f172a; border:1px solid #ef4444; box-shadow:0 25px 50px -12px rgba(0,0,0,0.85); border-radius:16px; overflow:hidden; padding:24px;">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:3rem; margin-bottom:6px;">📦🗑️</div>
+        <h3 style="margin:0 0 4px; color:#f8fafc; font-size:1.25rem; font-weight:800;">Vaciar / Eliminar Existencias en Bodega</h3>
+        <p style="margin:0; color:#94a3b8; font-size:0.85rem;">
+          Esta acción ajustará el stock a 0 unidades y quedará registrada en la bitácora de auditoría.
+        </p>
+      </div>
+
+      <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:10px; padding:12px 14px; margin-bottom:16px; text-align:left;">
+        <div style="color:#f87171; font-weight:800; font-size:0.95rem; margin-bottom:4px;" id="eliminarExistenciaInsumoNombre">Insumo</div>
+        <div style="color:#cbd5e1; font-size:0.82rem; margin-bottom:2px;">Stock actual en bodega: <strong id="eliminarExistenciaStockActual" style="color:#fbbf24;">0</strong></div>
+        <div style="color:#94a3b8; font-size:0.75rem;">📋 Se generará un registro estricto en el Kárdex y en el sistema de Auditoría con sello de tiempo y usuario.</div>
+      </div>
+
+      <div style="margin-bottom:18px; text-align:left;">
+        <label style="display:block; font-size:0.8rem; font-weight:700; color:#cbd5e1; margin-bottom:4px;">Motivo / Justificación:</label>
+        <input type="text" id="txtMotivoEliminarExistencias" placeholder="Ej: Merma total, vencimiento, descarte autorizado..." style="width:100%; padding:10px 12px; background:#1e293b; border:1px solid #334155; border-radius:8px; color:#fff; font-size:0.9rem;" />
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button type="button" class="btn-sec" onclick="cerrarModalEliminarExistenciasBodega()" style="flex:1; padding:10px; border-radius:8px; font-weight:700; background:#334155; color:#fff; border:none; cursor:pointer;">
+          Cancelar
+        </button>
+        <button type="button" onclick="ejecutarEliminarExistenciasBodegaConfirmado()" style="flex:1.5; padding:10px; border-radius:8px; font-weight:800; background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; border:none; cursor:pointer; box-shadow:0 4px 12px rgba(239,68,68,0.35);">
+          🗑️ Confirmar Vaciado de Stock
+        </button>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- MODAL: AGREGAR NUEVA CATEGORÍA -->
+  <div class="modal-backdrop" id="modalNuevaCategoria" style="display:none; z-index: 99999;">
+    <div class="modal-card" style="max-width: 440px; width: 92%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 16px; padding: 22px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85);">
+      <div style="text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 2.4rem; margin-bottom: 4px;">📂</div>
+        <h3 style="margin: 0 0 4px; color: #f8fafc; font-size: 1.25rem; font-weight: 800;">Nueva Categoría de Menú</h3>
+        <p style="margin: 0; color: #94a3b8; font-size: 0.82rem;">
+          Crea una sección para agrupar y organizar tus platillos y bebidas.
+        </p>
+      </div>
+
+      <form id="formNuevaCategoria" onsubmit="event.preventDefault(); guardarNuevaCategoria();">
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Nombre de la Categoría:</label>
+          <input type="text" id="txtNuevaCatNombre" placeholder="Ej: Hamburguesas, Postres, Cócteles..." required style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.95rem;" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;">
+          <div>
+            <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Ícono / Emoji:</label>
+            <input type="text" id="txtNuevaCatIcono" placeholder="🍽️" value="🍽️" maxlength="4" style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 1.2rem; text-align: center;" />
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Destino de Comanda:</label>
+            <select id="selNuevaCatDestino" style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.9rem;">
+              <option value="cocina">🍳 Cocina</option>
+              <option value="barra">🍸 Barra / Bar</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn-sec" onclick="cerrarModalNuevaCategoria()" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: 700; background: #334155; color: #fff; border: none; cursor: pointer;">
+            Cancelar
+          </button>
+          <button type="submit" style="flex: 1.5; padding: 10px; border-radius: 8px; font-weight: 800; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16,185,129,0.35);">
+            💾 Crear Categoría
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modalConfirmacionAccion" style="display:none; z-index: 100100;">
     <div class="dialog-box" style="max-width:420px; border-radius:18px; background:#0f172a; border:1px solid #334155; box-shadow:0 20px 60px rgba(0,0,0,0.7); padding:0; overflow:hidden;">
       <div class="dialog-header" style="background:linear-gradient(135deg,#1e293b,#0f172a); border-bottom:1px solid #334155; padding:18px 22px; display:flex; align-items:center; gap:12px;">

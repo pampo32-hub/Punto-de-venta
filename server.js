@@ -3246,7 +3246,7 @@ app.get('/api/menu', async (req, res) => {
 });
 
 // Crear nueva categoría en el menú y sincronizar
-app.post('/api/categorias', async (req, res) => {
+const handlerCrearCategoria = async (req, res) => {
   try {
     const { nombre, icono, destino, negocio_id } = req.body;
     const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
@@ -3274,7 +3274,10 @@ app.post('/api/categorias', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+};
+
+app.post('/api/categorias', handlerCrearCategoria);
+app.post('/api/admin/categorias', verificarAdmin, handlerCrearCategoria);
 
 // Eliminar categoría del menú
 const handlerEliminarCategoria = async (req, res) => {
@@ -6383,6 +6386,61 @@ app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+
+// Eliminar existencias totales de bodega con registro estricto en auditoría y Kárdex
+const handlerEliminarExistenciasBodega = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { motivo = 'Eliminación manual de existencias en bodega', usuarioNombre = 'Administrador' } = req.body || {};
+
+    let insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
+    if (!insumo) {
+      return res.status(404).json({ error: 'Insumo no encontrado en bodega.' });
+    }
+
+    const stockPrevio = Number(insumo.stock_actual || insumo.stock || 0);
+    const ahora = new Date().toISOString();
+
+    await dbRun('UPDATE Inventario SET stock_actual = 0, actualizado_en = ? WHERE id = ?', [ahora, id]);
+
+    // Registrar en InventarioMovimientos
+    try {
+      await dbRun(
+        `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+         VALUES (1, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
+        [id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
+      );
+    } catch (_) {}
+
+    // Registrar en Auditoria
+    await registrarAuditoria({
+      negocioId: insumo.negocio_id || 1,
+      usuarioNombre,
+      accion: 'eliminar_existencia_bodega',
+      tipoEvento: 'inventario',
+      modulo: 'bodega',
+      detalle: `Eliminación total de existencia en bodega: "${insumo.nombre}" (Stock anterior: ${stockPrevio} ${insumo.unidad_medida || 'uds'}) -> Stock: 0`,
+      motivo,
+      pinAutorizado: 1
+    });
+
+    if (io) io.emit('inventario_actualizado');
+
+    res.json({
+      success: true,
+      message: `Existencias de "${insumo.nombre}" eliminadas correctamente y registradas en auditoría.`,
+      insumo_id: Number(id),
+      stock_previo: stockPrevio,
+      stock_actual: 0
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al eliminar existencias: ' + e.message });
+  }
+};
+
+app.post('/api/admin/inventario/:id/eliminar-existencias', verificarAdmin, handlerEliminarExistenciasBodega);
+app.post('/api/admin/inventario/insumos/:id/eliminar-existencias', verificarAdmin, handlerEliminarExistenciasBodega);
 
 app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) => {
   try {

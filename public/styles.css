@@ -8379,3 +8379,80 @@ body.dev-inspecting-active * {
 
 
 
+
+
+/* MEJORAS DE ESPACIADO EN LOGIN Y GRID DE USUARIOS */
+.demo-accounts-box {
+  margin-top: 14px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+#loginUsuariosDisponiblesGrid {
+  display: block;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-top: 6px;
+}
+
+.demo-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.chip-account {
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  font-size: 0.76rem !important;
+  font-weight: 700 !important;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: all 0.15s ease !important;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-account:hover {
+  border-color: #38bdf8 !important;
+  background: #0f172a !important;
+  transform: translateY(-1px);
+}
+
+/* COMPACTACIÓN CABECERA DE CATEGORÍAS EN COMANDERO */
+.com-cat-nav-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1e293b;
+  padding: 6px 12px !important;
+  border-radius: 10px !important;
+  margin-bottom: 6px !important;
+  border: 1px solid #334155;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 42px !important;
+}
+
+.btn-volver-categorias {
+  padding: 5px 12px !important;
+  font-size: 0.82rem !important;
+  background: rgba(56, 189, 248, 0.15) !important;
+  border: 1px solid #38bdf8 !important;
+  color: #38bdf8 !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  cursor: pointer;
+}
