@@ -9448,9 +9448,7 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       return;
     }
 
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('📄 Generando Pre-Factura...', 'info');
-    }
+    
 
     const endpoint = oId ? `/api/ordenes/${oId}/prefactura` : `/api/mesas/${mId}/prefactura`;
     const meseroActual = (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno';
@@ -9470,9 +9468,7 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       window.mostrarVisorTicketTermico(data.ticket, false);
     }
 
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('✅ Pre-Factura generada e impresa en caja.', 'success');
-    }
+    
 
     if (mId && typeof cargarMesasDesdeBackend === 'function') {
       cargarMesasDesdeBackend();
@@ -10324,14 +10320,14 @@ window.ejecutarCobroFinal = async function() {
           mSplit.style.display = 'none';
         }
 
-        mostrarNotificacionCentro(`🎉 ¡Todas las cuentas de ${mesaNumero} liquidadas y facturadas con éxito! Mesa liberada.`, 'success');
+        mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
 
         if (typeof cargarMesasDesdeBackend === 'function') cargarMesasDesdeBackend();
         if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
         if (typeof cargarKDSDesdeBackend === 'function') cargarKDSDesdeBackend();
       } else {
         // Quedan personas pendientes: re-abrir split modal y avanzar a la siguiente persona
-        mostrarNotificacionCentro(`🧾 Factura de ${personaCobrada.nombre} emitida e impresa (${formatCRCSinDecimales(totalNum)} - ${metodoFinal})`, 'success');
+        // Cobro parcial registrado silenciosamente
 
         const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
         if (sigPersonaIdx !== -1) {
@@ -10442,7 +10438,7 @@ window.ejecutarCobroFinal = async function() {
         window.mostrarVisorTicketTermico(ticketFinal, true);
       }
 
-      mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada e impresa con éxito!`, 'success');
+      mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
     }
 
     await cargarMesasDesdeBackend();
@@ -11438,7 +11434,7 @@ window.imprimirPrefacturaPersonaSplit = function(personaIndex) {
     window.ejecutarImpresionDirectaTermica(ticketPrefactura);
   }
 
-  mostrarNotificacionCentro(`📄 Pre-Factura de ${p.nombre} enviada a impresora térmica (${formatCRCSinDecimales(totalNum)})`, 'info');
+  // Pre-factura impresa en segundo plano silenciosamente
 
   renderSplitColaPersonas();
   renderSplitPersonaActiva();
@@ -16677,20 +16673,11 @@ window.cerrarModalVisorTicket = function() {
   }
 };
 
-window.ejecutarImpresionDirectaTermica = async function(ticketData) {
+window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso = true) {
   const tData = ticketData || window.ticketTermicoActual || window.ticketActivoParaImprimir;
-  if (!tData) {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('⚠️ No hay datos de ticket activos para imprimir.', 'warning');
-    } else {
-      alert('⚠️ No hay datos de ticket activos para imprimir.');
-    }
-    return;
-  }
+  if (!tData) return;
+
   try {
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🖨️ Despachando ticket a impresora térmica POS-80...', 'info');
-    }
     const res = await fetch('/api/impresoras/imprimir-directo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -16699,33 +16686,14 @@ window.ejecutarImpresionDirectaTermica = async function(ticketData) {
         destino: tData.destino || (tData.tipo === 'comanda' ? 'cocina' : 'caja')
       })
     });
-    const data = await res.json();
-    if (res.ok && data.ok) {
+    const data = await res.json().catch(() => null);
+    if (!silencioso && res.ok && data?.ok) {
       const reg = data.registro || {};
-      const esImpresoFisico = reg.estado === 'impreso';
-      const msg = esImpresoFisico
-        ? `🖨️ ${reg.detalleConexion || 'Ticket impreso correctamente en POS-80-Series'}`
-        : `🖨️ ${data.mensaje || 'Ticket despachado a impresora térmica'} (${reg.detalleConexion || 'Listo'})`;
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro(msg, 'success');
-      } else {
-        alert(msg);
-      }
-    } else {
-      const errMsg = (data && data.error) ? data.error : 'No se pudo enviar a la impresora térmica.';
-      if (typeof mostrarNotificacionCentro === 'function') {
-        mostrarNotificacionCentro('⚠️ ' + errMsg, 'warning');
-      } else {
-        alert('⚠️ ' + errMsg);
-      }
+      const msg = reg.detalleConexion || data.mensaje || 'Ticket impreso correctamente';
+      mostrarNotificacionCentro(`🖨️ ${msg}`, 'success');
     }
   } catch (e) {
-    console.warn('Error al imprimir directo:', e);
-    if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('❌ Error de comunicación con la impresora: ' + e.message, 'error');
-    } else {
-      alert('❌ Error de comunicación: ' + e.message);
-    }
+    console.warn('Error al imprimir directo en segundo plano:', e);
   }
 };
 
