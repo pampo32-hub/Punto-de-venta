@@ -18085,7 +18085,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // =============================================================================
-// 🎨 GESTOR DE TEMAS Y ESTILOS DE BOTONES (2D / 3D & MULTI-TEMA)
+// 🎨 GESTOR DE TEMAS Y ESTILOS DE BOTONES (2D / 3D & 16 TEMAS)
 // =============================================================================
 window.temaSeleccionadoTemporal = null;
 window.dimensionSeleccionadaTemporal = '3d';
@@ -18098,12 +18098,15 @@ window.abrirModalSelectorEstilosBotones = function() {
   window.temaSeleccionadoTemporal = currentConfig.tema;
   window.dimensionSeleccionadaTemporal = currentConfig.dimension;
 
-  // Actualizar tarjetas
+  // Actualizar tarjetas activas
   document.querySelectorAll('.theme-option-card').forEach(card => {
     card.classList.toggle('active', card.dataset.theme === currentConfig.tema);
   });
 
-  // Actualizar selector 2D/3D
+  // Aplicar dimensión visual a los botones de ejemplo dentro de las tarjetas
+  window.actualizarMuestrasBotonesModal(currentConfig.dimension);
+
+  // Actualizar switch 2D/3D
   document.querySelectorAll('.dim-switch-btn').forEach(btn => {
     const isAct = btn.dataset.dim === currentConfig.dimension;
     btn.classList.toggle('active', isAct);
@@ -18128,15 +18131,32 @@ window.cerrarModalSelectorEstilosBotones = function() {
   window.aplicarTemaVisualEnDOM(c.tema, c.dimension);
 };
 
+window.actualizarMuestrasBotonesModal = function(dimKey) {
+  const modal = document.getElementById('modalSelectorEstilosBotones');
+  if (!modal) return;
+
+  const es2d = dimKey === '2d';
+  modal.querySelectorAll('.preview-btn-sample').forEach(el => {
+    const bottomColor = el.dataset.bottomColor || '#334155';
+    if (es2d) {
+      el.style.borderBottom = '1px solid ' + bottomColor;
+      el.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)';
+      el.style.transform = 'none';
+    } else {
+      el.style.borderBottom = '4px solid ' + bottomColor;
+      el.style.boxShadow = '0 3px 6px rgba(0,0,0,0.35)';
+      el.style.transform = 'translateY(-1px)';
+    }
+  });
+};
+
 window.seleccionarDimensionTema = function(dimKey) {
   window.dimensionSeleccionadaTemporal = dimKey;
 
-  const modal = document.getElementById('modalSelectorEstilosBotones');
-  if (modal) {
-    modal.classList.remove('preview-dim-2d', 'preview-dim-3d');
-    modal.classList.add('preview-dim-' + dimKey);
-  }
+  // Actualizar botones de muestra dentro de las 16 tarjetas del modal
+  window.actualizarMuestrasBotonesModal(dimKey);
 
+  // Actualizar botones del switch 2D / 3D
   document.querySelectorAll('.dim-switch-btn').forEach(btn => {
     const isAct = btn.dataset.dim === dimKey;
     btn.classList.toggle('active', isAct);
@@ -18151,6 +18171,7 @@ window.seleccionarDimensionTema = function(dimKey) {
     }
   });
 
+  // Aplicar inmediatamente en vivo al fondo y a todos los botones del sistema
   window.aplicarTemaVisualEnDOM(window.temaSeleccionadoTemporal || 'gold', dimKey);
 };
 

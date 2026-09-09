@@ -10797,3 +10797,68 @@ body.dim-3d .db-pill:active {
   border-bottom-width: 3px !important;
   box-shadow: 0 3px 8px rgba(0,0,0,0.35) !important;
 }
+
+
+
+/* =============================================================================
+   REGLAS MAESTRAS DE ALTA ESPECIFICIDAD: 2D PLANO vs 3D TÁCTIL
+   ============================================================================= */
+
+/* --- MODO 2D PLANO: ABSOLUTAMENTE NINGÚN BORDE INFERIOR GRUESO --- */
+body.dim-2d button,
+body.dim-2d .btn,
+body.dim-2d a.btn,
+body.dim-2d [role="button"],
+body.dim-2d input[type="button"],
+body.dim-2d input[type="submit"],
+body.dim-2d [class*="btn-"],
+body.dim-2d [class*="-btn"],
+body.dim-2d .cobrar,
+body.dim-2d .guardar,
+body.dim-2d .danger,
+body.dim-2d .exact,
+body.dim-2d .prefactura {
+  border-bottom-width: 1px !important;
+  border-bottom-style: solid !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+
+body.dim-2d button:hover,
+body.dim-2d [class*="btn-"]:hover,
+body.dim-2d [class*="-btn"]:hover {
+  transform: none !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3) !important;
+  filter: brightness(1.08) !important;
+}
+
+body.dim-2d button:active,
+body.dim-2d [class*="btn-"]:active,
+body.dim-2d [class*="-btn"]:active {
+  transform: scale(0.96) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* --- MODO 3D TÁCTIL: RELIEVE RÍGIDO DE 4px Y PUSH-DOWN --- */
+body.dim-3d button,
+body.dim-3d .btn,
+body.dim-3d a.btn,
+body.dim-3d [role="button"],
+body.dim-3d [class*="btn-"],
+body.dim-3d [class*="-btn"],
+body.dim-3d .cobrar,
+body.dim-3d .guardar,
+body.dim-3d .danger,
+body.dim-3d .exact,
+body.dim-3d .prefactura {
+  border-bottom-width: 4px !important;
+  border-bottom-style: solid !important;
+}
+
+body.dim-3d button:active,
+body.dim-3d [class*="btn-"]:active,
+body.dim-3d [class*="-btn"]:active {
+  transform: translateY(3px) !important;
+  border-bottom-width: 1px !important;
+}
