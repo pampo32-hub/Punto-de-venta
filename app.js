@@ -2198,11 +2198,13 @@ window.cargarUsuariosPublicosLogin = async function() {
     if (!Array.isArray(usuarios) || !usuarios.length) return;
 
     const demoDefaults = {
-      'dev': '1234',
+      'dev': 'dev123',
       'admin': 'admin123',
       'cajero': 'caja123',
       'carlos': 'mesero123',
       'sofia': 'mesera123',
+      'admin_beta': 'admin123',
+      'mesero_beta': 'mesero123',
       'admin_terraza': '123',
       'cajero_terraza': '123',
       'mesero_terraza': '123',
@@ -12910,42 +12912,6 @@ window.guardarAjusteInventario = async function() {
   }
 };
 
-// CONTROL DE LICORES Y SHOTS - MODAL NUEVO INSUMO
-window.toggleConfigLicorNuevo = function(checked) {
-  const sec = document.getElementById('seccionConfigLicorNuevo');
-  if (sec) sec.style.display = checked ? 'block' : 'none';
-  const selUnidad = document.getElementById('selectNuevoInsumoUnidad');
-  if (checked && selUnidad) {
-    selUnidad.value = 'botellas';
-  }
-  actualizarCalculoShotsNuevo();
-};
-
-window.actualizarCalculoShotsNuevo = function() {
-  const selCap = document.getElementById('selNuevoInsumoCapacidad');
-  const txtCapCustom = document.getElementById('txtNuevoInsumoCapacidadCustom');
-  let cap = 750;
-  if (selCap && selCap.value === 'custom') {
-    if (txtCapCustom) txtCapCustom.style.display = 'block';
-    cap = parseFloat(txtCapCustom?.value) || 750;
-  } else {
-    if (txtCapCustom) txtCapCustom.style.display = 'none';
-    cap = parseFloat(selCap?.value) || 750;
-  }
-
-  const selShot = document.getElementById('selNuevoInsumoMedidaShot');
-  const txtShotCustom = document.getElementById('txtNuevoInsumoMedidaShotCustom');
-  let shot = 30;
-  if (selShot && selShot.value === 'custom') {
-    if (txtShotCustom) txtShotCustom.style.display = 'block';
-    shot = parseFloat(txtShotCustom?.value) || 30;
-  } else {
-    if (txtShotCustom) txtShotCustom.style.display = 'none';
-    shot = parseFloat(selShot?.value) || 30;
-  }
-
-  const costo = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
-  const rendimiento = shot > 0 ? Math.round((cap / shot) * 10) / 10 : 0;
 // GESTIÓN DE FRACCIONAMIENTO INTELIGENTE
 window.onCambioUnidadInsumo = function(modo) {
   const selUni = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
