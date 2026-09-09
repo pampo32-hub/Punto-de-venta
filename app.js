@@ -1843,6 +1843,7 @@ try {
           if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
         }
       }
+      if (typeof window.poblarSelectorKardexInsumos === 'function') window.poblarSelectorKardexInsumos();
       if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
     });
     socket.on('venta_registrada', () => {
@@ -4920,7 +4921,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
           ${btnEditLargeHtml}
           <div class="prod-card-large-media">
             ${imgLargeHtml}
-            <span class="prod-card-large-badge">${catBadge}</span>
+            
             <span class="prod-card-large-price">${formatCRC(p.precio)}</span>
             ${isPromo ? '<span class="prod-card-large-promo">🍸 2x1</span>' : ''}
           </div>
@@ -13382,6 +13383,7 @@ window.ejecutarEliminarInsumoConfirmado = async function() {
 
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const usuarioNombre = estado.usuarioActual ? (estado.usuarioActual.nombre_completo || estado.usuarioActual.usuario || 'Admin') : 'Admin';
     const headers = {
       'Content-Type': 'application/json',
       'x-user-rol': rol
@@ -13393,19 +13395,33 @@ window.ejecutarEliminarInsumoConfirmado = async function() {
     const res = await fetch(`/api/admin/inventario/${id}`, {
       method: 'DELETE',
       headers,
-      body: JSON.stringify({
-        usuarioNombre: estado.usuarioActual ? estado.usuarioActual.nombre : 'Admin'
-      })
+      body: JSON.stringify({ usuarioNombre })
     });
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el insumo');
 
-    mostrarNotificacionCentro(`🗑️ ${data.message || 'Insumo eliminado correctamente'}`, 'success');
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`🗑️ ${data.message || 'Insumo eliminado correctamente de bodega'}`, 'success');
+    }
     window.cerrarModalEliminarInsumo();
-    cargarInventarioAdmin();
+
+    if (Array.isArray(estado.inventario)) {
+      estado.inventario = estado.inventario.filter(i => i.id !== Number(id) && String(i.id) !== String(id));
+    }
+
+    if (typeof cargarInventarioAdmin === 'function') {
+      await cargarInventarioAdmin();
+    }
+    if (typeof poblarSelectorKardexInsumos === 'function') {
+      poblarSelectorKardexInsumos();
+    }
   } catch (e) {
-    alert('❌ ' + e.message);
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`❌ ${e.message}`, 'error');
+    } else {
+      alert('❌ ' + e.message);
+    }
   }
 };
 
@@ -17673,5 +17689,12 @@ window.ejecutarEliminarExistenciasBodegaConfirmado = async function() {
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('❌ ' + e.message, 'error');
     }
+  }
+};
+
+
+window.abrirMenuDirecto = function() {
+  if (typeof abrirModoParaLlevar === 'function') {
+    abrirModoParaLlevar();
   }
 };
