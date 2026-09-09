@@ -1060,17 +1060,11 @@
             <button class="btn-quick-action" id="btnParaLlevarSalon" onclick="abrirModoParaLlevar()" style="background: linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.25) 100%); border: 1px solid rgba(236,72,153,0.45); color: #f472b6; font-weight: 700;" title="Tomar pedido rápido para Llevar o Barra sin mesa física">
               🛍️ Para Llevar / Barra
             </button>
-            <button class="btn-quick-action" onclick="abrirModalSelectorPiso()" title="Cambiar textura y piso del salón">
-              🎨 Piso del Salón
-            </button>
             <button class="btn-quick-action" id="btnVerTodosQRs">
               📱 Códigos QR Mesas
             </button>
             <button class="btn-quick-action" id="btnAbrirMoverUnirModal">
               🔄 Mover / Unir Mesas
-            </button>
-            <button class="btn-quick-action" id="btnGestionarAgotados">
-              ⛔ Lista Agotados (86)
             </button>
             <button class="btn-quick-action admin-only-action" id="btnIrEditorSalon">
               📐 Diseñar Salón
@@ -1369,6 +1363,7 @@
             <button class="btn-tool" onclick="abrirModalNuevoInsumo()">➕ Nuevo Insumo</button>
             <button class="btn-tool" style="background:#065f46; border-color:#10b981;" onclick="abrirModalAjusteRapido('entrada')">📥 Entrada de Mercadería</button>
             <button class="btn-tool" style="background:#7f1d1d; border-color:#ef4444;" onclick="abrirModalAjusteRapido('merma')">⚠️ Registrar Merma</button>
+            <button class="btn-tool" id="btnGestionarAgotados" onclick="abrirModalAgotados()" style="background:#451a03; border-color:#f59e0b; color:#fde68a; font-weight:700;" title="Gestionar disponibilidad de productos y platillos (86)">⛔ Lista Agotados (86)</button>
             <button class="btn-tool" style="background:#1e1b4b; border-color:#6366f1; color:#c7d2fe; font-weight:700;" onclick="cambiarSubTabInventario('kardex')" title="Ver historial y movimientos de Kárdex">📜 Ver Kárdex</button>
           </div>
         </div>
@@ -3153,6 +3148,20 @@
             <p>Auditoría de todos los movimientos de inventario: salidas automáticas por comanda, compras y mermas.</p>
             <div class="admin-card-action">
               <span>Ver Kárdex</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
+          <!-- 2.3 Lista de Agotados (86) -->
+          <div class="admin-panel-card card-agotados" onclick="abrirModalAgotados()">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">⛔</div>
+              <span class="admin-card-tag" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">Cocina & Barra 86</span>
+            </div>
+            <h4>Lista de Agotados (86)</h4>
+            <p>Bloquear o habilitar platillos y bebidas en tiempo real para todos los saloneros y comandas.</p>
+            <div class="admin-card-action">
+              <span>Gestionar Agotados</span>
               <span class="arrow">→</span>
             </div>
           </div>

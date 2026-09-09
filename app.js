@@ -11571,16 +11571,23 @@ document.getElementById('btnAgregarBarra').addEventListener('click', async () =>
 });
 
 // Agotados (86)
+window.abrirModalAgotados = function() {
+  if (typeof renderListaAgotados === 'function') renderListaAgotados();
+  const modal = document.getElementById('modalAgotados');
+  if (modal) modal.classList.add('active');
+};
+
 function initAgotados86() {
-  document.getElementById('btnGestionarAgotados').addEventListener('click', () => {
-    renderListaAgotados();
-    document.getElementById('modalAgotados').classList.add('active');
+  document.querySelectorAll('#btnGestionarAgotados, .btnGestionarAgotados, #btnAgotadosInventario').forEach(btn => {
+    btn.addEventListener('click', () => {
+      window.abrirModalAgotados();
+    });
   });
 
-  document.getElementById('btnCloseAgotadosModal').addEventListener('click', () => document.getElementById('modalAgotados').classList.remove('active'));
-  document.getElementById('btnGuardarAgotados').addEventListener('click', () => {
-    document.getElementById('modalAgotados').classList.remove('active');
-    renderGridProductos(estado.productos);
+  document.getElementById('btnCloseAgotadosModal')?.addEventListener('click', () => document.getElementById('modalAgotados')?.classList.remove('active'));
+  document.getElementById('btnGuardarAgotados')?.addEventListener('click', () => {
+    document.getElementById('modalAgotados')?.classList.remove('active');
+    if (typeof renderGridProductos === 'function') renderGridProductos(estado.productos);
   });
 }
 
@@ -14904,8 +14911,21 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
     const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
     const baseImp = Math.max(0, subNum - descHH);
-    const servNum = (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) > 0) ? Math.round(Number(ticketData.servicio)) : Math.round(baseImp * 0.10);
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && Number(ticketData.iva) > 0) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const esParaLlevarTicket = Boolean(
+      ticketData.es_para_llevar ||
+      ticketData.tipo_orden === 'para_llevar' ||
+      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar'))) ||
+      (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) === 0)
+    );
+    let servNum;
+    if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
+      servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
+    } else if (esParaLlevarTicket) {
+      servNum = 0;
+    } else {
+      servNum = Math.round(baseImp * 0.10);
+    }
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const prop10 = Math.round(subNum * 0.10);
     const prop15 = Math.round(subNum * 0.15);
@@ -14961,10 +14981,17 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
             <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
           </div>
         ` : ''}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-          <span>10% Servicio (Ley):</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
-        </div>
+        ${servNum > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+            <span>10% Servicio (Ley):</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
+          </div>
+        ` : `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#6b7280;">
+            <span>Servicio (0% Para Llevar):</span>
+            <span style="font-weight:900;">EXENTO</span>
+          </div>
+        `}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
@@ -15304,8 +15331,21 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
     const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
     const baseImp = Math.max(0, subNum - descHH);
-    const servNum = (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) > 0) ? Math.round(Number(ticketData.servicio)) : Math.round(baseImp * 0.10);
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && Number(ticketData.iva) > 0) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const esParaLlevarTicket = Boolean(
+      ticketData.es_para_llevar ||
+      ticketData.tipo_orden === 'para_llevar' ||
+      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar'))) ||
+      (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) === 0)
+    );
+    let servNum;
+    if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
+      servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
+    } else if (esParaLlevarTicket) {
+      servNum = 0;
+    } else {
+      servNum = Math.round(baseImp * 0.10);
+    }
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;
     const montoCambio = Number(ticketData.cambio) >= 0 ? Math.round(Number(ticketData.cambio)) : Math.max(0, montoRec - totalNum);
@@ -15359,10 +15399,17 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
             <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
           </div>
         ` : ''}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-          <span>10% Servicio (Ley):</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
-        </div>
+        ${servNum > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+            <span>10% Servicio (Ley):</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
+          </div>
+        ` : `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#6b7280;">
+            <span>Servicio (0% Para Llevar):</span>
+            <span style="font-weight:900;">EXENTO</span>
+          </div>
+        `}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>

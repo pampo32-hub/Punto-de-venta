@@ -220,7 +220,28 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
 /**
  * Generador de Factura / Ticket de Liquidación Completa
  */
-function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, metodoPago, subtotal, descuentoHH, servicio, iva, total, recibido, cambio, items, pagos = [], fechaHora = new Date().toISOString() }) {
+function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
+  const {
+    negocio = negocioOverride,
+    ordenId,
+    numeroOrden,
+    mesaNumero = (datos.mesaNumero || datos.mesa),
+    mesero,
+    cliente,
+    metodoPago,
+    subtotal,
+    descuentoHH,
+    servicio,
+    iva,
+    total,
+    recibido,
+    cambio,
+    items,
+    pagos = [],
+    fechaHora = new Date().toISOString(),
+    es_para_llevar,
+    tipo_orden
+  } = datos;
   let fechaStr = fechaHora;
   if (fechaHora) {
     const d = new Date(fechaHora);
@@ -261,8 +282,21 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
   const baseImponible = Math.max(0, subNum - descHHNum);
-  const servNum = (servicio !== undefined && servicio !== null && Number(servicio) > 0) ? Math.round(Number(servicio)) : Math.round(baseImponible * 0.10);
-  const ivaNum = (iva !== undefined && iva !== null && Number(iva) > 0) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
+  const esParaLlevarTicket = Boolean(
+    datos?.es_para_llevar ||
+    datos?.tipo_orden === 'para_llevar' ||
+    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
+    (servicio !== undefined && servicio !== null && Number(servicio) === 0)
+  );
+  let servNum;
+  if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
+    servNum = Math.max(0, Math.round(Number(servicio)));
+  } else if (esParaLlevarTicket) {
+    servNum = 0;
+  } else {
+    servNum = Math.round(baseImponible * 0.10);
+  }
+  const ivaNum = (iva !== undefined && iva !== null && !isNaN(Number(iva))) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
   const totNum = (total !== undefined && total !== null && Number(total) > 0) ? Math.round(Number(total)) : (baseImponible + servNum + ivaNum);
   const montoRecibido = Number(recibido) > 0 ? Math.round(Number(recibido)) : totNum;
   const vuelto = Number(cambio) >= 0 ? Math.round(Number(cambio)) : Math.max(0, montoRecibido - totNum);
@@ -300,7 +334,11 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  if (servNum > 0) {
+    raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  } else {
+    raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
+  }
   raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
@@ -362,7 +400,24 @@ function generarTicketLiquidacion({ negocio, ordenId, numeroOrden, mesaNumero, m
 /**
  * Generador de Pre-Factura / Pre-Cuenta (Revisión de Consumos en Mesa)
  */
-function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, mesero, cliente, subtotal, descuentoHH, servicio, iva, total, items, fechaHora = new Date().toISOString() }) {
+function generarTicketPreFactura(datos = {}, negocioOverride = null) {
+  const {
+    negocio = negocioOverride,
+    ordenId,
+    numeroOrden,
+    mesaNumero = (datos.mesaNumero || datos.mesa),
+    mesero,
+    cliente,
+    subtotal,
+    descuentoHH,
+    servicio,
+    iva,
+    total,
+    items,
+    fechaHora = new Date().toISOString(),
+    es_para_llevar,
+    tipo_orden
+  } = datos;
   let fechaStr = fechaHora;
   if (fechaHora) {
     const d = new Date(fechaHora);
@@ -403,8 +458,21 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
   const baseImponible = Math.max(0, subNum - descHHNum);
-  const servNum = (servicio !== undefined && servicio !== null && Number(servicio) > 0) ? Math.round(Number(servicio)) : Math.round(baseImponible * 0.10);
-  const ivaNum = (iva !== undefined && iva !== null && Number(iva) > 0) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
+  const esParaLlevarTicket = Boolean(
+    datos?.es_para_llevar ||
+    datos?.tipo_orden === 'para_llevar' ||
+    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
+    (servicio !== undefined && servicio !== null && Number(servicio) === 0)
+  );
+  let servNum;
+  if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
+    servNum = Math.max(0, Math.round(Number(servicio)));
+  } else if (esParaLlevarTicket) {
+    servNum = 0;
+  } else {
+    servNum = Math.round(baseImponible * 0.10);
+  }
+  const ivaNum = (iva !== undefined && iva !== null && !isNaN(Number(iva))) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
   const totNum = (total !== undefined && total !== null && Number(total) > 0) ? Math.round(Number(total)) : (baseImponible + servNum + ivaNum);
   const prop10 = Math.round(subNum * 0.10);
   const prop15 = Math.round(subNum * 0.15);
@@ -444,7 +512,11 @@ function generarTicketPreFactura({ negocio, ordenId, numeroOrden, mesaNumero, me
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  if (servNum > 0) {
+    raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  } else {
+    raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
+  }
   raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
