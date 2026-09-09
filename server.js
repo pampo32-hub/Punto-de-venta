@@ -467,9 +467,15 @@ app.get('/m/:id', (req, res) => {
 });
 
 // Rutas comerciales y presentación de la página web del sistema
-app.get(['/landing', '/pagina', '/sitio', '/web'], (req, res) => {
+app.get(['/landing', '/pagina', '/sitio', '/web', '/dark'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'landing.html'));
 });
+
+// Ruta versión minimalista elegante (colores claros, marfil y oro)
+app.get(['/landing-minimal', '/elegante', '/minimal', '/pagina-minimal'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing-minimal.html'));
+});
+
 
 
 

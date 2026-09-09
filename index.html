@@ -89,13 +89,16 @@
     
     <div class="landing-content">
       <div class="landing-header">
-        <div style="display:inline-flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px;">
+        <div style="display:inline-flex; align-items:center; justify-content:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
           <div class="landing-brand-badge" style="display:inline-flex; align-items:center; gap:8px; margin-bottom:0;">
             <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" style="width:22px; height:22px; border-radius:5px; object-fit:cover;" onerror="this.src='/gamma_pos_logo.png'" />
             GAMMA POS Cloud
           </div>
-          <a href="/landing" class="btn-ver-pagina-top" style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, rgba(245,158,11,0.25) 0%, rgba(217,119,6,0.35) 100%); border:1px solid #f59e0b; color:#fbbf24; padding:6px 14px; border-radius:20px; font-size:0.85rem; font-weight:800; text-decoration:none; box-shadow:0 0 15px rgba(245,158,11,0.25); cursor:pointer;">
-            🌐 Ver Página
+          <a href="/landing" class="btn-ver-pagina-top" style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, rgba(245,158,11,0.25) 0%, rgba(217,119,6,0.35) 100%); border:1px solid #f59e0b; color:#fbbf24; padding:6px 14px; border-radius:20px; font-size:0.82rem; font-weight:800; text-decoration:none; box-shadow:0 0 15px rgba(245,158,11,0.25); cursor:pointer;" title="Ver versión Dark Luxury">
+            🌙 Ver Página (Dark)
+          </a>
+          <a href="/landing-minimal" class="btn-ver-pagina-top" style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(254,243,199,0.9) 100%); border:1px solid #d97706; color:#92400e; padding:6px 14px; border-radius:20px; font-size:0.82rem; font-weight:800; text-decoration:none; box-shadow:0 4px 14px rgba(180,83,9,0.2); cursor:pointer;" title="Ver versión Elegante Minimalista">
+            ✨ Ver Página (Elegante)
           </a>
         </div>
         <h1>PUNTO DE VENTA INTELIGENTE</h1>
@@ -127,9 +130,12 @@
           </button>
         </form>
 
-        <div style="margin: 10px 0 14px; text-align: center;">
-          <a href="/landing" style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:9px 14px; background:linear-gradient(135deg, rgba(2,132,199,0.18) 0%, rgba(56,189,248,0.22) 100%); border:1.5px solid #38bdf8; border-radius:10px; color:#e0f2fe; font-weight:800; font-size:0.88rem; text-decoration:none; box-shadow:0 4px 14px rgba(2,132,199,0.2); cursor:pointer;">
-            🌐 Ver Página Web Comercial
+        <div style="margin: 12px 0 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <a href="/landing" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:9px 10px; background:linear-gradient(135deg, rgba(2,132,199,0.18) 0%, rgba(56,189,248,0.22) 100%); border:1.5px solid #38bdf8; border-radius:10px; color:#e0f2fe; font-weight:800; font-size:0.8rem; text-decoration:none; box-shadow:0 4px 12px rgba(2,132,199,0.2); cursor:pointer; text-align:center;">
+            🌙 Página Dark
+          </a>
+          <a href="/landing-minimal" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:9px 10px; background:linear-gradient(135deg, #ffffff 0%, #fef3c7 100%); border:1.5px solid #d97706; border-radius:10px; color:#78350f; font-weight:800; font-size:0.8rem; text-decoration:none; box-shadow:0 4px 12px rgba(217,119,6,0.2); cursor:pointer; text-align:center;">
+            ✨ Página Elegante
           </a>
         </div>
 
@@ -1027,9 +1033,12 @@
         <button class="nav-pill btn-para-llevar-nav" id="btnParaLlevarNav" onclick="abrirModoParaLlevar()" style="background: linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.22) 100%); border: 1px solid rgba(236,72,153,0.4); color: #f472b6; font-weight: 700;" title="Tomar pedido rápido para Llevar o Barra sin asignar mesa física">
           <span class="pill-icon">🛍️</span> Para Llevar
         </button>
-        <!-- Enlace a la Página Comercial -->
-        <a href="/landing" target="_blank" class="nav-pill btn-landing-nav" id="btnVerPaginaNav" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; color:#fbbf24; border: 1px solid rgba(245,158,11,0.35); background: linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(217,119,6,0.18) 100%); font-weight:700;" title="Abrir Página Web Comercial de GAMMA POS">
-          <span class="pill-icon">🌐</span> Ver Página
+        <!-- Enlaces a las Páginas Comerciales (Dark y Elegante Minimalista) -->
+        <a href="/landing" target="_blank" class="nav-pill btn-landing-nav" id="btnVerPaginaNav" style="text-decoration:none; display:inline-flex; align-items:center; gap:5px; color:#fbbf24; border: 1px solid rgba(245,158,11,0.35); background: linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(217,119,6,0.18) 100%); font-weight:700;" title="Abrir Página Comercial Dark Luxury">
+          <span class="pill-icon">🌙</span> Web Dark
+        </a>
+        <a href="/landing-minimal" target="_blank" class="nav-pill btn-landing-minimal-nav" id="btnVerPaginaMinimalNav" style="text-decoration:none; display:inline-flex; align-items:center; gap:5px; color:#fef08a; border: 1px solid rgba(251,191,36,0.4); background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(254,243,199,0.2) 100%); font-weight:700;" title="Abrir Página Comercial Elegante Minimalista">
+          <span class="pill-icon">✨</span> Web Elegante
         </a>
       </nav>
 
