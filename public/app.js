@@ -19,7 +19,7 @@ window.obtenerIconoCategoriaInsumo = function(categoria) {
 (function() {
   const _origFetch = window.fetch;
   window.fetch = async function(resource, init = {}) {
-    const token = sessionStorage.getItem('pos_token');
+    const token = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token');
     if (token && (typeof resource === 'string' || (typeof URL !== 'undefined' && resource instanceof URL))) {
       const urlStr = typeof resource === 'string' ? resource : resource.toString();
       if (urlStr.startsWith('/api/') || urlStr.includes('/api/')) {
@@ -2361,12 +2361,17 @@ window.ejecutarLogin = async function() {
     estado.usuarioActual = data.usuario;
     estado.negocioActual = data.negocio;
 
-    // Guardar en sesión
+    // Guardar en sesión persistente (sessionStorage y localStorage para persistir tras F5)
     if (data.token) {
       sessionStorage.setItem('pos_token', data.token);
+      localStorage.setItem('pos_token', data.token);
     }
     sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
+    localStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
     sessionStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
+    localStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
+    sessionStorage.setItem('pos_user_context', data.usuario?.rol === 'developer' ? 'dev' : 'pos');
+    localStorage.setItem('pos_user_context', data.usuario?.rol === 'developer' ? 'dev' : 'pos');
 
     aplicarEnrutamientoPorRol();
   } catch (e) {
@@ -2512,6 +2517,19 @@ window.cerrarSesion = function() {
   estado.usuarioActual = null;
   sessionStorage.removeItem('pos_usuario');
   sessionStorage.removeItem('pos_token');
+  sessionStorage.removeItem('pos_negocio');
+  sessionStorage.removeItem('pos_active_view');
+  sessionStorage.removeItem('pos_active_zone');
+  sessionStorage.removeItem('pos_user_context');
+  sessionStorage.removeItem('pos_inventario_subtab');
+
+  localStorage.removeItem('pos_usuario');
+  localStorage.removeItem('pos_token');
+  localStorage.removeItem('pos_negocio');
+  localStorage.removeItem('pos_active_view');
+  localStorage.removeItem('pos_active_zone');
+  localStorage.removeItem('pos_user_context');
+  localStorage.removeItem('pos_inventario_subtab');
   const devTop = document.getElementById('devTopControls');
   if (devTop) devTop.style.display = 'none';
   document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
@@ -2547,15 +2565,39 @@ function aplicarEnrutamientoPorRol() {
     }
   }
 
-  // CASO 1: DEVELOPER ➔ PORTAL DISTINTO DE DESARROLLADOR
+  // CASO 1: DEVELOPER ➔ PORTAL DE DESARROLLADOR O VISTA POS SEGÚN CONTEXTO GUARDADO TRAS F5
   if (u.rol === 'developer') {
-    if (devTop) devTop.style.display = 'none';
-    document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
-    if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
-    document.getElementById('developerPortalView').classList.add('active');
-    document.getElementById('posMainView').classList.remove('active');
-    cargarDevPortal();
-    return;
+    const userContext = sessionStorage.getItem('pos_user_context') || localStorage.getItem('pos_user_context') || 'dev';
+    if (userContext === 'pos') {
+      window.irAPuntoDeVentaAdmin();
+      const savedView = sessionStorage.getItem('pos_active_view') || localStorage.getItem('pos_active_view') || 'salon';
+      if (['metricas', 'inventario', 'recetas', 'kardex', 'auditoria', 'editor-plano'].includes(savedView)) {
+        abrirModuloAdmin(savedView);
+        if (savedView === 'inventario') {
+          const subTab = sessionStorage.getItem('pos_inventario_subtab') || localStorage.getItem('pos_inventario_subtab') || 'existencias';
+          cambiarSubTabInventario(subTab);
+        }
+      } else {
+        document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
+        const navBtn = document.querySelector(`.nav-pill[data-view="${savedView}"]`);
+        if (navBtn) navBtn.classList.add('active');
+        const targetViewEl = document.getElementById('view-' + savedView);
+        if (targetViewEl) targetViewEl.classList.add('active');
+        if (savedView === 'salon') cargarMesasDesdeBackend();
+        if (savedView === 'kds') cargarKDSDesdeBackend();
+        if (savedView === 'caja') cargarCajaDesdeBackend();
+      }
+      return;
+    } else {
+      if (devTop) devTop.style.display = 'none';
+      document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
+      if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
+      document.getElementById('developerPortalView').classList.add('active');
+      document.getElementById('posMainView').classList.remove('active');
+      cargarDevPortal();
+      return;
+    }
   }
 
   // CASO 2: ADMIN, CAJERO, SALONERO/A ➔ SISTEMA POS RESTAURANTE
@@ -2651,6 +2693,8 @@ window.aplicarEnrutamientoPorRol = aplicarEnrutamientoPorRol;
 
 // Helpers globales para acceso directo a módulos de Admin desde cualquier vista
 window.irAPuntoDeVentaAdmin = function() {
+  sessionStorage.setItem('pos_user_context', 'pos');
+  localStorage.setItem('pos_user_context', 'pos');
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
   document.body.classList.add('is-admin');
@@ -2693,7 +2737,7 @@ window._pinSupervisorActivo = null;
 
 window.obtenerHeadersAuthAdmin = function(extraHeaders = {}) {
   const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-  const token = sessionStorage.getItem('pos_token');
+  const token = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token');
   const headers = {
     'x-user-rol': rol,
     ...extraHeaders
@@ -2836,7 +2880,7 @@ window.abrirModuloAdmin = async function(modulo) {
   const actualView = (modulo === 'recetas' || modulo === 'kardex') ? 'inventario' : modulo;
   const target = document.getElementById('view-' + actualView);
   if (target) target.classList.add('active');
-  sessionStorage.setItem('pos_active_view', modulo);
+  sessionStorage.setItem('pos_active_view', modulo); localStorage.setItem('pos_active_view', modulo);
 
   if (modulo === 'metricas') cargarDashboardMetricas();
   if (modulo === 'inventario') {
@@ -6933,7 +6977,7 @@ document.querySelectorAll('.zone-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.zone-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    sessionStorage.setItem('pos_active_zone', tab.dataset.zona);
+    sessionStorage.setItem('pos_active_zone', tab.dataset.zona); localStorage.setItem('pos_active_zone', tab.dataset.zona);
     if (tab.dataset.zona === 'segundo') {
       estado.pisoActual = 2;
     } else if (['salon', 'barra', 'terraza', 'vip'].includes(tab.dataset.zona)) {
@@ -7047,8 +7091,10 @@ window.validarPinMesaIngresado = async function() {
     estado.usuarioActual = data.usuario;
     if (data.token) {
       sessionStorage.setItem('pos_token', data.token);
+      localStorage.setItem('pos_token', data.token);
     }
     sessionStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
+    localStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
 
     const perfilBadge = document.getElementById('userProfileBadge');
     if (perfilBadge) {
@@ -10505,42 +10551,74 @@ window.ejecutarCobroFinal = async function() {
       estado.cobroSplitPersonaIndex = null;
 
       if (esLiquidacionFinal) {
-        // Todas las cuentas liquidadas: liberar mesa y cerrar todos los modales
+        // Todas las cuentas liquidadas: liberar mesa, limpiar comanda y volver al salón
+        const mesaIdCerrada = estado.mesaActiva?.id;
         if (estado.mesaActiva) {
           try { if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) { window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {}); } } catch (_) {}
           estado.mesaActiva.estado = 'libre';
           estado.mesaActiva.cliente = null;
           estado.mesaActiva.mesa_cliente = null;
           estado.mesaActiva.items = [];
+          estado.mesaActiva.platos_pendientes = [];
+          estado.mesaActiva.items_pendientes = [];
           estado.mesaActiva.orden_id = null;
           estado.mesaActiva.orden_activa_id = null;
           estado.mesaActiva.orden_total = 0;
           estado.mesaActiva.pidio_cuenta_qr = 0;
           estado.mesaActiva.cuenta_pedida = false;
         }
-        const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
-        if (mesaEnLista) {
-          mesaEnLista.cliente = null;
-          mesaEnLista.mesa_cliente = null;
-          mesaEnLista.estado = 'libre';
-          mesaEnLista.orden_total = 0;
-          mesaEnLista.orden_activa_id = null;
-          mesaEnLista.items = [];
+        if (mesaIdCerrada) {
+          const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(mesaIdCerrada));
+          if (mesaEnLista) {
+            mesaEnLista.cliente = null;
+            mesaEnLista.mesa_cliente = null;
+            mesaEnLista.estado = 'libre';
+            mesaEnLista.orden_total = 0;
+            mesaEnLista.orden_activa_id = null;
+            mesaEnLista.items = [];
+            mesaEnLista.platos_pendientes = [];
+            mesaEnLista.items_pendientes = [];
+          }
+        }
+
+        // Limpiar comanda activa
+        estado.mesaActiva = null;
+        estado.comanda = [];
+        estado.cobroSplitPersonaIndex = null;
+        if (typeof splitState !== 'undefined') {
+          splitState.personas = [];
+          splitState.personaActivaIndex = 0;
         }
         const elNom = document.getElementById('comClienteNombre');
         if (elNom) elNom.textContent = 'General';
+        const txtNotasComanda = document.getElementById('comandaNotasMesa');
+        if (txtNotasComanda) txtNotasComanda.value = '';
+        if (typeof renderTicketItems === 'function') renderTicketItems();
+        if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
 
-        const mCom = document.getElementById('modalComandero');
-        if (mCom) mCom.classList.remove('active');
-        const mSplit = document.getElementById('modalSplitBill');
-        if (mSplit) {
-          mSplit.classList.remove('active');
-          mSplit.style.display = 'none';
+        // Cerrar todos los modales (cobro, comandero, split)
+        if (typeof window.cerrarTodosLosModales === 'function') {
+          window.cerrarTodosLosModales();
+        } else {
+          document.querySelectorAll('.modal, .modal-backdrop').forEach(m => {
+            m.classList.remove('active');
+            m.style.display = 'none';
+          });
         }
+
+        // Navegar y activar la vista del Salón
+        document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
+        const btnSalonNav = document.querySelector('.nav-pill[data-view="salon"]');
+        if (btnSalonNav) btnSalonNav.classList.add('active');
+        const viewSalonEl = document.getElementById('view-salon');
+        if (viewSalonEl) viewSalonEl.classList.add('active');
+        sessionStorage.setItem('pos_active_view', 'salon');
+        localStorage.setItem('pos_active_view', 'salon');
 
         mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
 
-        if (typeof cargarMesasDesdeBackend === 'function') cargarMesasDesdeBackend();
+        if (typeof cargarMesasDesdeBackend === 'function') await cargarMesasDesdeBackend();
         if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
         if (typeof cargarKDSDesdeBackend === 'function') cargarKDSDesdeBackend();
       } else {
@@ -10572,38 +10650,72 @@ window.ejecutarCobroFinal = async function() {
       }
     } else {
       // COBRO ESTÁNDAR COMPLETO DE MESA (NO SPLIT)
+      const mesaIdCobrada = estado.mesaActiva?.id;
       if (estado.mesaActiva) {
         try { if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) { window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {}); } } catch (_) {}
         estado.mesaActiva.estado = 'libre';
         estado.mesaActiva.cliente = null;
         estado.mesaActiva.mesa_cliente = null;
         estado.mesaActiva.items = [];
+        estado.mesaActiva.platos_pendientes = [];
+        estado.mesaActiva.items_pendientes = [];
         estado.mesaActiva.orden_id = null;
         estado.mesaActiva.orden_activa_id = null;
         estado.mesaActiva.orden_total = 0;
         estado.mesaActiva.pidio_cuenta_qr = 0;
         estado.mesaActiva.cuenta_pedida = false;
       }
-      const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
-      if (mesaEnLista) {
-        mesaEnLista.cliente = null;
-        mesaEnLista.mesa_cliente = null;
-        mesaEnLista.estado = 'libre';
-        mesaEnLista.orden_total = 0;
-        mesaEnLista.orden_activa_id = null;
-        mesaEnLista.items = [];
+      if (mesaIdCobrada) {
+        const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(mesaIdCobrada));
+        if (mesaEnLista) {
+          mesaEnLista.cliente = null;
+          mesaEnLista.mesa_cliente = null;
+          mesaEnLista.estado = 'libre';
+          mesaEnLista.orden_total = 0;
+          mesaEnLista.orden_activa_id = null;
+          mesaEnLista.items = [];
+          mesaEnLista.platos_pendientes = [];
+          mesaEnLista.items_pendientes = [];
+        }
+      }
+
+      // Limpiar comanda activa
+      estado.mesaActiva = null;
+      estado.comanda = [];
+      estado.cobroSplitPersonaIndex = null;
+      if (typeof splitState !== 'undefined') {
+        splitState.personas = [];
+        splitState.personaActivaIndex = 0;
       }
       const elNom = document.getElementById('comClienteNombre');
       if (elNom) elNom.textContent = 'General';
-      estado.cobroSplitPersonaIndex = null;
-      document.getElementById('modalCobro').classList.remove('active');
-      document.getElementById('modalCobro').style.display = 'none';
-      document.getElementById('modalComandero').classList.remove('active');
-      document.getElementById('modalSplitBill').classList.remove('active');
-      document.getElementById('modalSplitBill').style.display = 'none';
+      const txtNotasComanda = document.getElementById('comandaNotasMesa');
+      if (txtNotasComanda) txtNotasComanda.value = '';
+      if (typeof renderTicketItems === 'function') renderTicketItems();
+      if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
+
+      // Cerrar todos los modales de cobro/comandero
+      if (typeof window.cerrarTodosLosModales === 'function') {
+        window.cerrarTodosLosModales();
+      } else {
+        document.querySelectorAll('.modal, .modal-backdrop').forEach(m => {
+          m.classList.remove('active');
+          m.style.display = 'none';
+        });
+      }
+
+      // Navegar y activar la vista del Salón
+      document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
+      const btnSalonNav = document.querySelector('.nav-pill[data-view="salon"]');
+      if (btnSalonNav) btnSalonNav.classList.add('active');
+      const viewSalonEl = document.getElementById('view-salon');
+      if (viewSalonEl) viewSalonEl.classList.add('active');
+      sessionStorage.setItem('pos_active_view', 'salon');
+      localStorage.setItem('pos_active_view', 'salon');
 
       if (typeof cargarMesasDesdeBackend === 'function') {
-        cargarMesasDesdeBackend();
+        await cargarMesasDesdeBackend();
       }
       if (typeof cargarCajaDesdeBackend === 'function') {
         cargarCajaDesdeBackend();
@@ -12967,12 +13079,30 @@ document.addEventListener('DOMContentLoaded', () => {
   initRenombrarMesas();
   initNuevoProducto();
 
-  // Verificar si hay sesión previa guardada en sessionStorage
-  const userGuardado = sessionStorage.getItem('pos_usuario');
-  const negGuardado = sessionStorage.getItem('pos_negocio');
-  if (userGuardado) {
-    estado.usuarioActual = JSON.parse(userGuardado);
-    estado.negocioActual = negGuardado ? JSON.parse(negGuardado) : null;
+  // Verificar si hay sesión previa guardada en sessionStorage o localStorage (F5 persistence)
+  const userStr = sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario');
+  const negStr = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
+  const tokenStr = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token');
+
+  if (userStr) {
+    try {
+      estado.usuarioActual = JSON.parse(userStr);
+      estado.negocioActual = negStr ? JSON.parse(negStr) : null;
+    } catch (_) {}
+
+    if (tokenStr) {
+      sessionStorage.setItem('pos_token', tokenStr);
+      localStorage.setItem('pos_token', tokenStr);
+    }
+    if (estado.usuarioActual) {
+      sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      localStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+    }
+    if (estado.negocioActual) {
+      sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+      localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+    }
+
     if (estado.negocioActual && estado.negocioActual.id) {
       fetch(`/api/dev/negocios/${estado.negocioActual.id}/modulos`)
         .then(r => r.json())
@@ -12981,6 +13111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             estado.negocioActual.modulos_activos = d.modulosActivos;
             estado.negocioActual.plan_nombre = d.planNombre;
             sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+            localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
             if (typeof aplicarRestriccionesModulos === 'function') {
               aplicarRestriccionesModulos();
             }
@@ -17667,6 +17798,8 @@ window.toggleModoEdicionGlobal = function(forzarEstado) {
 
 // Vuelve a la consola dev desde el POS
 window.volverAConsoleDev = async function() {
+  sessionStorage.setItem('pos_user_context', 'dev');
+  localStorage.setItem('pos_user_context', 'dev');
   if (_hayCambiosPendientes) {
     const confirmado = await confirmarAccion({
       icono: '💾',
