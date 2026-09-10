@@ -690,7 +690,7 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
 
   return { raw, ticketVisual };
 }
-function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_corte, fondo_inicial, ventas = {}, total_entradas, total_salidas, efectivo_esperado, movimientos_detalle = [], tip_pool = [], total_propinas = 0 }) {
+function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_corte, fondo_inicial, fondo_inicial_usd = 0, ventas = {}, total_entradas = 0, total_salidas = 0, efectivo_esperado, esperado_efectivo_crc, esperado_dolares_usd, esperado_dolares_crc, total_general_esperado_gaveta_crc, movimientos_detalle = [], tip_pool = [], total_propinas = 0 }) {
   const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
   const fCorte = fecha_corte ? new Date(fecha_corte).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
 
@@ -732,12 +732,33 @@ function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_c
   raw += '-'.repeat(48) + '\n';
   raw += formatearLinea2Col('(+) Fondo Inicial:', formatMontoTermica(fondo_inicial || 0)) + '\n';
   raw += formatearLinea2Col('(+) Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  if ((ventas.dolares && ventas.dolares > 0) || (ventas.dolares_usd && ventas.dolares_usd > 0)) {
+    const usdTxt = ventas.dolares_usd ? `$${ventas.dolares_usd.toFixed(2)} (${formatMontoTermica(ventas.dolares || 0)})` : formatMontoTermica(ventas.dolares || 0);
+    raw += formatearLinea2Col('(+) Ventas Dolares:', usdTxt) + '\n';
+  }
   raw += formatearLinea2Col('(+) Entradas Efectivo:', `+${formatMontoTermica(total_entradas || 0)}`) + '\n';
   raw += formatearLinea2Col('(-) Salidas Menores:', `-${formatMontoTermica(total_salidas || 0)}`) + '\n';
-  raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'EFECTIVO ESPERADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(efectivo_esperado || 0)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.ALIGN_LEFT;
+
+  const espCRC = esperado_efectivo_crc !== undefined ? esperado_efectivo_crc : (efectivo_esperado || 0);
+  const espUSD = esperado_dolares_usd !== undefined ? esperado_dolares_usd : (ventas.dolares_usd || 0);
+  const espUSD_CRC = esperado_dolares_crc !== undefined ? esperado_dolares_crc : (ventas.dolares || 0);
+  const totalGaveta = total_general_esperado_gaveta_crc !== undefined ? total_general_esperado_gaveta_crc : (espCRC + espUSD_CRC);
+
+  if (espUSD > 0 || espUSD_CRC > 0) {
+    raw += '='.repeat(48) + '\n';
+    raw += formatearLinea2Col('Esperado en Colones:', formatMontoTermica(espCRC)) + '\n';
+    raw += formatearLinea2Col('Esperado en Dolares:', `$${Number(espUSD).toFixed(2)} (${formatMontoTermica(espUSD_CRC)})`) + '\n';
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'ESPERADO TOTAL GAVETA:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totalGaveta)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+  } else {
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'EFECTIVO ESPERADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(espCRC)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+  }
+
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_CENTER;
   raw += `*** ESTADO: TURNO PERMANECE ABIERTO ***\n`;
@@ -754,10 +775,15 @@ function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_c
     fecha_apertura,
     fecha_corte,
     fondo_inicial,
+    fondo_inicial_usd: fondo_inicial_usd || 0,
     ventas,
     total_entradas,
     total_salidas,
-    efectivo_esperado,
+    efectivo_esperado: espCRC,
+    esperado_efectivo_crc: espCRC,
+    esperado_dolares_usd: espUSD,
+    esperado_dolares_crc: espUSD_CRC,
+    total_general_esperado_gaveta_crc: totalGaveta,
     movimientos_detalle,
     tip_pool,
     total_propinas
@@ -776,10 +802,15 @@ function generarTicketCorteXCiego({
   fecha_apertura,
   fecha_corte,
   fondo_inicial,
+  fondo_inicial_usd = 0,
   ventas = {},
   total_entradas = 0,
   total_salidas = 0,
   efectivo_esperado = 0,
+  esperado_efectivo_crc,
+  esperado_dolares_usd,
+  esperado_dolares_crc,
+  total_general_esperado_gaveta_crc,
   efectivo_declarado = 0,
   diferencia_efectivo = 0,
   dolares_esperado_usd = 0,
@@ -801,6 +832,11 @@ function generarTicketCorteXCiego({
   const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
   const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
 
+  const espCRC = esperado_efectivo_crc !== undefined ? esperado_efectivo_crc : (efectivo_esperado || 0);
+  const espUSD = esperado_dolares_usd !== undefined ? esperado_dolares_usd : (dolares_esperado_usd || ventas.dolares_usd || 0);
+  const espUSD_CRC = esperado_dolares_crc !== undefined ? esperado_dolares_crc : (ventas.dolares || 0);
+  const totalGaveta = total_general_esperado_gaveta_crc !== undefined ? total_general_esperado_gaveta_crc : (espCRC + espUSD_CRC);
+
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
@@ -820,16 +856,16 @@ function generarTicketCorteXCiego({
   raw += ESCPOS.BOLD_ON + `RESULTADO DE ARQUEO A CIEGAS\n` + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
   raw += formatearLinea2Col('Efectivo Declarado (Fisico):', formatMontoTermica(efectivo_declarado || 0)) + '\n';
-  raw += formatearLinea2Col('Efectivo Esperado (Sistema):', formatMontoTermica(efectivo_esperado || 0)) + '\n';
+  raw += formatearLinea2Col('Efectivo Esperado (Sistema):', formatMontoTermica(espCRC)) + '\n';
   const diffVal = Number(diferencia_efectivo) || 0;
   const diffTxt = diffVal === 0 ? '0 (CUADRADO)' : (diffVal > 0 ? `+${formatMontoTermica(diffVal)} (SOBRANTE)` : `-${formatMontoTermica(Math.abs(diffVal))} (FALTANTE)`);
   raw += ESCPOS.BOLD_ON + formatearLinea2Col('DIFERENCIA EFECTIVO:', diffTxt) + '\n' + ESCPOS.BOLD_OFF;
 
-  if (dolares_declarado_usd !== undefined && dolares_declarado_usd !== null && Number(dolares_declarado_usd) > 0) {
+  if (dolares_declarado_usd !== undefined && dolares_declarado_usd !== null && (Number(dolares_declarado_usd) > 0 || Number(espUSD) > 0)) {
     raw += '-'.repeat(48) + '\n';
     raw += formatearLinea2Col('Dolares Declarados ($):', `$${Number(dolares_declarado_usd).toFixed(2)}`) + '\n';
-    raw += formatearLinea2Col('Dolares Esperados ($):', `$${Number(dolares_esperado_usd || 0).toFixed(2)}`) + '\n';
-    const diffDol = (Number(dolares_declarado_usd) || 0) - (Number(dolares_esperado_usd) || 0);
+    raw += formatearLinea2Col('Dolares Esperados ($):', `$${Number(espUSD).toFixed(2)}`) + '\n';
+    const diffDol = (Number(dolares_declarado_usd) || 0) - Number(espUSD);
     raw += formatearLinea2Col('Diferencia USD ($):', diffDol >= 0 ? `+$${diffDol.toFixed(2)}` : `-$${Math.abs(diffDol).toFixed(2)}`) + '\n';
   }
 
@@ -849,8 +885,23 @@ function generarTicketCorteXCiego({
   raw += ESCPOS.BOLD_ON + `MOVIMIENTOS DE GAVETA\n` + ESCPOS.BOLD_OFF;
   raw += '-'.repeat(48) + '\n';
   raw += formatearLinea2Col('(+) Fondo Inicial:', formatMontoTermica(fondo_inicial || 0)) + '\n';
+  if ((ventas.dolares && ventas.dolares > 0) || (ventas.dolares_usd && ventas.dolares_usd > 0)) {
+    const usdTxt = ventas.dolares_usd ? `$${ventas.dolares_usd.toFixed(2)} (${formatMontoTermica(ventas.dolares || 0)})` : formatMontoTermica(ventas.dolares || 0);
+    raw += formatearLinea2Col('(+) Ventas Dolares:', usdTxt) + '\n';
+  }
   raw += formatearLinea2Col('(+) Entradas Efectivo:', `+${formatMontoTermica(total_entradas || 0)}`) + '\n';
   raw += formatearLinea2Col('(-) Salidas Menores:', `-${formatMontoTermica(total_salidas || 0)}`) + '\n';
+
+  if (espUSD > 0 || espUSD_CRC > 0) {
+    raw += '='.repeat(48) + '\n';
+    raw += formatearLinea2Col('Esperado en Colones:', formatMontoTermica(espCRC)) + '\n';
+    raw += formatearLinea2Col('Esperado en Dolares:', `$${Number(espUSD).toFixed(2)} (${formatMontoTermica(espUSD_CRC)})`) + '\n';
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'ESPERADO TOTAL GAVETA:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totalGaveta)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+  }
+
   if (notas) {
     raw += '-'.repeat(48) + '\n';
     raw += `Notas: ${limpiarTextoTermica(notas)}\n`;
@@ -871,13 +922,18 @@ function generarTicketCorteXCiego({
     fecha_apertura,
     fecha_corte,
     fondo_inicial,
+    fondo_inicial_usd: fondo_inicial_usd || 0,
     ventas,
     total_entradas,
     total_salidas,
-    efectivo_esperado,
+    efectivo_esperado: espCRC,
+    esperado_efectivo_crc: espCRC,
+    esperado_dolares_usd: espUSD,
+    esperado_dolares_crc: espUSD_CRC,
+    total_general_esperado_gaveta_crc: totalGaveta,
     efectivo_declarado,
     diferencia_efectivo,
-    dolares_esperado_usd,
+    dolares_esperado_usd: espUSD,
     dolares_declarado_usd,
     diferencia_dolares_usd,
     tarjeta_declarada,
@@ -894,7 +950,30 @@ function generarTicketCorteXCiego({
 /**
  * Generador de Comprobante Cierre Z (Liquidación Definitiva de Turno)
  */
-function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_cierre, fondo_inicial, ventas = {}, total_entradas, total_salidas, efectivo_esperado, efectivo_real_contado, diferencia, estado_cuadre, notas, tip_pool = [], total_propinas = 0 }) {
+function generarTicketCierreZ({
+  negocio,
+  caja_id,
+  cajero,
+  fecha_apertura,
+  fecha_cierre,
+  fondo_inicial,
+  fondo_inicial_usd = 0,
+  ventas = {},
+  total_entradas = 0,
+  total_salidas = 0,
+  efectivo_esperado,
+  esperado_efectivo_crc,
+  esperado_dolares_usd,
+  esperado_dolares_crc,
+  total_general_esperado_gaveta_crc,
+  efectivo_real_contado = 0,
+  dolares_real_contado_usd = 0,
+  diferencia = 0,
+  estado_cuadre,
+  notas,
+  tip_pool = [],
+  total_propinas = 0
+}) {
   const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
   const fCierre = fecha_cierre ? new Date(fecha_cierre).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
 
@@ -903,6 +982,11 @@ function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_
   const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
   const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
   const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+
+  const espCRC = esperado_efectivo_crc !== undefined ? esperado_efectivo_crc : (efectivo_esperado || 0);
+  const espUSD = esperado_dolares_usd !== undefined ? esperado_dolares_usd : (ventas.dolares_usd || 0);
+  const espUSD_CRC = esperado_dolares_crc !== undefined ? esperado_dolares_crc : (ventas.dolares || 0);
+  const totalGaveta = total_general_esperado_gaveta_crc !== undefined ? total_general_esperado_gaveta_crc : (espCRC + espUSD_CRC);
 
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
@@ -936,10 +1020,26 @@ function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_
   raw += '-'.repeat(48) + '\n';
   raw += formatearLinea2Col('(+) Fondo Inicial:', formatMontoTermica(fondo_inicial || 0)) + '\n';
   raw += formatearLinea2Col('(+) Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  if ((ventas.dolares && ventas.dolares > 0) || (ventas.dolares_usd && ventas.dolares_usd > 0)) {
+    const usdTxt = ventas.dolares_usd ? `$${ventas.dolares_usd.toFixed(2)} (${formatMontoTermica(ventas.dolares || 0)})` : formatMontoTermica(ventas.dolares || 0);
+    raw += formatearLinea2Col('(+) Ventas Dolares:', usdTxt) + '\n';
+  }
   raw += formatearLinea2Col('(+) Entradas Menores:', `+${formatMontoTermica(total_entradas || 0)}`) + '\n';
   raw += formatearLinea2Col('(-) Salidas Menores:', `-${formatMontoTermica(total_salidas || 0)}`) + '\n';
-  raw += formatearLinea2Col('EFECTIVO ESPERADO:', formatMontoTermica(efectivo_esperado || 0)) + '\n';
+
+  if (espUSD > 0 || espUSD_CRC > 0) {
+    raw += '='.repeat(48) + '\n';
+    raw += formatearLinea2Col('Esperado en Colones:', formatMontoTermica(espCRC)) + '\n';
+    raw += formatearLinea2Col('Esperado en Dolares:', `$${Number(espUSD).toFixed(2)} (${formatMontoTermica(espUSD_CRC)})`) + '\n';
+    raw += formatearLinea2Col('ESPERADO TOTAL GAVETA:', formatMontoTermica(totalGaveta)) + '\n';
+  } else {
+    raw += formatearLinea2Col('EFECTIVO ESPERADO:', formatMontoTermica(espCRC)) + '\n';
+  }
+
   raw += formatearLinea2Col('EFECTIVO CONTADO:', formatMontoTermica(efectivo_real_contado || 0)) + '\n';
+  if (dolares_real_contado_usd > 0) {
+    raw += formatearLinea2Col('DOLARES CONTADOS ($):', `$${Number(dolares_real_contado_usd).toFixed(2)}`) + '\n';
+  }
   raw += formatearLinea2Col(`DIFERENCIA (${estado_cuadre || 'Cuadre'}):`, `${Number(diferencia) >= 0 ? '+' : ''}${formatMontoTermica(diferencia || 0)}`) + '\n';
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL LIQUIDADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
@@ -964,15 +1064,19 @@ function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_
     fecha_apertura,
     fecha_cierre,
     fondo_inicial,
+    fondo_inicial_usd: fondo_inicial_usd || 0,
     ventas,
     total_entradas,
     total_salidas,
-    efectivo_esperado,
+    efectivo_esperado: espCRC,
+    esperado_efectivo_crc: espCRC,
+    esperado_dolares_usd: espUSD,
+    esperado_dolares_crc: espUSD_CRC,
+    total_general_esperado_gaveta_crc: totalGaveta,
     efectivo_real_contado,
+    dolares_real_contado_usd,
     diferencia,
     estado_cuadre,
-    notas,
-    tip_pool,
     total_propinas
   };
 

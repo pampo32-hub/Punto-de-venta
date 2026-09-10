@@ -10300,10 +10300,15 @@ window.generarCorteX = async function() {
       fecha_apertura: data.fecha_apertura,
       fecha_corte: data.fecha_corte,
       fondo_inicial: data.fondo_inicial,
+      fondo_inicial_usd: data.fondo_inicial_usd || 0,
       ventas: data.ventas,
       total_entradas: data.total_entradas,
       total_salidas: data.total_salidas,
       efectivo_esperado: data.efectivo_esperado,
+      esperado_efectivo_crc: data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : data.efectivo_esperado,
+      esperado_dolares_usd: data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0),
+      esperado_dolares_crc: data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0),
+      total_general_esperado_gaveta_crc: data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : ((data.esperado_efectivo_crc || data.efectivo_esperado || 0) + (data.esperado_dolares_crc || data.ventas?.dolares || 0)),
       movimientos_detalle: data.movimientos_detalle || [],
       tip_pool: data.tip_pool || [],
       total_propinas: data.total_propinas || 0
@@ -18732,6 +18737,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>(+) Ventas Efectivo:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Entradas de Efectivo:</span>
           <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
@@ -18742,10 +18753,28 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         </div>
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      ${(v.dolares > 0 || v.dolares_usd > 0 || ticketData.esperado_dolares_usd > 0) ? `
+      <div style="background:#ffffff; color:#000000; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:12px; font-weight:900;">
+          <span>Esperado en Colones:</span>
+          <span style="font-size:13px;">${formatCRCSinDecimales(ticketData.esperado_efectivo_crc !== undefined ? ticketData.esperado_efectivo_crc : (ticketData.efectivo_esperado || 0))}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; font-weight:900;">
+          <span>Esperado en Dólares:</span>
+          <span style="font-size:13px;">$ ${(Number(ticketData.esperado_dolares_usd || v.dolares_usd || 0)).toFixed(2)} (${formatCRCSinDecimales(ticketData.esperado_dolares_crc !== undefined ? ticketData.esperado_dolares_crc : (v.dolares || 0))})</span>
+        </div>
+        <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+        <div style="border:2px solid #000000; padding:6px 10px; margin:4px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+          <span style="font-size:13px; font-weight:900; letter-spacing:0.5px;">ESPERADO TOTAL GAVETA:</span>
+          <span style="font-size:20px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.total_general_esperado_gaveta_crc !== undefined ? ticketData.total_general_esperado_gaveta_crc : ((ticketData.esperado_efectivo_crc || ticketData.efectivo_esperado || 0) + (ticketData.esperado_dolares_crc || v.dolares || 0)))}</span>
+        </div>
+      </div>
+      ` : `
       <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
         <span style="font-size:15px; font-weight:900; letter-spacing:0.5px;">EFECTIVO ESPERADO:</span>
         <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
       </div>
+      `}
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
         <div>*** ESTADO: TURNO PERMANECE ABIERTO ***</div>
@@ -18790,14 +18819,14 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         </div>
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Efectivo Esperado (Sistema):</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.esperado_efectivo_crc !== undefined ? ticketData.esperado_efectivo_crc : (ticketData.efectivo_esperado || 0))}</span>
         </div>
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:4px; font-size:13px; font-weight:900; border-top:1px dashed #000; padding-top:3px;">
           <span>DIFERENCIA EFECTIVO:</span>
           <span>${diff === 0 ? '₡ 0 (CUADRADO)' : (diff > 0 ? `+${formatCRCSinDecimales(diff)} (SOBRANTE)` : `-${formatCRCSinDecimales(Math.abs(diff))} (FALTANTE)`)}</span>
         </div>
       </div>
-      ${(ticketData.dolares_declarado_usd > 0 || ticketData.dolares_esperado_usd > 0) ? `
+      ${(ticketData.dolares_declarado_usd > 0 || ticketData.dolares_esperado_usd > 0 || ticketData.esperado_dolares_usd > 0) ? `
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
       <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
@@ -18806,7 +18835,7 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
         </div>
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Dólares Esperados ($ USD):</span>
-          <span style="font-weight:900;">$ ${Number(ticketData.dolares_esperado_usd || 0).toFixed(2)}</span>
+          <span style="font-weight:900;">$ ${Number(ticketData.esperado_dolares_usd || ticketData.dolares_esperado_usd || 0).toFixed(2)}</span>
         </div>
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:2px; font-weight:900;">
           <span>Diferencia USD:</span>
@@ -18849,6 +18878,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>(+) Fondo Inicial:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.fondo_inicial || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Entradas Efectivo:</span>
           <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
@@ -18858,6 +18893,24 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
         </div>
       </div>
+      ${(v.dolares > 0 || v.dolares_usd > 0 || ticketData.esperado_dolares_usd > 0) ? `
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="background:#ffffff; color:#000000; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:12px; font-weight:900;">
+          <span>Esperado en Colones:</span>
+          <span style="font-size:13px;">${formatCRCSinDecimales(ticketData.esperado_efectivo_crc !== undefined ? ticketData.esperado_efectivo_crc : (ticketData.efectivo_esperado || 0))}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; font-weight:900;">
+          <span>Esperado en Dólares:</span>
+          <span style="font-size:13px;">$ ${(Number(ticketData.esperado_dolares_usd || v.dolares_usd || 0)).toFixed(2)} (${formatCRCSinDecimales(ticketData.esperado_dolares_crc !== undefined ? ticketData.esperado_dolares_crc : (v.dolares || 0))})</span>
+        </div>
+        <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+        <div style="border:2px solid #000000; padding:6px 10px; margin:4px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
+          <span style="font-size:13px; font-weight:900; letter-spacing:0.5px;">ESPERADO TOTAL GAVETA:</span>
+          <span style="font-size:20px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(ticketData.total_general_esperado_gaveta_crc !== undefined ? ticketData.total_general_esperado_gaveta_crc : ((ticketData.esperado_efectivo_crc || ticketData.efectivo_esperado || 0) + (ticketData.esperado_dolares_crc || v.dolares || 0)))}</span>
+        </div>
+      </div>
+      ` : ''}
       ${ticketData.notas ? `
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
       <div style="font-size:11px; color:#000000; font-weight:700;">Notas: ${escapeHtml(ticketData.notas)}</div>
@@ -18935,6 +18988,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>(+) Ventas Efectivo:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>(+) Entradas Menores:</span>
           <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
@@ -18943,14 +19002,35 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>(-) Salidas Menores:</span>
           <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0 || ticketData.esperado_dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; border-top:1px solid #000; padding-top:2px;">
+          <span>Esperado en Colones:</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.esperado_efectivo_crc !== undefined ? ticketData.esperado_efectivo_crc : (ticketData.efectivo_esperado || 0))}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Esperado en Dólares:</span>
+          <span style="font-weight:900;">$ ${(Number(ticketData.esperado_dolares_usd || v.dolares_usd || 0)).toFixed(2)} (${formatCRCSinDecimales(ticketData.esperado_dolares_crc !== undefined ? ticketData.esperado_dolares_crc : (v.dolares || 0))})</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; font-weight:900;">
+          <span>ESPERADO TOTAL GAVETA:</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.total_general_esperado_gaveta_crc !== undefined ? ticketData.total_general_esperado_gaveta_crc : ((ticketData.esperado_efectivo_crc || ticketData.efectivo_esperado || 0) + (ticketData.esperado_dolares_crc || v.dolares || 0)))}</span>
+        </div>
+        ` : `
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; border-top:1px solid #000; padding-top:2px;">
           <span>EFECTIVO ESPERADO:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
         </div>
+        `}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>EFECTIVO CONTADO:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_real_contado || 0)}</span>
         </div>
+        ${ticketData.dolares_real_contado_usd > 0 ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>DÓLARES CONTADOS ($):</span>
+          <span style="font-weight:900;">$ ${Number(ticketData.dolares_real_contado_usd).toFixed(2)}</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; font-weight:900;">
           <span>DIFERENCIA (${ticketData.estado_cuadre || 'Cuadre'}):</span>
           <span>${diff >= 0 ? '+' : ''}${formatCRCSinDecimales(diff)}</span>
