@@ -8683,9 +8683,21 @@ app.post('/api/ia/chat', async (req, res) => {
     const geminiApiKey = process.env.GEMINI_API_KEY;
     if (geminiApiKey) {
       try {
-        const systemPrompt = `Eres el Asistente Inteligente oficial de GAMMA POS para el restaurante/comercio "${negocio.nombre}".
-Tu función es responder preguntas del personal (cajeros, meseros, administradores, cocina) con precisión, rapidez y amabilidad en español.
-La moneda del negocio es ${simboloMoneda} (${negocio.moneda || 'CRC'}).
+        const systemPrompt = `Eres el Asistente Inteligente Integral de GAMMA POS para el negocio "${negocio.nombre}".
+Tienes capacidad total para responder CUALQUIER tipo de pregunta con excelencia, amabilidad y profesionalismo en español:
+
+1. 🏪 INFORMACIÓN DEL RESTAURANTE / NEGOCIO (Usa los datos en tiempo real de la base de datos abajo):
+   - Stock, inventario y disponibilidad de productos/insumos.
+   - Ventas acumuladas, arqueo de caja y formas de pago (${simboloMoneda}).
+   - Mesas ocupadas, cuentas y pedidos pendientes.
+
+2. 🧠 CONOCIMIENTO GENERAL, GASTRONÓMICO Y DE NEGOCIOS (Usa toda tu inteligencia y conocimiento general):
+   - Recetas de cocina, preparación de cócteles, técnicas de bar y cocina, maridajes.
+   - Consejos de atención al comensal, hospitalidad y resolución de dudas de clientes.
+   - Ideas de promociones, marketing, frases para redes sociales o pizarras.
+   - Cálculos matemáticos, conversiones de medidas, porcentajes de propina o costos.
+   - Traducción de platillos a inglés u otros idiomas para turistas extranjeros.
+   - Respuestas a cualquier pregunta general, cotidiana o técnica que el usuario te formule.
 
 DATOS EN TIEMPO REAL DEL NEGOCIO (DESDE BASE DE DATOS SUPABASE/POSTGRESQL):
 - INVENTARIO ACTUAL (${inventario.length} insumos registrados):
@@ -8708,15 +8720,12 @@ ${cajaActiva ? JSON.stringify({
 - MESAS ACTIVAS O EN ATENCIÓN (${mesasOcupadas.length} mesas ocupadas):
 ${JSON.stringify(mesasOcupadas.map(m => ({ mesa: m.numero, zona: m.zona, estado: m.estado, total: m.total })))}
 
-INSTRUCCIONES CLAVE:
-1. Si preguntan sobre stock o disponibilidad (ej: "¿Cuántas Imperial Silver quedan?", "¿Hay carne de res?"), responde indicando la cantidad exacta y unidad en stock.
-2. Si un insumo está por debajo de su stock mínimo, añade una advertencia amigable de bajo stock.
-3. Si preguntan sobre dinero, caja o ventas del turno, resume los totales por forma de pago con el símbolo ${simboloMoneda}.
-4. Si preguntan sobre mesas, indica cuáles están ocupadas o con la cuenta pedida.
-5. Usa respuestas breves, con viñetas claras y negritas, fáciles de leer rápidamente en una tablet o pantalla de restaurante.
-6. Si te saludan o hacen una pregunta general del restaurante, sé cortés y dispuesto a ayudar.`;
+PAUTAS DE FORMATO:
+- Sé claro, conciso y ameno.
+- Usa formato markdown (negritas, viñetas, emojis) para que sea muy fácil y rápido de leer en pantalla.
+- Si te preguntan algo del negocio, responde con los datos reales del local. Si te preguntan cualquier otra cosa general o gastronómica, responde con tu conocimiento amplio.`;
 
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`;
         const response = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -8728,15 +8737,16 @@ INSTRUCCIONES CLAVE:
               }
             ],
             generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 600
+              temperature: 0.4,
+              maxOutputTokens: 800
             }
           })
         });
 
         if (response.ok) {
           const geminiData = await response.json();
-          const textoRespuesta = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          const parts = geminiData.candidates?.[0]?.content?.parts || [];
+          const textoRespuesta = parts.map(p => p.text || '').filter(Boolean).join('\n');
           if (textoRespuesta) {
             return res.json({
               ok: true,
