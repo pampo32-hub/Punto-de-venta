@@ -4496,10 +4496,26 @@ window.aplicarRestriccionesModulos = function() {
     el.style.display = tieneStockCritico ? '' : 'none';
   });
 
-  // 16. Corte / Cierre X a Ciegas (Arqueo Parcial)
+  // 16. Corte / Cierre X y Z a Ciegas (Arqueo Parcial y Definitivo)
   const tieneCorteXCiego = negocioTieneCaracteristica('cierre_x_ciegas');
-  document.querySelectorAll('#btnCorteXCiego, .corte-x-ciego').forEach(el => {
-    el.style.display = tieneCorteXCiego ? 'inline-flex' : 'none';
+  const tieneArqueoCiegoZ = negocioTieneCaracteristica('arqueo_ciego_cierre_z');
+
+  const btnXCiego = document.getElementById('btnCorteXCiego');
+  const btnZCiego = document.getElementById('btnCorteZCiego');
+
+  if (btnXCiego) {
+    btnXCiego.style.display = tieneCorteXCiego ? 'inline-flex' : 'none';
+    btnXCiego.style.gridColumn = (tieneCorteXCiego && tieneArqueoCiegoZ) ? 'span 1' : 'span 2';
+  }
+  if (btnZCiego) {
+    btnZCiego.style.display = tieneArqueoCiegoZ ? 'inline-flex' : 'none';
+    btnZCiego.style.gridColumn = (tieneCorteXCiego && tieneArqueoCiegoZ) ? 'span 1' : 'span 2';
+  }
+  document.querySelectorAll('.corte-x-ciego').forEach(el => {
+    if (el !== btnXCiego) el.style.display = tieneCorteXCiego ? '' : 'none';
+  });
+  document.querySelectorAll('.corte-z-ciego').forEach(el => {
+    if (el !== btnZCiego) el.style.display = tieneArqueoCiegoZ ? '' : 'none';
   });
 };
 
@@ -10476,11 +10492,15 @@ window.procesarCorteXCiego = async function() {
   }
 };
 
-window.abrirModalCierreZ = async function() {
+window.abrirModalCierreZ = async function(forzarCiego = null) {
+  const tieneArqueoCiego = typeof negocioTieneCaracteristica === 'function' && negocioTieneCaracteristica('arqueo_ciego_cierre_z');
+  const esModoCiego = (forzarCiego === true) || (forzarCiego !== false && tieneArqueoCiego);
+  window._cierreZEsCiego = esModoCiego;
+
   const pinAutorizado = await window.solicitarPinAdmin({
-    icono: '🔒',
-    titulo: 'Autorización: Cierre Z Final',
-    subtitulo: 'Cierre definitivo de turno y arqueo',
+    icono: esModoCiego ? '🙈' : '🔒',
+    titulo: esModoCiego ? 'Autorización: Cierre Z a Ciegas' : 'Autorización: Cierre Z Final',
+    subtitulo: esModoCiego ? 'Arqueo definitivo a ciegas de turno' : 'Cierre definitivo de turno y arqueo',
     mensaje: 'Ingresa el PIN de Administrador para acceder al arqueo físico y realizar el Cierre Z.'
   });
   if (!pinAutorizado) return;
@@ -10504,6 +10524,26 @@ window.abrirModalCierreZ = async function() {
 
     if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
       window.aplicarConfiguracionMonedaNegocio();
+    }
+
+    const avisoCiego = document.getElementById('czAvisoCiegoBox');
+    const resumenEsperado = document.getElementById('czResumenEsperadoBox');
+    const headerTitle = document.getElementById('czModalHeaderTitle');
+    const headerSubtitle = document.getElementById('czModalHeaderSubtitle');
+    const headerIcon = document.getElementById('czModalHeaderIcon');
+
+    if (esModoCiego) {
+      if (avisoCiego) avisoCiego.style.display = 'block';
+      if (resumenEsperado) resumenEsperado.style.display = 'none';
+      if (headerTitle) headerTitle.textContent = 'Cierre Z a Ciegas (Arqueo Final)';
+      if (headerSubtitle) headerSubtitle.textContent = 'Liquidación definitiva con conteo físico sin ver totales';
+      if (headerIcon) headerIcon.textContent = '🙈';
+    } else {
+      if (avisoCiego) avisoCiego.style.display = 'none';
+      if (resumenEsperado) resumenEsperado.style.display = 'block';
+      if (headerTitle) headerTitle.textContent = 'Cierre Z Definitivo & Arqueo';
+      if (headerSubtitle) headerSubtitle.textContent = 'Liquidación del turno y cuadre de efectivo en gaveta';
+      if (headerIcon) headerIcon.textContent = '🔒';
     }
 
     const txtEsperadoCRC = document.getElementById('czEsperadoEfectivoCRC');
@@ -10572,9 +10612,11 @@ window.abrirModalCierreZ = async function() {
       elDiferencia.style.background = 'rgba(30,41,59,0.5)';
       elDiferencia.style.borderColor = '#334155';
       elDiferencia.style.color = '#94a3b8';
-      elDiferencia.innerHTML = aceptaUSD
-        ? '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.'
-        : '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.';
+      elDiferencia.innerHTML = esModoCiego
+        ? '🙈 Modo Arqueo Ciego: Ingresa el dinero físico contado en la gaveta.'
+        : (aceptaUSD
+          ? '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.'
+          : '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.');
     }
 
     modal.classList.add('active');
@@ -10590,6 +10632,7 @@ window.cerrarModalCierreZ = function() {
   const modal = document.getElementById('modalCierreZ');
   if (modal) modal.classList.remove('active');
   window._datosCierreZPrecargados = null;
+  window._cierreZEsCiego = false;
 };
 
 window.calcularDiferenciaCierreZ = window.calcularDiferenciaArqueoCierreZ = function() {
@@ -10613,6 +10656,25 @@ window.calcularDiferenciaCierreZ = window.calcularDiferenciaArqueoCierreZ = func
     } else {
       elTotalComb.textContent = `Total Contado: ${formatCRC(totalContadoCombinado)}`;
     }
+  }
+
+  // Si estamos en modo Cierre Z a Ciegas, no revelar diferencias ni totales esperados
+  if (window._cierreZEsCiego) {
+    const tieneAlgo = aceptaUSD ? (realCRC > 0 || realUSD > 0 || (txtRealCRC && txtRealCRC.value.trim() !== '') || (txtRealUSD && txtRealUSD.value.trim() !== '')) : (realCRC > 0 || (txtRealCRC && txtRealCRC.value.trim() !== ''));
+    if (tieneAlgo) {
+      box.style.display = 'block';
+      box.style.background = 'rgba(139, 92, 246, 0.15)';
+      box.style.borderColor = '#8b5cf6';
+      box.style.color = '#c4b5fd';
+      box.innerHTML = '🙈 <strong>Conteo físico ingresado:</strong> En modo arqueo ciego las diferencias se calcularán y desglosarán en el comprobante oficial al confirmar el cierre.';
+    } else {
+      box.style.display = 'block';
+      box.style.background = 'rgba(30,41,59,0.5)';
+      box.style.borderColor = '#334155';
+      box.style.color = '#94a3b8';
+      box.innerHTML = '⚖️ Modo Arqueo Ciego: Ingresa el dinero físico contado en la gaveta.';
+    }
+    return;
   }
 
   const data = window._datosCierreZPrecargados;
@@ -10879,6 +10941,7 @@ document.getElementById('btnEntradaEfectivo')?.addEventListener('click', () => w
 document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('salida'));
 document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());
 document.getElementById('btnCorteZ')?.addEventListener('click', () => window.abrirModalCierreZ());
+document.getElementById('btnCorteZCiego')?.addEventListener('click', () => window.abrirModalCierreZ(true));
 
 if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
   socket.on('caja_actualizada', () => {

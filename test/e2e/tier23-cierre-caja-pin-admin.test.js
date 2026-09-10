@@ -108,4 +108,13 @@ describe('Tier 23: Cierre Parcial (Corte X) y Cierre Z con PIN de Administrador'
     assert.ok(appJs.includes('window.validarPinAdminManual'), 'Debe existir validación manual de PIN');
     assert.ok(appJs.includes('window.solicitarPinAdmin({'), 'generarCorteX y abrirModalCierreZ deben invocar solicitarPinAdmin');
   });
+
+  it('T23.5: Característica de Arqueo Ciego en Cierre Z presente en HTML y controladores frontend', () => {
+    assert.ok(indexHtml.includes('id="btnCorteZCiego"'), 'Debe existir btnCorteZCiego en HTML');
+    assert.ok(indexHtml.includes('id="czAvisoCiegoBox"'), 'Debe existir aviso de modo ciego en modal Cierre Z');
+    assert.ok(indexHtml.includes('id="czResumenEsperadoBox"'), 'Debe existir contenedor de resumen esperado para ocultarlo en modo ciego');
+    assert.ok(appJs.includes('arqueo_ciego_cierre_z'), 'app.js debe verificar la característica arqueo_ciego_cierre_z');
+    assert.ok(appJs.includes('_cierreZEsCiego'), 'app.js debe controlar el estado ciego de cierre Z');
+  });
 });
+
