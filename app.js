@@ -2706,6 +2706,9 @@ window.irAPuntoDeVentaAdmin = function() {
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
   document.body.classList.add('is-admin');
+  const inpSearch = document.getElementById('globalSearchInput');
+  if (inpSearch) inpSearch.value = '';
+  document.getElementById('searchDropdown')?.classList.remove('active');
   const perfilBadge = document.getElementById('userProfileBadge');
   if (perfilBadge && estado.usuarioActual) {
     perfilBadge.textContent = estado.usuarioActual.perfilVisual || `${estado.usuarioActual.nombre} (${estado.usuarioActual.rol === 'developer' ? 'Desarrollador' : estado.usuarioActual.rol})`;
@@ -4277,6 +4280,9 @@ window.abrirPosComoNegocio = async function(negocioId) {
       estado.mesaActiva = null;
       estado.comandasKDS = [];
       estado.mesas = [];
+      const inpSearch = document.getElementById('globalSearchInput');
+      if (inpSearch) inpSearch.value = '';
+      document.getElementById('searchDropdown')?.classList.remove('active');
 
       // Cargar personalización y piso únicos para este comercio específico
       cargarPersonalizacionPagina(neg.id);
@@ -12230,6 +12236,12 @@ window.abrirQrMesaEnNuevaPestana = function() {
 function initBuscadorRapido() {
   const inp = document.getElementById('globalSearchInput');
   const dropdown = document.getElementById('searchDropdown');
+  if (!inp || !dropdown) return;
+
+  inp.value = '';
+  // Blindaje contra autocompletado involuntario del navegador (ej: usuario guardado 'dev')
+  setTimeout(() => { if (inp && (inp.value === 'dev' || inp.value === 'admin')) inp.value = ''; }, 100);
+  setTimeout(() => { if (inp && (inp.value === 'dev' || inp.value === 'admin')) inp.value = ''; }, 500);
 
   inp.addEventListener('input', (e) => {
     const q = e.target.value.toLowerCase().trim();
@@ -12238,15 +12250,15 @@ function initBuscadorRapido() {
       return;
     }
 
-    const matches = estado.productos.filter(p => 
-      p.nombre.toLowerCase().includes(q) || (p.cod && p.cod.toLowerCase().includes(q))
+    const matches = (estado.productos || []).filter(p => 
+      (p.nombre && p.nombre.toLowerCase().includes(q)) || (p.cod && p.cod.toLowerCase().includes(q))
     );
 
     if (matches.length) {
       dropdown.innerHTML = matches.map(p => `
         <div class="search-item" onclick="seleccionarDelBuscador(${p.id})">
           <div>
-            <strong>${p.nombre}</strong> <small style="color:#9ca3af;">(${p.cod})</small>
+            <strong>${escapeHtml ? escapeHtml(p.nombre) : p.nombre}</strong> <small style="color:#9ca3af;">(${p.cod || ''})</small>
           </div>
           <strong style="color:#38bdf8;">${formatCRC(p.precio)}</strong>
         </div>
@@ -12260,8 +12272,12 @@ function initBuscadorRapido() {
 
   window.addEventListener('keydown', (e) => {
     if (e.key === '/' && document.activeElement !== inp) {
-      e.preventDefault();
-      inp.focus();
+      const isOtherInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+      if (!isOtherInput) {
+        e.preventDefault();
+        inp.focus();
+        inp.select?.();
+      }
     }
   });
 }
