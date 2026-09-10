@@ -69,6 +69,19 @@ db.serialize(() => {
     }
   });
 
+  // Cargar configuración de impresoras térmicas persistente
+  db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'printer_config'", [], (err, row) => {
+    if (!err && row && row.valor) {
+      try {
+        const saved = JSON.parse(row.valor);
+        if (saved && typeof saved === 'object') {
+          Object.assign(printerService.printerConfig, saved);
+          console.log('🖨️ Configuración persistente de impresoras térmicas cargada');
+        }
+      } catch (e) {}
+    }
+  });
+
   // Migraciones automáticas para trazabilidad y unión/separación de mesas
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero TEXT", () => {});
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_id INTEGER", () => {});
@@ -9242,7 +9255,35 @@ app.post('/api/impresoras/config', (req, res) => {
   };
 
   io.emit('impresoras_config_actualizada', printerService.printerConfig);
+  db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('printer_config', ?)", [JSON.stringify(printerService.printerConfig)]);
   res.json({ message: 'Configuración de impresora actualizada', config: printerService.printerConfig[destino] });
+});
+
+// Auto-configuración Plug & Play de impresora IP con calibración inmediata
+app.post('/api/impresoras/auto-configurar', async (req, res) => {
+  try {
+    const { ip, puerto = 9100, destino = 'caja', nombre } = req.body;
+    if (!ip || typeof ip !== 'string' || !ip.trim()) {
+      return res.status(400).json({ error: 'Por favor ingresa una dirección IP válida (ej: 192.168.1.30)' });
+    }
+
+    const resultado = await printerService.autoConfigurarImpresora({
+      ip: ip.trim(),
+      puerto: Number(puerto) || 9100,
+      destino: (destino || 'caja').toLowerCase(),
+      nombre,
+      io
+    });
+
+    db.run(
+      "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('printer_config', ?)",
+      [JSON.stringify(printerService.printerConfig)]
+    );
+
+    res.json(resultado);
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Error al auto-configurar la impresora' });
+  }
 });
 
 // Prueba de impresión manual desde el monitor

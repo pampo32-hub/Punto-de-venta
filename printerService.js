@@ -1281,6 +1281,137 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   return registro;
 }
 
+/**
+ * Auto-configuración Plug & Play de impresora térmica IP (Red TCP ESC/POS)
+ * Prueba la conexión, envía ticket de bienvenida y guarda en memoria/perfil
+ */
+async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', nombre = null, io = null }) {
+  if (!ip || typeof ip !== 'string' || !ip.trim()) {
+    throw new Error('Debes ingresar una dirección IP válida (ej: 192.168.1.30)');
+  }
+  const ipLimpia = ip.trim();
+  const portNum = Number(puerto) || 9100;
+  const destinoLimpio = (destino || 'caja').toLowerCase();
+
+  const regexIp = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (!regexIp.test(ipLimpia) && ipLimpia !== 'localhost') {
+    throw new Error('El formato de la dirección IP no es válido. Debe ser como: 192.168.1.30');
+  }
+
+  // 1. Probar conexión TCP directa con timeout
+  const testConexion = await new Promise((resolve) => {
+    const s = new net.Socket();
+    s.setTimeout(3500);
+    s.connect(portNum, ipLimpia, () => {
+      s.destroy();
+      resolve({ ok: true });
+    });
+    s.on('timeout', () => {
+      s.destroy();
+      resolve({ ok: false, error: `Tiempo de espera agotado al conectar con ${ipLimpia}:${portNum}` });
+    });
+    s.on('error', (err) => {
+      s.destroy();
+      resolve({ ok: false, error: err.message || 'Error de red' });
+    });
+  });
+
+  if (!testConexion.ok) {
+    throw new Error(`No se pudo conectar con la impresora en ${ipLimpia}:${portNum} (${testConexion.error}). Verifica que esté encendida, con papel y conectada a la misma red local Wi-Fi o cable.`);
+  }
+
+  // 2. Construir ticket de bienvenida corto y calibración
+  const areaNombres = {
+    caja: 'CAJA (Cuentas y Facturas)',
+    cocina: 'COCINA (Comandas de Alimentos)',
+    barra: 'BARRA (Bebidas y Cocteles)'
+  };
+  const areaLabel = areaNombres[destinoLimpio] || `ÁREA ${destinoLimpio.toUpperCase()}`;
+  const now = new Date();
+  const fechaStr = now.toLocaleDateString('es-CR') + ' ' + now.toLocaleTimeString('es-CR');
+
+  let raw = '';
+  raw += ESCPOS.INIT;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += ESCPOS.DOUBLE_BOTH;
+  raw += 'GAMMA POS\n';
+  raw += ESCPOS.NORMAL;
+  raw += ESCPOS.BOLD_ON;
+  raw += 'VINCULACION EXITOSA (PLUG & PLAY)\n';
+  raw += ESCPOS.BOLD_OFF;
+  raw += '================================\n';
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Destino : ${areaLabel}\n`;
+  raw += `IP Red  : ${ipLimpia}:${portNum}\n`;
+  raw += `Fecha   : ${fechaStr}\n`;
+  raw += `Estado  : CONECTADA Y OPERATIVA\n`;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += '================================\n';
+  raw += 'Impresora configurada con exito\npara despacho automatico.\n';
+  raw += '================================\n';
+  raw += ESCPOS.FEED_LINES(4);
+  raw += ESCPOS.CUT_PARTIAL;
+
+  // 3. Enviar ticket de bienvenida por TCP
+  await enviarAPuertoTCP(ipLimpia, portNum, raw);
+
+  // 4. Actualizar configuración en memoria
+  const nombreFinal = nombre || `Impresora ${destinoLimpio.charAt(0).toUpperCase() + destinoLimpio.slice(1)}`;
+  printerConfig[destinoLimpio] = {
+    nombre: nombreFinal,
+    tipo: 'red',
+    ip: ipLimpia,
+    puerto: portNum,
+    windowsPrinter: printerConfig[destinoLimpio]?.windowsPrinter || 'POS-80-Series',
+    activa: true
+  };
+
+  // 5. Registrar en bitácora
+  const registro = {
+    id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+    timestamp: now.toISOString(),
+    destinoImpresora: destinoLimpio,
+    impresoraNombre: nombreFinal,
+    tipoTicket: 'Auto-Configuración',
+    titulo: 'Vinculación Automática IP',
+    mesa: areaLabel,
+    bytes: Buffer.byteLength(raw),
+    estado: 'impreso',
+    detalleConexion: `Auto-configurada en ${ipLimpia}:${portNum}`,
+    ticketVisual: {
+      tipo: 'Auto-Configuración',
+      titulo: 'Vinculación Automática IP',
+      mesa: areaLabel,
+      fechaHora: fechaStr,
+      cliente: 'Administrador POS',
+      items: [
+        { nombre: `Área asignada: ${destinoLimpio.toUpperCase()}`, cantidad: 1, subtotal: 0 },
+        { nombre: `Dirección IP: ${ipLimpia}:${portNum}`, cantidad: 1, subtotal: 0 },
+        { nombre: 'Modo: Red TCP ESC/POS', cantidad: 1, subtotal: 0 }
+      ],
+      total: 0
+    },
+    rawBase64: Buffer.from(raw, 'binary').toString('base64'),
+    rawText: raw,
+    rawHexPreview: Buffer.from(raw).toString('hex').substring(0, 64) + '...'
+  };
+
+  historialImpresiones.unshift(registro);
+  if (historialImpresiones.length > 50) historialImpresiones.pop();
+
+  if (io) {
+    io.emit('impresoras_config_actualizada', printerConfig);
+    io.emit('ticket_impreso', registro);
+  }
+
+  return {
+    ok: true,
+    mensaje: `¡Impresora de ${destinoLimpio.toUpperCase()} auto-configurada con éxito en ${ipLimpia}:${portNum}!`,
+    config: printerConfig[destinoLimpio],
+    registro
+  };
+}
+
 module.exports = {
   printerConfig,
   historialImpresiones,
@@ -1295,6 +1426,8 @@ module.exports = {
   enviarAPuertoTCP,
   sendRawToWindowsPrinter,
   getInstalledPrinters,
-  procesarImpresion
+  procesarImpresion,
+  autoConfigurarImpresora
 };
+
 

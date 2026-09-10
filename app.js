@@ -19501,21 +19501,159 @@ window.ejecutarImpresionNativa = function() {
 window.abrirModalMonitorImpresoras = async function() {
   const modal = document.getElementById('modalMonitorImpresoras');
   if (modal) modal.classList.add('active');
-  await cargarHistorialImpresoras();
+  await cargarEstadoImpresorasConfig();
 };
 
 window.cerrarModalMonitorImpresoras = function() {
   const modal = document.getElementById('modalMonitorImpresoras');
   if (modal) modal.classList.remove('active');
+  const statusBox = document.getElementById('statusAutoPrinterMsg');
+  if (statusBox) statusBox.style.display = 'none';
 };
 
 async function cargarHistorialImpresoras() {
+  await cargarEstadoImpresorasConfig();
+}
+
+async function cargarEstadoImpresorasConfig() {
   try {
     const res = await fetch('/api/impresoras/config');
     const data = await res.json();
+    if (!res.ok) return;
+
+    const impresoras = data.impresoras || {};
+    
+    // Actualizar Card Caja
+    if (impresoras.caja) {
+      const c = impresoras.caja;
+      const tipoEl = document.getElementById('tipoPrinterCaja');
+      const connEl = document.getElementById('connPrinterCaja');
+      const badgeEl = document.getElementById('badgePrinterCaja');
+      if (tipoEl) tipoEl.textContent = c.tipo === 'red' ? 'Red TCP (ESC/POS)' : 'USB (Windows Spooler)';
+      if (connEl) connEl.textContent = c.tipo === 'red' ? `${c.ip}:${c.puerto}` : (c.windowsPrinter || c.nombre);
+      if (badgeEl) {
+        badgeEl.textContent = c.activa ? 'Activa' : 'Inactiva';
+        badgeEl.style.color = c.activa ? '#34d399' : '#94a3b8';
+      }
+    }
+
+    // Actualizar Card Cocina
+    if (impresoras.cocina) {
+      const c = impresoras.cocina;
+      const tipoEl = document.getElementById('tipoPrinterCocina');
+      const connEl = document.getElementById('connPrinterCocina');
+      const badgeEl = document.getElementById('badgePrinterCocina');
+      if (tipoEl) tipoEl.textContent = c.tipo === 'red' ? 'Red TCP (ESC/POS)' : 'USB (Windows Spooler)';
+      if (connEl) connEl.textContent = c.tipo === 'red' ? `${c.ip}:${c.puerto}` : (c.windowsPrinter || c.nombre);
+      if (badgeEl) {
+        badgeEl.textContent = c.activa ? 'Activa' : 'Inactiva';
+        badgeEl.style.color = c.activa ? '#34d399' : '#94a3b8';
+      }
+    }
+
+    // Actualizar Card Barra
+    if (impresoras.barra) {
+      const c = impresoras.barra;
+      const tipoEl = document.getElementById('tipoPrinterBarra');
+      const connEl = document.getElementById('connPrinterBarra');
+      const badgeEl = document.getElementById('badgePrinterBarra');
+      if (tipoEl) tipoEl.textContent = c.tipo === 'red' ? 'Red TCP (ESC/POS)' : 'USB (Windows Spooler)';
+      if (connEl) connEl.textContent = c.tipo === 'red' ? `${c.ip}:${c.puerto}` : (c.windowsPrinter || c.nombre);
+      if (badgeEl) {
+        badgeEl.textContent = c.activa ? 'Activa' : 'Inactiva';
+        badgeEl.style.color = c.activa ? '#34d399' : '#94a3b8';
+      }
+    }
+
+    // Pre-cargar IP en el input si está vacío
+    const inputIP = document.getElementById('txtAutoPrinterIP');
+    if (inputIP && !inputIP.value) {
+      inputIP.value = impresoras.caja?.ip || impresoras.cocina?.ip || '192.168.1.30';
+    }
+
     renderLogsImpresora(data.historial || []);
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Error cargando estado de impresoras:', e);
+  }
 }
+
+window.ejecutarAutoConfiguracionImpresora = async function() {
+  const inputIP = document.getElementById('txtAutoPrinterIP');
+  const selectDestino = document.getElementById('selectAutoPrinterDestino');
+  const inputPort = document.getElementById('txtAutoPrinterPort');
+  const btn = document.getElementById('btnEjecutarAutoConfigPrinter');
+  const textBtn = document.getElementById('textBtnAutoPrinter');
+  const iconBtn = document.getElementById('iconBtnAutoPrinter');
+  const statusBox = document.getElementById('statusAutoPrinterMsg');
+
+  const ip = inputIP ? inputIP.value.trim() : '';
+  const destino = selectDestino ? selectDestino.value : 'caja';
+  const puerto = inputPort ? (parseInt(inputPort.value, 10) || 9100) : 9100;
+
+  if (!ip) {
+    if (statusBox) {
+      statusBox.style.display = 'block';
+      statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+      statusBox.style.border = '1px solid #ef4444';
+      statusBox.style.color = '#fca5a5';
+      statusBox.innerHTML = '⚠️ Por favor escribe la dirección IP de la impresora (ej: <code>192.168.1.30</code>).';
+    }
+    if (inputIP) inputIP.focus();
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (textBtn) textBtn.textContent = 'Verificando y configurando...';
+  if (iconBtn) iconBtn.textContent = '⏳';
+  if (statusBox) {
+    statusBox.style.display = 'block';
+    statusBox.style.background = 'rgba(56, 189, 248, 0.12)';
+    statusBox.style.border = '1px solid #38bdf8';
+    statusBox.style.color = '#7dd3fc';
+    statusBox.innerHTML = `🔍 Probando comunicación con <strong>${ip}:${puerto}</strong> y enviando calibración...`;
+  }
+
+  try {
+    const res = await fetch('/api/impresoras/auto-configurar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip, puerto, destino })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'No se pudo auto-configurar la impresora');
+    }
+
+    if (statusBox) {
+      statusBox.style.display = 'block';
+      statusBox.style.background = 'rgba(16, 185, 129, 0.18)';
+      statusBox.style.border = '1px solid #10b981';
+      statusBox.style.color = '#6ee7b7';
+      statusBox.innerHTML = `✅ <strong>¡Éxito!</strong> ${data.mensaje}. Se ha impreso el ticket de bienvenida en la impresora física.`;
+    }
+
+    mostrarNotificacionCentro(`🖨️ ${data.mensaje}`, 'success');
+    await cargarEstadoImpresorasConfig();
+
+    if (data.registro && data.registro.ticketVisual) {
+      mostrarVisorTicketTermico(data.registro.ticketVisual);
+    }
+  } catch (err) {
+    if (statusBox) {
+      statusBox.style.display = 'block';
+      statusBox.style.background = 'rgba(239, 68, 68, 0.18)';
+      statusBox.style.border = '1px solid #dc2626';
+      statusBox.style.color = '#fca5a5';
+      statusBox.innerHTML = `❌ <strong>Error:</strong> ${err.message}`;
+    }
+    mostrarNotificacionCentro(`❌ Error: ${err.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (textBtn) textBtn.textContent = 'Auto-Configurar';
+    if (iconBtn) iconBtn.textContent = '⚡';
+  }
+};
 
 function renderLogsImpresora(logs = []) {
   const container = document.getElementById('printerLogsContainer');
@@ -19565,7 +19703,7 @@ window.probarImpresoraBackend = async function(destino) {
     if (data.registro && data.registro.ticketVisual) {
       mostrarVisorTicketTermico(data.registro.ticketVisual);
     }
-    await cargarHistorialImpresoras();
+    await cargarEstadoImpresorasConfig();
   } catch (e) {
     alert('Error al probar impresora: ' + e.message);
   }
@@ -19575,7 +19713,10 @@ window.probarImpresoraBackend = async function(destino) {
 try {
   if (typeof socket !== 'undefined' && socket) {
     socket.on('ticket_impreso', (reg) => {
-      cargarHistorialImpresoras();
+      cargarEstadoImpresorasConfig();
+    });
+    socket.on('impresoras_config_actualizada', () => {
+      cargarEstadoImpresorasConfig();
     });
   }
 } catch (_) {}
