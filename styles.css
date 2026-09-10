@@ -11649,3 +11649,10 @@ body.theme-capsula-elegance .btn-prefactura-split {
 .btn-send-ai:active {
   transform: scale(0.95);
 }
+
+
+/* Ocultar botón IA solo en pantalla de login */
+#landingLoginView.active ~ #btnFloatAsistenteIA,
+#landingLoginView.active ~ #widgetChatIA {
+  display: none !important;
+}
