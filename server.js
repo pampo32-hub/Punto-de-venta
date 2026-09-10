@@ -454,7 +454,7 @@ function extraerUsuarioJWT(req, res, next) {
 function obtenerNegocioIdReq(req, idFallback = 1) {
   const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
   if (explicitId) {
-    if (!req.usuario || req.usuario.rol === 'developer' || req.usuario.rol === 'superadmin') {
+    if (!req.usuario || req.usuario.rol === 'developer' || req.usuario.rol === 'superadmin' || req.usuario.rol === 'admin') {
       return Number(explicitId);
     }
   }
@@ -902,19 +902,30 @@ async function garantizarLimpiezaCeroNegocio(negocioId) {
   const nid = Number(negocioId);
   if (!nid || isNaN(nid)) return;
   try {
-    // 1. Limpieza total de historial financiero, cajas y movimientos
+    // 1. Limpieza de pagos asociados al negocio (por orden_id o por caja_id) ANTES de eliminar cajas y órdenes
+    await dbRun(`
+      DELETE FROM Pagos 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)
+         OR caja_id IN (SELECT id FROM Cajas WHERE negocio_id = ?)
+    `, [nid, nid]);
+
+    // 2. Limpieza de movimientos de caja
     await dbRun('DELETE FROM MovimientosCaja WHERE caja_id IN (SELECT id FROM Cajas WHERE negocio_id = ?)', [nid]);
+
+    // 3. Limpieza de cajas
     await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [nid]);
-    // 2. Limpieza de pagos, facturación y órdenes
-    await dbRun('DELETE FROM Pagos WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
+
+    // 4. Limpieza de detalles de órdenes, facturas electrónicas, anulaciones y órdenes
     await dbRun('DELETE FROM DetalleOrden WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
     await dbRun('DELETE FROM FacturasElectronicas WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
     await dbRun('DELETE FROM Anulaciones WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
     await dbRun('DELETE FROM Ordenes WHERE negocio_id = ?', [nid]);
     await dbRun('DELETE FROM TableMerges WHERE negocio_id = ?', [nid]);
-    // 3. Limpieza de claves residuales de configuración tenant
+
+    // 5. Limpieza de claves residuales de configuración tenant
     await dbRun("DELETE FROM ConfigNegocio WHERE clave = ? OR clave = ?", [`salon_piso_fondo_negocio_${nid}`, `custom_page_settings_negocio_${nid}`]);
-    // 4. Reset estricto a cero de todas las mesas del comercio (libres y sin saldos)
+
+    // 6. Reset estricto a cero de todas las mesas del comercio (libres y sin saldos)
     await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE negocio_id = ?", [nid]);
     console.log(`🧹 [CERO ABSOLUTO] Comercio ID ${nid} inicializado con historial y saldos 100% limpios.`);
   } catch (errLimpieza) {
@@ -5143,8 +5154,8 @@ async function procesarCobroOrden(ordenId, {
   }
 
 
-  const negocioIdFinal = orden.negocio_id || 1;
-  let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
+  const negocioIdFinal = orden.negocio_id || obtenerNegocioIdReq(req);
+  let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [negocioIdFinal]);
   if (!caja) {
     const ahoraApertura = new Date().toISOString();
     const rCaja = await dbRun(`

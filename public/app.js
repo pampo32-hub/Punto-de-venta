@@ -13320,6 +13320,9 @@ window.initRelojTiempoReal = initRelojTiempoReal;
 
 // INICIALIZADOR AL CARGAR
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof window.resetearEstadoFinancieroCero === 'function') {
+    window.resetearEstadoFinancieroCero();
+  }
   initNavegacion();
   initRelojTiempoReal();
   initBuscadorRapido();
