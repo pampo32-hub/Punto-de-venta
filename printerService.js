@@ -698,6 +698,10 @@ function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_c
   raw += formatearLinea2Col('Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
   raw += formatearLinea2Col('Ventas Tarjeta:', formatMontoTermica(ventas.tarjeta || 0)) + '\n';
   raw += formatearLinea2Col('Ventas SINPE Movil:', formatMontoTermica(ventas.sinpe || 0)) + '\n';
+  if ((ventas.dolares && ventas.dolares > 0) || (ventas.dolares_usd && ventas.dolares_usd > 0)) {
+    const usdTxt = ventas.dolares_usd ? `$${ventas.dolares_usd.toFixed(2)} (${formatMontoTermica(ventas.dolares || 0)})` : formatMontoTermica(ventas.dolares || 0);
+    raw += formatearLinea2Col('Ventas Dolares ($ USD):', usdTxt) + '\n';
+  }
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL VENTAS:', formatMontoTermica(ventas.total || 0)) + '\n' + ESCPOS.BOLD_OFF;
   raw += '='.repeat(48) + '\n';
@@ -773,6 +777,10 @@ function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_
   raw += formatearLinea2Col('Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
   raw += formatearLinea2Col('Ventas Tarjeta:', formatMontoTermica(ventas.tarjeta || 0)) + '\n';
   raw += formatearLinea2Col('Ventas SINPE Movil:', formatMontoTermica(ventas.sinpe || 0)) + '\n';
+  if ((ventas.dolares && ventas.dolares > 0) || (ventas.dolares_usd && ventas.dolares_usd > 0)) {
+    const usdTxt = ventas.dolares_usd ? `$${ventas.dolares_usd.toFixed(2)} (${formatMontoTermica(ventas.dolares || 0)})` : formatMontoTermica(ventas.dolares || 0);
+    raw += formatearLinea2Col('Ventas Dolares ($ USD):', usdTxt) + '\n';
+  }
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL FACTURADO:', formatMontoTermica(ventas.total || 0)) + '\n' + ESCPOS.BOLD_OFF;
   raw += '='.repeat(48) + '\n';

@@ -933,6 +933,34 @@ async function garantizarLimpiezaCeroNegocio(negocioId) {
   }
 }
 
+// Tipo de Cambio oficial (BCCR / Hacienda) con cache y fallback
+let cacheTipoCambio = { valor: 520, fecha: 0 };
+app.get('/api/tipo-cambio', async (req, res) => {
+  const ahora = Date.now();
+  if (cacheTipoCambio.fecha && (ahora - cacheTipoCambio.fecha < 60 * 60 * 1000)) {
+    return res.json({ tipo_cambio: cacheTipoCambio.valor, venta: cacheTipoCambio.valor, fuente: 'cache' });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const resp = await fetch('https://api.hacienda.go.cr/indicadores/tc/dolar', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (resp.ok) {
+      const data = await resp.json();
+      const valor = data?.venta?.valor || data?.compra?.valor;
+      if (valor && Number(valor) > 0) {
+        cacheTipoCambio = { valor: Math.round(Number(valor)), fecha: ahora };
+        return res.json({ tipo_cambio: cacheTipoCambio.valor, venta: cacheTipoCambio.valor, fuente: 'hacienda_bccr' });
+      }
+    }
+  } catch (err) {
+    console.warn('[TC] Error consultando API de tipo de cambio:', err.message);
+  }
+
+  res.json({ tipo_cambio: cacheTipoCambio.valor || 520, venta: cacheTipoCambio.valor || 520, fuente: 'fallback' });
+});
+
 // Negocios (Comercios)
 app.get('/api/dev/negocios', async (req, res) => {
   try {
@@ -956,6 +984,7 @@ app.post('/api/dev/negocios', async (req, res) => {
       slogan = '', 
       logo_url = '', 
       moneda = 'CRC', 
+      tipo_cambio_usd = 520,
       telefono = '', 
       direccion = '', 
       activo = 1,
@@ -980,9 +1009,11 @@ app.post('/api/dev/negocios', async (req, res) => {
     }
 
     const valActivo = activo === 0 ? 0 : 1;
+    const monedaFinal = (moneda && moneda.trim()) ? moneda.trim() : 'CRC';
+    const tcFinal = Number(tipo_cambio_usd) || 520;
     const r = await dbRun(
-      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [nombre.trim(), slogan.trim(), logo_url.trim(), 'CRC', telefono.trim(), direccion.trim(), valActivo, plan_nombre, typeof modulos_activos === 'object' ? JSON.stringify(modulos_activos) : modulos_activos]
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, tipo_cambio_usd, telefono, direccion, activo, plan_nombre, modulos_activos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [nombre.trim(), slogan.trim(), logo_url.trim(), monedaFinal, tcFinal, telefono.trim(), direccion.trim(), valActivo, plan_nombre, typeof modulos_activos === 'object' ? JSON.stringify(modulos_activos) : modulos_activos]
     );
     const nuevoNegocioId = r.lastID;
 
@@ -1052,14 +1083,16 @@ app.post('/api/dev/negocios', async (req, res) => {
 
 app.put('/api/dev/negocios/:id', async (req, res) => {
   try {
-    const { nombre, slogan, logo_url, telefono, direccion, activo } = req.body;
+    const { nombre, slogan, logo_url, moneda, tipo_cambio_usd, telefono, direccion, activo } = req.body;
     const negocioId = Number(req.params.id);
 
     let valActivo = (activo !== undefined && activo !== null) ? (Number(activo) === 0 ? 0 : 1) : 1;
+    const monedaFinal = (moneda && moneda.trim()) ? moneda.trim() : null;
+    const tcFinal = tipo_cambio_usd !== undefined && tipo_cambio_usd !== null ? Number(tipo_cambio_usd) : null;
 
     await dbRun(
-      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ?, activo = ? WHERE id = ?',
-      [nombre, slogan, logo_url, 'CRC', telefono, direccion, valActivo, negocioId]
+      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = COALESCE(?, moneda), tipo_cambio_usd = COALESCE(?, tipo_cambio_usd), telefono = ?, direccion = ?, activo = ? WHERE id = ?',
+      [nombre, slogan, logo_url, monedaFinal, tcFinal, telefono, direccion, valActivo, negocioId]
     );
     const actualizado = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [negocioId]);
     io.emit('negocio_actualizado', actualizado);
@@ -1359,16 +1392,17 @@ const handlerClonarNegocio = async (req, res) => {
 
     const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Clon)`;
     const sloganClon = sloganNuevo.trim() || origen.slogan || 'Restaurante & Bar';
-    const monedaClon = 'CRC';
+    const monedaClon = (moneda && moneda.trim()) ? moneda.trim() : (origen.moneda || 'CRC');
+    const tcClon = origen.tipo_cambio_usd || 520;
     const telClon = telefono.trim() || origen.telefono || '';
     const dirClon = direccion.trim() || origen.direccion || '';
     const logoClon = logo_url.trim() || origen.logo_url || '';
 
     // 1. Insertar nuevo Negocio totalmente independiente
     const rNeg = await dbRun(
-      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-      [nombreClon, sloganClon, logoClon, monedaClon, telClon, dirClon, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
+      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, tipo_cambio_usd, telefono, direccion, activo, plan_nombre, modulos_activos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [nombreClon, sloganClon, logoClon, monedaClon, tcClon, telClon, dirClon, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
     );
     const nuevoNegocioId = rNeg.lastID;
 
@@ -4889,6 +4923,7 @@ async function procesarCobroOrden(ordenId, {
   mesero = 'Juan Jival',
   referencia = null,
   tipo_cambio = 1,
+  tipo_cambio_usd = null,
   monto_usd = 0,
   pagos = [],
   desglose = null,
@@ -5144,7 +5179,7 @@ async function procesarCobroOrden(ordenId, {
   }
 
 
-  const negocioIdFinal = orden.negocio_id || obtenerNegocioIdReq(req);
+  const negocioIdFinal = orden.negocio_id || reqNegocioId || 1;
   let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [negocioIdFinal]);
   if (!caja) {
     const ahoraApertura = new Date().toISOString();
@@ -5157,10 +5192,13 @@ async function procesarCobroOrden(ordenId, {
   const cajaId = caja ? caja.id : null;
   const montoFinal = (monto !== undefined && monto !== null) ? Number(monto) : (Number(orden.total) || 0);
 
-  // Normalizar lista de pagos a registrar en la tabla Pagos (unitaria o multi-método)
+  // Registrar los pagos asociados a la orden
   let listaPagos = [];
   if (Array.isArray(pagos) && pagos.length > 0) {
-    listaPagos = pagos.filter(p => p && Number(p.monto) > 0);
+    listaPagos = pagos.map(p => ({
+      ...p,
+      monto_usd: Number(p.monto_usd) || (p.metodo === 'Dólares' ? (Number(p.monto) > 0 && Number(p.tipo_cambio) > 0 ? Number((Number(p.monto) / Number(p.tipo_cambio)).toFixed(2)) : 0) : 0)
+    }));
   } else if (desglose && typeof desglose === 'object') {
     if (Number(desglose.efectivo) > 0) {
       listaPagos.push({
@@ -5191,29 +5229,45 @@ async function procesarCobroOrden(ordenId, {
         referencia: desglose.referencia_transferencia || desglose.referencia || null
       });
     }
+    if (Number(desglose.dolares || desglose.usd) > 0) {
+      const tc = Number(desglose.tipo_cambio) || Number(tipo_cambio) || 520;
+      const mUSD = Number(desglose.monto_usd || desglose.usd || desglose.dolares);
+      const mCRC = Number(desglose.monto_crc) || Math.round(mUSD * tc);
+      listaPagos.push({
+        metodo: 'Dólares',
+        monto: mCRC,
+        monto_usd: mUSD,
+        tipo_cambio: tc,
+        referencia: desglose.referencia_dolares || desglose.referencia || null
+      });
+    }
   }
 
   if (listaPagos.length === 0) {
+    const tcReq = Number(tipo_cambio) || (metodoFinal === 'Dólares' ? (Number(tipo_cambio_usd) || 520) : 1);
+    const usdReq = Number(monto_usd) || (metodoFinal === 'Dólares' ? (Number(montoFinal) > 0 ? Number((Number(montoFinal) / tcReq).toFixed(2)) : 0) : 0);
     listaPagos.push({
       metodo: metodoFinal,
       monto: montoFinal,
       propina: Number(propina) || 0,
       cambio: Number(cambio) || 0,
       referencia: referencia || null,
-      tipo_cambio: 1,
-      monto_usd: 0
+      tipo_cambio: tcReq,
+      monto_usd: usdReq
     });
   }
 
   const totalPagadoAcum = listaPagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+  const totalUSDOrden = listaPagos.reduce((acc, p) => acc + (Number(p.monto_usd) || 0), 0);
+
   for (const p of listaPagos) {
     const metPago = p.metodo || 'Efectivo';
     const mtoPago = Number(p.monto) || 0;
     const propPago = p.propina !== undefined ? Number(p.propina) : (listaPagos.length === 1 ? (Number(propina) || 0) : Math.round((Number(propina) || 0) * (mtoPago / (totalPagadoAcum || 1))));
     const camPago = Number(p.cambio) || (listaPagos.length === 1 ? (Number(cambio) || 0) : 0);
     const refPago = p.referencia || (listaPagos.length === 1 ? (referencia || null) : null);
-    const tcPago = 1;
-    const usdPago = 0;
+    const tcPago = Number(p.tipo_cambio) || 1;
+    const usdPago = Number(p.monto_usd) || 0;
 
     await dbRun(
       'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, referencia, tipo_cambio, monto_usd, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -5231,7 +5285,7 @@ async function procesarCobroOrden(ordenId, {
   let ticketGenerado = null;
 
   if (liquidar_total) {
-    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL, total_usd = ? WHERE id = ?", [ahora, totalUSDOrden, ordenId]);
 
     // Consultar todos los ítems de la orden para el tiquete final
     const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
@@ -5740,18 +5794,19 @@ app.get('/api/caja/corte-x', async (req, res) => {
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
     const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       WHERE p.caja_id = ?
       GROUP BY p.metodo
     `, [caja.id]);
 
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasTransferencia = 0, ventasOtros = 0;
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
 
     ventas.forEach(v => {
       const m = (v.metodo || '').toLowerCase();
       const tot = Number(v.total) || 0;
+      const totUSD = Number(v.total_usd) || 0;
       desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
 
       if (m.includes('efectivo') || m.includes('cash')) {
@@ -5760,6 +5815,9 @@ app.get('/api/caja/corte-x', async (req, res) => {
         ventasTarjeta += tot;
       } else if (m.includes('sinpe')) {
         ventasSinpe += tot;
+      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+        ventasDolares += tot;
+        ventasDolaresUSD += totUSD;
       } else if (m.includes('transfer')) {
         ventasTransferencia += tot;
         ventasSinpe += tot;
@@ -5778,8 +5836,11 @@ app.get('/api/caja/corte-x', async (req, res) => {
     });
 
     const fondoInicial = Number(caja.monto_inicial) || 0;
+    const fondoInicialUSD = Number(caja.monto_inicial_usd) || 0;
     const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
-    const totalGeneralEsperadoGaveta = efectivoEsperado;
+    const dolaresEsperadoUSD = Math.round((fondoInicialUSD + ventasDolaresUSD) * 100) / 100;
+    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
+    const totalGeneralEsperadoGaveta = Math.round((efectivoEsperado + dolaresEsperadoCRC) * 100) / 100;
 
     const tipPool = await dbAll(`
       SELECT 
@@ -5805,10 +5866,13 @@ app.get('/api/caja/corte-x', async (req, res) => {
       fecha_apertura: caja.fecha_apertura,
       fecha_corte: new Date().toISOString(),
       fondo_inicial: fondoInicial,
+      fondo_inicial_usd: fondoInicialUSD,
       ventas: {
         efectivo: ventasEfectivo,
         tarjeta: ventasTarjeta,
         sinpe: ventasSinpe,
+        dolares: ventasDolares,
+        dolares_usd: ventasDolaresUSD,
         transferencia: ventasTransferencia,
         otros: ventasOtros,
         desglose_por_metodo: desgloseMetodos,
@@ -5820,6 +5884,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
       total_salidas: totalSalidas,
       efectivo_esperado: efectivoEsperado,
       esperado_efectivo_crc: efectivoEsperado,
+      esperado_dolares_usd: dolaresEsperadoUSD,
+      esperado_dolares_crc: dolaresEsperadoCRC,
       total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
       tip_pool: tipPool,
       total_propinas: totalPropinas
@@ -5829,12 +5895,15 @@ app.get('/api/caja/corte-x', async (req, res) => {
   }
 });
 
-// Cierre Z definitivo del turno con arqueo físico de caja (Colones)
+// Cierre Z definitivo del turno con arqueo físico de caja (Colones y Dólares)
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
     const {
       efectivo_real_contado,
       efectivo_real_contado_crc,
+      dolares_real_contado_usd,
+      dolares_real,
+      tipo_cambio,
       notas = '',
       usuarioNombre = 'Cajero',
       adminPin,
@@ -5863,18 +5932,19 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
 
     const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       WHERE p.caja_id = ?
       GROUP BY p.metodo
     `, [caja.id]);
 
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasTransferencia = 0, ventasOtros = 0;
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
 
     ventas.forEach(v => {
       const m = (v.metodo || '').toLowerCase();
       const tot = Number(v.total) || 0;
+      const totUSD = Number(v.total_usd) || 0;
       desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
 
       if (m.includes('efectivo') || m.includes('cash')) {
@@ -5883,6 +5953,9 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         ventasTarjeta += tot;
       } else if (m.includes('sinpe')) {
         ventasSinpe += tot;
+      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+        ventasDolares += tot;
+        ventasDolaresUSD += totUSD;
       } else if (m.includes('transfer')) {
         ventasTransferencia += tot;
         ventasSinpe += tot;
@@ -5901,12 +5974,20 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     });
 
     const fondoInicial = Number(caja.monto_inicial) || 0;
+    const fondoInicialUSD = Number(caja.monto_inicial_usd) || 0;
     const efectivoEsperadoCRC = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
-    const totalGeneralEsperadoGavetaCRC = efectivoEsperadoCRC;
-    const totalRealContadoGavetaCRC = efectivoRealCRC;
+    const dolaresEsperadoUSD = Math.round((fondoInicialUSD + ventasDolaresUSD) * 100) / 100;
+    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
+    const totalGeneralEsperadoGavetaCRC = Math.round((efectivoEsperadoCRC + dolaresEsperadoCRC) * 100) / 100;
+
+    const tc = parseFloat(tipo_cambio) || (dolaresEsperadoUSD > 0 && dolaresEsperadoCRC > 0 ? (dolaresEsperadoCRC / dolaresEsperadoUSD) : 520);
+    const dolaresRealUSD = parseFloat(dolares_real_contado_usd != null ? dolares_real_contado_usd : (dolares_real != null ? dolares_real : 0)) || 0;
+    const dolaresRealCRC = Math.round(dolaresRealUSD * tc * 100) / 100;
+    const totalRealContadoGavetaCRC = Math.round((efectivoRealCRC + dolaresRealCRC) * 100) / 100;
 
     const diferenciaCRC = Math.round((efectivoRealCRC - efectivoEsperadoCRC) * 100) / 100;
-    const diferenciaTotal = diferenciaCRC;
+    const diferenciaUSD = Math.round((dolaresRealUSD - dolaresEsperadoUSD) * 100) / 100;
+    const diferenciaTotal = Math.round((totalRealContadoGavetaCRC - totalGeneralEsperadoGavetaCRC) * 100) / 100;
     const estadoCuadre = diferenciaTotal === 0 ? 'Cuadrada' : (diferenciaTotal > 0 ? 'Sobrante' : 'Faltante');
 
     const tipPool = await dbAll(`
@@ -5927,23 +6008,23 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       UPDATE Cajas SET
         fecha_cierre = ?,
         monto_final_efectivo = ?,
-        monto_final_dolares = 0,
+        monto_final_dolares = ?,
         total_ventas_efectivo = ?,
         total_ventas_tarjeta = ?,
         total_ventas_sinpe = ?,
-        total_ventas_dolares = 0,
-        total_ventas_usd = 0,
+        total_ventas_dolares = ?,
+        total_ventas_usd = ?,
         total_ventas_transferencia = ?,
         estado = 'cerrada'
       WHERE id = ?
-    `, [ahora, efectivoRealCRC, ventasEfectivo, ventasTarjeta, ventasSinpe, ventasTransferencia, caja.id]);
+    `, [ahora, efectivoRealCRC, dolaresRealUSD, ventasEfectivo, ventasTarjeta, ventasSinpe, ventasDolares, ventasDolaresUSD, ventasTransferencia, caja.id]);
 
     await registrarAuditoria({
       usuarioNombre,
       accion: 'cierre_z',
       tipoEvento: 'financiero',
       modulo: 'caja',
-      detalle: `Cierre Z Turno #${caja.id}. Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`
+      detalle: `Cierre Z Turno #${caja.id}. Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Esp USD: $${dolaresEsperadoUSD} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} + $${dolaresRealUSD} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`
     });
 
     io.emit('caja_actualizada');
@@ -5956,10 +6037,14 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       fecha_apertura: caja.fecha_apertura,
       fecha_cierre: ahora,
       fondo_inicial: fondoInicial,
+      fondo_inicial_usd: fondoInicialUSD,
+      tipo_cambio: tc,
       ventas: {
         efectivo: ventasEfectivo,
         tarjeta: ventasTarjeta,
         sinpe: ventasSinpe,
+        dolares: ventasDolares,
+        dolares_usd: ventasDolaresUSD,
         transferencia: ventasTransferencia,
         otros: ventasOtros,
         desglose_por_metodo: desgloseMetodos,
@@ -5970,13 +6055,21 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       total_salidas: totalSalidas,
       efectivo_esperado: efectivoEsperadoCRC,
       esperado_efectivo_crc: efectivoEsperadoCRC,
+      esperado_dolares_usd: dolaresEsperadoUSD,
+      esperado_dolares_crc: dolaresEsperadoCRC,
       total_general_esperado_gaveta_crc: totalGeneralEsperadoGavetaCRC,
       efectivo_real_contado: totalRealContadoGavetaCRC,
       efectivo_real_contado_crc: efectivoRealCRC,
+      dolares_real_contado_usd: dolaresRealUSD,
+      dolares_real_contado_crc: dolaresRealCRC,
       total_real_contado_gaveta_crc: totalRealContadoGavetaCRC,
       diferencia: diferenciaTotal,
       diferencia_crc: diferenciaCRC,
+      diferencia_usd: diferenciaUSD,
       diferencia_total: diferenciaTotal,
+      monto_final_dolares: dolaresRealUSD,
+      total_ventas_dolares: ventasDolares,
+      total_ventas_usd: ventasDolaresUSD,
       estado_cuadre: estadoCuadre,
       tip_pool: tipPool,
       total_propinas: totalPropinas,
@@ -5990,29 +6083,42 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 // Apertura de nuevo turno de caja
 app.post('/api/caja/abrir', async (req, res) => {
   try {
-    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id } = req.body;
+    const { cajero = 'Cajero Turno', monto_inicial = 50000, monto_inicial_usd = 0, negocio_id } = req.body;
     const negocioId = obtenerNegocioIdReq(req, negocio_id || 1);
     const montoNum = parseFloat(monto_inicial);
+    const montoUSDNum = parseFloat(monto_inicial_usd) || 0;
     if (isNaN(montoNum) || montoNum < 0) {
       return res.status(400).json({ error: 'Monto inicial de apertura inválido' });
     }
 
     const activa = await dbGet(
-      "SELECT id FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      "SELECT id, monto_inicial, monto_inicial_usd FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
       [negocioId]
     );
     if (activa) {
-      return res.json({ ok: true, message: 'Ya existe una caja abierta para este comercio', caja_id: activa.id });
+      return res.json({
+        ok: true,
+        message: 'Ya existe una caja abierta para este comercio',
+        caja_id: activa.id,
+        monto_inicial: activa.monto_inicial || 0,
+        monto_inicial_usd: activa.monto_inicial_usd || 0
+      });
     }
 
     const ahoraApertura = new Date().toISOString();
     const r = await dbRun(`
-      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
-      VALUES (?, ?, ?, ?, 'abierta')
-    `, [negocioId, cajero, ahoraApertura, montoNum]);
+      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, monto_inicial_usd, estado)
+      VALUES (?, ?, ?, ?, ?, 'abierta')
+    `, [negocioId, cajero, ahoraApertura, montoNum, montoUSDNum]);
 
     io.emit('caja_actualizada');
-    res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
+    res.json({
+      ok: true,
+      message: 'Nuevo turno de caja abierto con éxito',
+      caja_id: r.lastID,
+      monto_inicial: montoNum,
+      monto_inicial_usd: montoUSDNum
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -8069,12 +8175,14 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
     let totalEfectivo = 0;
     let totalTarjeta = 0;
     let totalSinpe = 0;
+    let totalDolares = 0;
+    let totalDolaresUSD = 0;
     let totalTransferencia = 0;
     let totalPropinas = 0;
     const desgloseMetodosHoy = {};
 
     const pagosHoy = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(p.propina) AS total_propina
+      SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(COALESCE(p.monto_usd, 0)) AS total_usd, SUM(p.propina) AS total_propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
@@ -8095,6 +8203,9 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         totalTarjeta += mto;
       } else if (met.includes('sinpe')) {
         totalSinpe += mto;
+      } else if (met.includes('dolar') || met.includes('dólar') || met.includes('usd')) {
+        totalDolares += mto;
+        totalDolaresUSD += Number(pg.total_usd) || 0;
       } else if (met.includes('transfer')) {
         totalTransferencia += mto;
         totalSinpe += mto;
@@ -8110,6 +8221,8 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         efectivo: totalEfectivo,
         tarjeta: totalTarjeta,
         sinpe: totalSinpe,
+        dolares: totalDolares,
+        dolares_usd: totalDolaresUSD,
         transferencia: totalTransferencia,
         por_metodo: desgloseMetodosHoy
       },
@@ -8119,6 +8232,8 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         totalEfectivo,
         totalTarjeta,
         totalSinpe,
+        totalDolares,
+        totalDolaresUSD,
         totalTransferencia,
         totalPropinas
       },
@@ -8683,17 +8798,18 @@ app.post('/api/ia/chat', async (req, res) => {
         .catch(() => []),
       dbAll('SELECT p.id, p.nombre, p.precio, p.destino, p.curso, p.agotado, c.nombre as categoria FROM Productos p LEFT JOIN Categorias c ON p.categoria_id = c.id WHERE p.negocio_id = ? AND p.activo = 1 ORDER BY p.nombre ASC', [negocioId])
         .catch(() => []),
-      dbGet('SELECT id, cajero, fecha_apertura, monto_inicial, total_ventas_efectivo, total_ventas_tarjeta, total_ventas_sinpe FROM Cajas WHERE negocio_id = ? AND fecha_cierre IS NULL ORDER BY id DESC LIMIT 1', [negocioId])
+      dbGet('SELECT id, cajero, fecha_apertura, monto_inicial, monto_inicial_usd, total_ventas_efectivo, total_ventas_tarjeta, total_ventas_sinpe, total_ventas_dolares, total_ventas_usd FROM Cajas WHERE negocio_id = ? AND fecha_cierre IS NULL ORDER BY id DESC LIMIT 1', [negocioId])
         .catch(() => null),
       dbAll('SELECT m.id, m.numero, m.estado, m.total, m.nombre_cliente, z.nombre as zona FROM Mesas m LEFT JOIN Zonas z ON m.zona_id = z.id WHERE m.negocio_id = ? AND m.estado != "libre"', [negocioId])
         .catch(() => [])
     ]);
 
-    const simboloMoneda = '₡';
+    const simboloMoneda = (negocio.moneda === 'USD' ? '$' : '₡');
     const invStr = inventario.slice(0, 100).map(i => `${i.nombre}: ${i.stock_actual} ${i.unidad_medida || 'uds'}${Number(i.stock_actual) <= Number(i.stock_minimo) ? ' (bajo stock)' : ''}`).join(' | ');
     const prodStr = productos.slice(0, 100).map(p => `${p.nombre} (${simboloMoneda}${p.precio}${p.agotado ? ', AGOTADO' : ''})`).join(' | ');
     const mesasStr = mesasOcupadas.length > 0 ? mesasOcupadas.map(m => `Mesa ${m.numero}: ${simboloMoneda}${m.total} (${m.estado})`).join(' | ') : 'Sin mesas ocupadas';
-    const cajaStr = cajaActiva ? `Cajero: ${cajaActiva.cajero || 'Activo'}, Inicial: ${simboloMoneda}${Number(cajaActiva.monto_inicial || 0).toLocaleString()}, Efectivo: ${simboloMoneda}${Number(cajaActiva.total_ventas_efectivo || 0).toLocaleString()}, Tarjeta: ${simboloMoneda}${Number(cajaActiva.total_ventas_tarjeta || 0).toLocaleString()}, SINPE: ${simboloMoneda}${Number(cajaActiva.total_ventas_sinpe || 0).toLocaleString()}` : 'Caja cerrada';
+    const dolaresCajaTxt = cajaActiva && (cajaActiva.total_ventas_usd > 0 || cajaActiva.monto_inicial_usd > 0) ? `, Dólares: $${Number(cajaActiva.total_ventas_usd || 0).toFixed(2)}` : '';
+    const cajaStr = cajaActiva ? `Cajero: ${cajaActiva.cajero || 'Activo'}, Inicial: ${simboloMoneda}${Number(cajaActiva.monto_inicial || 0).toLocaleString()}, Efectivo: ${simboloMoneda}${Number(cajaActiva.total_ventas_efectivo || 0).toLocaleString()}, Tarjeta: ${simboloMoneda}${Number(cajaActiva.total_ventas_tarjeta || 0).toLocaleString()}, SINPE: ${simboloMoneda}${Number(cajaActiva.total_ventas_sinpe || 0).toLocaleString()}${dolaresCajaTxt}` : 'Caja cerrada';
 
     // 2. Intentar llamar a Google Gemini si hay API KEY
     const geminiApiKey = process.env.GEMINI_API_KEY;

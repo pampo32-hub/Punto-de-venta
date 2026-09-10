@@ -2007,6 +2007,82 @@ function formatCRCSinDecimales(num) {
   return formatCRC(num);
 }
 
+function negocioAceptaDolares() {
+  const m = estado.negocioActual?.moneda || 'CRC';
+  return m === 'CRC_USD' || m === 'USD';
+}
+window.negocioAceptaDolares = negocioAceptaDolares;
+
+window.actualizarTipoCambioBCCR = async function() {
+  try {
+    const res = await fetch('/api/tipo-cambio');
+    const data = await res.json();
+    const tc = Number(data?.venta || data?.tipo_cambio) || 520;
+    if (tc > 0) {
+      window._tipoCambioBCCR = { ...data, venta: tc, tipo_cambio: tc };
+      localStorage.setItem('pos_tipo_cambio_usd', String(tc));
+      const txtTC = document.getElementById('txtTipoCambioUSD');
+      if (txtTC) {
+        txtTC.value = tc;
+      }
+      return tc;
+    }
+  } catch (e) {
+    console.warn('No se pudo obtener el tipo de cambio BCCR en vivo:', e);
+  }
+  return 520;
+};
+
+window.aplicarConfiguracionMonedaNegocio = function() {
+  const aceptaUSD = negocioAceptaDolares();
+
+  // Pestaña Dólares en Modal de Cobro
+  const tabDol = document.getElementById('tabCobroDolares');
+  if (tabDol) tabDol.style.display = aceptaUSD ? '' : 'none';
+
+  // Si no acepta dólares y estaba en pestaña Dólares, volver a Efectivo
+  if (!aceptaUSD) {
+    const activeTab = document.querySelector('.pay-method-tab.active');
+    if (activeTab && activeTab.dataset.method === 'Dolares') {
+      const tabEf = document.querySelector('.pay-method-tab[data-method="Efectivo"]');
+      if (tabEf) tabEf.click();
+    }
+  }
+
+  // Fila Dólares en Pago Mixto
+  const rowMixtoUSD = document.getElementById('rowMixtoUSD');
+  if (rowMixtoUSD) rowMixtoUSD.style.display = aceptaUSD ? '' : 'none';
+
+  // Fila Dólares en Apertura de Caja
+  const rowAperturaUSD = document.getElementById('rowAperturaUSD');
+  if (rowAperturaUSD) rowAperturaUSD.style.display = aceptaUSD ? '' : 'none';
+
+  // Filas Dólares en Cierre Z
+  const czRowVentasDolares = document.getElementById('czRowVentasDolares');
+  if (czRowVentasDolares) czRowVentasDolares.style.display = aceptaUSD ? '' : 'none';
+
+  const czRowEsperadoDolares = document.getElementById('czRowEsperadoDolares');
+  if (czRowEsperadoDolares) czRowEsperadoDolares.style.display = aceptaUSD ? '' : 'none';
+
+  const czRowDolaresReal = document.getElementById('czRowDolaresReal');
+  if (czRowDolaresReal) czRowDolaresReal.style.display = aceptaUSD ? '' : 'none';
+
+  const czTipoCambioInfo = document.getElementById('czTipoCambioInfo');
+  if (czTipoCambioInfo) czTipoCambioInfo.style.display = aceptaUSD ? '' : 'none';
+
+  const czConteosWrapper = document.getElementById('czConteosWrapper');
+  if (czConteosWrapper) {
+    czConteosWrapper.style.gridTemplateColumns = aceptaUSD ? '1fr 1fr' : '1fr';
+  }
+
+  // Asignar tipo de cambio inicial en txtTipoCambioUSD si no tiene valor
+  const txtTC = document.getElementById('txtTipoCambioUSD');
+  if (txtTC) {
+    const tc = estado.negocioActual?.tipo_cambio_usd || parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || window._tipoCambioBCCR?.venta || 520;
+    if (!txtTC.value) txtTC.value = tc;
+  }
+};
+
 /**
  * Formateador de Fecha y Hora en zona horaria oficial de Costa Rica (America/Costa_Rica) con formato am/pm 12 horas.
  */
@@ -2936,6 +3012,9 @@ function actualizarBrandingNegocio(negocio) {
 
   nomTxt.textContent = negocio.nombre || 'GAMMA POS';
   slogTxt.textContent = negocio.slogan || 'Punto de Venta Profesional';
+  if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
+    window.aplicarConfiguracionMonedaNegocio();
+  }
 }
 
 // ============================================================================
@@ -3721,7 +3800,7 @@ async function cargarNegociosDev() {
           <div class="negocio-meta-stats">
             <span>👥 ${n.total_usuarios || 0} Usuarios</span>
             <span>🍽️ ${n.total_mesas || 0} Mesas</span>
-            <span>💰 Moneda: ${n.moneda}</span>
+            <span>💰 Moneda: ${n.moneda === 'CRC_USD' ? 'Bimoneda (₡ y $)' : (n.moneda === 'USD' ? 'Dólares ($)' : 'Colones (₡)')}</span>
             <span style="grid-column: 1 / -1; color: #818cf8; font-weight: 700;">🧩 ${modulosCount}/11 Módulos (${planTexto})</span>
           </div>
           <div class="negocio-actions" style="display: flex; flex-wrap: wrap; gap: 8px;">
@@ -8812,10 +8891,12 @@ window.resetearEstadoFinancieroCero = function() {
     'cajaVentasEfectivo': '₡ 0.00',
     'cajaVentasTarjeta': '₡ 0.00',
     'cajaVentasSinpe': '₡ 0.00',
+    'cajaVentasDolares': '$ 0.00 (₡ 0)',
     'cajaTotalEfectivo': '₡ 0.00',
     'cajaEntradasTotal': '+₡ 0.00',
     'cajaSalidasTotal': '-₡ 0.00',
     'cajaTotalEsperadoEfectivo': '₡ 0.00',
+    'cajaTotalEsperadoDolares': '$ 0.00 (₡ 0)',
     'cajeroTurnoNombre': 'Sin turno'
   };
   Object.entries(zeroes).forEach(([id, val]) => {
@@ -8832,18 +8913,27 @@ async function cargarCajaDesdeBackend() {
     });
     const data = await res.json();
     if (data && data.caja) {
-      let efect = 0, tarj = 0, sinpe = 0;
+      let efect = 0, tarj = 0, sinpe = 0, dolaresCRC = 0, dolaresUSD = 0;
       (data.ventas || []).forEach(v => {
         const m = (v.metodo || '').toLowerCase();
         const tot = Number(v.total) || 0;
+        const totUSD = Number(v.total_usd) || 0;
         if (m.includes('efectivo')) efect += tot;
         else if (m.includes('tarjeta')) tarj += tot;
         else if (m.includes('sinpe') || m.includes('transfer')) sinpe += tot;
+        else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+          dolaresCRC += tot;
+          dolaresUSD += totUSD;
+        }
       });
 
       document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
       document.getElementById('cajaVentasTarjeta').textContent = formatCRC(tarj);
       document.getElementById('cajaVentasSinpe').textContent = formatCRC(sinpe);
+      const elDolares = document.getElementById('cajaVentasDolares');
+      if (elDolares) {
+        elDolares.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
+      }
       document.getElementById('cajaTotalEfectivo').textContent = formatCRC((data.caja.monto_inicial || 50000) + efect);
       document.getElementById('cajeroTurnoNombre').textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
       let entradas = 0, salidas = 0;
@@ -8854,7 +8944,9 @@ async function cargarCajaDesdeBackend() {
 
       const fondo = data.caja.monto_inicial || 0;
       const totalEsperadoEfectivo = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
-      const totalGeneralGavetaCRC = totalEsperadoEfectivo;
+      const totalEsperadoDolaresUSD = dolaresUSD;
+      const totalEsperadoDolaresCRC = dolaresCRC;
+      const totalGeneralGavetaCRC = Math.round((totalEsperadoEfectivo + (negocioAceptaDolares() ? totalEsperadoDolaresCRC : 0)) * 100) / 100;
 
       const elFondo = document.getElementById('cajaFondoInicial');
       if (elFondo) elFondo.textContent = formatCRC(fondo);
@@ -8877,6 +8969,11 @@ async function cargarCajaDesdeBackend() {
       const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
       if (elEspEf) elEspEf.textContent = formatCRC(totalEsperadoEfectivo);
 
+      const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
+      if (elEspDol) {
+        elEspDol.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
+      }
+
       const elTotEf = document.getElementById('cajaTotalEfectivo');
       if (elTotEf) elTotEf.textContent = formatCRC(totalGeneralGavetaCRC);
 
@@ -8889,13 +8986,13 @@ async function cargarCajaDesdeBackend() {
         ventasEfectivo: efect,
         ventasTarjeta: tarj,
         ventasSinpe: sinpe,
-        ventasDolares: 0,
-        ventasDolaresUSD: 0,
+        ventasDolares: dolaresCRC,
+        ventasDolaresUSD: dolaresUSD,
         totalEntradas: entradas,
         totalSalidas: salidas,
         totalEsperadoEfectivo,
-        totalEsperadoDolaresUSD: 0,
-        totalEsperadoDolaresCRC: 0,
+        totalEsperadoDolaresUSD,
+        totalEsperadoDolaresCRC,
         totalGeneralGavetaCRC,
         totalEsperado: totalGeneralGavetaCRC,
         movimientos: data.movimientos || []
@@ -8908,6 +9005,8 @@ async function cargarCajaDesdeBackend() {
         if (elFondo) elFondo.textContent = 'CERRADA';
         const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
         if (elEspEf) elEspEf.textContent = '₡ 0.00';
+        const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
+        if (elEspDol) elEspDol.textContent = '$ 0.00 (₡ 0)';
         const elTotEf = document.getElementById('cajaTotalEfectivo');
         if (elTotEf) elTotEf.textContent = '₡ 0.00';
         const elVentasEf = document.getElementById('cajaVentasEfectivo');
@@ -8916,6 +9015,8 @@ async function cargarCajaDesdeBackend() {
         if (elTarj) elTarj.textContent = '₡ 0.00';
         const elSinpe = document.getElementById('cajaVentasSinpe');
         if (elSinpe) elSinpe.textContent = '₡ 0.00';
+        const elDolares = document.getElementById('cajaVentasDolares');
+        if (elDolares) elDolares.textContent = '$ 0.00 (₡ 0)';
         const elEntradas = document.getElementById('cajaEntradasTotal');
         if (elEntradas) elEntradas.textContent = '+₡ 0.00';
         const elSalidas = document.getElementById('cajaSalidasTotal');
@@ -9376,6 +9477,13 @@ document.addEventListener('keydown', (e) => {
         window.seleccionarMetodoCobro('SINPE');
         return;
       }
+      if (k === 'd' && negocioAceptaDolares()) {
+        e.preventDefault();
+        window.seleccionarMetodoCobro('Dolares');
+        const txtDol = document.getElementById('txtDolaresRecibidos');
+        if (txtDol) { txtDol.focus(); txtDol.select?.(); }
+        return;
+      }
       if (k === 'm') {
         e.preventDefault();
         window.seleccionarMetodoCobro('Mixto');
@@ -9383,7 +9491,7 @@ document.addEventListener('keydown', (e) => {
       }
     }
 
-    // Atajos numéricos (1: Efectivo, 2: Tarjeta, 3: SINPE, 4 ó 5: Mixto) cuando NO se está digitando texto/monto en un input
+    // Atajos numéricos (1, 2, 3, 4, 5) cuando NO se está digitando texto/monto en un input
     if (!isInputActive) {
       if (e.key === '1') {
         e.preventDefault();
@@ -9402,7 +9510,18 @@ document.addEventListener('keydown', (e) => {
         window.seleccionarMetodoCobro('SINPE');
         return;
       }
-      if (e.key === '4' || e.key === '5') {
+      if (e.key === '4') {
+        e.preventDefault();
+        if (negocioAceptaDolares()) {
+          window.seleccionarMetodoCobro('Dolares');
+          const txtDol = document.getElementById('txtDolaresRecibidos');
+          if (txtDol) { txtDol.focus(); txtDol.select?.(); }
+        } else {
+          window.seleccionarMetodoCobro('Mixto');
+        }
+        return;
+      }
+      if (e.key === '5') {
         e.preventDefault();
         window.seleccionarMetodoCobro('Mixto');
         return;
@@ -9498,20 +9617,36 @@ window.abrirModalCierreZ = async function() {
     const modal = document.getElementById('modalCierreZ');
     if (!modal) return;
 
+    if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
+      window.aplicarConfiguracionMonedaNegocio();
+    }
+
     const txtEsperadoCRC = document.getElementById('czEsperadoEfectivoCRC');
+    const txtEsperadoUSD = document.getElementById('czEsperadoDolaresUSD');
     const txtEsperadoTotal = document.getElementById('czTotalEsperado') || document.getElementById('txtCierreZEsperado');
     const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+    const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
     const txtNotas = document.getElementById('txtCierreZNotas');
 
     const espCRC = Number(data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : (data.efectivo_esperado || 0));
-    const espTotal = espCRC;
+    const espUSD = Number(data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0));
+    const espDolCRC = Number(data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0));
+    const aceptaUSD = negocioAceptaDolares();
+    const espTotal = aceptaUSD
+      ? Number(data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : (espCRC + espDolCRC))
+      : espCRC;
 
     if (txtEsperadoCRC) txtEsperadoCRC.textContent = formatCRC(espCRC);
+    if (txtEsperadoUSD) txtEsperadoUSD.textContent = `$ ${espUSD.toFixed(2)} (${formatCRC(espDolCRC)})`;
     if (txtEsperadoTotal) txtEsperadoTotal.textContent = formatCRC(espTotal);
 
     if (txtRealCRC) {
       txtRealCRC.value = '';
       txtRealCRC.placeholder = '0';
+    }
+    if (txtRealUSD) {
+      txtRealUSD.value = '';
+      txtRealUSD.placeholder = '0.00';
     }
     if (txtNotas) txtNotas.value = '';
 
@@ -9520,6 +9655,11 @@ window.abrirModalCierreZ = async function() {
 
     const elVentas = document.getElementById('czVentasEfectivo') || document.getElementById('cierreZVentasTotal');
     if (elVentas) elVentas.textContent = `+${formatCRC(data.ventas?.efectivo !== undefined ? data.ventas.efectivo : (data.ventas?.total || 0))}`;
+
+    const elVentasDolares = document.getElementById('czVentasDolares');
+    if (elVentasDolares) {
+      elVentasDolares.textContent = `$ ${espUSD.toFixed(2)} (${formatCRC(espDolCRC)})`;
+    }
 
     const elVentasTarj = document.getElementById('czVentasTarjeta');
     if (elVentasTarj) elVentasTarj.textContent = formatCRC(data.ventas?.tarjeta || 0);
@@ -9533,13 +9673,23 @@ window.abrirModalCierreZ = async function() {
     const elSalidas = document.getElementById('czTotalSalidas') || document.getElementById('cierreZSalidas');
     if (elSalidas) elSalidas.textContent = `-${formatCRC(data.total_salidas || 0)}`;
 
+    const tcActual = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || (estado.negocioActual?.tipo_cambio_usd || (espUSD > 0 ? Math.round(espDolCRC / espUSD) : 520));
+    window._tcActualCierreZ = tcActual;
+    const elTC = document.getElementById('czTipoCambioInfo');
+    if (elTC) elTC.textContent = `💵 Tipo de Cambio: ₡${tcActual} / $1 USD`;
+
+    const elTotalComb = document.getElementById('czTotalContadoCombinado');
+    if (elTotalComb) elTotalComb.textContent = `Total Contado: ₡ 0`;
+
     const elDiferencia = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
     if (elDiferencia) {
       elDiferencia.style.display = 'block';
       elDiferencia.style.background = 'rgba(30,41,59,0.5)';
       elDiferencia.style.borderColor = '#334155';
       elDiferencia.style.color = '#94a3b8';
-      elDiferencia.innerHTML = '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.';
+      elDiferencia.innerHTML = aceptaUSD
+        ? '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.'
+        : '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.';
     }
 
     modal.classList.add('active');
@@ -9560,70 +9710,126 @@ window.cerrarModalCierreZ = function() {
 window.calcularDiferenciaCierreZ = window.calcularDiferenciaArqueoCierreZ = function() {
   if (!window._datosCierreZPrecargados) return;
   const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
   const box = document.getElementById('boxDiferenciaCierreZ') || document.getElementById('cierreZDiferenciaBox');
   if (!box) return;
 
   const realCRC = parseFloat(txtRealCRC?.value || 0) || 0;
+  const realUSD = parseFloat(txtRealUSD?.value || 0) || 0;
+  const tc = window._tcActualCierreZ || 520;
+  const realUSDEnCRC = Math.round(realUSD * tc);
+  const totalContadoCombinado = Math.round(realCRC + realUSDEnCRC);
+  const aceptaUSD = negocioAceptaDolares();
+
+  const elTotalComb = document.getElementById('czTotalContadoCombinado');
+  if (elTotalComb) {
+    if (aceptaUSD && realUSD > 0) {
+      elTotalComb.textContent = `Total Contado: ${formatCRC(totalContadoCombinado)} (${formatCRC(realCRC)} + $${realUSD.toFixed(2)})`;
+    } else {
+      elTotalComb.textContent = `Total Contado: ${formatCRC(totalContadoCombinado)}`;
+    }
+  }
+
   const data = window._datosCierreZPrecargados;
   const espCRC = Number(data.esperado_efectivo_crc !== undefined ? data.esperado_efectivo_crc : (data.efectivo_esperado || 0));
+  const espUSD = Number(data.esperado_dolares_usd !== undefined ? data.esperado_dolares_usd : (data.ventas?.dolares_usd || 0));
+  const espDolCRC = Number(data.esperado_dolares_crc !== undefined ? data.esperado_dolares_crc : (data.ventas?.dolares || 0));
+  const espTotal = aceptaUSD
+    ? Number(data.total_general_esperado_gaveta_crc !== undefined ? data.total_general_esperado_gaveta_crc : (espCRC + espDolCRC))
+    : espCRC;
 
-  if (txtRealCRC?.value === '') {
+  const estaVacio = aceptaUSD ? (txtRealCRC?.value === '' && txtRealUSD?.value === '') : (txtRealCRC?.value === '');
+  if (estaVacio) {
     box.style.display = 'block';
     box.style.background = 'rgba(30,41,59,0.5)';
     box.style.borderColor = '#334155';
     box.style.color = '#94a3b8';
-    box.innerHTML = '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.';
+    box.innerHTML = aceptaUSD
+      ? '⚖️ Ingresa el dinero contado en colones y/o dólares para calcular el cuadre de arqueo.'
+      : '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.';
     return;
   }
 
+  const diffTotal = Math.round((totalContadoCombinado - espTotal) * 100) / 100;
   const diffCRC = Math.round((realCRC - espCRC) * 100) / 100;
+  const diffUSD = Math.round((realUSD - espUSD) * 100) / 100;
 
   box.style.display = 'block';
   let badgeHtml = '';
-  if (diffCRC === 0) {
+  if (diffTotal === 0) {
     box.style.background = 'rgba(16, 185, 129, 0.2)';
     box.style.borderColor = '#10b981';
     box.style.color = '#6ee7b7';
     badgeHtml = '✨ <strong>¡Caja Cuadrada Exacta!</strong> (Diferencia: ₡0.00)';
-  } else if (diffCRC > 0) {
+  } else if (diffTotal > 0) {
     box.style.background = 'rgba(59, 130, 246, 0.2)';
     box.style.borderColor = '#3b82f6';
     box.style.color = '#93c5fd';
-    badgeHtml = `🟢 <strong>Sobrante en Gaveta:</strong> +${formatCRC(diffCRC)}`;
+    badgeHtml = `🟢 <strong>Sobrante Total en Gaveta:</strong> +${formatCRC(diffTotal)}`;
   } else {
     box.style.background = 'rgba(239, 68, 68, 0.2)';
     box.style.borderColor = '#dc2626';
     box.style.color = '#f87171';
-    badgeHtml = `🔴 <strong>Faltante en Gaveta:</strong> -${formatCRC(Math.abs(diffCRC))}`;
+    badgeHtml = `🔴 <strong>Faltante Total en Gaveta:</strong> -${formatCRC(Math.abs(diffTotal))}`;
   }
 
-  box.innerHTML = `<div>${badgeHtml}</div>`;
+  if (aceptaUSD && (realUSD > 0 || espUSD > 0)) {
+    const detalleCRC = diffCRC === 0 ? '₡ 0' : (diffCRC > 0 ? `+${formatCRC(diffCRC)}` : `-${formatCRC(Math.abs(diffCRC))}`);
+    const detalleUSD = diffUSD === 0 ? '$ 0.00' : (diffUSD > 0 ? `+$${diffUSD.toFixed(2)}` : `-$${Math.abs(diffUSD).toFixed(2)}`);
+    box.innerHTML = `
+      <div>${badgeHtml}</div>
+      <div style="font-size:0.8rem; margin-top:4px; opacity:0.9;">
+        <span>• Colones: <strong>${detalleCRC}</strong></span> &nbsp;|&nbsp; 
+        <span>• Dólares: <strong>${detalleUSD}</strong></span>
+      </div>
+    `;
+  } else {
+    box.innerHTML = `<div>${badgeHtml}</div>`;
+  }
 };
 
 window.ejecutarCierreZ = async function() {
   const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
   const txtNotas = document.getElementById('txtCierreZNotas');
 
   const valCRC = txtRealCRC ? txtRealCRC.value.trim() : '';
+  const valUSD = txtRealUSD ? txtRealUSD.value.trim() : '';
+  const aceptaUSD = negocioAceptaDolares();
 
-  if (valCRC === '') {
-    alert('Por favor ingresa el dinero físico contado en la gaveta.');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa el monto contado en la gaveta.', 'warning');
-    if (txtRealCRC) txtRealCRC.focus();
-    return;
+  if (aceptaUSD) {
+    if (valCRC === '' && valUSD === '') {
+      alert('Por favor ingresa el dinero físico contado en la gaveta (Colones y/o Dólares).');
+      mostrarNotificacionCentro('⚠️ Por favor ingresa el monto contado en la gaveta.', 'warning');
+      if (txtRealCRC) txtRealCRC.focus();
+      return;
+    }
+  } else {
+    if (valCRC === '') {
+      alert('Por favor ingresa el dinero físico contado en la gaveta.');
+      mostrarNotificacionCentro('⚠️ Por favor ingresa el monto contado en la gaveta.', 'warning');
+      if (txtRealCRC) txtRealCRC.focus();
+      return;
+    }
   }
 
   const realCRC = parseFloat(valCRC || 0) || 0;
-  const totalContadoCRC = realCRC;
+  const realUSD = parseFloat(valUSD || 0) || 0;
+  const tc = window._tcActualCierreZ || 520;
+  const totalContadoCRC = Math.round(realCRC + (realUSD * tc));
 
   const notas = txtNotas ? txtNotas.value.trim() : '';
   const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
+
+  const mensajeCierre = (aceptaUSD && realUSD > 0)
+    ? `¿Estás seguro de realizar el CIERRE Z DEFINITIVO? Total contado: ${formatCRC(totalContadoCRC)} (${formatCRC(realCRC)} + $${realUSD.toFixed(2)} USD). Esta acción cerrará la caja en el sistema e imprimirá el reporte final.`
+    : `¿Estás seguro de realizar el CIERRE Z DEFINITIVO? Total contado: ${formatCRC(totalContadoCRC)}. Esta acción cerrará la caja en el sistema e imprimirá el reporte final.`;
 
   const confirmarCierre = await window.confirmarAccion({
     icono: '🔒',
     titulo: '¿Ejecutar Cierre Z Definitivo?',
     subtitulo: 'Cierre oficial de turno y arqueo de caja',
-    mensaje: `¿Estás seguro de realizar el CIERRE Z DEFINITIVO? Total contado: ${formatCRC(totalContadoCRC)}. Esta acción cerrará la caja en el sistema e imprimirá el reporte final.`,
+    mensaje: mensajeCierre,
     txtSi: '🔒 Sí, Cerrar Turno',
     txtNo: 'Cancelar',
     tipo: 'peligro'
@@ -9638,6 +9844,9 @@ window.ejecutarCierreZ = async function() {
       body: JSON.stringify({
         efectivo_real_contado: totalContadoCRC,
         efectivo_real_contado_crc: realCRC,
+        dolares_real_contado: realUSD,
+        dolares_real_contado_usd: realUSD,
+        tipo_cambio: tc,
         notas,
         usuarioNombre,
         adminPin: window._adminPinCierreZ || '1234',
@@ -9708,14 +9917,23 @@ window.ejecutarCierreZ = async function() {
 window.abrirModalAperturaCaja = function() {
   const modal = document.getElementById('modalAperturaCaja');
   if (!modal) return;
+
+  if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
+    window.aplicarConfiguracionMonedaNegocio();
+  }
+
   const txtCajero = document.getElementById('txtAperturaCajero');
   const txtMonto = document.getElementById('txtAperturaMontoInicial');
+  const txtMontoUSD = document.getElementById('txtAperturaMontoUSD');
 
   if (txtCajero) {
     txtCajero.value = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Juan Jival';
   }
   if (txtMonto) {
     txtMonto.value = '50000';
+  }
+  if (txtMontoUSD) {
+    txtMontoUSD.value = '0';
   }
   modal.classList.add('active');
   setTimeout(() => {
@@ -9731,9 +9949,11 @@ window.cerrarModalAperturaCaja = function() {
 window.ejecutarAperturaCaja = async function() {
   const txtCajero = document.getElementById('txtAperturaCajero');
   const txtMonto = document.getElementById('txtAperturaMontoInicial');
+  const txtMontoUSD = document.getElementById('txtAperturaMontoUSD');
 
   const cajero = (txtCajero ? txtCajero.value : '').trim() || 'Cajero de Turno';
   const monto_inicial = parseFloat(txtMonto ? txtMonto.value : 0);
+  const monto_inicial_usd = parseFloat(txtMontoUSD ? txtMontoUSD.value : 0) || 0;
 
   if (isNaN(monto_inicial) || monto_inicial < 0) {
     alert('Por favor ingresa un fondo inicial válido.');
@@ -9747,7 +9967,7 @@ window.ejecutarAperturaCaja = async function() {
     const res = await fetch('/api/caja/abrir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-      body: JSON.stringify({ cajero, monto_inicial, negocio_id: nid })
+      body: JSON.stringify({ cajero, monto_inicial, monto_inicial_usd, negocio_id: nid })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -9757,7 +9977,10 @@ window.ejecutarAperturaCaja = async function() {
     }
 
     cerrarModalAperturaCaja();
-    mostrarNotificacionCentro(`🔓 Turno de caja abierto con éxito (Fondo: ${formatCRC(monto_inicial)})`, 'success');
+    const txtFondoNotif = monto_inicial_usd > 0
+      ? `Fondo: ${formatCRC(monto_inicial)} + $${monto_inicial_usd.toFixed(2)} USD`
+      : `Fondo: ${formatCRC(monto_inicial)}`;
+    mostrarNotificacionCentro(`🔓 Turno de caja abierto con éxito (${txtFondoNotif})`, 'success');
     await cargarCajaDesdeBackend();
   } catch (e) {
     alert('❌ Error abriendo caja: ' + e.message);
@@ -9966,11 +10189,23 @@ function inicializarPanelesCobroModal(totalTxt) {
   const refSinpe = document.getElementById('txtSinpeReferencia');
   if (refSinpe) refSinpe.value = '';
 
+  // Panel Dólares
+  const txtTC = document.getElementById('txtTipoCambioUSD');
+  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
+  const totalUSD = totalNum > 0 ? (totalNum / tc).toFixed(2) : '0.00';
+  const elTotUSD = document.getElementById('cobroTotalUSDDisplay');
+  if (elTotUSD) elTotUSD.textContent = `$ ${totalUSD}`;
+  const txtRecUSD = document.getElementById('txtDolaresRecibidos');
+  if (txtRecUSD) txtRecUSD.value = '';
+  calcularCobroDolares();
+
   // Panel Mixto - Limpiar al abrir modal
-  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
+  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const elUSDEquiv = document.getElementById('txtMixtoUSDEquiv');
+  if (elUSDEquiv) elUSDEquiv.textContent = '₡ 0';
   calcularPagoMixto();
 }
 
@@ -10004,6 +10239,7 @@ document.querySelectorAll('.pay-method-tab').forEach(btn => {
       'Efectivo': 'cobroEfectivoPanel',
       'Tarjeta': 'cobroTarjetaPanel',
       'SINPE': 'cobroSinpePanel',
+      'Dolares': 'cobroDolaresPanel',
       'Mixto': 'cobroMixtoPanel'
     };
 
@@ -10022,6 +10258,8 @@ document.querySelectorAll('.pay-method-tab').forEach(btn => {
     } else if (method === 'SINPE') {
       const elSinpe = document.getElementById('cobroSinpeMontoDisplay');
       if (elSinpe) elSinpe.textContent = formatCRC(totalNum);
+    } else if (method === 'Dolares') {
+      calcularCobroDolares();
     } else if (method === 'Mixto') {
       calcularPagoMixto();
     } else if (method === 'Efectivo') {
@@ -10060,12 +10298,74 @@ function calcularVueltoCobro() {
   if (elVuelto) elVuelto.textContent = formatCRC(vuelto);
 }
 
+// Cálculo y chips para Dólares ($ USD)
+function calcularCobroDolares() {
+  const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+  const txtTC = document.getElementById('txtTipoCambioUSD');
+  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
+  const totalUSD = totalCRC > 0 ? (totalCRC / tc) : 0;
+  
+  const elTotUSD = document.getElementById('cobroTotalUSDDisplay');
+  if (elTotUSD) elTotUSD.textContent = `$ ${totalUSD.toFixed(2)}`;
+
+  const txtRec = document.getElementById('txtDolaresRecibidos');
+  const recUSD = txtRec ? (parseFloat(txtRec.value) || 0) : 0;
+  
+  const vueltoUSD = Math.max(0, recUSD - totalUSD);
+  const vueltoCRC = Math.max(0, Math.round(vueltoUSD * tc));
+
+  const elVueltoCRC = document.getElementById('cobroVueltoUSDEnColones');
+  if (elVueltoCRC) elVueltoCRC.textContent = formatCRC(vueltoCRC);
+
+  const elVueltoUSD = document.getElementById('cobroVueltoUSDDisplay');
+  if (elVueltoUSD) elVueltoUSD.textContent = `$ ${vueltoUSD.toFixed(2)}`;
+}
+
+document.querySelectorAll('.chip-usd[data-usd]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const txtRec = document.getElementById('txtDolaresRecibidos');
+    if (txtRec) {
+      txtRec.value = chip.dataset.usd;
+      calcularCobroDolares();
+    }
+  });
+});
+
+const btnPagoExactoUSDEl = document.getElementById('btnPagoExactoUSD');
+if (btnPagoExactoUSDEl) {
+  btnPagoExactoUSDEl.addEventListener('click', () => {
+    const totalCRC = parseCRC(document.getElementById('cobroTotalDisplay')?.textContent || '0');
+    const txtTC = document.getElementById('txtTipoCambioUSD');
+    const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
+    const totalUSD = totalCRC > 0 ? (totalCRC / tc) : 0;
+    const txtRec = document.getElementById('txtDolaresRecibidos');
+    if (txtRec) {
+      txtRec.value = totalUSD.toFixed(2);
+      calcularCobroDolares();
+    }
+  });
+}
+
+const txtDolaresRecibidosEl = document.getElementById('txtDolaresRecibidos');
+if (txtDolaresRecibidosEl) {
+  txtDolaresRecibidosEl.addEventListener('input', calcularCobroDolares);
+}
+const txtTipoCambioUSDEl = document.getElementById('txtTipoCambioUSD');
+if (txtTipoCambioUSDEl) {
+  txtTipoCambioUSDEl.addEventListener('input', () => {
+    calcularCobroDolares();
+    calcularPagoMixto();
+  });
+}
+
 // Funciones para Pago Mixto
 window.limpiarCamposMixto = function() {
-  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
+  ['txtMixtoEfectivo', 'txtMixtoTarjeta', 'txtMixtoSinpe', 'txtMixtoUSD', 'txtMixtoTarjetaRef', 'txtMixtoSinpeRef'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const elUSDEquiv = document.getElementById('txtMixtoUSDEquiv');
+  if (elUSDEquiv) elUSDEquiv.textContent = '₡ 0';
   calcularPagoMixto();
 };
 
@@ -10108,11 +10408,21 @@ function calcularPagoMixto() {
     totalCRC = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
   }
 
+  const txtTC = document.getElementById('txtTipoCambioUSD');
+  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
+
   const mEfectivo = parseFloat(document.getElementById('txtMixtoEfectivo')?.value) || 0;
   const mTarjeta = parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0;
   const mSinpe = parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0;
+  const mUSD = (negocioAceptaDolares() && document.getElementById('txtMixtoUSD')) ? (parseFloat(document.getElementById('txtMixtoUSD').value) || 0) : 0;
 
-  const totalAsignado = mEfectivo + mTarjeta + mSinpe;
+  const mUSDEnCRC = Math.round(mUSD * tc);
+  const elUSDEquiv = document.getElementById('txtMixtoUSDEquiv');
+  if (elUSDEquiv) {
+    elUSDEquiv.textContent = mUSD > 0 ? `Equiv: ${formatCRC(mUSDEnCRC)}` : '₡ 0';
+  }
+
+  const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
   const elAsig = document.getElementById('cobroMixtoAsignadoDisplay');
   if (elAsig) elAsig.textContent = formatCRC(totalAsignado);
 
@@ -10183,15 +10493,18 @@ function calcularPagoMixto() {
   }
 
   // Actualizar en tiempo real el texto y estilo de cada botón de cubrir
-  actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante);
+  actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante, tc);
 }
 
-function actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante) {
+function actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante, tc = 520) {
   const filas = [
-    { id: 'txtMixtoEfectivo', btnId: 'btnCubrirMixtoEfectivo', tipo: 'efectivo' },
-    { id: 'txtMixtoTarjeta', btnId: 'btnCubrirMixtoTarjeta', tipo: 'tarjeta' },
-    { id: 'txtMixtoSinpe', btnId: 'btnCubrirMixtoSinpe', tipo: 'sinpe' }
+    { id: 'txtMixtoEfectivo', btnId: 'btnCubrirMixtoEfectivo', tipo: 'efectivo', esUSD: false },
+    { id: 'txtMixtoTarjeta', btnId: 'btnCubrirMixtoTarjeta', tipo: 'tarjeta', esUSD: false },
+    { id: 'txtMixtoSinpe', btnId: 'btnCubrirMixtoSinpe', tipo: 'sinpe', esUSD: false }
   ];
+  if (negocioAceptaDolares()) {
+    filas.push({ id: 'txtMixtoUSD', btnId: 'btnCubrirMixtoUSD', tipo: 'usd', esUSD: true });
+  }
 
   filas.forEach(f => {
     const inp = document.getElementById(f.id);
@@ -10201,14 +10514,14 @@ function actualizarBotonesFilasMixto(totalCRC, totalAsignado, faltante) {
     const val = parseFloat(inp.value) || 0;
 
     if (val > 0) {
-      btn.innerHTML = `✓ ${formatCRC(val)}`;
+      btn.innerHTML = `✓ ${f.esUSD ? '$ ' + val.toFixed(2) : formatCRC(val)}`;
       btn.title = `Monto asignado. Haz clic para limpiar este campo.`;
       btn.style.background = 'rgba(16,185,129,0.2)';
       btn.style.border = '1px solid #10b981';
       btn.style.color = '#34d399';
     } else {
       if (faltante > 0) {
-        const textoFaltante = formatCRC(faltante);
+        const textoFaltante = f.esUSD ? `$ ${(faltante / tc).toFixed(2)}` : formatCRC(faltante);
         btn.innerHTML = `⚡ Cubrir (${textoFaltante})`;
         btn.title = `Asignar los ${textoFaltante} restantes a este método`;
         btn.style.background = '#0284c7';
@@ -10238,10 +10551,14 @@ window.autoAsignarRestanteMixto = function(tipo) {
   }
   if (totalCRC <= 0) return;
 
+  const txtTC = document.getElementById('txtTipoCambioUSD');
+  const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
+
   const inputMap = {
     efectivo: document.getElementById('txtMixtoEfectivo'),
     tarjeta: document.getElementById('txtMixtoTarjeta'),
-    sinpe: document.getElementById('txtMixtoSinpe')
+    sinpe: document.getElementById('txtMixtoSinpe'),
+    usd: document.getElementById('txtMixtoUSD')
   };
 
   const targetInput = inputMap[tipo];
@@ -10261,12 +10578,17 @@ window.autoAsignarRestanteMixto = function(tipo) {
   const mEfec = tipo === 'efectivo' ? 0 : (parseFloat(inputMap.efectivo?.value) || 0);
   const mTarj = tipo === 'tarjeta' ? 0 : (parseFloat(inputMap.tarjeta?.value) || 0);
   const mSinpe = tipo === 'sinpe' ? 0 : (parseFloat(inputMap.sinpe?.value) || 0);
+  const mUSD = tipo === 'usd' ? 0 : (parseFloat(inputMap.usd?.value) || 0);
 
-  const yaAsignadoEnOtros = mEfec + mTarj + mSinpe;
+  const yaAsignadoEnOtros = mEfec + mTarj + mSinpe + Math.round(mUSD * tc);
   const faltante = Math.max(0, totalCRC - yaAsignadoEnOtros);
 
   if (faltante > 0) {
-    targetInput.value = faltante;
+    if (tipo === 'usd') {
+      targetInput.value = +(faltante / tc).toFixed(2);
+    } else {
+      targetInput.value = faltante;
+    }
     targetInput.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
@@ -10313,6 +10635,9 @@ window.ejecutarCobroFinal = async function() {
     let monto_usd = 0;
     let pagosArray = [];
 
+    const txtTC = document.getElementById('txtTipoCambioUSD');
+    const tcActual = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
+
     if (metodoKey === 'Efectivo') {
       metodoFinal = 'Efectivo';
       const txtEf = document.getElementById('txtEfectivoRecibido')?.value;
@@ -10328,15 +10653,24 @@ window.ejecutarCobroFinal = async function() {
       referencia = document.getElementById('txtSinpeReferencia')?.value.trim() || null;
       recibido = totalNum;
       cambio = 0;
+    } else if (metodoKey === 'Dolares') {
+      metodoFinal = 'Dólares';
+      tipo_cambio = tcActual;
+      monto_usd = totalNum > 0 ? Number((totalNum / tcActual).toFixed(2)) : 0;
+      const recUSD = parseFloat(document.getElementById('txtDolaresRecibidos')?.value) || monto_usd;
+      recibido = Math.round(recUSD * tcActual);
+      cambio = Math.max(0, recibido - totalNum);
     } else if (metodoKey === 'Mixto') {
       metodoFinal = 'Mixto';
       const mEfectivo = parseFloat(document.getElementById('txtMixtoEfectivo')?.value) || 0;
       const mTarjeta = parseFloat(document.getElementById('txtMixtoTarjeta')?.value) || 0;
       const mSinpe = parseFloat(document.getElementById('txtMixtoSinpe')?.value) || 0;
+      const mUSD = parseFloat(document.getElementById('txtMixtoUSD')?.value) || 0;
       const refTarjeta = document.getElementById('txtMixtoTarjetaRef')?.value.trim() || null;
       const refSinpe = document.getElementById('txtMixtoSinpeRef')?.value.trim() || null;
 
-      const totalAsignado = mEfectivo + mTarjeta + mSinpe;
+      const mUSDEnCRC = Math.round(mUSD * tcActual);
+      const totalAsignado = mEfectivo + mTarjeta + mSinpe + mUSDEnCRC;
 
       if (totalAsignado < totalNum && (totalNum - totalAsignado) > 1) {
         mostrarNotificacionCentro(`⚠️ El monto asignado (${formatCRC(totalAsignado)}) no cubre el total (${formatCRC(totalNum)}). Faltan: ${formatCRC(totalNum - totalAsignado)}`, 'warning');
@@ -10346,6 +10680,7 @@ window.ejecutarCobroFinal = async function() {
       if (mEfectivo > 0) pagosArray.push({ metodo: 'Efectivo', monto: mEfectivo });
       if (mTarjeta > 0) pagosArray.push({ metodo: 'Tarjeta', monto: mTarjeta, referencia: refTarjeta });
       if (mSinpe > 0) pagosArray.push({ metodo: 'SINPE', monto: mSinpe, referencia: refSinpe });
+      if (mUSD > 0) pagosArray.push({ metodo: 'Dólares', monto: mUSDEnCRC, monto_usd: mUSD, tipo_cambio: tcActual });
 
       if (pagosArray.length === 0) {
         pagosArray.push({ metodo: 'Efectivo', monto: totalNum });
@@ -13126,6 +13461,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof window.resetearEstadoFinancieroCero === 'function') {
     window.resetearEstadoFinancieroCero();
   }
+  if (typeof window.actualizarTipoCambioBCCR === 'function') {
+    window.actualizarTipoCambioBCCR();
+  }
   initNavegacion();
   initRelojTiempoReal();
   initBuscadorRapido();
@@ -13177,6 +13515,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         })
         .catch(() => {});
+    }
+    if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
+      window.aplicarConfiguracionMonedaNegocio();
     }
     aplicarEnrutamientoPorRol();
   } else {
@@ -16777,6 +17118,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>Ventas SINPE Móvil:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
           <span>TOTAL VENTAS:</span>
           <span>${formatCRCSinDecimales(v.total || 0)}</span>
@@ -16858,6 +17205,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <span>Ventas SINPE Móvil:</span>
           <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
         </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
         <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
           <span>TOTAL FACTURADO:</span>
           <span>${formatCRCSinDecimales(v.total || 0)}</span>
@@ -17042,6 +17395,20 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           </div>
           <div style="display:flex; justify-content:space-between;">
             <span>Vuelto / Cambio:</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
+          </div>
+        ` : ''}
+        ${(ticketData.metodoPago === 'Dólares' || ticketData.monto_usd > 0) ? `
+          <div style="display:flex; justify-content:space-between;">
+            <span>Dólares Recibidos:</span>
+            <span style="font-weight:900;">$ ${(Number(ticketData.monto_usd) || 0).toFixed(2)} (TC: ₡${ticketData.tipo_cambio || 520})</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span>Equivalente Colones:</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(montoRec)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span>Vuelto en Colones:</span>
             <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
           </div>
         ` : ''}

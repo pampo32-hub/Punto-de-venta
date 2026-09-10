@@ -227,6 +227,7 @@ function initDb() {
     db.run("ALTER TABLE Negocios ADD COLUMN activo INTEGER DEFAULT 1", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN tipo_cambio_usd REAL DEFAULT 520", () => {});
 
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (
@@ -326,6 +327,7 @@ function initDb() {
     db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN monto_final_dolares REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN monto_inicial_usd REAL DEFAULT 0", () => {});
 
     // 6. Movimientos de Caja
     db.run(`CREATE TABLE IF NOT EXISTS MovimientosCaja (
@@ -367,6 +369,7 @@ function initDb() {
     db.run("ALTER TABLE Ordenes ADD COLUMN descuento_autorizado_por TEXT", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN tipo_orden TEXT DEFAULT 'mesa'", () => {});
     db.run("ALTER TABLE Ordenes ADD COLUMN es_para_llevar INTEGER DEFAULT 0", () => {});
+    db.run("ALTER TABLE Ordenes ADD COLUMN total_usd REAL DEFAULT 0", () => {});
 
     // 8. Detalle de Órdenes (Comandas)
     db.run(`CREATE TABLE IF NOT EXISTS DetalleOrden (
@@ -408,6 +411,8 @@ function initDb() {
       FOREIGN KEY(caja_id) REFERENCES Cajas(id)
     )`);
     db.run("ALTER TABLE Pagos ADD COLUMN mesero TEXT", () => {});
+    db.run("ALTER TABLE Pagos ADD COLUMN monto_usd REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Pagos ADD COLUMN tipo_cambio REAL DEFAULT 1", () => {});
 
     // 10. Auditoría de Anulaciones
     db.run(`CREATE TABLE IF NOT EXISTS Anulaciones (
