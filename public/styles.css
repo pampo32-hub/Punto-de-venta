@@ -11656,3 +11656,51 @@ body.theme-capsula-elegance .btn-prefactura-split {
 #landingLoginView.active ~ #widgetChatIA {
   display: none !important;
 }
+
+/* ============================================================================ */
+/* RELOJ DIGITAL EN TIEMPO REAL (TOP BAR POS)                                    */
+/* ============================================================================ */
+.pos-live-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace, sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f8fafc;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.5px;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.pos-live-clock:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.25);
+}
+
+.pos-live-clock .live-clock-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-block;
+}
+
+.pos-live-clock .live-clock-time {
+  color: #38bdf8;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+}
+
+@media (max-width: 768px) {
+  .pos-live-clock {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    gap: 4px;
+  }
+}

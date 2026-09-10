@@ -1025,14 +1025,7 @@
         <button class="nav-pill" data-view="facturacion">
           <span class="pill-icon">⚡</span> Facturación
         </button>
-        <!-- Pestaña de Inventario & Recetas -->
-        <button class="nav-pill admin-view-tab" data-view="inventario" id="tabNavInventario" title="Control de Inventario, Insumos, Recetas y Kárdex">
-          <span class="pill-icon">📦</span> Inventario
-        </button>
-        <!-- Botón Rápido Para Llevar / Barra Express -->
-        <button class="nav-pill btn-para-llevar-nav" id="btnParaLlevarNav" onclick="abrirModoParaLlevar()" style="background: linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.22) 100%); border: 1px solid rgba(236,72,153,0.4); color: #f472b6; font-weight: 700;" title="Tomar pedido rápido para Llevar o Barra sin asignar mesa física">
-          <span class="pill-icon">🛍️</span> Para Llevar
-        </button>
+
         <!-- Enlaces a las Páginas Comerciales (Dark y Elegante Minimalista) -->
         <a href="/landing" target="_blank" class="nav-pill btn-landing-nav" id="btnVerPaginaNav" style="text-decoration:none; display:inline-flex; align-items:center; gap:5px; color:#fbbf24; border: 1px solid rgba(245,158,11,0.35); background: linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(217,119,6,0.18) 100%); font-weight:700;" title="Abrir Página Comercial Dark Luxury">
           <span class="pill-icon">🌙</span> Web Dark
@@ -1076,6 +1069,12 @@
       <div id="netStatusBadge" class="network-status-badge online" title="Conexión en línea y sincronizada">
         <span class="net-dot online"></span>
         <span class="net-text">En línea</span>
+      </div>
+
+      <!-- RELOJ DIGITAL EN TIEMPO REAL -->
+      <div class="pos-live-clock" id="posLiveClock" title="Hora actual en tiempo real">
+        <span class="live-clock-icon">⏰</span>
+        <span class="live-clock-time" id="posLiveClockTime">12:00:00 PM</span>
       </div>
 
       <!-- PERFIL DE USUARIO CON GÉNERO DINÁMICO & CERRAR SESIÓN -->
@@ -5826,7 +5825,7 @@
 <!-- ASISTENTE INTELIGENTE POS (CHATBOT IA CON SUPABASE & GEMINI) -->
 <!-- ===================================================================== -->
 <!-- BOTÓN FLOTANTE -->
-<button id="btnFloatAsistenteIA" class="btn-float-ai" onclick="toggleChatboxIA()" title="Consultar stock, caja o mesas con Inteligencia Artificial">
+<button id="btnFloatAsistenteIA" class="btn-float-ai" onclick="toggleChatboxIA()" style="display:none;" title="Consultar stock, caja o mesas con Inteligencia Artificial">
   <span class="ai-sparkle-icon">✨</span>
   <span class="ai-icon">🤖</span>
   <span class="ai-label">Asistente IA</span>

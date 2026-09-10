@@ -4046,7 +4046,7 @@ document.getElementById('btnCancelarModulosNegocio')?.addEventListener('click', 
 window.tieneModulo = function(moduloKey) {
   if (!estado.negocioActual) {
     try {
-      const s = sessionStorage.getItem('pos_negocio');
+      const s = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
       if (s) estado.negocioActual = JSON.parse(s);
     } catch (_) {}
   }
@@ -4060,10 +4060,10 @@ window.tieneModulo = function(moduloKey) {
   if (typeof modulos === 'string') {
     try {
       const arr = JSON.parse(modulos);
-      return Array.isArray(arr) ? arr.includes(moduloKey) : true;
-    } catch (_) {
-      return true;
-    }
+      if (Array.isArray(arr)) return arr.includes(moduloKey);
+    } catch (_) {}
+    const splitArr = modulos.split(',').map(s => s.trim().toLowerCase());
+    return splitArr.includes(String(moduloKey).toLowerCase());
   }
   return true;
 };
@@ -4197,8 +4197,17 @@ window.aplicarRestriccionesModulos = function() {
     el.style.display = tieneWhatsApp ? '' : 'none';
   });
 
-  // 10. Inteligencia Artificial Gastronómica (Voice POS & Upselling)
-  document.querySelectorAll('#btnVoicePOS, #btnDictarComanda, .btn-voice-pos, #btnSugerenciasIA, .card-ia, .ai-badge, .btn-ia-suggest, .seccion-ia').forEach(el => {
+  // 10. Inteligencia Artificial Gastronómica (Chatbot Asistente IA, Voice POS & Upselling)
+  const btnFloatIA = document.getElementById('btnFloatAsistenteIA');
+  if (btnFloatIA) {
+    btnFloatIA.style.display = tieneIA ? 'flex' : 'none';
+  }
+  const widgetChatIA = document.getElementById('widgetChatIA');
+  if (widgetChatIA && !tieneIA) {
+    widgetChatIA.style.display = 'none';
+    widgetChatIA.classList.remove('active');
+  }
+  document.querySelectorAll('#btnVoicePOS, #btnDictarComanda, .btn-voice-pos, #btnSugerenciasIA, .card-ia, .ai-badge, .btn-ia-suggest, .seccion-ia, .btn-float-ai, #btnFloatAsistenteIA').forEach(el => {
     el.style.display = tieneIA ? '' : 'none';
   });
 
@@ -13066,9 +13075,34 @@ function initNavegacion() {
   });
 }
 
+
+// ============================================================================
+// RELOJ DIGITAL EN TIEMPO REAL (ACTUALIZACIÓN CONTINUA)
+// ============================================================================
+function initRelojTiempoReal() {
+  const elTime = document.getElementById('posLiveClockTime');
+  if (!elTime) return;
+
+  function actualizarReloj() {
+    const ahora = new Date();
+    let horas = ahora.getHours();
+    const minutos = String(ahora.getMinutes()).padStart(2, '0');
+    const segundos = String(ahora.getSeconds()).padStart(2, '0');
+    const ampm = horas >= 12 ? 'PM' : 'AM';
+    horas = horas % 12;
+    horas = horas ? String(horas).padStart(2, '0') : '12';
+    elTime.textContent = `${horas}:${minutos}:${segundos} ${ampm}`;
+  }
+
+  actualizarReloj();
+  setInterval(actualizarReloj, 1000);
+}
+window.initRelojTiempoReal = initRelojTiempoReal;
+
 // INICIALIZADOR AL CARGAR
 document.addEventListener('DOMContentLoaded', () => {
   initNavegacion();
+  initRelojTiempoReal();
   initBuscadorRapido();
   initSplitBills();
   initAnulaciones();
