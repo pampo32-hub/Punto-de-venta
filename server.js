@@ -8678,6 +8678,10 @@ app.post('/api/ia/chat', async (req, res) => {
     ]);
 
     const simboloMoneda = (negocio.moneda === 'USD' ? '$' : '₡');
+    const invStr = inventario.slice(0, 100).map(i => `${i.nombre}: ${i.stock_actual} ${i.unidad_medida || 'uds'}${Number(i.stock_actual) <= Number(i.stock_minimo) ? ' (bajo stock)' : ''}`).join(' | ');
+    const prodStr = productos.slice(0, 100).map(p => `${p.nombre} (${simboloMoneda}${p.precio}${p.agotado ? ', AGOTADO' : ''})`).join(' | ');
+    const mesasStr = mesasOcupadas.length > 0 ? mesasOcupadas.map(m => `Mesa ${m.numero}: ${simboloMoneda}${m.total} (${m.estado})`).join(' | ') : 'Sin mesas ocupadas';
+    const cajaStr = cajaActiva ? `Cajero: ${cajaActiva.cajero || 'Activo'}, Inicial: ${simboloMoneda}${Number(cajaActiva.monto_inicial || 0).toLocaleString()}, Efectivo: ${simboloMoneda}${Number(cajaActiva.total_ventas_efectivo || 0).toLocaleString()}, Tarjeta: ${simboloMoneda}${Number(cajaActiva.total_ventas_tarjeta || 0).toLocaleString()}, SINPE: ${simboloMoneda}${Number(cajaActiva.total_ventas_sinpe || 0).toLocaleString()}` : 'Caja cerrada';
 
     // 2. Intentar llamar a Google Gemini si hay API KEY
     const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -8686,73 +8690,59 @@ app.post('/api/ia/chat', async (req, res) => {
         const systemPrompt = `Eres el Asistente Inteligente Integral de GAMMA POS para el negocio "${negocio.nombre}".
 Tienes capacidad total para responder CUALQUIER tipo de pregunta con excelencia, amabilidad y profesionalismo en español:
 
-1. 🏪 INFORMACIÓN DEL RESTAURANTE / NEGOCIO (Usa los datos en tiempo real de la base de datos abajo):
-   - Stock, inventario y disponibilidad de productos/insumos.
-   - Ventas acumuladas, arqueo de caja y formas de pago (${simboloMoneda}).
-   - Mesas ocupadas, cuentas y pedidos pendientes.
+1. 🏪 INFORMACIÓN DEL RESTAURANTE / NEGOCIO (Usa los datos en tiempo real de la base de datos):
+   - Inventario actual: ${invStr || 'Sin insumos'}
+   - Menú y Precios: ${prodStr || 'Sin productos'}
+   - Estado de Caja: ${cajaStr}
+   - Mesas Ocupadas: ${mesasStr}
 
-2. 🧠 CONOCIMIENTO GENERAL, GASTRONÓMICO Y DE NEGOCIOS (Usa toda tu inteligencia y conocimiento general):
-   - Recetas de cocina, preparación de cócteles, técnicas de bar y cocina, maridajes.
-   - Consejos de atención al comensal, hospitalidad y resolución de dudas de clientes.
-   - Ideas de promociones, marketing, frases para redes sociales o pizarras.
-   - Cálculos matemáticos, conversiones de medidas, porcentajes de propina o costos.
-   - Traducción de platillos a inglés u otros idiomas para turistas extranjeros.
-   - Respuestas a cualquier pregunta general, cotidiana o técnica que el usuario te formule.
+2. 🧠 CONOCIMIENTO GENERAL, GASTRONÓMICO Y DE NEGOCIOS:
+   - Recetas de cocina, preparación de cócteles, técnicas de bar/cocina, maridajes.
+   - Consejos de servicio al cliente, hospitalidad, traducciones a inglés para turistas.
+   - Ideas de promociones, marketing, cálculos o cualquier pregunta general o cotidiana.
 
-DATOS EN TIEMPO REAL DEL NEGOCIO (DESDE BASE DE DATOS SUPABASE/POSTGRESQL):
-- INVENTARIO ACTUAL (${inventario.length} insumos registrados):
-${JSON.stringify(inventario.map(i => ({ nombre: i.nombre, stock: i.stock_actual, unidad: i.unidad_medida, min: i.stock_minimo })))}
+PAUTAS:
+- Sé claro, conciso, útil y ameno.
+- Usa formato markdown (negritas, viñetas, emojis) fácil de leer en pantallas de restaurante.
+- Si te preguntan algo del negocio, usa los datos provistos arriba. Si preguntan cualquier otra cosa general o gastronómica, responde con todo tu conocimiento.`;
 
-- CATÁLOGO DE PRODUCTOS EN MENÚ (${productos.length} productos):
-${JSON.stringify(productos.map(p => ({ nombre: p.nombre, precio: p.precio, categoria: p.categoria, agotado: p.agotado === 1 })))}
-
-- ESTADO DE CAJA / TURNO ACTUAL:
-${cajaActiva ? JSON.stringify({
-  cajero: cajaActiva.cajero,
-  apertura: cajaActiva.fecha_apertura,
-  montoInicial: cajaActiva.monto_inicial,
-  efectivo: cajaActiva.total_ventas_efectivo,
-  tarjeta: cajaActiva.total_ventas_tarjeta,
-  sinpe: cajaActiva.total_ventas_sinpe,
-  dolares: cajaActiva.total_ventas_usd || cajaActiva.total_ventas_dolares
-}) : 'Caja cerrada / Sin turno activo'}
-
-- MESAS ACTIVAS O EN ATENCIÓN (${mesasOcupadas.length} mesas ocupadas):
-${JSON.stringify(mesasOcupadas.map(m => ({ mesa: m.numero, zona: m.zona, estado: m.estado, total: m.total })))}
-
-PAUTAS DE FORMATO:
-- Sé claro, conciso y ameno.
-- Usa formato markdown (negritas, viñetas, emojis) para que sea muy fácil y rápido de leer en pantalla.
-- Si te preguntan algo del negocio, responde con los datos reales del local. Si te preguntan cualquier otra cosa general o gastronómica, responde con tu conocimiento amplio.`;
-
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`;
-        const response = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: `${systemPrompt}\n\nPregunta del usuario: ${q}` }]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.4,
-              maxOutputTokens: 800
-            }
-          })
-        });
-
-        if (response.ok) {
-          const geminiData = await response.json();
-          const parts = geminiData.candidates?.[0]?.content?.parts || [];
-          const textoRespuesta = parts.map(p => p.text || '').filter(Boolean).join('\n');
-          if (textoRespuesta) {
-            return res.json({
-              ok: true,
-              respuesta: textoRespuesta.trim(),
-              fuente: 'gemini'
+        const modelList = ['gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.6-flash'];
+        for (const modelName of modelList) {
+          try {
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+            const response = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(15000),
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [{ text: `${systemPrompt}\n\nPregunta del usuario: ${q}` }]
+                  }
+                ],
+                generationConfig: {
+                  temperature: 0.4,
+                  maxOutputTokens: 600
+                }
+              })
             });
+
+            if (response.ok) {
+              const geminiData = await response.json();
+              const parts = geminiData.candidates?.[0]?.content?.parts || [];
+              const textoRespuesta = parts.map(p => p.text || '').filter(Boolean).join('\n');
+              if (textoRespuesta) {
+                return res.json({
+                  ok: true,
+                  respuesta: textoRespuesta.trim(),
+                  fuente: 'gemini',
+                  modelo: modelName
+                });
+              }
+            }
+          } catch (_) {
+            // Intentar con el siguiente modelo de la lista
           }
         }
       } catch (geminiErr) {
