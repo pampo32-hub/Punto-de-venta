@@ -6030,10 +6030,10 @@ function renderGrillaOrdenada(filtroZona = null) {
         const estadoEtiqueta = {
           libre: 'Libre',
           ocupada: 'Ocupada',
-          abierta: 'Abierta',
+          abierta: 'Ocupada',
           esperando: 'Esperando',
           esperando_parcial: 'Esperando',
-          activa: 'Activa',
+          activa: 'Ocupada',
           cuenta: 'Cuenta Pedida',
           unida: 'Unida'
         }[m.estado] || 'Libre';
@@ -6190,10 +6190,10 @@ function renderSalón(filtroZona = null) {
     const estadoEtiqueta = {
       libre: 'Libre',
       ocupada: 'Ocupada',
-      abierta: 'Abierta',
+      abierta: 'Ocupada',
       esperando: 'Esperando',
       esperando_parcial: 'Esperando Parcial',
-      activa: 'Activa',
+      activa: 'Ocupada',
       cuenta: 'Cuenta Pedida',
       unida: 'Unida'
     }[m.estado] || 'Libre';
@@ -6225,10 +6225,10 @@ function renderSalón(filtroZona = null) {
           </div>
         `;
       } else if (m.estado === 'abierta') {
-        headerText = `🍽️ Mesa Abierta (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Sin pedidos pendientes'})`;
+        headerText = `🍽️ Mesa Ocupada (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Sin pedidos pendientes'})`;
         listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Mesa abierta sin pedidos de cocina pendientes'];
       } else if (m.estado === 'activa') {
-        headerText = `✅ Todos los platillos servidos (Activa)`;
+        headerText = `✅ Todos los platillos servidos (Ocupada)`;
         listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Comanda despachada por cocina'];
       } else if (m.todos_platillos && m.todos_platillos.length > 0) {
         headerText = `✅ Pedidos entregados (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Mesa Activa'})`;
@@ -8357,6 +8357,33 @@ async function cargarKDSDesdeBackend() {
   } catch (e) {}
 }
 
+
+let _kdsTimerInterval = null;
+
+function actualizarTimersKDS() {
+  const timers = document.querySelectorAll('.kds-stopwatch[data-hora-inicio]');
+  if (!timers || !timers.length) return;
+  const ahora = Date.now();
+  timers.forEach(el => {
+    const raw = el.getAttribute('data-hora-inicio');
+    if (!raw) return;
+    const inicio = new Date(raw).getTime();
+    if (isNaN(inicio)) return;
+    const transcurridoSegs = Math.max(0, Math.floor((ahora - inicio) / 1000));
+    const mins = Math.floor(transcurridoSegs / 60);
+    const segs = transcurridoSegs % 60;
+    const valEl = el.querySelector('.kds-timer-val');
+    if (valEl) {
+      valEl.textContent = `${String(mins).padStart(2, '0')}:${String(segs).padStart(2, '0')}`;
+    }
+    if (mins >= 15) {
+      el.classList.add('kds-timer-urgente');
+    } else {
+      el.classList.remove('kds-timer-urgente');
+    }
+  });
+}
+
 function renderKDS() {
   const container = document.getElementById('kdsTicketsContainer');
   container.innerHTML = '';
@@ -8420,7 +8447,7 @@ function renderKDS() {
           <span class="badge-comanda-num" style="background:rgba(59,130,246,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">Comanda #${t.comandaNumero}</span>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <span class="kds-stopwatch">⏱️ ${t.horaPedido ? t.horaPedido.slice(11, 16) : 'Ahora'}</span>
+          <span class="kds-stopwatch" data-hora-inicio="${t.horaPedido || new Date().toISOString()}" title="Tiempo en cocina">⏱️ <span class="kds-timer-val">00:00</span></span>
         </div>
       </div>
 
@@ -8459,6 +8486,11 @@ function renderKDS() {
     `;
     container.appendChild(card);
   });
+
+  actualizarTimersKDS();
+  if (!_kdsTimerInterval) {
+    _kdsTimerInterval = setInterval(actualizarTimersKDS, 1000);
+  }
 
   if (typeof aplicarPersonalizacionAlDOM === 'function') {
     aplicarPersonalizacionAlDOM();

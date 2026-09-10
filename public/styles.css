@@ -437,29 +437,66 @@ body {
 
 .legend-group {
   display: flex;
-  gap: 14px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .legend-badge {
-  font-size: 0.82rem;
-  font-weight: 700;
-  display: flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .legend-badge .dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
-.legend-badge.libre .dot { background: var(--success); }
-.legend-badge.ocupada .dot { background: var(--danger); }
-.legend-badge.esperando .dot { background: var(--accent); }
-.legend-badge.esperando_parcial .dot { background: #f59e0b; }
-.legend-badge.activa .dot { background: #2563eb; }
-.legend-badge.cuenta .dot { background: var(--warning); }
+.legend-badge.libre {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+.legend-badge.libre .dot { background: #10b981; box-shadow: 0 0 6px #10b981; }
+
+.legend-badge.ocupada {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+.legend-badge.ocupada .dot { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+
+.legend-badge.esperando {
+  background: rgba(234, 88, 12, 0.12);
+  border: 1px solid rgba(234, 88, 12, 0.35);
+  color: #fb923c;
+}
+.legend-badge.esperando .dot { background: #ea580c; box-shadow: 0 0 6px #ea580c; }
+
+.legend-badge.esperando_parcial {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+}
+.legend-badge.esperando_parcial .dot { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+
+.legend-badge.cuenta {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+.legend-badge.cuenta .dot { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
 
 .zone-selector {
   display: flex;
@@ -1456,9 +1493,31 @@ body {
 }
 
 .kds-stopwatch {
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   font-weight: 800;
-  color: var(--warning);
+  font-family: 'Plus Jakarta Sans', monospace;
+  color: #ffffff;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  border: 1px solid #fdba74;
+  padding: 3px 10px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.45);
+  letter-spacing: 0.5px;
+}
+
+.kds-stopwatch.kds-timer-urgente {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: #fca5a5;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+  animation: pulseKdsUrgente 1.5s infinite;
+}
+
+@keyframes pulseKdsUrgente {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 
 .kds-item-line {
