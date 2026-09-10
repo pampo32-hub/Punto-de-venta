@@ -18518,8 +18518,7 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const esParaLlevarTicket = Boolean(
       ticketData.es_para_llevar ||
       ticketData.tipo_orden === 'para_llevar' ||
-      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar'))) ||
-      (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) === 0)
+      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar')))
     );
     let servNum;
     if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
@@ -18527,9 +18526,11 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     } else if (esParaLlevarTicket) {
       servNum = 0;
     } else {
-      servNum = Math.round(baseImp * 0.10);
+      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+      servNum = tieneServ10 ? Math.round(baseImp * 0.10) : 0;
     }
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : (tieneIva13 ? Math.round(baseImp * 0.13) : 0);
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const prop10 = Math.round(subNum * 0.10);
     const prop15 = Math.round(subNum * 0.15);
@@ -18590,16 +18591,18 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
             <span>10% Servicio (Ley):</span>
             <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
           </div>
-        ` : `
+        ` : (esParaLlevarTicket ? `
           <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#6b7280;">
             <span>Servicio (0% Para Llevar):</span>
             <span style="font-weight:900;">EXENTO</span>
           </div>
-        `}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-          <span>13% I.V.A.:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
-        </div>
+        ` : '')}
+        ${ivaNum > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+            <span>13% I.V.A.:</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
+          </div>
+        ` : ''}
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">
@@ -19129,8 +19132,7 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     const esParaLlevarTicket = Boolean(
       ticketData.es_para_llevar ||
       ticketData.tipo_orden === 'para_llevar' ||
-      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar'))) ||
-      (ticketData.servicio !== undefined && ticketData.servicio !== null && Number(ticketData.servicio) === 0)
+      (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar')))
     );
     let servNum;
     if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
@@ -19138,9 +19140,11 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
     } else if (esParaLlevarTicket) {
       servNum = 0;
     } else {
-      servNum = Math.round(baseImp * 0.10);
+      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+      servNum = tieneServ10 ? Math.round(baseImp * 0.10) : 0;
     }
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : Math.round(baseImp * 0.13);
+    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : (tieneIva13 ? Math.round(baseImp * 0.13) : 0);
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;
     const montoCambio = Number(ticketData.cambio) >= 0 ? Math.round(Number(ticketData.cambio)) : Math.max(0, montoRec - totalNum);
@@ -19199,16 +19203,18 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
             <span>10% Servicio (Ley):</span>
             <span style="font-weight:900;">${formatCRCSinDecimales(servNum)}</span>
           </div>
-        ` : `
+        ` : (esParaLlevarTicket ? `
           <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#6b7280;">
             <span>Servicio (0% Para Llevar):</span>
             <span style="font-weight:900;">EXENTO</span>
           </div>
-        `}
-        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
-          <span>13% I.V.A.:</span>
-          <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
-        </div>
+        ` : '')}
+        ${ivaNum > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+            <span>13% I.V.A.:</span>
+            <span style="font-weight:900;">${formatCRCSinDecimales(ivaNum)}</span>
+          </div>
+        ` : ''}
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div style="border:2px solid #000000; padding:6px 10px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; background:#ffffff; color:#000000;">

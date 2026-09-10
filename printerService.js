@@ -285,8 +285,7 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
-    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
-    (servicio !== undefined && servicio !== null && Number(servicio) === 0)
+    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar')))
   );
   let servNum;
   if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
@@ -486,8 +485,7 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
-    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
-    (servicio !== undefined && servicio !== null && Number(servicio) === 0)
+    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar')))
   );
   let servNum;
   if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
