@@ -3767,6 +3767,42 @@ const handlerCrearCategoria = async (req, res) => {
 app.post('/api/categorias', handlerCrearCategoria);
 app.post('/api/admin/categorias', verificarAdmin, handlerCrearCategoria);
 
+// Editar categoría del menú
+const handlerEditarCategoria = async (req, res) => {
+  try {
+    const catId = Number(req.params.id);
+    const { nombre, icono, destino } = req.body;
+    const cat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+    if (!cat) {
+      return res.status(404).json({ error: 'Categoría no encontrada.' });
+    }
+
+    const finalNombre = nombre ? String(nombre).trim() : cat.nombre;
+    const finalIcono = icono !== undefined ? String(icono).trim() : cat.icono;
+    const finalDestino = destino || cat.destino || 'cocina';
+
+    await dbRun(
+      'UPDATE Categorias SET nombre = ?, icono = ?, destino = ? WHERE id = ?',
+      [finalNombre, finalIcono, finalDestino, catId]
+    );
+
+    const updated = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+    io.emit('categoria_actualizada', updated);
+    io.emit('menu_actualizado');
+
+    res.json({
+      ok: true,
+      message: `Categoría "${finalNombre}" actualizada exitosamente.`,
+      categoria: updated
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al actualizar categoría: ' + e.message });
+  }
+};
+
+app.put('/api/categorias/:id', handlerEditarCategoria);
+app.put('/api/admin/categorias/:id', verificarAdmin, handlerEditarCategoria);
+
 // Eliminar categoría del menú
 const handlerEliminarCategoria = async (req, res) => {
   try {

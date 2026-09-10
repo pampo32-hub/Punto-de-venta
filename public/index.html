@@ -2034,9 +2034,12 @@
                 👤 <span id="comClienteNombre">General</span> ✏️
               </button>
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <button class="btn-tool" id="btnComanderoEditarProd" onclick="abrirSelectorEditarProductoComandero()" title="Editar productos y sincronizar con Kárdex" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2,132,199,0.3);">
                 ✏️ Editar Producto
+              </button>
+              <button class="btn-tool" id="btnComanderoEditarCat" onclick="abrirSelectorEditarCategoriaComandero()" title="Editar categorías del menú" style="display:none; background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2,132,199,0.3);">
+                ✏️ Editar Categoría
               </button>
               <button class="btn-tool" id="btnAbrirModalNuevaCategoria" onclick="abrirModalNuevaCategoria()" title="Agregar nueva categoría al menú" style="background: linear-gradient(135deg, #0284c7, #0369a1); color: #ffffff; border: none; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(2,132,199,0.3);">
                 ➕ Agregar Categoría
@@ -5193,18 +5196,19 @@
   </div>
 
   
-  <!-- MODAL: AGREGAR NUEVA CATEGORÍA -->
-  <div class="modal-backdrop" id="modalNuevaCategoria" style="display:none; z-index: 99999;">
-    <div class="modal-card" style="max-width: 440px; width: 92%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 16px; padding: 22px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85);">
+  <!-- MODAL: AGREGAR / EDITAR CATEGORÍA -->
+  <div class="modal-backdrop" id="modalNuevaCategoria" style="display:none; z-index: 100060;">
+    <div class="modal-card" style="max-width: 460px; width: 92%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 16px; padding: 22px; box-shadow: 0 25px 60px -12px rgba(0,0,0,0.95);">
       <div style="text-align: center; margin-bottom: 16px;">
-        <div style="font-size: 2.4rem; margin-bottom: 4px;">📂</div>
-        <h3 style="margin: 0 0 4px; color: #f8fafc; font-size: 1.25rem; font-weight: 800;">Nueva Categoría de Menú</h3>
-        <p style="margin: 0; color: #94a3b8; font-size: 0.82rem;">
+        <div id="lblIconoCategoriaModal" style="font-size: 2.4rem; margin-bottom: 4px;">📂</div>
+        <h3 id="lblTituloCategoriaModal" style="margin: 0 0 4px; color: #f8fafc; font-size: 1.25rem; font-weight: 800;">Nueva Categoría de Menú</h3>
+        <p id="lblSubtituloCategoriaModal" style="margin: 0; color: #94a3b8; font-size: 0.82rem;">
           Crea una sección para agrupar y organizar tus platillos y bebidas.
         </p>
       </div>
 
       <form id="formNuevaCategoria" onsubmit="event.preventDefault(); guardarNuevaCategoria();">
+        <input type="hidden" id="txtEditCatId" value="" />
         <div style="margin-bottom: 12px;">
           <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 4px;">Nombre de la Categoría:</label>
           <input type="text" id="txtNuevaCatNombre" placeholder="Ej: Hamburguesas, Postres, Cócteles..." required style="width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.95rem;" />
@@ -5228,11 +5232,33 @@
           <button type="button" class="btn-sec" onclick="cerrarModalNuevaCategoria()" style="flex: 1; padding: 10px; border-radius: 8px; font-weight: 700; background: #334155; color: #fff; border: none; cursor: pointer;">
             Cancelar
           </button>
-          <button type="submit" style="flex: 1.5; padding: 10px; border-radius: 8px; font-weight: 800; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16,185,129,0.35);">
+          <button type="submit" id="btnSubmitCategoriaForm" style="flex: 1.5; padding: 10px; border-radius: 8px; font-weight: 800; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(16,185,129,0.35);">
             💾 Crear Categoría
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SELECTOR PARA EDITAR CATEGORÍA -->
+  <div class="modal-backdrop" id="modalSelectorEditarCategoria" style="display:none; z-index: 100055;">
+    <div class="dialog-box" style="max-width:480px; width:92vw; border-radius:16px; background:#0f172a; border:1px solid #38bdf8; box-shadow:0 25px 60px rgba(0,0,0,0.85); padding:0; overflow:hidden;">
+      <div class="dialog-header" style="background:linear-gradient(135deg,#1e1b4b,#0f172a); border-bottom:1px solid #334155; padding:16px 20px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">📂</span>
+          <div>
+            <h3 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:800;">Seleccionar Categoría para Editar</h3>
+            <span style="color:#38bdf8; font-size:0.78rem;">Elige la categoría del menú que deseas modificar</span>
+          </div>
+        </div>
+        <button onclick="cerrarSelectorEditarCategoriaComandero()" style="background:transparent; border:none; color:#94a3b8; font-size:1.3rem; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:16px 20px; max-height:60vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px;" id="listaCategoriasParaEditar">
+        <!-- Lista de categorías -->
+      </div>
+      <div class="dialog-footer" style="padding:12px 20px; display:flex; justify-content:flex-end; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarSelectorEditarCategoriaComandero()" style="padding:8px 16px; font-size:0.88rem; cursor:pointer;">Cerrar</button>
+      </div>
     </div>
   </div>
 

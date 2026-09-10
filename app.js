@@ -2771,12 +2771,16 @@ function aplicarEnrutamientoPorRol() {
   document.body.classList.toggle('is-admin', esAdmin);
 
   const btnComanderoEditar = document.getElementById('btnComanderoEditarProd');
+  const btnComanderoEditarCat = document.getElementById('btnComanderoEditarCat');
   const btnComanderoAgregar = document.getElementById('btnAbrirModalNuevoProducto');
+  const btnComanderoAgregarCat = document.getElementById('btnAbrirModalNuevaCategoria');
 
   if (esAdmin) {
     if (adminTools) adminTools.style.display = 'flex';
     if (btnComanderoEditar) btnComanderoEditar.style.display = 'inline-flex';
+    if (btnComanderoEditarCat) btnComanderoEditarCat.style.display = 'inline-flex';
     if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'inline-flex';
+    if (btnComanderoAgregarCat) btnComanderoAgregarCat.style.display = 'inline-flex';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
     document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'inline-flex');
     if (perfilBadge && (u.rol === 'admin' || u.rol === 'superadmin')) {
@@ -2786,7 +2790,9 @@ function aplicarEnrutamientoPorRol() {
     // Si no es admin, permitimos que adminTools esté accesible con PIN para no bloquear al usuario
     if (adminTools) adminTools.style.display = 'flex';
     if (btnComanderoEditar) btnComanderoEditar.style.display = 'none';
+    if (btnComanderoEditarCat) btnComanderoEditarCat.style.display = 'none';
     if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'none';
+    if (btnComanderoAgregarCat) btnComanderoAgregarCat.style.display = 'none';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'none');
     const activeNav = document.querySelector('.nav-pill.active');
@@ -2868,8 +2874,12 @@ window.irAPuntoDeVentaAdmin = function() {
 
   const btnComanderoEditar = document.getElementById('btnComanderoEditarProd');
   if (btnComanderoEditar) btnComanderoEditar.style.display = 'inline-flex';
+  const btnComanderoEditarCat = document.getElementById('btnComanderoEditarCat');
+  if (btnComanderoEditarCat) btnComanderoEditarCat.style.display = 'inline-flex';
   const btnComanderoAgregar = document.getElementById('btnAbrirModalNuevoProducto');
   if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'inline-flex';
+  const btnComanderoAgregarCat = document.getElementById('btnAbrirModalNuevaCategoria');
+  if (btnComanderoAgregarCat) btnComanderoAgregarCat.style.display = 'inline-flex';
 
   // Si es developer, habilitar controles de edición superior y badge del local
   const devTop = document.getElementById('devTopControls');
@@ -5817,8 +5827,11 @@ function renderGridCategorias() {
 
   const cardsHtml = cats.map(cat => {
     const totalEnCat = prods.filter(p => p.catId === cat.id || p.categoria_id === cat.id).length;
+    const btnEditCat = esAdminODev
+      ? `<button class="btn-cat-card-edit" onclick="event.stopPropagation(); abrirModalEditarCategoria(${cat.id});" title="Editar categoría ${escapeHtml(cat.nombre)}" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.8rem; margin-left: 6px; transition: all 0.15s;">✏️</button>`
+      : '';
     const btnDelCat = esAdminODev
-      ? `<button class="btn-cat-card-delete" onclick="event.stopPropagation(); confirmarEliminarCategoria(${cat.id});" title="Eliminar categoría ${escapeHtml(cat.nombre)}" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.8rem; margin-left: 6px; transition: all 0.15s;">🗑️</button>`
+      ? `<button class="btn-cat-card-delete" onclick="event.stopPropagation(); confirmarEliminarCategoria(${cat.id});" title="Eliminar categoría ${escapeHtml(cat.nombre)}" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.8rem; margin-left: 4px; transition: all 0.15s;">🗑️</button>`
       : '';
     return `
       <div class="com-cat-card" onclick="seleccionarCategoriaComandero(${cat.id})" title="Ver platillos de ${escapeHtml(cat.nombre)}" style="position: relative; display: flex; align-items: center; justify-content: space-between;">
@@ -5830,6 +5843,7 @@ function renderGridCategorias() {
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 4px;">
+          ${btnEditCat}
           ${btnDelCat}
           <span class="com-cat-arrow" style="margin-left: 4px;">➔</span>
         </div>
@@ -20451,25 +20465,176 @@ window.toggleDetalleComandaCobrada = function(ordenId) {
 // ============================================================================
 window.categoriaAEliminarId = null;
 
+window.cargarCategoriasComandero = async function() {
+  if (typeof cargarMenuDesdeBackend === 'function') {
+    await cargarMenuDesdeBackend();
+  }
+};
+
 window.abrirModalNuevaCategoria = function() {
+  const hiddenId = document.getElementById('txtEditCatId');
+  if (hiddenId) hiddenId.value = '';
+
+  const lblTit = document.getElementById('lblTituloCategoriaModal');
+  const lblSub = document.getElementById('lblSubtituloCategoriaModal');
+  const lblIco = document.getElementById('lblIconoCategoriaModal');
+  const btnSubmit = document.getElementById('btnSubmitCategoriaForm');
+
+  if (lblTit) lblTit.textContent = 'Nueva Categoría de Menú';
+  if (lblSub) lblSub.textContent = 'Crea una sección para agrupar y organizar tus platillos y bebidas.';
+  if (lblIco) lblIco.textContent = '📂';
+  if (btnSubmit) {
+    btnSubmit.innerHTML = '💾 Crear Categoría';
+    btnSubmit.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+  }
+
   const nom = document.getElementById('txtNuevaCatNombre');
   const ico = document.getElementById('txtNuevaCatIcono');
   const des = document.getElementById('selNuevaCatDestino');
   if (nom) nom.value = '';
   if (ico) ico.value = '🍽️';
   if (des) des.value = 'cocina';
-  document.getElementById('modalNuevaCategoria')?.classList.add('active');
+
+  const m = document.getElementById('modalNuevaCategoria');
+  if (m) {
+    m.style.display = 'flex';
+    m.classList.add('active');
+  }
   nom?.focus();
 };
 
 window.cerrarModalNuevaCategoria = function() {
-  document.getElementById('modalNuevaCategoria')?.classList.remove('active');
+  const m = document.getElementById('modalNuevaCategoria');
+  if (m) {
+    m.style.display = 'none';
+    m.classList.remove('active');
+  }
+  const hiddenId = document.getElementById('txtEditCatId');
+  if (hiddenId) hiddenId.value = '';
 };
+
+window.abrirModalEditarCategoria = function(catId) {
+  const cat = (estado.categorias || []).find(c => Number(c.id) === Number(catId));
+  if (!cat) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ No se encontró la categoría seleccionada.', 'warning');
+    }
+    return;
+  }
+
+  // Cerrar selector si estaba abierto
+  cerrarSelectorEditarCategoriaComandero();
+
+  const hiddenId = document.getElementById('txtEditCatId');
+  if (hiddenId) hiddenId.value = String(cat.id);
+
+  const lblTit = document.getElementById('lblTituloCategoriaModal');
+  const lblSub = document.getElementById('lblSubtituloCategoriaModal');
+  const lblIco = document.getElementById('lblIconoCategoriaModal');
+  const btnSubmit = document.getElementById('btnSubmitCategoriaForm');
+
+  if (lblTit) lblTit.textContent = `✏️ Editar Categoría: ${cat.nombre}`;
+  if (lblSub) lblSub.textContent = 'Modifica el nombre, emoji representativo o destino de comanda.';
+  if (lblIco) lblIco.textContent = cat.icono || '📂';
+  if (btnSubmit) {
+    btnSubmit.innerHTML = '💾 Guardar Cambios';
+    btnSubmit.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
+  }
+
+  const nom = document.getElementById('txtNuevaCatNombre');
+  const ico = document.getElementById('txtNuevaCatIcono');
+  const des = document.getElementById('selNuevaCatDestino');
+  if (nom) nom.value = cat.nombre || '';
+  if (ico) ico.value = cat.icono || '🍽️';
+  if (des) des.value = cat.destino || 'cocina';
+
+  const m = document.getElementById('modalNuevaCategoria');
+  if (m) {
+    m.style.display = 'flex';
+    m.classList.add('active');
+  }
+  nom?.focus();
+};
+
+window.abrirSelectorEditarCategoriaComandero = function() {
+  const catActiva = window.categoriaActivaComandero;
+  if (catActiva && catActiva !== 'categorias') {
+    abrirModalEditarCategoria(catActiva);
+    return;
+  }
+
+  const searchInput = document.getElementById('txtBuscarCatSelector');
+  if (searchInput) searchInput.value = '';
+
+  renderListaSelectorCategorias('');
+
+  const modal = document.getElementById('modalSelectorEditarCategoria');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
+  searchInput?.focus();
+};
+
+window.cerrarSelectorEditarCategoriaComandero = function() {
+  const modal = document.getElementById('modalSelectorEditarCategoria');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+};
+
+window.filtrarCategoriasEnSelector = function() {
+  const q = document.getElementById('txtBuscarCatSelector')?.value || '';
+  renderListaSelectorCategorias(q);
+};
+
+function renderListaSelectorCategorias(filterText) {
+  const lista = document.getElementById('listaSelectorEditarCategoria');
+  if (!lista) return;
+
+  const cats = estado.categorias || [];
+  const prods = estado.productos || [];
+  const f = (filterText || '').toLowerCase().trim();
+
+  const filtradas = cats.filter(c => !f || (c.nombre || '').toLowerCase().includes(f));
+
+  if (filtradas.length === 0) {
+    lista.innerHTML = `
+      <div style="text-align:center; padding:30px; color:#94a3b8;">
+        <span style="font-size:2rem; display:block; margin-bottom:8px;">🔍</span>
+        No se encontraron categorías ${f ? `que coincidan con "${escapeHtml(f)}"` : ''}
+      </div>
+    `;
+    return;
+  }
+
+  lista.innerHTML = filtradas.map(c => {
+    const total = prods.filter(p => p.catId === c.id || p.categoria_id === c.id).length;
+    return `
+      <div onclick="abrirModalEditarCategoria(${c.id})" style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#1e293b; border:1px solid #334155; border-radius:10px; cursor:pointer; transition:all 0.2s;" onmouseenter="this.style.borderColor='#38bdf8'; this.style.background='#334155';" onmouseleave="this.style.borderColor='#334155'; this.style.background='#1e293b';">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:1.6rem;">${c.icono || '🍽️'}</span>
+          <div>
+            <div style="font-weight:700; color:#f8fafc; font-size:0.95rem;">${escapeHtml(c.nombre)}</div>
+            <div style="color:#94a3b8; font-size:0.8rem;">${total} platillos/bebidas · Destino: ${c.destino || 'cocina'}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button style="background:rgba(56,189,248,0.2); border:1px solid #38bdf8; color:#38bdf8; padding:6px 12px; border-radius:6px; font-weight:700; font-size:0.82rem; cursor:pointer; display:flex; align-items:center; gap:4px;">
+            ✏️ Editar
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
 window.guardarNuevaCategoria = async function() {
   const nombre = document.getElementById('txtNuevaCatNombre')?.value?.trim();
   const icono = document.getElementById('txtNuevaCatIcono')?.value?.trim() || '🍽️';
   const destino = document.getElementById('selNuevaCatDestino')?.value || 'cocina';
+  const editCatId = document.getElementById('txtEditCatId')?.value?.trim();
 
   if (!nombre) {
     if (typeof mostrarNotificacionCentro === 'function') {
@@ -20482,32 +20647,45 @@ window.guardarNuevaCategoria = async function() {
   const userRol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
 
   try {
-    const res = await fetch('/api/categorias', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-rol': userRol,
-        'x-negocio-id': nid
-      },
-      body: JSON.stringify({ nombre, icono, destino, negocio_id: nid })
-    });
+    let res;
+    if (editCatId) {
+      // EDITAR CATEGORÍA EXISTENTE
+      res = await fetch(`/api/categorias/${editCatId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-rol': userRol,
+          'x-negocio-id': String(nid)
+        },
+        body: JSON.stringify({ nombre, icono, destino, negocio_id: nid })
+      });
+    } else {
+      // CREAR NUEVA CATEGORÍA
+      res = await fetch('/api/categorias', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-rol': userRol,
+          'x-negocio-id': String(nid)
+        },
+        body: JSON.stringify({ nombre, icono, destino, negocio_id: nid })
+      });
+    }
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al crear categoría');
+    if (!res.ok) throw new Error(data.error || (editCatId ? 'Error al actualizar categoría' : 'Error al crear categoría'));
 
     cerrarModalNuevaCategoria();
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('✅ Categoría creada exitosamente.', 'success');
+      mostrarNotificacionCentro(editCatId ? '✅ Categoría actualizada exitosamente.' : '✅ Categoría creada exitosamente.', 'success');
     }
 
-    if (typeof cargarCategoriasComandero === 'function') {
-      await cargarCategoriasComandero();
-    }
+    await cargarCategoriasComandero();
     if (typeof filtrarProductosComandero === 'function') {
       filtrarProductosComandero();
     }
   } catch (e) {
-    console.error('Error al crear categoría:', e);
+    console.error('Error al guardar categoría:', e);
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('❌ ' + e.message, 'error');
     }
