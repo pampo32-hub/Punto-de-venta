@@ -2075,6 +2075,20 @@ function negocioAceptaDolares() {
 }
 window.negocioAceptaDolares = negocioAceptaDolares;
 
+window.actualizarBadgeTipoCambioTop = function() {
+  const badge = document.getElementById('posTipoCambioBadge');
+  const lbl = document.getElementById('lblTipoCambioTop');
+  const aceptaUSD = typeof negocioAceptaDolares === 'function' ? negocioAceptaDolares() : true;
+  const tc = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || window._tipoCambioBCCR?.venta || estado.negocioActual?.tipo_cambio_usd || 520;
+  
+  if (lbl) {
+    lbl.textContent = `₡${Math.round(Number(tc)).toLocaleString('es-CR')}`;
+  }
+  if (badge) {
+    badge.style.display = aceptaUSD ? 'inline-flex' : 'none';
+  }
+};
+
 window.actualizarTipoCambioBCCR = async function() {
   try {
     const res = await fetch('/api/tipo-cambio');
@@ -2087,16 +2101,20 @@ window.actualizarTipoCambioBCCR = async function() {
       if (txtTC) {
         txtTC.value = tc;
       }
+      actualizarBadgeTipoCambioTop();
       return tc;
     }
   } catch (e) {
     console.warn('No se pudo obtener el tipo de cambio BCCR en vivo:', e);
   }
+  actualizarBadgeTipoCambioTop();
   return 520;
 };
 
 window.aplicarConfiguracionMonedaNegocio = function() {
   const aceptaUSD = negocioAceptaDolares();
+
+  actualizarBadgeTipoCambioTop();
 
   // Pestaña Dólares en Modal de Cobro
   const tabDol = document.getElementById('tabCobroDolares');
@@ -9591,11 +9609,15 @@ async function cargarCajaDesdeBackend() {
       (data.ventas || []).forEach(v => {
         const m = (v.metodo || '').toLowerCase();
         const tot = Number(v.total) || 0;
-        const totUSD = Number(v.total_usd) || 0;
+        let totUSD = Number(v.total_usd) || 0;
         if (m.includes('efectivo')) efect += tot;
         else if (m.includes('tarjeta')) tarj += tot;
         else if (m.includes('sinpe') || m.includes('transfer')) sinpe += tot;
         else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+          if (totUSD <= 0 && tot > 0) {
+            const tc = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || window._tipoCambioBCCR?.venta || estado.negocioActual?.tipo_cambio_usd || 520;
+            totUSD = Math.round((tot / tc) * 100) / 100;
+          }
           dolaresCRC += tot;
           dolaresUSD += totUSD;
         }
@@ -11865,6 +11887,11 @@ window.ejecutarCobroFinal = async function() {
       const servTicket = esParaLlevarCobro ? 0 : Math.round(subTicket * 0.10);
       const ivaTicket = totalNum - subTicket - servTicket;
 
+      const txtDolInput = document.getElementById('txtDolaresRecibidos');
+      const dolaresEntregados = (metodoFinal === 'Dolares' || metodoFinal === 'Dólares') ? (parseFloat(txtDolInput?.value) || 0) : 0;
+      const tcParaTicket = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || window._tipoCambioBCCR?.venta || estado.negocioActual?.tipo_cambio_usd || 520;
+      const esDolaresCobro = Boolean(metodoFinal === 'Dolares' || metodoFinal === 'Dólares' || dolaresEntregados > 0);
+
       const ticketFinal = (cobroResData && cobroResData.ticket) ? cobroResData.ticket : {
         tipo: 'cuenta_total',
         titulo: 'COMPROBANTE DE PAGO / FACTURA',
@@ -11892,10 +11919,19 @@ window.ejecutarCobroFinal = async function() {
         servicio: servTicket,
         iva: ivaTicket,
         total: totalNum,
-        metodoPago: metodoFinal,
+        metodoPago: esDolaresCobro ? 'Dólares' : metodoFinal,
         recibido: recibido,
-        cambio: cambio
+        cambio: cambio,
+        monto_usd: dolaresEntregados,
+        tipo_cambio: tcParaTicket,
+        esDolares: esDolaresCobro
       };
+
+      if (esDolaresCobro && ticketFinal) {
+        if (!ticketFinal.monto_usd && dolaresEntregados > 0) ticketFinal.monto_usd = dolaresEntregados;
+        if (!ticketFinal.tipo_cambio) ticketFinal.tipo_cambio = tcParaTicket;
+        ticketFinal.esDolares = true;
+      }
 
       if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
         window.ejecutarImpresionDirectaTermica(ticketFinal);
@@ -16891,12 +16927,20 @@ window.purgarSugerenciasComprasDev = async function() {
   const confirmar = confirm(`⚠️ ¿Deseas eliminar definitivamente las sugerencias de compra para ${negNombre}?\n\n• Se normalizarán las existencias de insumos por debajo del mínimo para que no generen sugerencias de compra.\n• Se limpiará el historial de movimientos de Kárdex de prueba.\n• El catálogo de insumos quedará listo y en blanco para la entrega oficial.`);
   if (!confirmar) return;
 
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+
   try {
     const res = await fetch('/api/admin/inventario/purgar-sugerencias', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
       },
       body: JSON.stringify({ negocio_id: nid, limpiarKardex: true })
     });
@@ -16911,7 +16955,7 @@ window.purgarSugerenciasComprasDev = async function() {
       window.cargarInventario();
     }
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🗑️ Sugerencias de compra eliminadas definitivamente y existencias normalizadas.', 'success');
+      mostrarNotificacionCentro('🗑️ Sugerencias de compra eliminadas definitivamente (mínimos en 0 y kárdex limpio).', 'success');
     }
   } catch (e) {
     alert('❌ Error: ' + e.message);
@@ -16928,12 +16972,20 @@ window.purgarHistorialCajaDev = async function() {
   const confirmar = confirm(`⚠️ ¿Deseas resetear todo el historial financiero de caja para ${negNombre}?\n\n• Se cerrará el turno actual.\n• Se eliminarán los registros de turnos pasados, cortes X/Z y entradas/salidas de prueba.\n• La caja quedará en ₡0.00 / $0.00 lista para su primera apertura real por el cliente.`);
   if (!confirmar) return;
 
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+
   try {
     const res = await fetch('/api/caja/purgar-historial', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
       },
       body: JSON.stringify({ negocio_id: nid })
     });
@@ -16962,12 +17014,20 @@ window.purgarVentasPruebaDev = async function() {
   const confirmar = confirm(`⚠️ ¿Deseas purgar todas las ventas, órdenes y facturas de prueba para ${negNombre}?\n\n• Se eliminarán todas las órdenes y tiques de prueba.\n• Los gráficos, ventas del día y KPIs se reiniciarán a ₡0.\n• Las mesas quedarán libres de saldos retenidos.`);
   if (!confirmar) return;
 
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+
   try {
     const res = await fetch('/api/admin/ventas/purgar-pruebas', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
       },
       body: JSON.stringify({ negocio_id: nid })
     });
@@ -16994,6 +17054,66 @@ window.purgarVentasPruebaDev = async function() {
   }
 };
 
+window.purgarVentasProductosYKardexDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas eliminar definitivamente el historial de ventas y movimientos de kárdex para ${negNombre}?\n\n• Se eliminarán todas las órdenes, ventas, pagos y facturas de prueba.\n• Se limpiará todo el historial de movimientos de kárdex.\n• Las mesas volverán a estado libre con saldo ₡0.\n• Los contadores de productos vendidos se reiniciarán a 0.\n• El sistema quedará completamente limpio para entregar al cliente.`);
+  if (!confirmar) return;
+
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+  const usuarioNombre = estado.usuarioActual?.nombre || 'Super Admin';
+
+  try {
+    const res = await fetch('/api/admin/ventas-kardex/purgar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
+      },
+      body: JSON.stringify({ negocio_id: nid, usuarioNombre })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar ventas y kárdex');
+
+    if (typeof window.cargarMetricasDev === 'function') {
+      window.cargarMetricasDev();
+    }
+    if (typeof window.cargarDashboardMetricas === 'function') {
+      window.cargarDashboardMetricas();
+    }
+    if (typeof window.cargarMesasDesdeBackend === 'function') {
+      window.cargarMesasDesdeBackend();
+    }
+    if (typeof window.cargarCajaDesdeBackend === 'function') {
+      window.cargarCajaDesdeBackend();
+    }
+    if (typeof window.cargarKardexGeneral === 'function') {
+      window.cargarKardexGeneral();
+    }
+    if (typeof window.cargarVentasPorProducto === 'function') {
+      window.cargarVentasPorProducto();
+    }
+    if (typeof window.cargarSugerenciaCompras === 'function') {
+      window.cargarSugerenciaCompras();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🗑️ Historial de ventas y kárdex purgado exitosamente. El sistema quedó limpio.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
 window.purgarComandasKDSDev = async function() {
   if (!window.esUsuarioDeveloperOSuperAdmin()) {
     alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
@@ -17004,12 +17124,20 @@ window.purgarComandasKDSDev = async function() {
   const confirmar = confirm(`⚠️ ¿Deseas limpiar todas las comandas activas de Cocina y Barra para ${negNombre}?\n\n• Todas las pantallas KDS quedarán en blanco y limpias.`);
   if (!confirmar) return;
 
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+
   try {
     const res = await fetch('/api/kds/purgar-comandas', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
       },
       body: JSON.stringify({ negocio_id: nid })
     });
@@ -17037,12 +17165,20 @@ window.liberarTodasLasMesasDev = async function() {
   const confirmar = confirm(`⚠️ ¿Deseas liberar y restablecer TODAS las mesas para ${negNombre}?\n\n• Todas las mesas volverán a estado libre (verde) con saldo ₡0.\n• Se desharán uniones temporales de mesas.`);
   if (!confirmar) return;
 
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+
   try {
     const res = await fetch('/api/mesas/liberar-todas', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
       },
       body: JSON.stringify({ negocio_id: nid })
     });
@@ -17070,12 +17206,20 @@ window.purgarAuditoriaDev = async function() {
   const confirmar = confirm(`⚠️ ¿Deseas limpiar todos los registros de auditoría de prueba para ${negNombre}?`);
   if (!confirmar) return;
 
+  const rol = (estado.usuarioActual?.rol || (() => {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      return su?.rol || '';
+    } catch (_) { return ''; }
+  })() || 'developer').toLowerCase();
+
   try {
     const res = await fetch('/api/admin/auditoria/purgar', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol
       },
       body: JSON.stringify({ negocio_id: nid })
     });
@@ -18881,20 +19025,38 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
             <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
           </div>
         ` : ''}
-        ${(ticketData.metodoPago === 'Dólares' || ticketData.monto_usd > 0) ? `
-          <div style="display:flex; justify-content:space-between;">
-            <span>Dólares Recibidos:</span>
-            <span style="font-weight:900;">$ ${(Number(ticketData.monto_usd) || 0).toFixed(2)} (TC: ₡${ticketData.tipo_cambio || 520})</span>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span>Equivalente Colones:</span>
-            <span style="font-weight:900;">${formatCRCSinDecimales(montoRec)}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span>Vuelto en Colones:</span>
-            <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
-          </div>
-        ` : ''}
+        ${(() => {
+          const esUSD = Boolean(
+            ticketData.metodoPago === 'Dólares' ||
+            ticketData.metodoPago === 'Dolares' ||
+            ticketData.esDolares ||
+            Number(ticketData.monto_usd) > 0 ||
+            (Array.isArray(ticketData.pagos) && ticketData.pagos.some(p => p.metodo === 'Dólares' || p.metodo === 'Dolares' || Number(p.monto_usd) > 0))
+          );
+          if (!esUSD) return '';
+
+          const tcVal = Number(ticketData.tipo_cambio) || (Array.isArray(ticketData.pagos) && ticketData.pagos[0]?.tipo_cambio ? Number(ticketData.pagos[0].tipo_cambio) : 520);
+          const usdVal = Number(ticketData.monto_usd) || (Array.isArray(ticketData.pagos) ? ticketData.pagos.reduce((a, p) => a + (Number(p.monto_usd) || 0), 0) : 0) || (tcVal > 0 && montoRec > 0 ? Number((montoRec / tcVal).toFixed(2)) : 0);
+
+          return `
+            <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+              <span>Dólares Recibidos:</span>
+              <span style="font-weight:900;">$ ${usdVal.toFixed(2)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+              <span>Tipo de Cambio (Banco):</span>
+              <span style="font-weight:900;">₡${tcVal.toLocaleString('es-CR')}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+              <span>Equivalente Colones:</span>
+              <span style="font-weight:900;">${formatCRCSinDecimales(montoRec)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+              <span>Vuelto en Colones:</span>
+              <span style="font-weight:900;">${formatCRCSinDecimales(montoCambio)}</span>
+            </div>
+          `;
+        })()}
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
       <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
@@ -20719,11 +20881,19 @@ window.confirmarEliminarCategoria = async function(catId) {
   if (elNom) elNom.textContent = `${cat.icono || '🍽️'} ${cat.nombre}`;
   if (elProds) elProds.textContent = prodsEnCat.length;
 
-  document.getElementById('modalConfirmarEliminarCategoria')?.classList.add('active');
+  const modal = document.getElementById('modalConfirmarEliminarCategoria');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
 };
 
 window.cerrarModalEliminarCategoria = function() {
-  document.getElementById('modalConfirmarEliminarCategoria')?.classList.remove('active');
+  const modal = document.getElementById('modalConfirmarEliminarCategoria');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
   window.categoriaAEliminarId = null;
 };
 

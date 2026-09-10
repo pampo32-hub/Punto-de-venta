@@ -346,15 +346,35 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   raw += ESCPOS.ALIGN_LEFT;
   raw += '='.repeat(48) + '\n';
 
+  const esDolaresPago = Boolean(
+    metodoPago === 'Dolares' ||
+    metodoPago === 'Dólares' ||
+    Number(datos?.monto_usd) > 0 ||
+    (Array.isArray(pagos) && pagos.some(p => (p.metodo === 'Dolares' || p.metodo === 'Dólares' || Number(p.monto_usd) > 0)))
+  );
+  const montoUSDTotal = Number(datos?.monto_usd) || (Array.isArray(pagos) ? pagos.reduce((a, p) => a + (Number(p.monto_usd) || 0), 0) : 0);
+  const tcUsado = Number(datos?.tipo_cambio) || (Array.isArray(pagos) && pagos[0]?.tipo_cambio ? Number(pagos[0].tipo_cambio) : 520);
+
   if (Array.isArray(pagos) && pagos.length > 1) {
     raw += `Metodo de Pago: PAGO MIXTO / COMBINADO\n`;
     pagos.forEach(p => {
       const nomP = limpiarTextoTermica(p.metodo || 'Pago');
       const mtoP = formatMontoTermica(p.monto);
-      raw += `  * ${nomP}: ${mtoP}${p.referencia ? ` (Ref: ${limpiarTextoTermica(p.referencia)})` : ''}\n`;
+      const usdDetalle = (p.metodo === 'Dolares' || p.metodo === 'Dólares' || Number(p.monto_usd) > 0)
+        ? ` ($ ${(Number(p.monto_usd) || (Number(p.monto) / (Number(p.tipo_cambio) || 520))).toFixed(2)} USD)`
+        : '';
+      raw += `  * ${nomP}: ${mtoP}${usdDetalle}${p.referencia ? ` (Ref: ${limpiarTextoTermica(p.referencia)})` : ''}\n`;
     });
     if (vuelto > 0) {
       raw += `  * Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
+    }
+  } else if (esDolaresPago) {
+    const finalUSD = montoUSDTotal > 0 ? montoUSDTotal : (montoRecibido > 0 && tcUsado > 0 ? Number((montoRecibido / tcUsado).toFixed(2)) : 0);
+    raw += `Metodo de Pago: DOLARES ($ USD)\n`;
+    raw += `Dolares Recibidos: $ ${finalUSD.toFixed(2)} (T.C: ${formatMontoTermica(tcUsado)})\n`;
+    raw += `Equivalente en Colones: ${formatMontoTermica(montoRecibido)}\n`;
+    if (vuelto > 0) {
+      raw += `Vuelto / Cambio en Colones: ${formatMontoTermica(vuelto)}\n`;
     }
   } else {
     raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
@@ -388,9 +408,12 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     servicio: servNum,
     iva: ivaNum,
     total: totNum,
-    metodoPago: metodoPago || 'Efectivo',
+    metodoPago: esDolaresPago ? 'Dólares' : (metodoPago || 'Efectivo'),
     recibido: montoRecibido,
     cambio: vuelto,
+    monto_usd: montoUSDTotal > 0 ? montoUSDTotal : (esDolaresPago && tcUsado > 0 ? Number((montoRecibido / tcUsado).toFixed(2)) : 0),
+    tipo_cambio: tcUsado,
+    esDolares: esDolaresPago,
     pagos: Array.isArray(pagos) ? pagos : []
   };
 

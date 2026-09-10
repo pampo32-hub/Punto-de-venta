@@ -104,6 +104,9 @@ db.serialize(() => {
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN monto_final_dolares REAL DEFAULT 0", () => {});
+  db.run("UPDATE Categorias SET icono = '🍽️' WHERE icono LIKE '%fa-%utensils%' OR icono LIKE 'fa %' OR icono = 'fas fa-utensils'", () => {});
+  db.run("UPDATE Categorias SET icono = '🍸' WHERE icono LIKE '%fa-%glass%' OR icono LIKE '%martini%' OR icono = 'fas fa-glass-martini-alt'", () => {});
+  db.run("UPDATE Categorias SET destino = 'barra' WHERE destino = 'bar'", () => {});
   db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     negocio_id INTEGER DEFAULT 1,
@@ -1029,8 +1032,8 @@ app.post('/api/dev/negocios', async (req, res) => {
           [nuevoNegocioId, `Mesa ${i}`, zonaId, 40 + ((i - 1) % 3) * 160, 40 + Math.floor((i - 1) / 3) * 150]
         );
       }
-      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Comidas', 'fas fa-utensils', 'cocina')`, [nuevoNegocioId]);
-      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Bebidas', 'fas fa-glass-martini-alt', 'bar')`, [nuevoNegocioId]);
+      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Comidas', '🍽️', 'cocina')`, [nuevoNegocioId]);
+      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Bebidas', '🍸', 'barra')`, [nuevoNegocioId]);
     }
 
     // Crear Usuario Administrador para el nuevo negocio si se especificó
@@ -5913,7 +5916,7 @@ app.get('/api/caja/actual', async (req, res) => {
     if (!caja) return res.json({ caja: null, ventas: [], movimientos: [], tipPool: [] });
 
     const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total, COUNT(*) as transacciones
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       WHERE p.caja_id = ?
       GROUP BY p.metodo
@@ -7852,10 +7855,10 @@ app.post('/api/admin/inventario/purgar-sugerencias', verificarAdmin, async (req,
     const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
     const { limpiarKardex = true } = req.body || {};
 
-    // Normalizar existencias de insumos por encima del mínimo para que queden 0 sugerencias de compra
+    // Establecer el stock mínimo en 0 para que ninguna sugerencia se dispare hasta que el cliente configure sus mínimos
     await dbRun(`
       UPDATE Inventario 
-      SET stock_actual = CASE WHEN stock_minimo > 0 THEN stock_minimo * 2 ELSE 10 END,
+      SET stock_minimo = 0,
           actualizado_en = ?
       WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
     `, [new Date().toISOString(), nid, nid]);
@@ -7869,7 +7872,79 @@ app.post('/api/admin/inventario/purgar-sugerencias', verificarAdmin, async (req,
 
     res.json({
       ok: true,
-      mensaje: 'Sugerencias de compra eliminadas definitivamente y existencias normalizadas.'
+      mensaje: 'Sugerencias de compra eliminadas definitivamente (mínimos en 0 y kárdex limpio).'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 1.1 Purgar historial de ventas de productos y consumo kárdex (Entrega en blanco para el cliente)
+app.post('/api/admin/ventas-kardex/purgar', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+    const usuarioNombre = req.usuario?.nombre || req.body?.usuarioNombre || 'Super Admin';
+
+    await dbRun(`
+      DELETE FROM Pagos 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM FacturasElectronicas 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM Anulaciones 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM DetalleOrden 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM Ordenes 
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM InventarioMovimientos 
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [nid, nid]);
+
+    await dbRun(`
+      UPDATE Mesas 
+      SET estado = 'libre',
+          mesero = NULL,
+          cliente = 'Cliente General',
+          pidio_cuenta_qr = 0,
+          hora_pidio_cuenta = NULL,
+          unida_a_mesa_id = NULL,
+          unida_con = NULL,
+          grupo_mesas = NULL,
+          transferida_de = NULL
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [nid, nid]);
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: 'purga_ventas_kardex_entrega_limpia',
+      tipoEvento: 'sistema',
+      modulo: 'ventas_kardex',
+      detalle: `Historial de ventas de productos y consumo kárdex purgado para entrega limpia de negocio #${nid}`
+    });
+
+    io.emit('mesas_actualizadas');
+    io.emit('comandas_actualizadas');
+    io.emit('kardex_actualizado', { negocioId: nid });
+    io.emit('menu_actualizado');
+
+    res.json({
+      ok: true,
+      mensaje: 'Historial de ventas de productos y consumo kárdex eliminado definitivamente. El sistema quedó limpio para el cliente.'
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -8768,6 +8843,7 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       } else if (met.includes('dolar') || met.includes('dólar') || met.includes('usd')) {
         totalDolares += mto;
         totalDolaresUSD += Number(pg.total_usd) || 0;
+        totalEfectivo += mto;
       } else if (met.includes('transfer')) {
         totalTransferencia += mto;
         totalSinpe += mto;

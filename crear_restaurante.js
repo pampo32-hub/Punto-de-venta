@@ -48,8 +48,8 @@ async function crearNuevoRestaurante({
       }
 
       // Crear Categorías básicas
-      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Comidas', 'fas fa-utensils', 'cocina')`, [negocioId]);
-      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Bebidas', 'fas fa-glass-martini-alt', 'bar')`, [negocioId]);
+      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Comidas', '🍽️', 'cocina')`, [negocioId]);
+      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Bebidas', '🍸', 'barra')`, [negocioId]);
 
       console.log(`✅ Zonas, Mesas y Categorías base creadas.`);
     }
