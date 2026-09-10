@@ -860,12 +860,22 @@ body {
 
 .mesa-grid-card.ocupada,
 .mesa-grid-card.abierta,
-.mesa-grid-card.esperando,
-.mesa-grid-card.esperando_parcial,
 .mesa-grid-card.activa {
-  border-color: #ef4444 !important;
+  border-color: #3b82f6 !important;
   background: linear-gradient(180deg, #111827 0%, #1e3a8a33 100%);
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.45), inset 0 0 6px rgba(59, 130, 246, 0.15) !important;
+}
+
+.mesa-grid-card.esperando {
+  border-color: #f97316 !important;
+  background: linear-gradient(180deg, #111827 0%, #7c2d1244 100%) !important;
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.45), inset 0 0 6px rgba(249, 115, 22, 0.15) !important;
+}
+
+.mesa-grid-card.esperando_parcial {
+  border-color: #f59e0b !important;
+  background: linear-gradient(180deg, #111827 0%, #78350f44 100%) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45), inset 0 0 6px rgba(245, 158, 11, 0.15) !important;
 }
 
 .mesa-grid-card.cuenta,
@@ -908,9 +918,21 @@ body {
 }
 
 .m-grid-badge.badge-ocupada {
-  background: rgba(239, 68, 68, 0.25);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.m-grid-badge.badge-esperando {
+  background: rgba(249, 115, 22, 0.22);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.55);
+}
+
+.m-grid-badge.badge-esperando_parcial {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fde047;
+  border: 1px solid rgba(245, 158, 11, 0.55);
 }
 
 .m-grid-badge.badge-cuenta {

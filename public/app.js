@@ -6025,22 +6025,35 @@ function renderGrillaOrdenada(filtroZona = null) {
         const card = document.createElement('div');
         const esSilla = m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'));
         const esCuenta = m.estado === 'cuenta';
-        const estadoClass = esCuenta ? 'cuenta-qr' : m.estado;
+
+        const platosPendientes = m.platos_pendientes || m.items_pendientes || [];
+        let minutosEspera = m.minutos_espera != null ? m.minutos_espera : 0;
+        if (m.primera_comanda_hora && m.minutos_espera == null) {
+          minutosEspera = Math.max(0, Math.floor((Date.now() - new Date(m.primera_comanda_hora).getTime()) / 60000));
+        }
+
+        const estaEsperandoCocina = Boolean((m.estado === 'esperando' || m.estado === 'esperando_parcial') || (platosPendientes && platosPendientes.length > 0));
+
+        let estadoEfectivo = m.estado;
+        if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
+          estadoEfectivo = 'esperando';
+        }
+        const estadoClass = esCuenta ? 'cuenta-qr' : estadoEfectivo;
 
         const estadoEtiqueta = {
           libre: 'Libre',
           ocupada: 'Ocupada',
           abierta: 'Ocupada',
           esperando: 'Esperando',
-          esperando_parcial: 'Esperando',
+          esperando_parcial: 'Esperando Parcial',
           activa: 'Ocupada',
           cuenta: 'Cuenta Pedida',
           unida: 'Unida'
-        }[m.estado] || 'Libre';
+        }[estadoEfectivo] || (estaEsperandoCocina ? 'Esperando' : 'Libre');
 
-        const badgeClass = (m.estado === 'libre')
+        const badgeClass = (estadoEfectivo === 'libre' && !estaEsperandoCocina)
           ? 'badge-libre'
-          : (esCuenta ? 'badge-cuenta' : 'badge-ocupada');
+          : (esCuenta ? 'badge-cuenta' : (estadoEfectivo === 'esperando' || estaEsperandoCocina ? 'badge-esperando' : (estadoEfectivo === 'esperando_parcial' ? 'badge-esperando_parcial' : 'badge-ocupada')));
 
         const clienteMesa = m.cliente || m.mesa_cliente;
         let clienteHtml = '';
@@ -6076,6 +6089,70 @@ function renderGrillaOrdenada(filtroZona = null) {
           semaforoBadgeHtml = `<div class="badge-semaforo-inactiva" style="margin: 4px 0;" title="Mesa ocupada sin comanda reciente (${m.minutos_inactiva} min)">⚠️ ${m.minutos_inactiva}m inactiva</div>`;
         }
 
+        let waitChipHtml = '';
+        let tooltipHtml = '';
+        const isOccupied = m.estado !== 'libre' || (m.orden_total > 0) || Boolean(m.orden_activa_id) || estaEsperandoCocina;
+
+        if (isOccupied) {
+          let headerText = '';
+          let listItems = [];
+
+          if (estaEsperandoCocina) {
+            headerText = `⏱️ Esperando hace ${minutosEspera} min (${platosPendientes.length} pendiente${platosPendientes.length > 1 ? 's' : ''})`;
+            listItems = platosPendientes;
+            waitChipHtml = `
+              <div class="m-wait-chip" title="Ver platillos pendientes de entrega">
+                ⏱️ ${minutosEspera}m
+              </div>
+            `;
+          } else if (m.estado === 'abierta') {
+            headerText = `🍽️ Mesa Ocupada (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Sin pedidos pendientes'})`;
+            listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Mesa abierta sin pedidos de cocina pendientes'];
+          } else if (m.estado === 'activa') {
+            headerText = `✅ Todos los platillos servidos (Ocupada)`;
+            listItems = (m.todos_platillos && m.todos_platillos.length > 0) ? m.todos_platillos : ['Comanda despachada por cocina'];
+          } else if (m.todos_platillos && m.todos_platillos.length > 0) {
+            headerText = `✅ Pedidos entregados (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'Mesa Ocupada'})`;
+            listItems = m.todos_platillos;
+          } else {
+            headerText = `🍽️ Cuenta Activa (${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : 'En consumo'})`;
+            listItems = ['Mesa atendida por salonero'];
+          }
+
+          const atendidoPor = m.orden_mesero || m.mesero || (m.pidio_cuenta_qr ? 'Pedido QR' : 'Personal de Turno');
+          const meseroHtml = `
+            <div class="mesa-tooltip-mesero">
+              <span class="m-tip-mesero-lbl">👤 Atendido por:</span>
+              <strong class="m-tip-mesero-nom">${escapeHtml(atendidoPor)}</strong>
+            </div>
+          `;
+
+          tooltipHtml = `
+            <div class="mesa-tooltip">
+              <div class="mesa-tooltip-header">${escapeHtml(headerText)}</div>
+              ${meseroHtml}
+              <ul class="mesa-tooltip-list">
+                ${listItems.map(p => `<li>${escapeHtml(typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo'))}</li>`).join('')}
+              </ul>
+              <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px; display:flex; gap:6px;">
+                <button onclick="event.stopPropagation(); window.liberarMesaId(${m.id})" class="btn-tool" style="width:100%; background:rgba(239,68,68,0.25); border:1px solid #ef4444; color:#fca5a5; padding:5px 8px; border-radius:6px; font-size:0.75rem; font-weight:700; cursor:pointer;">🔓 Liberar Mesa ${m.orden_total > 0 ? '(PIN)' : '(₡0)'}</button>
+              </div>
+            </div>
+          `;
+
+          card.setAttribute('title', `${headerText}\n👤 Atendido por: ${atendidoPor}\n${listItems.map(p => `• ${typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo')}`).join('\n')}`);
+        }
+
+        let cuentaQrHtml = '';
+        if (m.estado === 'cuenta') {
+          cuentaQrHtml = `
+            <div class="mesa-qr-alert-halo">
+              <div class="mesa-qr-alert-icon">🧾</div>
+              <span class="mesa-qr-alert-tag">🔔 PIDE CUENTA</span>
+            </div>
+          `;
+        }
+
         if (esBarraZona) {
           card.innerHTML = `
             <div class="m-grid-header">
@@ -6084,7 +6161,10 @@ function renderGrillaOrdenada(filtroZona = null) {
             </div>
             ${clienteHtml}
             ${semaforoBadgeHtml}
+            ${cuentaQrHtml}
+            ${waitChipHtml}
             <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
+            ${tooltipHtml}
           `;
         } else {
           card.innerHTML = `
@@ -6094,13 +6174,39 @@ function renderGrillaOrdenada(filtroZona = null) {
             </div>
             ${clienteHtml}
             ${semaforoBadgeHtml}
+            ${cuentaQrHtml}
+            ${waitChipHtml}
             <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
             <div class="m-grid-footer">
               <span class="m-grid-cap">👥 ${cap}</span>
               <span class="m-grid-zona" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
             </div>
+            ${tooltipHtml}
           `;
         }
+
+        card.addEventListener('mouseenter', () => {
+          const tip = card.querySelector('.mesa-tooltip');
+          if (tip) {
+            tip.style.display = 'block';
+            tip.style.opacity = '1';
+            tip.style.visibility = 'visible';
+            card.style.zIndex = '999999';
+          }
+        });
+
+        card.addEventListener('mouseleave', (e) => {
+          const tip = card.querySelector('.mesa-tooltip');
+          if (e.relatedTarget && tip && (tip === e.relatedTarget || tip.contains(e.relatedTarget))) {
+            return;
+          }
+          if (tip && !tip.classList.contains('show-touch')) {
+            tip.style.display = 'none';
+            tip.style.opacity = '0';
+            tip.style.visibility = 'hidden';
+            card.style.zIndex = '1';
+          }
+        });
 
         // Manejador de clic
         card.addEventListener('click', () => {
