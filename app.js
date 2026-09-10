@@ -16303,6 +16303,193 @@ window.limpiarSugerenciasCompras = function() {
   }
 };
 
+// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE) ---
+
+window.purgarSugerenciasComprasDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas eliminar definitivamente las sugerencias de compra para ${negNombre}?\n\n• Se normalizarán las existencias de insumos por debajo del mínimo para que no generen sugerencias de compra.\n• Se limpiará el historial de movimientos de Kárdex de prueba.\n• El catálogo de insumos quedará listo y en blanco para la entrega oficial.`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch('/api/admin/inventario/purgar-sugerencias', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid, limpiarKardex: true })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar sugerencias');
+
+    await window.cargarSugerenciaCompras();
+    if (typeof window.cargarKardexGeneral === 'function') {
+      window.cargarKardexGeneral();
+    }
+    if (typeof window.cargarInventario === 'function') {
+      window.cargarInventario();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🗑️ Sugerencias de compra eliminadas definitivamente y existencias normalizadas.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.purgarHistorialCajaDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas resetear todo el historial financiero de caja para ${negNombre}?\n\n• Se cerrará el turno actual.\n• Se eliminarán los registros de turnos pasados, cortes X/Z y entradas/salidas de prueba.\n• La caja quedará en ₡0.00 / $0.00 lista para su primera apertura real por el cliente.`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch('/api/caja/purgar-historial', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar historial de caja');
+
+    if (typeof window.resetearEstadoFinancieroCero === 'function') {
+      window.resetearEstadoFinancieroCero();
+    }
+    await window.cargarCajaDesdeBackend();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🧹 Historial financiero de caja reseteado exitosamente a ₡0.00.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.purgarVentasPruebaDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas purgar todas las ventas, órdenes y facturas de prueba para ${negNombre}?\n\n• Se eliminarán todas las órdenes y tiques de prueba.\n• Los gráficos, ventas del día y KPIs se reiniciarán a ₡0.\n• Las mesas quedarán libres de saldos retenidos.`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch('/api/admin/ventas/purgar-pruebas', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar ventas de prueba');
+
+    if (typeof window.cargarMetricasDev === 'function') {
+      window.cargarMetricasDev();
+    }
+    if (typeof window.cargarMesasDesdeBackend === 'function') {
+      window.cargarMesasDesdeBackend();
+    }
+    if (typeof window.cargarCajaDesdeBackend === 'function') {
+      window.cargarCajaDesdeBackend();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🗑️ Ventas, facturas y órdenes de prueba purgadas exitosamente.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.purgarComandasKDSDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas limpiar todas las comandas activas de Cocina y Barra para ${negNombre}?\n\n• Todas las pantallas KDS quedarán en blanco y limpias.`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch('/api/kds/purgar-comandas', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar comandas KDS');
+
+    if (typeof window.cargarKDSDesdeBackend === 'function') {
+      window.cargarKDSDesdeBackend();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🧹 Pantallas de KDS (Cocina y Barra) limpiadas con éxito.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.liberarTodasLasMesasDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas liberar y restablecer TODAS las mesas para ${negNombre}?\n\n• Todas las mesas volverán a estado libre (verde) con saldo ₡0.\n• Se desharán uniones temporales de mesas.`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch('/api/mesas/liberar-todas', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al liberar mesas');
+
+    if (typeof window.cargarMesasDesdeBackend === 'function') {
+      window.cargarMesasDesdeBackend();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🔓 Todas las mesas liberadas y restablecidas a verde.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.purgarAuditoriaDev = async function() {
+  const nid = estado.negocioActual?.id || 1;
+  const negNombre = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ¿Deseas limpiar todos los registros de auditoría de prueba para ${negNombre}?`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch('/api/admin/auditoria/purgar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar auditoría');
+
+    if (typeof window.cargarAuditoriaDev === 'function') {
+      window.cargarAuditoriaDev();
+    }
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🧹 Bitácora de auditoría limpiada con éxito.', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
 window.copiarListaComprasTexto = function() {
   if (!window.listaComprasActual || !window.listaComprasActual.length) {
     alert('No hay insumos pendientes de compra para copiar.');

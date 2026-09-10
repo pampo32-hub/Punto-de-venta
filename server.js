@@ -7562,6 +7562,185 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
   }
 });
 
+// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE) ---
+
+// 1. Purgar sugerencias de compra e insumos de prueba
+app.post('/api/admin/inventario/purgar-sugerencias', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+    const { limpiarKardex = true } = req.body || {};
+
+    // Normalizar existencias de insumos por debajo del mínimo para que no generen sugerencias
+    await dbRun(`
+      UPDATE Inventario 
+      SET stock_actual = stock_minimo,
+          actualizado_en = ?
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+        AND (stock_actual < stock_minimo OR stock_actual <= 0)
+    `, [new Date().toISOString(), nid, nid]);
+
+    if (limpiarKardex) {
+      await dbRun('DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+    }
+
+    io.emit('inventario_actualizado', { negocioId: nid });
+    io.emit('kardex_actualizado', { negocioId: nid });
+
+    res.json({
+      ok: true,
+      mensaje: 'Sugerencias de compra eliminadas definitivamente y existencias normalizadas.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 2. Purgar historial financiero de caja
+app.post('/api/caja/purgar-historial', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+
+    await dbRun(`
+      DELETE FROM MovimientosCaja 
+      WHERE caja_id IN (SELECT id FROM Cajas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun('DELETE FROM Cajas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+
+    io.emit('caja_actualizada', { negocioId: nid });
+
+    res.json({
+      ok: true,
+      mensaje: 'Historial de turnos y movimientos de caja purgado con éxito. Caja reseteada a ₡0.00 / $0.00.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 3. Purgar ventas, órdenes y facturas de prueba
+app.post('/api/admin/ventas/purgar-pruebas', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+
+    await dbRun(`
+      DELETE FROM DetalleOrden 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM Pagos 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM FacturasElectronicas 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun(`
+      DELETE FROM Anulaciones 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    await dbRun('DELETE FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+
+    io.emit('ordenes_actualizadas', { negocioId: nid });
+    io.emit('ventas_actualizadas', { negocioId: nid });
+    io.emit('mesas_actualizadas', { negocioId: nid });
+
+    res.json({
+      ok: true,
+      mensaje: 'Ventas, órdenes, pagos y reportes de prueba purgados exitosamente.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 4. Purgar comandas de cocina y barra (KDS)
+app.post('/api/kds/purgar-comandas', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+
+    await dbRun(`
+      UPDATE DetalleOrden 
+      SET estado_comanda = 'entregado', hora_listo = ?
+      WHERE estado_comanda IN ('pendiente', 'preparando', 'listo')
+        AND orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [new Date().toISOString(), nid, nid]);
+
+    io.emit('kds_actualizado', { negocioId: nid });
+    io.emit('actualizar_pantalla_kds', { negocioId: nid });
+    io.emit('comanda_lista', { negocioId: nid });
+
+    res.json({
+      ok: true,
+      mensaje: 'Pantallas de KDS (Cocina y Barra) limpiadas con éxito.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 5. Liberar y resetear todas las mesas a verde
+app.post('/api/mesas/liberar-todas', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+
+    await dbRun(`
+      UPDATE Mesas 
+      SET estado = 'libre',
+          mesero = NULL,
+          cliente = 'Cliente General',
+          pidio_cuenta_qr = 0,
+          hora_pidio_cuenta = NULL,
+          unida_a_mesa_id = NULL,
+          unida_con = NULL,
+          grupo_mesas = NULL,
+          transferida_de = NULL
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [nid, nid]);
+
+    // Cerrar cualquier orden abierta que haya estado asociada a esas mesas
+    await dbRun(`
+      UPDATE Ordenes 
+      SET estado = 'cancelada', fecha_cierre = ?
+      WHERE estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')
+        AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [new Date().toISOString(), nid, nid]);
+
+    // Eliminar uniones registradas
+    await dbRun('UPDATE TableMerges SET activo = 0 WHERE activo = 1');
+
+    io.emit('mesas_actualizadas', { negocioId: nid });
+    io.emit('ordenes_actualizadas', { negocioId: nid });
+
+    res.json({
+      ok: true,
+      mensaje: 'Todas las mesas han sido liberadas a verde y sus estados restablecidos.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 6. Purgar bitácora de auditoría de prueba
+app.post('/api/admin/auditoria/purgar', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+
+    await dbRun('DELETE FROM Auditoria WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+
+    res.json({
+      ok: true,
+      mensaje: 'Bitácora de auditoría de prueba purgada exitosamente.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- REPORTE DE VENTAS POR PERÍODO & CONSUMO DE INSUMOS EN KÁRDEX ---
 app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res) => {
   try {

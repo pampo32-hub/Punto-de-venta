@@ -832,9 +832,14 @@
               </h3>
               <p style="margin:0; color:#94a3b8; font-size:0.9rem;" id="devMetricasSubtitulo">Visualizando métricas e indicadores de rendimiento del comercio activo.</p>
             </div>
-            <button class="btn-pri" onclick="cargarMetricasDev()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8); display:flex; align-items:center; gap:8px;">
-              🔄 Actualizar Métricas
-            </button>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <button class="btn-sec" onclick="purgarVentasPruebaDev()" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; display:flex; align-items:center; gap:6px; font-weight:700; padding:8px 14px; border-radius:8px; cursor:pointer;" title="Eliminar ventas, facturas y órdenes de prueba para entregar en blanco">
+                🗑️ Purgar Ventas de Prueba
+              </button>
+              <button class="btn-pri" onclick="cargarMetricasDev()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8); display:flex; align-items:center; gap:8px;">
+                🔄 Actualizar Métricas
+              </button>
+            </div>
           </div>
 
           <!-- KPIs PRINCIPALES -->
@@ -988,6 +993,7 @@
                 <option value="ORDEN">🧾 Órdenes & Anulaciones</option>
                 <option value="CAJA">💰 Arqueos & Pagos</option>
               </select>
+              <button class="btn-sec" onclick="purgarAuditoriaDev()" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; font-weight:700; padding:8px 12px; border-radius:8px; cursor:pointer;" title="Limpiar bitácora de auditoría de pruebas">🧹 Limpiar Auditoría</button>
               <button class="btn-pri" onclick="cargarAuditoriaDev()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);">🔄 Recargar</button>
             </div>
           </div>
@@ -1160,6 +1166,9 @@
             <button class="btn-quick-action admin-only-action" id="btnEstiloBotonesSalonQuick" onclick="abrirModalSelectorEstilosBotones()" title="Personalizar diseño de botones y tema UI" style="background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(99,102,241,0.2)); border-color: #d4af37; color: #fef08a;">
               🎨 Estilo de Botones
             </button>
+            <button class="btn-quick-action admin-only-action" id="btnLiberarTodasMesas" onclick="liberarTodasLasMesasDev()" title="Liberar todas las mesas y dejarlas en verde sin saldo" style="background: rgba(239,68,68,0.15); border: 1px dashed #ef4444; color: #fca5a5; font-weight: 700;">
+              🔓 Liberar Todas
+            </button>
             <button class="btn-quick-action admin-only-action" id="btnIrEditorSalon">
               📐 Diseñar Salón
             </button>
@@ -1225,6 +1234,7 @@
             <button class="kds-tab" data-kds-dest="todos">📋 Todas las Comandas</button>
           </div>
           <div class="kds-audio-controls">
+            <button class="btn-bell" style="background:rgba(239,68,68,0.18); border:1px dashed #ef4444; color:#fca5a5; font-weight:700;" onclick="purgarComandasKDSDev()" title="Limpiar todas las comandas de cocina y barra para entregar en blanco">🧹 Limpiar Comandas KDS</button>
             <button class="btn-bell" id="btnTestBellSound" title="Probar sonido de comanda">🔔 Probar Campana</button>
             <span class="kds-live-tag">⚡ Enlace en tiempo real activo</span>
           </div>
@@ -1261,6 +1271,9 @@
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
               <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)">📑 Corte X (Parcial) <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
               <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
+              <button class="btn-caja-op btn-purgar-caja" id="btnResetCajaPruebas" onclick="purgarHistorialCajaDev()" style="grid-column: span 2; background: rgba(239, 68, 68, 0.12); border: 1px dashed #ef4444; color: #f87171; font-size: 0.82rem; padding: 8px; margin-top: 4px;" title="Resetear historial financiero y dejar caja en blanco para entrega al cliente">
+                🧹 Resetear Historial Financiero de Caja
+              </button>
             </div>
           </div>
 
@@ -1747,7 +1760,8 @@
                 </p>
               </div>
               <div class="compras-actions-top" style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="btn-tool" style="background:#475569; border-color:#64748b;" onclick="limpiarSugerenciasCompras()" title="Limpiar todas las sugerencias que aparecen en pantalla">🧹 Limpiar Todo</button>
+                <button class="btn-tool" style="background:#7f1d1d; border-color:#991b1b; color:#fecaca;" onclick="purgarSugerenciasComprasDev()" title="Eliminar definitivamente las sugerencias y normalizar existencias para entregar en blanco">🗑️ Eliminar Sugerencias Definitivamente</button>
+                <button class="btn-tool" style="background:#475569; border-color:#64748b;" onclick="limpiarSugerenciasCompras()" title="Limpiar todas las sugerencias que aparecen en pantalla">🧹 Limpiar Pantalla</button>
                 <button class="btn-tool" onclick="copiarListaComprasTexto()">📋 Copiar Lista</button>
                 <button class="btn-tool" style="background:#2563eb; border-color:#3b82f6;" onclick="imprimirListaCompras()">🖨️ Imprimir Pedido</button>
               </div>
