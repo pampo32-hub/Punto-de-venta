@@ -336,10 +336,12 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   }
   if (servNum > 0) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
-  } else {
+  } else if (esParaLlevarTicket) {
     raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
   }
-  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
+  if (ivaNum > 0) {
+    raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
+  }
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
@@ -537,10 +539,12 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   }
   if (servNum > 0) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
-  } else {
+  } else if (esParaLlevarTicket) {
     raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
   }
-  raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
+  if (ivaNum > 0) {
+    raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
+  }
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;

@@ -4476,12 +4476,18 @@ window.aplicarRestriccionesModulos = function() {
   });
 
   // 13. Servicio 10% Salón
-  document.querySelectorAll('.row-servicio-10, #rowTotalServicio, .pill-servicio-10, #tipPoolSection').forEach(el => {
+  const rowServ = document.getElementById('rowComServicio');
+  if (rowServ) rowServ.style.display = tieneServicio10 ? 'flex' : 'none';
+  const cardTipPool = document.getElementById('cajaCardTipPool');
+  if (cardTipPool) cardTipPool.style.display = tieneServicio10 ? '' : 'none';
+  document.querySelectorAll('.row-servicio-10, #rowComServicio, #rowTotalServicio, .pill-servicio-10, #tipPoolSection, #cajaCardTipPool').forEach(el => {
     el.style.display = tieneServicio10 ? '' : 'none';
   });
 
   // 14. Desglose IVA 13%
-  document.querySelectorAll('.row-iva-13, #rowTotalIVA, .ticket-iva-row, .desglose-iva').forEach(el => {
+  const rowIva = document.getElementById('rowComIva');
+  if (rowIva) rowIva.style.display = tieneIVA13 ? 'flex' : 'none';
+  document.querySelectorAll('.row-iva-13, #rowComIva, #rowTotalIVA, .ticket-iva-row, .desglose-iva').forEach(el => {
     el.style.display = tieneIVA13 ? '' : 'none';
   });
 
@@ -8654,17 +8660,38 @@ function recalcularTotalesTicket() {
     )
   );
 
-  let subtotalBase, servicio, iva;
-  if (esParaLlevar) {
-    // Para Llevar: EXENTO del 10% de Servicio. Solo aplica IVA 13% (1.13)
-    subtotalBase = Math.round(total / 1.13);
-    servicio = 0;
-    iva = total - subtotalBase;
-  } else {
-    // Consumo en Salón / Mesa: 10% Servicio + 13% IVA (1.23)
+  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+
+  const aplicaServicio = tieneServicio10 && !esParaLlevar;
+  const aplicaIVA = tieneIVA13;
+
+  let subtotalBase, servicio = 0, iva = 0;
+  if (aplicaServicio && aplicaIVA) {
     subtotalBase = Math.round(total / 1.23);
     servicio = Math.round(subtotalBase * 0.10);
     iva = total - subtotalBase - servicio;
+  } else if (!aplicaServicio && aplicaIVA) {
+    subtotalBase = Math.round(total / 1.13);
+    servicio = 0;
+    iva = total - subtotalBase;
+  } else if (aplicaServicio && !aplicaIVA) {
+    subtotalBase = Math.round(total / 1.10);
+    servicio = total - subtotalBase;
+    iva = 0;
+  } else {
+    subtotalBase = Math.round(total);
+    servicio = 0;
+    iva = 0;
+  }
+
+  const rowServ = document.getElementById('rowComServicio');
+  if (rowServ) {
+    rowServ.style.display = tieneServicio10 ? 'flex' : 'none';
+  }
+  const rowIva = document.getElementById('rowComIva');
+  if (rowIva) {
+    rowIva.style.display = tieneIVA13 ? 'flex' : 'none';
   }
 
   const lblServ = document.getElementById('lblComServicio');
@@ -8768,6 +8795,14 @@ window.toggleModoHappyHourActual = async function() {
 // MODAL DE DESCUENTOS & CORTESÍAS CON PIN Y AUDITORÍA
 // ============================================================================
 window.abrirModalAplicarDescuento = function() {
+  if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('descuentos_cortesias')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🔒 La función de Descuentos y Cortesías está deshabilitada en las características de este local.', 'warning');
+    } else {
+      alert('🔒 La función de Descuentos y Cortesías está deshabilitada en las características de este local.');
+    }
+    return;
+  }
   if (!estado.mesaActiva) {
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('⚠️ Debes seleccionar una mesa activa para aplicar descuentos.', 'warning');
@@ -10065,6 +10100,9 @@ document.addEventListener('keydown', (e) => {
   // Ctrl + D / Alt + D: Abrir Descuento / Cortesía con PIN
   if ((e.ctrlKey || e.altKey) && (e.key === 'd' || e.key === 'D')) {
     e.preventDefault();
+    if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('descuentos_cortesias')) {
+      return;
+    }
     if (typeof window.abrirModalAplicarDescuento === 'function') {
       window.abrirModalAplicarDescuento();
     } else {

@@ -3608,8 +3608,9 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 
     const ordenNegocioId = Number(orden.negocio_id) || negocioId || 1;
     const moduloActivo = await negocioTieneModulo(ordenNegocioId, 'descuentos_cortesias_pin');
-    if (!moduloActivo) {
-      return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
+    const featureActivo = await negocioTieneCaracteristica(ordenNegocioId, 'descuentos_cortesias');
+    if (!moduloActivo || !featureActivo) {
+      return res.status(403).json({ error: 'La función de Descuentos & Cortesías está deshabilitada para este restaurante.' });
     }
 
     // Validar PIN de Administrador/Supervisor OBLIGATORIO SIEMPRE
@@ -3651,8 +3652,21 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     descuentoPorcentaje = Number(descuentoPorcentaje) || 0;
 
     const subtotalNeto = Math.max(0, (subtotalBruto || 0) - descuentoMonto);
-    const servicio10 = Math.round(subtotalNeto * 0.10) || 0;
-    const iva13 = Math.round(subtotalNeto * 0.13) || 0;
+    const tieneServ10 = await negocioTieneCaracteristica(ordenNegocioId, 'servicio_10');
+    const tieneIva13 = await negocioTieneCaracteristica(ordenNegocioId, 'desglose_iva_13');
+    const esParaLlevar = Boolean(orden.tipo_orden === 'para_llevar' || orden.tipo === 'para_llevar' || orden.es_para_llevar === 1 || !orden.mesa_id);
+
+    const aplicaServ = tieneServ10 && !esParaLlevar;
+    const aplicaIva = tieneIva13;
+
+    let servicio10 = 0;
+    let iva13 = 0;
+    if (aplicaServ) {
+      servicio10 = Math.round(subtotalNeto * 0.10);
+    }
+    if (aplicaIva) {
+      iva13 = Math.round(subtotalNeto * 0.13);
+    }
     const totalFinal = (subtotalNeto + servicio10 + iva13) || 0;
 
     await dbRun(
@@ -4351,17 +4365,34 @@ async function recalcularTotalesOrden(ordenId) {
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
   const total = Math.max(0, totalBruto - descuentoHH);
-  let subtotal, servicio, iva;
-  if (esParaLlevar) {
-    // Para Llevar: EXENTO de 10% de Servicio. Solo aplica IVA 13% (1.13)
-    subtotal = Math.round(total / 1.13);
-    servicio = 0;
-    iva = total - subtotal;
-  } else {
+  const ordenNegocioId = Number(orden.negocio_id) || 1;
+  const tieneServicio10 = await negocioTieneCaracteristica(ordenNegocioId, 'servicio_10');
+  const tieneIVA13 = await negocioTieneCaracteristica(ordenNegocioId, 'desglose_iva_13');
+
+  const aplicaServicio = tieneServicio10 && !esParaLlevar;
+  const aplicaIVA = tieneIVA13;
+
+  let subtotal, servicio = 0, iva = 0;
+  if (aplicaServicio && aplicaIVA) {
     // Salón / Consumo en mesa: 10% Servicio + 13% IVA (1.23)
     subtotal = Math.round(total / 1.23);
     servicio = Math.round(subtotal * 0.10);
     iva = total - subtotal - servicio;
+  } else if (!aplicaServicio && aplicaIVA) {
+    // Solo 13% IVA (1.13)
+    subtotal = Math.round(total / 1.13);
+    servicio = 0;
+    iva = total - subtotal;
+  } else if (aplicaServicio && !aplicaIVA) {
+    // Solo 10% Servicio (1.10)
+    subtotal = Math.round(total / 1.10);
+    servicio = total - subtotal;
+    iva = 0;
+  } else {
+    // Sin desglose
+    subtotal = Math.round(total);
+    servicio = 0;
+    iva = 0;
   }
 
   await dbRun(
