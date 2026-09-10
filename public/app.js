@@ -2135,7 +2135,7 @@ window.aplicarConfiguracionMonedaNegocio = function() {
 
   // Fila Dólares en Apertura de Caja
   const rowAperturaUSD = document.getElementById('rowAperturaUSD');
-  if (rowAperturaUSD) rowAperturaUSD.style.display = aceptaUSD ? '' : 'none';
+  if (rowAperturaUSD) rowAperturaUSD.style.display = 'block';
 
   // Filas Dólares en Cierre Z
   const czRowVentasDolares = document.getElementById('czRowVentasDolares');
@@ -9683,17 +9683,17 @@ async function cargarCajaDesdeBackend() {
       }
 
       const rowFondoUSD = document.getElementById('rowCajaFondoInicialUSD');
-      if (rowFondoUSD) rowFondoUSD.style.display = aceptaUSD ? 'flex' : 'none';
+      if (rowFondoUSD) rowFondoUSD.style.display = (aceptaUSD || fondoUSD > 0) ? 'flex' : 'none';
 
       const rowVentasUSD = document.getElementById('rowCajaVentasDolares');
-      if (rowVentasUSD) rowVentasUSD.style.display = aceptaUSD ? 'flex' : 'none';
+      if (rowVentasUSD) rowVentasUSD.style.display = (aceptaUSD || dolaresUSD > 0 || dolaresCRC > 0) ? 'flex' : 'none';
 
       const rowTotalEspUSD = document.getElementById('rowCajaTotalEsperadoUSD');
-      if (rowTotalEspUSD) rowTotalEspUSD.style.display = aceptaUSD ? 'flex' : 'none';
+      if (rowTotalEspUSD) rowTotalEspUSD.style.display = (aceptaUSD || totalEsperadoDolaresUSD > 0 || fondoUSD > 0) ? 'flex' : 'none';
 
       const elTotEf = document.getElementById('cajaTotalEfectivo');
       if (elTotEf) {
-        if (aceptaUSD && (totalEsperadoDolaresUSD > 0 || fondoUSD > 0)) {
+        if (totalEsperadoDolaresUSD > 0 || fondoUSD > 0 || (aceptaUSD && dolaresUSD > 0)) {
           elTotEf.textContent = `${formatCRC(totalEsperadoEfectivoNeto)} + $ ${totalEsperadoDolaresUSD.toFixed(2)}`;
         } else {
           elTotEf.textContent = formatCRC(totalEsperadoEfectivoNeto);
@@ -10753,7 +10753,7 @@ window.abrirModalAperturaCaja = function() {
 
   const txtCajero = document.getElementById('txtAperturaCajero');
   const txtMonto = document.getElementById('txtAperturaMontoInicial');
-  const txtMontoUSD = document.getElementById('txtAperturaMontoUSD');
+  const txtMontoUSD = document.getElementById('txtAperturaMontoInicialUSD') || document.getElementById('txtAperturaMontoUSD');
 
   if (txtCajero) {
     txtCajero.value = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Juan Jival';
@@ -10778,7 +10778,7 @@ window.cerrarModalAperturaCaja = function() {
 window.ejecutarAperturaCaja = async function() {
   const txtCajero = document.getElementById('txtAperturaCajero');
   const txtMonto = document.getElementById('txtAperturaMontoInicial');
-  const txtMontoUSD = document.getElementById('txtAperturaMontoUSD');
+  const txtMontoUSD = document.getElementById('txtAperturaMontoInicialUSD') || document.getElementById('txtAperturaMontoUSD');
 
   const cajero = (txtCajero ? txtCajero.value : '').trim() || 'Cajero de Turno';
   const monto_inicial = parseFloat(txtMonto ? txtMonto.value : 0);
