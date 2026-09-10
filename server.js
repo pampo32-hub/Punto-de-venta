@@ -8640,6 +8640,187 @@ app.post('/api/dev/personalizacion-pagina/reset', (req, res) => {
 });
 
 // ============================================================================
+// ASISTENTE INTELIGENTE POS (CHATBOT IA CON SUPABASE/POSTGRES & GEMINI)
+// ============================================================================
+app.post('/api/ia/chat', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req, 1);
+    
+    // Verificar si el negocio tiene activo el módulo de Inteligencia Artificial
+    const tieneModuloIA = await negocioTieneModulo(negocioId, 'inteligencia_artificial');
+    if (!tieneModuloIA) {
+      return res.status(403).json({
+        ok: false,
+        moduloRequerido: 'inteligencia_artificial',
+        error: 'El módulo de Inteligencia Artificial no está activo en este negocio. Puedes activarlo desde la Consola Dev o consultar tu plan de suscripción.'
+      });
+    }
+
+    const { mensaje = '', historial = [] } = req.body || {};
+    if (!mensaje || !String(mensaje).trim()) {
+      return res.status(400).json({ error: 'El mensaje es requerido' });
+    }
+
+    const q = String(mensaje).trim();
+
+    // 1. Extraer contexto fresco en tiempo real de la BD (PostgreSQL / Supabase)
+    const [negocio, inventario, productos, cajaActiva, mesasOcupadas] = await Promise.all([
+      dbGet('SELECT id, nombre, moneda, modulos_activos FROM Negocios WHERE id = ?', [negocioId])
+        .then(r => r || { nombre: 'GastroBar', moneda: 'CRC' }),
+      dbAll('SELECT id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, es_licor FROM Inventario WHERE negocio_id = ? ORDER BY nombre ASC', [negocioId])
+        .catch(() => []),
+      dbAll('SELECT p.id, p.nombre, p.precio, p.destino, p.curso, p.agotado, c.nombre as categoria FROM Productos p LEFT JOIN Categorias c ON p.categoria_id = c.id WHERE p.negocio_id = ? AND p.activo = 1 ORDER BY p.nombre ASC', [negocioId])
+        .catch(() => []),
+      dbGet('SELECT id, cajero, fecha_apertura, monto_inicial, total_ventas_efectivo, total_ventas_tarjeta, total_ventas_sinpe, total_ventas_dolares, total_ventas_usd FROM Cajas WHERE negocio_id = ? AND fecha_cierre IS NULL ORDER BY id DESC LIMIT 1', [negocioId])
+        .catch(() => null),
+      dbAll('SELECT m.id, m.numero, m.estado, m.total, m.nombre_cliente, z.nombre as zona FROM Mesas m LEFT JOIN Zonas z ON m.zona_id = z.id WHERE m.negocio_id = ? AND m.estado != "libre"', [negocioId])
+        .catch(() => [])
+    ]);
+
+    const simboloMoneda = (negocio.moneda === 'USD' ? '$' : '₡');
+
+    // 2. Intentar llamar a Google Gemini si hay API KEY
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (geminiApiKey) {
+      try {
+        const systemPrompt = `Eres el Asistente Inteligente oficial de GAMMA POS para el restaurante/comercio "${negocio.nombre}".
+Tu función es responder preguntas del personal (cajeros, meseros, administradores, cocina) con precisión, rapidez y amabilidad en español.
+La moneda del negocio es ${simboloMoneda} (${negocio.moneda || 'CRC'}).
+
+DATOS EN TIEMPO REAL DEL NEGOCIO (DESDE BASE DE DATOS SUPABASE/POSTGRESQL):
+- INVENTARIO ACTUAL (${inventario.length} insumos registrados):
+${JSON.stringify(inventario.map(i => ({ nombre: i.nombre, stock: i.stock_actual, unidad: i.unidad_medida, min: i.stock_minimo })))}
+
+- CATÁLOGO DE PRODUCTOS EN MENÚ (${productos.length} productos):
+${JSON.stringify(productos.map(p => ({ nombre: p.nombre, precio: p.precio, categoria: p.categoria, agotado: p.agotado === 1 })))}
+
+- ESTADO DE CAJA / TURNO ACTUAL:
+${cajaActiva ? JSON.stringify({
+  cajero: cajaActiva.cajero,
+  apertura: cajaActiva.fecha_apertura,
+  montoInicial: cajaActiva.monto_inicial,
+  efectivo: cajaActiva.total_ventas_efectivo,
+  tarjeta: cajaActiva.total_ventas_tarjeta,
+  sinpe: cajaActiva.total_ventas_sinpe,
+  dolares: cajaActiva.total_ventas_usd || cajaActiva.total_ventas_dolares
+}) : 'Caja cerrada / Sin turno activo'}
+
+- MESAS ACTIVAS O EN ATENCIÓN (${mesasOcupadas.length} mesas ocupadas):
+${JSON.stringify(mesasOcupadas.map(m => ({ mesa: m.numero, zona: m.zona, estado: m.estado, total: m.total })))}
+
+INSTRUCCIONES CLAVE:
+1. Si preguntan sobre stock o disponibilidad (ej: "¿Cuántas Imperial Silver quedan?", "¿Hay carne de res?"), responde indicando la cantidad exacta y unidad en stock.
+2. Si un insumo está por debajo de su stock mínimo, añade una advertencia amigable de bajo stock.
+3. Si preguntan sobre dinero, caja o ventas del turno, resume los totales por forma de pago con el símbolo ${simboloMoneda}.
+4. Si preguntan sobre mesas, indica cuáles están ocupadas o con la cuenta pedida.
+5. Usa respuestas breves, con viñetas claras y negritas, fáciles de leer rápidamente en una tablet o pantalla de restaurante.
+6. Si te saludan o hacen una pregunta general del restaurante, sé cortés y dispuesto a ayudar.`;
+
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+        const response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${systemPrompt}\n\nPregunta del usuario: ${q}` }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 600
+            }
+          })
+        });
+
+        if (response.ok) {
+          const geminiData = await response.json();
+          const textoRespuesta = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (textoRespuesta) {
+            return res.json({
+              ok: true,
+              respuesta: textoRespuesta.trim(),
+              fuente: 'gemini'
+            });
+          }
+        }
+      } catch (geminiErr) {
+        console.warn('⚠️ Error al consultar Gemini API, usando motor de fallback local:', geminiErr.message);
+      }
+    }
+
+    // 3. Motor Inteligente de Fallback Local (respuestas instantáneas basadas en datos reales)
+    const qLower = q.toLowerCase();
+    let respuestaLocal = '';
+
+    if (qLower.includes('caja') || qLower.includes('venta') || qLower.includes('vendido') || qLower.includes('efectivo') || qLower.includes('tarjeta') || qLower.includes('sinpe') || qLower.includes('cuanto llevamos') || qLower.includes('cierre')) {
+      if (cajaActiva) {
+        const totalVentas = Number(cajaActiva.total_ventas_efectivo || 0) + Number(cajaActiva.total_ventas_tarjeta || 0) + Number(cajaActiva.total_ventas_sinpe || 0);
+        respuestaLocal = `💰 **Resumen de Caja (Turno Actual):**\n` +
+          `• **Cajero(a):** ${cajaActiva.cajero || 'Activo'}\n` +
+          `• **Monto Inicial:** ${simboloMoneda}${Number(cajaActiva.monto_inicial || 0).toLocaleString()}\n` +
+          `• **Efectivo:** ${simboloMoneda}${Number(cajaActiva.total_ventas_efectivo || 0).toLocaleString()}\n` +
+          `• **Tarjeta:** ${simboloMoneda}${Number(cajaActiva.total_ventas_tarjeta || 0).toLocaleString()}\n` +
+          `• **SINPE Móvil:** ${simboloMoneda}${Number(cajaActiva.total_ventas_sinpe || 0).toLocaleString()}\n` +
+          `• **Total Vendido Acumulado:** **${simboloMoneda}${totalVentas.toLocaleString()}**`;
+      } else {
+        respuestaLocal = `🔒 **Caja Cerrada:** No hay un turno de caja abierto actualmente en este comercio.`;
+      }
+    } else if (qLower.includes('mesa') || qLower.includes('salon') || qLower.includes('ocupad') || qLower.includes('cuenta')) {
+      if (mesasOcupadas.length > 0) {
+        respuestaLocal = `🍽️ **Mesas Activas / Ocupadas (${mesasOcupadas.length}):**\n` +
+          mesasOcupadas.map(m => `• **Mesa ${m.numero}** (${m.zona || 'Salón'}): ${simboloMoneda}${Number(m.total || 0).toLocaleString()} • *${m.estado}*`).join('\n');
+      } else {
+        respuestaLocal = `🟢 **Salón despejado:** En este momento no hay mesas ocupadas.`;
+      }
+    } else if (qLower.includes('stock') || qLower.includes('quedan') || qLower.includes('cuant') || qLower.includes('hay ') || qLower.includes('inventario') || qLower.includes('insumo') || qLower.includes('cerveza') || qLower.includes('imperial') || qLower.includes('pilsen')) {
+      const palabras = qLower.replace(/cuant[ao]s?|quedan|hay|en|el|la|los|las|de|stock|inventario|\?|¿/gi, ' ').split(/\s+/).filter(w => w.length > 2);
+      
+      let encontrados = inventario.filter(i => {
+        const nom = (i.nombre || '').toLowerCase();
+        return palabras.some(p => nom.includes(p));
+      });
+
+      if (encontrados.length > 0) {
+        respuestaLocal = `📦 **Stock de Inventario en Tiempo Real:**\n` + encontrados.map(i => {
+          const alerta = Number(i.stock_actual) <= Number(i.stock_minimo) ? ' ⚠️ *(Poco Stock)*' : '';
+          return `• **${i.nombre}**: **${i.stock_actual} ${i.unidad_medida || 'uds'}** en stock${alerta}`;
+        }).join('\n');
+      } else {
+        const prodsEncontrados = productos.filter(p => {
+          const nom = (p.nombre || '').toLowerCase();
+          return palabras.some(w => nom.includes(w));
+        });
+        if (prodsEncontrados.length > 0) {
+          respuestaLocal = `📋 **Productos en Menú:**\n` + prodsEncontrados.map(p => `• **${p.nombre}**: ${simboloMoneda}${p.precio} (${p.agotado ? '❌ Marcado Agotado' : '✅ Disponible'})`).join('\n');
+        } else if (qLower.includes('poco') || qLower.includes('bajo') || qLower.includes('agot')) {
+          const bajos = inventario.filter(i => Number(i.stock_actual) <= Number(i.stock_minimo));
+          if (bajos.length > 0) {
+            respuestaLocal = `⚠️ **Insumos con Poco Stock (${bajos.length}):**\n` + bajos.slice(0, 8).map(i => `• **${i.nombre}**: ${i.stock_actual} ${i.unidad_medida || 'uds'} (mínimo: ${i.stock_minimo})`).join('\n');
+          } else {
+            respuestaLocal = `✅ **Inventario al día:** No hay insumos por debajo del stock mínimo.`;
+          }
+        } else {
+          respuestaLocal = `🔍 No encontré insumos que coincidan con *"${q}"*. Prueba buscando por el nombre del producto (ej: Imperial, Pilsen, Coca Cola).`;
+        }
+      }
+    } else {
+      respuestaLocal = `👋 ¡Hola! Soy el **Asistente IA de ${negocio.nombre}**.\n\nPuedes preguntarme sobre:\n• 📦 **Stock e Inventario** (*"¿Cuántas Imperial quedan?", "Insumos con poco stock"*)\n• 💰 **Ventas y Caja** (*"¿Cuánto llevamos vendido en efectivo hoy?"*)\n• 🍽️ **Mesas** (*"¿Qué mesas están ocupadas?"*)\n\n*(💡 Para respuestas conversacionales con IA en lenguaje libre, puedes añadir GEMINI_API_KEY en tu archivo .env)*`;
+    }
+
+    return res.json({
+      ok: true,
+      respuesta: respuestaLocal,
+      fuente: 'local_database'
+    });
+  } catch (error) {
+    console.error('Error en /api/ia/chat:', error);
+    res.status(500).json({ error: 'Error procesando la consulta con el asistente IA' });
+  }
+});
+
+// ============================================================================
 // INICIAR SERVIDOR & EXPORTAR (ENTRYPOINT & TEST HARNESS)
 // ============================================================================
 if (require.main === module) {

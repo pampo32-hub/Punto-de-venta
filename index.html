@@ -5826,5 +5826,69 @@
         <div style="display:flex; gap:8px;">
           <div style="flex:1; background:linear-gradient(180deg,#6EE7B7 0%,#10B981 50%,#047857 100%); border:1px solid #D1FAE5; border-radius:8px; padding:6px; font-size:0.75rem; font-weight:800; color:#022C22; text-align:center;">Cobrar ₡</div>
 
+
+  <!-- ===================================================================== -->
+  <!-- ASISTENTE INTELIGENTE POS (CHATBOT IA) -->
+  <!-- ===================================================================== -->
+  <!-- BOTÓN FLOTANTE -->
+  <button id="btnFloatAsistenteIA" class="btn-float-ai" onclick="toggleChatboxIA()" title="Consultar stock, caja o mesas con Inteligencia Artificial" style="display:none;">
+    <span class="ai-sparkle-icon">✨</span>
+    <span class="ai-icon">🤖</span>
+    <span class="ai-label">Asistente IA</span>
+    <span class="ai-pulse-dot"></span>
+  </button>
+
+  <!-- VENTANA DEL CHAT -->
+  <div id="widgetChatIA" class="widget-chat-ai">
+    <div class="chat-ai-header">
+      <div class="chat-ai-header-info">
+        <div class="chat-ai-avatar">🤖</div>
+        <div>
+          <h4>Asistente Inteligente POS</h4>
+          <span class="chat-ai-status"><span class="status-dot"></span> Conectado • Inventario en vivo</span>
+        </div>
+      </div>
+      <div class="chat-ai-actions">
+        <button type="button" class="btn-chat-ai-ctrl" onclick="limpiarConversacionIA()" title="Limpiar conversación">🧹</button>
+        <button type="button" class="btn-chat-ai-ctrl" onclick="toggleChatboxIA()" title="Cerrar chat">✕</button>
+      </div>
+    </div>
+
+    <!-- CHIPS DE CONSULTA RÁPIDA -->
+    <div class="chat-ai-quick-chips">
+      <button type="button" class="quick-chip" onclick="preguntarSugerenciaIA('¿Cuántas Imperial Silver quedan en stock?')">🍺 Imperial Silver</button>
+      <button type="button" class="quick-chip" onclick="preguntarSugerenciaIA('¿Qué productos o insumos tienen poco stock?')">⚠️ Poco Stock</button>
+      <button type="button" class="quick-chip" onclick="preguntarSugerenciaIA('¿Cuánto llevamos vendido en la caja hoy?')">💰 Ventas Hoy</button>
+      <button type="button" class="quick-chip" onclick="preguntarSugerenciaIA('¿Cuáles mesas están ocupadas actualmente?')">🍽️ Mesas Ocupadas</button>
+    </div>
+
+    <!-- CUERPO DE MENSAJES -->
+    <div class="chat-ai-body" id="chatAIBody">
+      <div class="chat-ai-msg bot">
+        <div class="msg-bubble">
+          👋 ¡Hola! Soy tu <strong>Asistente Inteligente</strong> de <strong>GAMMA POS</strong>.<br><br>
+          Puedes preguntarme cualquier duda sobre <strong>stock de cervezas o insumos</strong>, <strong>ventas del turno</strong> o <strong>mesas activas</strong>.
+        </div>
+        <span class="msg-time">Ahora</span>
+      </div>
+    </div>
+
+    <!-- INDICADOR DE ESCRIBIENDO -->
+    <div class="chat-ai-typing" id="chatAITyping" style="display:none;">
+      <div class="typing-indicator">
+        <span></span><span></span><span></span>
+      </div>
+      <small>Consultando inventario y analizando...</small>
+    </div>
+
+    <!-- FOOTER INPUT -->
+    <form class="chat-ai-footer" id="formChatIA" onsubmit="event.preventDefault(); enviarMensajeFormularioIA();">
+      <input type="text" id="inputChatIA" placeholder="Pregunta sobre stock, insumos, precios o caja..." autocomplete="off" />
+      <button type="submit" id="btnEnviarChatIA" class="btn-send-ai" title="Enviar pregunta">
+        <span>🚀</span>
+      </button>
+    </form>
+  </div>
+
 </body>
 </html>

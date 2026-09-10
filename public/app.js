@@ -18965,3 +18965,140 @@ window.cargarPersonalizacionPagina = async function(negocioId) {
     try { originalCargarPersonalizacion(negocioId); } catch(e){}
   }
 };
+
+
+// ============================================================================
+// ASISTENTE INTELIGENTE POS (CHATBOT IA CON SUPABASE & GEMINI)
+// ============================================================================
+window.toggleChatboxIA = function() {
+  const widget = document.getElementById('widgetChatIA');
+  if (!widget) return;
+  
+  const isActive = widget.classList.contains('active');
+  if (isActive) {
+    widget.classList.remove('active');
+  } else {
+    widget.classList.add('active');
+    setTimeout(() => {
+      document.getElementById('inputChatIA')?.focus();
+    }, 150);
+  }
+};
+
+window.limpiarConversacionIA = function() {
+  const body = document.getElementById('chatAIBody');
+  if (!body) return;
+  body.innerHTML = `
+    <div class="chat-ai-msg bot">
+      <div class="msg-bubble">
+        👋 ¡Conversación reiniciada! ¿En qué te puedo ayudar hoy con respecto al inventario, ventas o mesas?
+      </div>
+      <span class="msg-time">Ahora</span>
+    </div>
+  `;
+};
+
+window.preguntarSugerenciaIA = function(texto) {
+  const input = document.getElementById('inputChatIA');
+  if (input) input.value = texto;
+  enviarMensajeFormularioIA();
+};
+
+window.enviarMensajeFormularioIA = function() {
+  const input = document.getElementById('inputChatIA');
+  if (!input) return;
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = '';
+  enviarMensajeIA(texto);
+};
+
+function formatRespuestaIA(texto) {
+  if (!texto) return '';
+  let html = String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  html = html.replace(/^[•\-]\s*(.*)$/gm, '<div style="margin-left: 8px; margin-bottom: 3px;">• $1</div>');
+  html = html.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+  return html;
+}
+
+window.enviarMensajeIA = async function(mensaje) {
+  const body = document.getElementById('chatAIBody');
+  const typing = document.getElementById('chatAITyping');
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  if (body) {
+    const userMsg = document.createElement('div');
+    userMsg.className = 'chat-ai-msg user';
+    const escUserMsg = typeof escapeHtml === 'function' ? escapeHtml(mensaje) : mensaje.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    userMsg.innerHTML = `
+      <div class="msg-bubble">${escUserMsg}</div>
+      <span class="msg-time">${timeStr}</span>
+    `;
+    body.appendChild(userMsg);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  if (typing) typing.style.display = 'flex';
+  if (body) body.scrollTop = body.scrollHeight;
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = sessionStorage.getItem('pos_token') || (estado.usuarioActual && estado.usuarioActual.token);
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (estado.negocioActual && estado.negocioActual.id) {
+      headers['x-negocio-id'] = String(estado.negocioActual.id);
+    }
+
+    const res = await fetch('/api/ia/chat', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ mensaje, negocio_id: estado.negocioActual?.id || 1 })
+    });
+
+    const data = await res.json();
+    if (typing) typing.style.display = 'none';
+
+    if (body) {
+      const botMsg = document.createElement('div');
+      botMsg.className = 'chat-ai-msg bot';
+
+      if (!res.ok || data.moduloRequerido) {
+        botMsg.innerHTML = `
+          <div class="msg-bubble" style="border-left: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.15);">
+            🔒 <strong>Módulo de IA no disponible:</strong><br>
+            ${data.error || 'El módulo de Inteligencia Artificial no está activo en este comercio.'}
+          </div>
+          <span class="msg-time">${timeStr}</span>
+        `;
+      } else {
+        botMsg.innerHTML = `
+          <div class="msg-bubble">${formatRespuestaIA(data.respuesta || 'Sin respuesta.')}</div>
+          <span class="msg-time">${timeStr}</span>
+        `;
+      }
+      body.appendChild(botMsg);
+      body.scrollTop = body.scrollHeight;
+    }
+  } catch (err) {
+    if (typing) typing.style.display = 'none';
+    if (body) {
+      const errMsg = document.createElement('div');
+      errMsg.className = 'chat-ai-msg bot';
+      errMsg.innerHTML = `
+        <div class="msg-bubble" style="border-left: 3px solid #ef4444; background: rgba(239, 68, 68, 0.15);">
+          ⚠️ <strong>Error de conexión:</strong> No se pudo comunicar con el asistente. Intenta de nuevo.
+        </div>
+        <span class="msg-time">${timeStr}</span>
+      `;
+      body.appendChild(errMsg);
+      body.scrollTop = body.scrollHeight;
+    }
+  }
+};
