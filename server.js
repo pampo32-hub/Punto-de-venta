@@ -1341,6 +1341,28 @@ const CATALOGO_MODULOS = [
   }
 ];
 
+// Catálogo de Características y Feature Flags por Negocio
+const CATALOGO_CARACTERISTICAS = [
+  { id: 'bimoneda_dolares', nombre: 'Soporte Bimoneda / Dólares ($ USD)', categoria: 'cobro', icono: '💵', descripcion: 'Habilita pagos, cobros mixtos, fondo inicial y arqueo en dólares.' },
+  { id: 'servicio_10', nombre: 'Cobro de 10% Servicio de Salón', categoria: 'cobro', icono: '🍽️', descripcion: 'Recargo automático del 10% legal de servicio/propinas en mesas.' },
+  { id: 'desglose_iva_13', nombre: 'Desglose de IVA (13%)', categoria: 'cobro', icono: '🧾', descripcion: 'Calcula y desglosa el 13% de impuesto de valor agregado en cuentas.' },
+  { id: 'descuentos_cortesias', nombre: 'Descuentos y Cortesías Manuales', categoria: 'cobro', icono: '🎟️', descripcion: 'Permite aplicar descuentos y cortesías con control de permisos.' },
+  { id: 'facturacion_electronica', nombre: 'Facturación Electrónica Express', categoria: 'cobro', icono: '⚡', descripcion: 'Consulta de cédulas y timbrado electrónico tributario.' },
+  { id: 'union_mesas', nombre: 'Unión y Fusión de Mesas', categoria: 'salon', icono: '🔗', descripcion: 'Permite unir múltiples mesas para grupos grandes y cuentas unificadas.' },
+  { id: 'division_cuentas', nombre: 'División de Cuentas (Split Bill)', categoria: 'salon', icono: '👥', descripcion: 'Permite pagar por partes iguales, por comensal o por ítems.' },
+  { id: 'liberar_mesas_pin', nombre: 'Liberación de Mesas con PIN', categoria: 'salon', icono: '🔒', descripcion: 'Exige PIN de administrador para liberar mesas con saldo pendiente.' },
+  { id: 'menu_digital_qr', nombre: 'Menú Digital QR para Clientes', categoria: 'salon', icono: '📱', descripcion: 'Permite a clientes escanear el QR de mesa para ver carta y pedir cuenta.' },
+  { id: 'happy_hour_auto', nombre: 'Happy Hour Automático (2x1 y Promos)', categoria: 'salon', icono: '🍸', descripcion: 'Aplica promociones y descuentos programados según el horario.' },
+  { id: 'impresion_auto_cobro', nombre: 'Impresión Automática al Cobrar', categoria: 'hardware', icono: '📄', descripcion: 'Dispara la impresión de factura térmica inmediatamente al liquidar.' },
+  { id: 'impresion_precuenta', nombre: 'Impresión de Pre-Cuenta / Pre-Factura', categoria: 'hardware', icono: '🧾', descripcion: 'Permite a los saloneros imprimir la pre-cuenta antes del pago.' },
+  { id: 'despacho_cocina_barra', nombre: 'Despacho de Comandas a Cocina/Barra', categoria: 'hardware', icono: '🍳', descripcion: 'Envía tickets físicos a impresoras térmicas de barra y cocina.' },
+  { id: 'apertura_cajon_gaveta', nombre: 'Apertura Automática de Gaveta', categoria: 'hardware', icono: '🗄️', descripcion: 'Envía el pulso Kick Drawer para abrir el cajón en pagos en efectivo.' },
+  { id: 'kardex_tiempo_real', nombre: 'Descuento de Kárdex en Tiempo Real', categoria: 'inventario', icono: '📦', descripcion: 'Rebaja inventario e insumos de recetas automáticamente al vender.' },
+  { id: 'alertas_stock_critico', nombre: 'Alertas de Stock Crítico / Mínimo', categoria: 'inventario', icono: '⚠️', descripcion: 'Avisa visualmente cuando un producto o insumo alcanza stock mínimo.' },
+  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🙈', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real.' },
+  { id: 'asistente_ia', nombre: 'Copiloto de Inteligencia Artificial (IA)', categoria: 'seguridad', icono: '🤖', descripcion: 'Habilita el asistente virtual inteligente de ventas, stock y soporte.' }
+];
+
 // Helper global para verificar si un negocio tiene un módulo/feature activo
 async function negocioTieneModulo(negocioId, moduloId) {
   try {
@@ -1359,9 +1381,32 @@ async function negocioTieneModulo(negocioId, moduloId) {
   }
 }
 
+// Helper global para verificar si un negocio tiene una característica activa
+async function negocioTieneCaracteristica(negocioId, flagId) {
+  try {
+    const neg = await dbGet('SELECT caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId || 1]);
+    if (!neg) return true;
+    if (!neg.caracteristicas_activas || neg.caracteristicas_activas === 'all') return true;
+    let flags = neg.caracteristicas_activas;
+    if (typeof flags === 'string') {
+      try { flags = JSON.parse(flags); } catch (_) { return true; }
+    }
+    if (Array.isArray(flags)) return flags.includes(flagId);
+    if (typeof flags === 'object' && flags !== null) return flags[flagId] !== false;
+    return true;
+  } catch (e) {
+    return true;
+  }
+}
+
 // Obtener catálogo de módulos
 app.get('/api/dev/modulos/catalogo', (req, res) => {
   res.json(CATALOGO_MODULOS);
+});
+
+// Obtener catálogo de características
+app.get('/api/dev/caracteristicas/catalogo', (req, res) => {
+  res.json(CATALOGO_CARACTERISTICAS);
 });
 
 // Clonar un negocio completo de forma 100% aislada (Zonas, Mesas, Categorías, Productos, Inventario y Super Admin)
@@ -1589,6 +1634,63 @@ app.put('/api/dev/negocios/:id/modulos', async (req, res) => {
       negocioId: Number(req.params.id),
       modulos_activos: parsedModulos,
       plan_nombre
+    });
+
+    res.json({ ok: true, negocio: actualizado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Obtener características activas de un negocio
+app.get('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
+  try {
+    const neg = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [req.params.id]);
+    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    let caracteristicas = neg.caracteristicas_activas || 'all';
+    if (caracteristicas !== 'all') {
+      try { caracteristicas = JSON.parse(caracteristicas); } catch (_) { caracteristicas = 'all'; }
+    }
+
+    res.json({
+      negocio: neg,
+      negocioId: neg.id,
+      nombre: neg.nombre,
+      moneda: neg.moneda,
+      tipoCambioUSD: neg.tipo_cambio_usd || 520,
+      planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
+      caracteristicasActivas: caracteristicas,
+      catalogo: CATALOGO_CARACTERISTICAS
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Actualizar características activas de un negocio
+app.put('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
+  try {
+    const { caracteristicas_activas } = req.body;
+    const valorFlags = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
+
+    await dbRun(
+      'UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?',
+      [valorFlags, req.params.id]
+    );
+
+    const actualizado = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [req.params.id]);
+
+    let parsedFlags = valorFlags;
+    try { parsedFlags = JSON.parse(valorFlags); } catch (_) {}
+    if (actualizado) {
+      actualizado.caracteristicas_activas = parsedFlags;
+    }
+
+    // Notificar en tiempo real a todas las pantallas de ese negocio
+    io.emit('negocio_caracteristicas_actualizadas', {
+      negocioId: Number(req.params.id),
+      caracteristicas_activas: parsedFlags
     });
 
     res.json({ ok: true, negocio: actualizado });

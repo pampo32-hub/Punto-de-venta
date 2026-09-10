@@ -228,6 +228,7 @@ function initDb() {
     db.run("ALTER TABLE Negocios ADD COLUMN modulos_activos TEXT DEFAULT 'all'", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN plan_nombre TEXT DEFAULT 'Plan Full Tech 2026'", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN tipo_cambio_usd REAL DEFAULT 520", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN caracteristicas_activas TEXT DEFAULT 'all'", () => {});
 
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (

@@ -1893,6 +1893,27 @@ try {
         }
       }
     });
+    socket.on('negocio_caracteristicas_actualizadas', (d) => {
+      if (estado.negocioActual && Number(estado.negocioActual.id) === Number(d.negocioId)) {
+        estado.negocioActual.caracteristicas_activas = d.caracteristicas_activas;
+        try {
+          sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+          localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+        } catch (_) {}
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro(`⚙️ Características del comercio actualizadas en tiempo real`, 'info');
+        }
+      }
+      const panel = document.getElementById('devTabCaracteristicas');
+      if (panel && panel.classList.contains('active')) {
+        const sel = document.getElementById('devSelectNegocioCaracteristicas');
+        if (sel && Number(sel.value) === Number(d.negocioId)) {
+          if (typeof cargarTabCaracteristicasDev === 'function') {
+            cargarTabCaracteristicasDev(Number(d.negocioId));
+          }
+        }
+      }
+    });
     socket.on('negocio_eliminado', (d) => {
       if (document.getElementById('developerPortalView')?.classList.contains('active')) {
         if (typeof cargarNegociosDev === 'function') cargarNegociosDev();
@@ -3074,6 +3095,9 @@ function cargarDevPortal() {
       } else if (target === 'usuarios') {
         document.getElementById('devTabUsuarios')?.classList.add('active');
         cargarUsuariosDev();
+      } else if (target === 'caracteristicas') {
+        document.getElementById('devTabCaracteristicas')?.classList.add('active');
+        cargarTabCaracteristicasDev();
       } else if (target === 'db') {
         document.getElementById('devTabDb')?.classList.add('active');
         if (typeof window.cargarMonitorDbDev === 'function') {
@@ -3151,6 +3175,8 @@ window.cambiarNegocioActivoDev = async function(negocioId) {
     cargarInventarioDev();
   } else if (target === 'auditoria') {
     cargarAuditoriaDev();
+  } else if (target === 'caracteristicas') {
+    cargarTabCaracteristicasDev(nid);
   } else if (target === 'editor-pagina') {
     cargarPersonalizacionPagina(nid);
   }
@@ -3842,6 +3868,9 @@ async function cargarNegociosDev() {
             <button class="btn-edit-negocio" style="flex: 1; background: #312e81; border-color: #4338ca; color: #e0e7ff; font-weight: 700;" onclick="abrirModalModulosNegocio(${n.id})">
               🧩 Licencia & Módulos
             </button>
+            <button class="btn-edit-negocio" style="flex: 1; background: #065f46; border-color: #059669; color: #a7f3d0; font-weight: 700;" onclick="abrirCaracteristicasDeNegocio(${n.id})">
+              ⚙️ Características
+            </button>
             <button class="btn-edit-negocio" style="flex: 1;" onclick="editarNegocioDev(${n.id})">
               ✏️ Editar Datos
             </button>
@@ -4339,6 +4368,252 @@ window.aplicarRestriccionesModulos = function() {
   document.querySelectorAll('.btn-descuento-trigger, #btnAbrirModalDescuento').forEach(el => {
     el.style.display = tieneDescuentos ? '' : 'none';
   });
+};
+
+// ============================================================================
+// GESTIÓN DE CARACTERÍSTICAS (FEATURE FLAGS) EN PANEL DEVELOPER
+// ============================================================================
+let _catalogoCaracteristicasCache = [];
+let _negocioCaracteristicasActivoId = 1;
+
+window.negocioTieneCaracteristica = function(flagId) {
+  let neg = estado.negocioActual;
+  if (!neg) {
+    try {
+      const s = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
+      if (s) neg = JSON.parse(s);
+    } catch (_) {}
+  }
+  if (!neg) return true;
+  const flags = neg.caracteristicas_activas;
+  if (!flags || flags === 'all') return true;
+
+  if (Array.isArray(flags)) {
+    return flags.includes(flagId);
+  }
+  if (typeof flags === 'string') {
+    try {
+      const arr = JSON.parse(flags);
+      if (Array.isArray(arr)) return arr.includes(flagId);
+    } catch (_) {}
+    const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
+    return splitArr.includes(String(flagId).toLowerCase());
+  }
+  return true;
+};
+
+window.cargarTabCaracteristicasDev = async function(negocioId) {
+  try {
+    const selector = document.getElementById('devSelectNegocioCaracteristicas');
+    let targetId = negocioId;
+    if (!targetId && selector && selector.value) {
+      targetId = Number(selector.value);
+    }
+    if (!targetId) {
+      targetId = estado.negocioActual?.id || 1;
+    }
+    _negocioCaracteristicasActivoId = Number(targetId);
+
+    // 1. Cargar catálogo si no está en cache
+    if (!_catalogoCaracteristicasCache || _catalogoCaracteristicasCache.length === 0) {
+      const resCat = await fetch('/api/dev/caracteristicas/catalogo');
+      if (resCat.ok) {
+        _catalogoCaracteristicasCache = await resCat.json();
+      }
+    }
+
+    // 2. Poblar selector de negocios
+    await window.poblarSelectorNegociosCaracteristicas(_negocioCaracteristicasActivoId);
+
+    // 3. Obtener configuración del negocio específico
+    const resNeg = await fetch(`/api/dev/negocios/${_negocioCaracteristicasActivoId}/caracteristicas`);
+    if (!resNeg.ok) throw new Error('No se pudo cargar la configuración del negocio');
+    const data = await resNeg.json();
+
+    const subtitulo = document.getElementById('devCaracteristicasSubtitulo');
+    if (subtitulo && data.negocio) {
+      subtitulo.textContent = `Configurando funcionalidades para: ${data.negocio.nombre} (${data.negocio.moneda === 'CRC_USD' ? 'Bimoneda ₡/$' : (data.negocio.moneda === 'USD' ? 'Dólares $' : 'Colones ₡')})`;
+    }
+
+    // 4. Renderizar tarjetas de características
+    window.renderizarGridCaracteristicas(_catalogoCaracteristicasCache, data.caracteristicasActivas);
+  } catch (e) {
+    console.error('Error cargando características dev:', e);
+  }
+};
+
+window.poblarSelectorNegociosCaracteristicas = async function(selectedId) {
+  try {
+    let negocios = window._negociosDisponiblesDev;
+    if (!negocios || negocios.length === 0) {
+      const res = await fetch('/api/dev/negocios');
+      negocios = await res.json();
+      window._negociosDisponiblesDev = negocios;
+    }
+    const selector = document.getElementById('devSelectNegocioCaracteristicas');
+    if (!selector) return;
+
+    selector.innerHTML = negocios.map(n => {
+      const tagInactivo = Number(n.activo) === 0 ? ' (⛔ Inactivo)' : '';
+      return `<option value="${n.id}" ${Number(n.id) === Number(selectedId) ? 'selected' : ''}>${n.nombre}${tagInactivo} (ID: ${n.id})</option>`;
+    }).join('');
+  } catch (e) {
+    console.error('Error poblando selector negocios características:', e);
+  }
+};
+
+window.cambiarNegocioCaracteristicas = function(negocioId) {
+  window.cargarTabCaracteristicasDev(Number(negocioId));
+};
+
+window.renderizarGridCaracteristicas = function(catalogo, activas) {
+  const grid = document.getElementById('devGridCaracteristicas');
+  if (!grid) return;
+
+  const esAll = !activas || activas === 'all';
+  let activasArray = [];
+  if (Array.isArray(activas)) {
+    activasArray = activas;
+  } else if (typeof activas === 'string' && !esAll) {
+    try { activasArray = JSON.parse(activas); } catch (_) { activasArray = []; }
+  }
+
+  let totalActivas = 0;
+  grid.innerHTML = (catalogo || []).map(feat => {
+    const isChecked = esAll || activasArray.includes(feat.id);
+    if (isChecked) totalActivas++;
+
+    return `
+      <div class="feat-card" style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.5rem;">${feat.icono || '⚙️'}</span>
+              <h4 style="margin: 0; font-size: 0.95rem; color: #f8fafc; font-weight: 700;">${feat.nombre}</h4>
+            </div>
+            <span class="badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 9999px; background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600;">
+              ${feat.categoria || 'Sistema'}
+            </span>
+          </div>
+          <p style="margin: 0 0 14px 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.4;">
+            ${feat.descripcion || ''}
+          </p>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1e293b; padding-top: 10px; margin-top: 6px;">
+          <code style="font-size: 0.72rem; color: #64748b; font-family: monospace;">${feat.id}</code>
+          <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; cursor: pointer;">
+            <input type="checkbox" id="switch_feat_${feat.id}" data-feat-id="${feat.id}" ${isChecked ? 'checked' : ''} onchange="actualizarContadorCaracteristicasActivas()" style="opacity: 0; width: 0; height: 0;">
+            <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: ${isChecked ? '#10b981' : '#334155'}; transition: .3s; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1);">
+              <span style="position: absolute; content: ''; height: 18px; width: 18px; left: ${isChecked ? '22px' : '3px'}; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+            </span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const countActivas = document.getElementById('devCaracteristicasActivasCount');
+  if (countActivas) countActivas.textContent = String(totalActivas);
+  const countTotal = document.getElementById('devCaracteristicasTotalCount');
+  if (countTotal) countTotal.textContent = String((catalogo || []).length);
+};
+
+window.actualizarContadorCaracteristicasActivas = function() {
+  const checkboxes = document.querySelectorAll('#devGridCaracteristicas input[type="checkbox"]');
+  let checkedCount = 0;
+  checkboxes.forEach(cb => {
+    const slider = cb.nextElementSibling;
+    const knob = slider ? slider.querySelector('span') : null;
+    if (cb.checked) {
+      checkedCount++;
+      if (slider) slider.style.backgroundColor = '#10b981';
+      if (knob) knob.style.left = '22px';
+    } else {
+      if (slider) slider.style.backgroundColor = '#334155';
+      if (knob) knob.style.left = '3px';
+    }
+  });
+
+  const countActivas = document.getElementById('devCaracteristicasActivasCount');
+  if (countActivas) countActivas.textContent = String(checkedCount);
+};
+
+window.establecerTodasCaracteristicas = function(valorBool) {
+  const checkboxes = document.querySelectorAll('#devGridCaracteristicas input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    cb.checked = !!valorBool;
+  });
+  window.actualizarContadorCaracteristicasActivas();
+};
+
+window.establecerModoBasicoCaracteristicas = function() {
+  const basicas = new Set([
+    'descuentos_cortesias',
+    'impresion_auto_cobro',
+    'impresion_precuenta',
+    'despacho_cocina_barra',
+    'apertura_cajon_gaveta',
+    'kardex_tiempo_real'
+  ]);
+  const checkboxes = document.querySelectorAll('#devGridCaracteristicas input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    const fid = cb.dataset.featId;
+    cb.checked = basicas.has(fid);
+  });
+  window.actualizarContadorCaracteristicasActivas();
+};
+
+window.guardarCaracteristicasNegocio = async function() {
+  if (!_negocioCaracteristicasActivoId) return;
+  const checkboxes = document.querySelectorAll('#devGridCaracteristicas input[type="checkbox"]');
+  const activas = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked && cb.dataset.featId) {
+      activas.push(cb.dataset.featId);
+    }
+  });
+
+  const total = (_catalogoCaracteristicasCache || []).length || checkboxes.length;
+  const valorFinal = (activas.length === total) ? 'all' : activas;
+
+  try {
+    const res = await fetch(`/api/dev/negocios/${_negocioCaracteristicasActivoId}/caracteristicas`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caracteristicas_activas: valorFinal })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`✅ ¡Características guardadas con éxito! (${activas.length} de ${total} activas)`, 'success');
+      } else {
+        alert(`✅ ¡Características guardadas con éxito!\n\n• Funciones activas: ${activas.length} de ${total}`);
+      }
+
+      // Si el negocio editado es el actual, actualizar estado en memoria
+      if (estado.negocioActual && Number(estado.negocioActual.id) === Number(_negocioCaracteristicasActivoId)) {
+        estado.negocioActual.caracteristicas_activas = valorFinal;
+        sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+        localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+      }
+    } else {
+      const err = await res.json();
+      alert('Error al guardar características: ' + (err.error || 'Error desconocido'));
+    }
+  } catch (e) {
+    alert('Error al comunicar con el servidor: ' + e.message);
+  }
+};
+
+window.abrirCaracteristicasDeNegocio = function(negocioId) {
+  document.querySelectorAll('.dev-nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.dev-tab-panel').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector('.dev-nav-btn[data-dev-tab="caracteristicas"]');
+  if (btn) btn.classList.add('active');
+  const panel = document.getElementById('devTabCaracteristicas');
+  if (panel) panel.classList.add('active');
+  window.cargarTabCaracteristicasDev(Number(negocioId));
 };
 
 window.abrirPosComoNegocio = async function(negocioId) {
@@ -8917,10 +9192,12 @@ window.resetearEstadoFinancieroCero = function() {
   window._cajaActivaData = null;
   const zeroes = {
     'cajaFondoInicial': 'CERRADA',
+    'cajaFondoInicialUSD': '$ 0.00',
     'cajaVentasEfectivo': '₡ 0.00',
     'cajaVentasTarjeta': '₡ 0.00',
     'cajaVentasSinpe': '₡ 0.00',
     'cajaVentasDolares': '$ 0.00 (₡ 0)',
+    'cajaTotalEsperadoUSD': '$ 0.00',
     'cajaTotalEfectivo': '₡ 0.00',
     'cajaEntradasTotal': '+₡ 0.00',
     'cajaSalidasTotal': '-₡ 0.00',
@@ -8932,6 +9209,14 @@ window.resetearEstadoFinancieroCero = function() {
     const el = document.getElementById(id);
     if (el) el.textContent = val;
   });
+
+  const aceptaUSD = typeof negocioAceptaDolares === 'function' && negocioAceptaDolares();
+  const rowFondoUSD = document.getElementById('rowCajaFondoInicialUSD');
+  if (rowFondoUSD) rowFondoUSD.style.display = aceptaUSD ? 'flex' : 'none';
+  const rowVentasUSD = document.getElementById('rowCajaVentasDolares');
+  if (rowVentasUSD) rowVentasUSD.style.display = aceptaUSD ? 'flex' : 'none';
+  const rowTotalUSD = document.getElementById('rowCajaTotalEsperadoUSD');
+  if (rowTotalUSD) rowTotalUSD.style.display = aceptaUSD ? 'flex' : 'none';
 };
 
 async function cargarCajaDesdeBackend() {
@@ -8959,26 +9244,28 @@ async function cargarCajaDesdeBackend() {
       document.getElementById('cajaVentasEfectivo').textContent = formatCRC(efect);
       document.getElementById('cajaVentasTarjeta').textContent = formatCRC(tarj);
       document.getElementById('cajaVentasSinpe').textContent = formatCRC(sinpe);
-      const elDolares = document.getElementById('cajaVentasDolares');
-      if (elDolares) {
-        elDolares.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
-      }
-      document.getElementById('cajaTotalEfectivo').textContent = formatCRC((data.caja.monto_inicial || 50000) + efect);
-      document.getElementById('cajeroTurnoNombre').textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
+      
+      const fondo = data.caja.monto_inicial || 0;
+      const fondoUSD = Number(data.caja.monto_inicial_usd) || 0;
+      const totalEsperadoEfectivo = Math.round((fondo + efect) * 100) / 100;
+      const totalEsperadoDolaresUSD = Math.round((fondoUSD + dolaresUSD) * 100) / 100;
+      const totalEsperadoDolaresCRC = dolaresCRC;
+      const aceptaUSD = typeof negocioAceptaDolares === 'function' && negocioAceptaDolares();
+
       let entradas = 0, salidas = 0;
       (data.movimientos || []).forEach(m => {
         if (m.tipo === 'entrada') entradas += m.monto;
         if (m.tipo === 'salida') salidas += m.monto;
       });
 
-      const fondo = data.caja.monto_inicial || 0;
-      const totalEsperadoEfectivo = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
-      const totalEsperadoDolaresUSD = dolaresUSD;
-      const totalEsperadoDolaresCRC = dolaresCRC;
-      const totalGeneralGavetaCRC = Math.round((totalEsperadoEfectivo + (negocioAceptaDolares() ? totalEsperadoDolaresCRC : 0)) * 100) / 100;
+      const totalEsperadoEfectivoNeto = Math.round((fondo + efect + entradas - salidas) * 100) / 100;
+      const totalGeneralGavetaCRC = Math.round((totalEsperadoEfectivoNeto + (aceptaUSD ? totalEsperadoDolaresCRC : 0)) * 100) / 100;
 
       const elFondo = document.getElementById('cajaFondoInicial');
       if (elFondo) elFondo.textContent = formatCRC(fondo);
+
+      const elFondoUSD = document.getElementById('cajaFondoInicialUSD');
+      if (elFondoUSD) elFondoUSD.textContent = `$ ${fondoUSD.toFixed(2)}`;
 
       const elVentasEf = document.getElementById('cajaVentasEfectivo');
       if (elVentasEf) elVentasEf.textContent = formatCRC(efect);
@@ -8995,16 +9282,41 @@ async function cargarCajaDesdeBackend() {
       const elSinpe = document.getElementById('cajaVentasSinpe');
       if (elSinpe) elSinpe.textContent = formatCRC(sinpe);
 
+      const elDolares = document.getElementById('cajaVentasDolares');
+      if (elDolares) {
+        elDolares.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
+      }
+
       const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
-      if (elEspEf) elEspEf.textContent = formatCRC(totalEsperadoEfectivo);
+      if (elEspEf) elEspEf.textContent = formatCRC(totalEsperadoEfectivoNeto);
 
       const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
       if (elEspDol) {
         elEspDol.textContent = (dolaresUSD > 0 || dolaresCRC > 0) ? `$ ${dolaresUSD.toFixed(2)} (${formatCRC(dolaresCRC)})` : '$ 0.00 (₡ 0)';
       }
 
+      const elEspUSD = document.getElementById('cajaTotalEsperadoUSD');
+      if (elEspUSD) {
+        elEspUSD.textContent = `$ ${totalEsperadoDolaresUSD.toFixed(2)}`;
+      }
+
+      const rowFondoUSD = document.getElementById('rowCajaFondoInicialUSD');
+      if (rowFondoUSD) rowFondoUSD.style.display = aceptaUSD ? 'flex' : 'none';
+
+      const rowVentasUSD = document.getElementById('rowCajaVentasDolares');
+      if (rowVentasUSD) rowVentasUSD.style.display = aceptaUSD ? 'flex' : 'none';
+
+      const rowTotalEspUSD = document.getElementById('rowCajaTotalEsperadoUSD');
+      if (rowTotalEspUSD) rowTotalEspUSD.style.display = aceptaUSD ? 'flex' : 'none';
+
       const elTotEf = document.getElementById('cajaTotalEfectivo');
-      if (elTotEf) elTotEf.textContent = formatCRC(totalGeneralGavetaCRC);
+      if (elTotEf) {
+        if (aceptaUSD && (totalEsperadoDolaresUSD > 0 || fondoUSD > 0)) {
+          elTotEf.textContent = `${formatCRC(totalEsperadoEfectivoNeto)} + $ ${totalEsperadoDolaresUSD.toFixed(2)}`;
+        } else {
+          elTotEf.textContent = formatCRC(totalEsperadoEfectivoNeto);
+        }
+      }
 
       const elCajero = document.getElementById('cajeroTurnoNombre');
       if (elCajero) elCajero.textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
@@ -9012,6 +9324,7 @@ async function cargarCajaDesdeBackend() {
       window._cajaActivaData = {
         caja: data.caja,
         fondo,
+        fondoUSD,
         ventasEfectivo: efect,
         ventasTarjeta: tarj,
         ventasSinpe: sinpe,
@@ -9019,7 +9332,7 @@ async function cargarCajaDesdeBackend() {
         ventasDolaresUSD: dolaresUSD,
         totalEntradas: entradas,
         totalSalidas: salidas,
-        totalEsperadoEfectivo,
+        totalEsperadoEfectivo: totalEsperadoEfectivoNeto,
         totalEsperadoDolaresUSD,
         totalEsperadoDolaresCRC,
         totalGeneralGavetaCRC,
