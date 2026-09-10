@@ -2067,18 +2067,20 @@ function formatCRCSinDecimales(num) {
 }
 
 function negocioAceptaDolares() {
-  if (typeof negocioTieneCaracteristica === 'function' && negocioTieneCaracteristica('bimoneda_dolares')) {
-    return true;
+  if (typeof negocioTieneCaracteristica === 'function') {
+    if (!negocioTieneCaracteristica('bimoneda_dolares')) {
+      return false;
+    }
   }
   const m = estado.negocioActual?.moneda || 'CRC';
-  return m === 'CRC_USD' || m === 'USD';
+  return m === 'CRC_USD' || m === 'USD' || (typeof negocioTieneCaracteristica === 'function' && negocioTieneCaracteristica('bimoneda_dolares'));
 }
 window.negocioAceptaDolares = negocioAceptaDolares;
 
 window.actualizarBadgeTipoCambioTop = function() {
   const badge = document.getElementById('posTipoCambioBadge');
   const lbl = document.getElementById('lblTipoCambioTop');
-  const aceptaUSD = typeof negocioAceptaDolares === 'function' ? negocioAceptaDolares() : true;
+  const aceptaUSD = typeof negocioAceptaDolares === 'function' ? negocioAceptaDolares() : false;
   const tc = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || window._tipoCambioBCCR?.venta || estado.negocioActual?.tipo_cambio_usd || 520;
   
   if (lbl) {
@@ -2135,7 +2137,7 @@ window.aplicarConfiguracionMonedaNegocio = function() {
 
   // Fila Dólares en Apertura de Caja
   const rowAperturaUSD = document.getElementById('rowAperturaUSD');
-  if (rowAperturaUSD) rowAperturaUSD.style.display = 'block';
+  if (rowAperturaUSD) rowAperturaUSD.style.display = aceptaUSD ? 'block' : 'none';
 
   // Filas Dólares en Cierre Z
   const czRowVentasDolares = document.getElementById('czRowVentasDolares');
@@ -9985,8 +9987,11 @@ window.validarPinAdminManual = async function() {
 // SISTEMA DE ATAJOS DE TECLADO RÁPIDOS (HOTKEYS) POS
 // =========================================================================
 window.seleccionarMetodoCobro = function(metodo) {
+  if (metodo === 'Dolares' && typeof negocioAceptaDolares === 'function' && !negocioAceptaDolares()) {
+    return false;
+  }
   const tab = document.querySelector(`.pay-method-tab[data-method="${metodo}"]`);
-  if (tab) {
+  if (tab && tab.style.display !== 'none') {
     tab.click();
     return true;
   }
@@ -10986,6 +10991,9 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
 });
 
 function inicializarPanelesCobroModal(totalTxt) {
+  if (typeof aplicarConfiguracionMonedaNegocio === 'function') {
+    aplicarConfiguracionMonedaNegocio();
+  }
   let totalNum = parseCRC(totalTxt || document.getElementById('cobroTotalDisplay')?.textContent || '0');
   if (totalNum <= 0 && estado.mesaActiva) {
     totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || (estado.mesaActiva.total || estado.mesaActiva.orden_total || 0);
