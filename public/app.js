@@ -8830,7 +8830,7 @@ window.resetearEstadoFinancieroCero = function() {
 
 async function cargarCajaDesdeBackend() {
   try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
     const res = await fetch(`/api/caja/actual?negocio_id=${nid}`, {
       headers: { 'x-negocio-id': String(nid) }
     });
@@ -8921,27 +8921,31 @@ async function cargarCajaDesdeBackend() {
         movimientos: data.movimientos || []
       };
     } else {
-      const elFondo = document.getElementById('cajaFondoInicial');
-      if (elFondo) elFondo.textContent = 'CERRADA';
-      const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
-      if (elEspEf) elEspEf.textContent = '₡ 0.00';
-      const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
-      if (elEspDol) elEspDol.textContent = '$ 0.00 (₡ 0)';
-      const elTotEf = document.getElementById('cajaTotalEfectivo');
-      if (elTotEf) elTotEf.textContent = '₡ 0.00';
-      const elVentasEf = document.getElementById('cajaVentasEfectivo');
-      if (elVentasEf) elVentasEf.textContent = '₡ 0.00';
-      const elTarj = document.getElementById('cajaVentasTarjeta');
-      if (elTarj) elTarj.textContent = '₡ 0.00';
-      const elSinpe = document.getElementById('cajaVentasSinpe');
-      if (elSinpe) elSinpe.textContent = '₡ 0.00';
-      const elDolares = document.getElementById('cajaVentasDolares');
-      if (elDolares) elDolares.textContent = '$ 0.00 (₡ 0)';
-      const elEntradas = document.getElementById('cajaEntradasTotal');
-      if (elEntradas) elEntradas.textContent = '+₡ 0.00';
-      const elSalidas = document.getElementById('cajaSalidasTotal');
-      if (elSalidas) elSalidas.textContent = '-₡ 0.00';
-      window._cajaActivaData = null;
+      if (typeof window.resetearEstadoFinancieroCero === 'function') {
+        window.resetearEstadoFinancieroCero();
+      } else {
+        const elFondo = document.getElementById('cajaFondoInicial');
+        if (elFondo) elFondo.textContent = 'CERRADA';
+        const elEspEf = document.getElementById('cajaTotalEsperadoEfectivo');
+        if (elEspEf) elEspEf.textContent = '₡ 0.00';
+        const elEspDol = document.getElementById('cajaTotalEsperadoDolares');
+        if (elEspDol) elEspDol.textContent = '$ 0.00 (₡ 0)';
+        const elTotEf = document.getElementById('cajaTotalEfectivo');
+        if (elTotEf) elTotEf.textContent = '₡ 0.00';
+        const elVentasEf = document.getElementById('cajaVentasEfectivo');
+        if (elVentasEf) elVentasEf.textContent = '₡ 0.00';
+        const elTarj = document.getElementById('cajaVentasTarjeta');
+        if (elTarj) elTarj.textContent = '₡ 0.00';
+        const elSinpe = document.getElementById('cajaVentasSinpe');
+        if (elSinpe) elSinpe.textContent = '₡ 0.00';
+        const elDolares = document.getElementById('cajaVentasDolares');
+        if (elDolares) elDolares.textContent = '$ 0.00 (₡ 0)';
+        const elEntradas = document.getElementById('cajaEntradasTotal');
+        if (elEntradas) elEntradas.textContent = '+₡ 0.00';
+        const elSalidas = document.getElementById('cajaSalidasTotal');
+        if (elSalidas) elSalidas.textContent = '-₡ 0.00';
+        window._cajaActivaData = null;
+      }
     }
 
     estado.meserosReporte = data.tipPool || [];

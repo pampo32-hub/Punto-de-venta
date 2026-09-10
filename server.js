@@ -5655,10 +5655,10 @@ app.get('/api/caja/actual', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
     const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      [negocioId]
     );
-    if (!caja) return res.json({ caja: null });
+    if (!caja) return res.json({ caja: null, ventas: [], movimientos: [], tipPool: [] });
 
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
@@ -5697,8 +5697,8 @@ app.post('/api/caja/movimiento', async (req, res) => {
     }
 
     let caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      [negocioId]
     );
     if (!caja) {
       const ahoraApertura = new Date().toISOString();
@@ -5745,8 +5745,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
 
     const negocioId = obtenerNegocioIdReq(req);
     const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      [negocioId]
     );
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
@@ -5880,8 +5880,8 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      [negocioId]
     );
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
 
@@ -6039,8 +6039,8 @@ app.post('/api/caja/abrir', async (req, res) => {
     }
 
     const activa = await dbGet(
-      "SELECT id FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
+      "SELECT id FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      [negocioId]
     );
     if (activa) {
       return res.json({ ok: true, message: 'Ya existe una caja abierta para este comercio', caja_id: activa.id });
