@@ -447,7 +447,7 @@ function initDb() {
     db.run(`CREATE TABLE IF NOT EXISTS Usuarios (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       negocio_id INTEGER DEFAULT 1,
-      usuario TEXT UNIQUE NOT NULL,
+      usuario TEXT NOT NULL,
       nombre_completo TEXT NOT NULL,
       password TEXT NOT NULL,
       rol TEXT NOT NULL, -- developer, admin, cajero, salonero
@@ -456,7 +456,8 @@ function initDb() {
       permisos TEXT DEFAULT '{"salon":true,"kds":true,"caja":true,"facturacion":true}',
       activo INTEGER DEFAULT 1,
       debe_cambiar_password INTEGER DEFAULT 0,
-      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
+      UNIQUE(negocio_id, usuario)
     )`);
     db.run("ALTER TABLE Usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 0", () => {});
 
