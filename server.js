@@ -452,10 +452,15 @@ function extraerUsuarioJWT(req, res, next) {
 }
 
 function obtenerNegocioIdReq(req, idFallback = 1) {
-  if (req.usuario && req.usuario.rol !== 'developer') {
-    return Number(req.usuario.negocio_id) || idFallback;
-  }
   const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
+  if (explicitId) {
+    if (!req.usuario || req.usuario.rol === 'developer' || req.usuario.rol === 'superadmin') {
+      return Number(explicitId);
+    }
+  }
+  if (req.usuario && req.usuario.rol !== 'developer') {
+    return Number(req.usuario.negocio_id) || (explicitId ? Number(explicitId) : idFallback);
+  }
   if (explicitId) return Number(explicitId);
   if (req.negocioId) return Number(req.negocioId);
   return idFallback;
@@ -5981,7 +5986,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 app.post('/api/caja/abrir', async (req, res) => {
   try {
     const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const negocioId = obtenerNegocioIdReq(req, negocio_id || 1);
     const montoNum = parseFloat(monto_inicial);
     if (isNaN(montoNum) || montoNum < 0) {
       return res.status(400).json({ error: 'Monto inicial de apertura inválido' });

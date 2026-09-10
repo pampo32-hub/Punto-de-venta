@@ -2703,6 +2703,10 @@ window.aplicarEnrutamientoPorRol = aplicarEnrutamientoPorRol;
 window.irAPuntoDeVentaAdmin = function() {
   sessionStorage.setItem('pos_user_context', 'pos');
   localStorage.setItem('pos_user_context', 'pos');
+  if (estado.negocioActual) {
+    sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+    localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+  }
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
   document.body.classList.add('is-admin');
@@ -4249,6 +4253,9 @@ window.abrirPosComoNegocio = async function(negocioId) {
 
       estado.negocioActual = neg;
       sessionStorage.setItem('pos_negocio', JSON.stringify(neg));
+      localStorage.setItem('pos_negocio', JSON.stringify(neg));
+      sessionStorage.setItem('pos_user_context', 'pos');
+      localStorage.setItem('pos_user_context', 'pos');
       actualizarBrandingNegocio(neg);
       aplicarRestriccionesModulos();
 
