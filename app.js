@@ -2067,9 +2067,11 @@ function formatCRCSinDecimales(num) {
 }
 
 function negocioAceptaDolares() {
+  if (typeof negocioTieneCaracteristica === 'function' && negocioTieneCaracteristica('bimoneda_dolares')) {
+    return true;
+  }
   const m = estado.negocioActual?.moneda || 'CRC';
-  const flagBimoneda = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('bimoneda_dolares') : true;
-  return flagBimoneda && (m === 'CRC_USD' || m === 'USD');
+  return m === 'CRC_USD' || m === 'USD';
 }
 window.negocioAceptaDolares = negocioAceptaDolares;
 
@@ -5214,11 +5216,17 @@ async function cargarUsuariosDev() {
       if (u.rol === 'superadmin') {
         rolBadge = '👑 Super Admin';
         badgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; font-weight: 800;';
+      } else if (u.rol === 'developer') {
+        rolBadge = '💻 Developer';
+        badgeStyle = 'background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; font-weight: 800;';
       } else if (u.rol === 'admin' || u.rol === 'administrador') {
         rolBadge = '🛡️ Administrador';
         badgeStyle = 'background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #0284c7; font-weight: 700;';
+      } else if (u.rol === 'cajero') {
+        rolBadge = '💵 Cajero';
+        badgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #059669; font-weight: 700;';
       } else if (u.rol === 'salonero') {
-        rolBadge = u.genero === 'F' ? 'Salonera' : 'Salonero';
+        rolBadge = u.genero === 'F' ? '🍽️ Salonera' : '🍽️ Salonero';
       }
 
       return `
@@ -5229,7 +5237,8 @@ async function cargarUsuariosDev() {
           <td>${genBadge}</td>
           <td>${escapeHtml(u.negocio_nombre || 'Comercio Principal')}</td>
           <td><code>${escapeHtml(u.pin || '1234')}</code></td>
-          <td>
+          <td style="white-space:nowrap;">
+            <button class="btn-item-tool" style="color:#38bdf8; margin-right:6px;" onclick="abrirModalEditarUsuarioDev(${u.id})">✏️ Editar</button>
             ${u.usuario === 'dev' ? '<small style="color:#a855f7;">Protegido</small>' : `
               <button class="btn-item-tool" style="color:#ef4444;" onclick="eliminarUsuarioDev(${u.id})">🗑️ Eliminar</button>
             `}
@@ -5238,6 +5247,7 @@ async function cargarUsuariosDev() {
       `;
     }).join('');
 
+    window._cacheUsuariosDev = usuarios;
     const lblCount = document.getElementById('dbUsuariosCount');
     if (lblCount) lblCount.textContent = usuarios.length;
   } catch (e) {
@@ -5267,7 +5277,13 @@ window.abrirModalUsuarioDev = async function() {
   const selNegocio = document.getElementById('devUserNegocioSelect');
   if (!modal) return;
 
-  // Limpiar campos
+  // Limpiar campos y configurar modo Crear
+  if (document.getElementById('devUserId')) document.getElementById('devUserId').value = '';
+  if (document.getElementById('lblTituloUsuarioDev')) document.getElementById('lblTituloUsuarioDev').textContent = 'Crear Nuevo Usuario (Global)';
+  if (document.getElementById('lblSubtituloUsuarioDev')) document.getElementById('lblSubtituloUsuarioDev').textContent = 'Registra un usuario y asígnalo a cualquier sucursal o comercio';
+  if (document.getElementById('devUserPasswordHint')) document.getElementById('devUserPasswordHint').style.display = 'none';
+  if (document.getElementById('btnGuardarUsuarioDevBtn')) document.getElementById('btnGuardarUsuarioDevBtn').textContent = '💾 Registrar Usuario';
+
   if (document.getElementById('devUserUsuario')) document.getElementById('devUserUsuario').value = '';
   if (document.getElementById('devUserPassword')) document.getElementById('devUserPassword').value = '';
   if (document.getElementById('devUserNombre')) document.getElementById('devUserNombre').value = '';
@@ -5295,6 +5311,61 @@ window.abrirModalUsuarioDev = async function() {
   modal.classList.add('active');
 };
 
+window.abrirModalEditarUsuarioDev = async function(id) {
+  const modal = document.getElementById('modalUsuarioDev');
+  const selNegocio = document.getElementById('devUserNegocioSelect');
+  if (!modal) return;
+
+  // Cargar comercios disponibles primero
+  if (selNegocio) {
+    selNegocio.innerHTML = '<option value="1">Cargando comercios...</option>';
+    try {
+      const res = await fetch('/api/dev/negocios');
+      const negocios = await res.json();
+      if (Array.isArray(negocios) && negocios.length > 0) {
+        selNegocio.innerHTML = negocios.map(n => `<option value="${n.id}">${n.nombre} (ID: ${n.id})</option>`).join('');
+      } else {
+        selNegocio.innerHTML = '<option value="1">Comercio Principal (ID: 1)</option>';
+      }
+    } catch (_) {
+      selNegocio.innerHTML = '<option value="1">Comercio Principal (ID: 1)</option>';
+    }
+  }
+
+  let user = (window._cacheUsuariosDev || []).find(u => u.id === Number(id));
+  if (!user) {
+    try {
+      const res = await fetch('/api/dev/usuarios');
+      const all = await res.json();
+      if (Array.isArray(all)) {
+        window._cacheUsuariosDev = all;
+        user = all.find(u => u.id === Number(id));
+      }
+    } catch (_) {}
+  }
+
+  if (!user) {
+    return mostrarNotificacionCentro('❌ No se encontró el usuario seleccionado', 'error');
+  }
+
+  if (document.getElementById('devUserId')) document.getElementById('devUserId').value = String(user.id);
+  if (document.getElementById('lblTituloUsuarioDev')) document.getElementById('lblTituloUsuarioDev').textContent = `✏️ Editar Usuario: ${user.usuario}`;
+  if (document.getElementById('lblSubtituloUsuarioDev')) document.getElementById('lblSubtituloUsuarioDev').textContent = 'Modifica los roles, credenciales o comercio asignado';
+  if (document.getElementById('devUserPasswordHint')) document.getElementById('devUserPasswordHint').style.display = 'block';
+  if (document.getElementById('btnGuardarUsuarioDevBtn')) document.getElementById('btnGuardarUsuarioDevBtn').textContent = '💾 Guardar Cambios';
+
+  if (document.getElementById('devUserUsuario')) document.getElementById('devUserUsuario').value = user.usuario || '';
+  if (document.getElementById('devUserPassword')) document.getElementById('devUserPassword').value = '';
+  if (document.getElementById('devUserNombre')) document.getElementById('devUserNombre').value = user.nombre_completo || '';
+  if (document.getElementById('devUserRol')) document.getElementById('devUserRol').value = user.rol || 'salonero';
+  if (document.getElementById('devUserGenero')) document.getElementById('devUserGenero').value = user.genero || 'M';
+  if (document.getElementById('devUserPin')) document.getElementById('devUserPin').value = user.pin || '1234';
+  if (selNegocio && user.negocio_id) selNegocio.value = String(user.negocio_id);
+
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+};
+
 window.cerrarModalUsuarioDev = function() {
   const modal = document.getElementById('modalUsuarioDev');
   if (modal) {
@@ -5304,6 +5375,7 @@ window.cerrarModalUsuarioDev = function() {
 };
 
 window.guardarUsuarioDev = async function() {
+  const editId = (document.getElementById('devUserId')?.value || '').trim();
   const negocio_id = parseInt(document.getElementById('devUserNegocioSelect')?.value) || 1;
   const usuario = (document.getElementById('devUserUsuario')?.value || '').trim();
   const password = (document.getElementById('devUserPassword')?.value || '').trim();
@@ -5312,33 +5384,41 @@ window.guardarUsuarioDev = async function() {
   const genero = document.getElementById('devUserGenero')?.value || 'M';
   const pin = (document.getElementById('devUserPin')?.value || '1234').trim();
 
-  if (!usuario || !password || !nombre_completo) {
-    return mostrarNotificacionCentro('❌ Completa el usuario, contraseña y nombre completo', 'error');
+  if (!usuario || !nombre_completo) {
+    return mostrarNotificacionCentro('❌ Completa el nombre de usuario y nombre completo', 'error');
+  }
+
+  if (!editId && !password) {
+    return mostrarNotificacionCentro('❌ Para un usuario nuevo, la contraseña es requerida', 'error');
   }
 
   try {
-    const res = await fetch('/api/dev/usuarios', {
-      method: 'POST',
+    const url = editId ? `/api/dev/usuarios/${editId}` : '/api/dev/usuarios';
+    const method = editId ? 'PUT' : 'POST';
+    const bodyPayload = {
+      negocio_id,
+      usuario,
+      nombre_completo,
+      rol,
+      genero,
+      pin,
+      permisos: {}
+    };
+    if (password) bodyPayload.password = password;
+
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        negocio_id,
-        usuario,
-        password,
-        nombre_completo,
-        rol,
-        genero,
-        pin,
-        permisos: {}
-      })
+      body: JSON.stringify(bodyPayload)
     });
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.error || 'Error al registrar usuario');
+      throw new Error(data.error || 'Error al procesar usuario');
     }
 
     cerrarModalUsuarioDev();
-    mostrarNotificacionCentro(`✅ Usuario "${usuario}" creado exitosamente`, 'success');
+    mostrarNotificacionCentro(`✅ Usuario "${usuario}" guardado exitosamente`, 'success');
     if (typeof cargarUsuariosDev === 'function') {
       cargarUsuariosDev();
     }
@@ -13002,6 +13082,180 @@ function calcularSplitIgual() {
   }
 }
 
+// ============================================================================
+// GESTIÓN DE NOTAS RÁPIDAS / MODIFICADORES (CRUD EN PERSONALIZAR PLATILLO)
+// ============================================================================
+const NOTAS_RAPIDAS_DEFAULT = [
+  '🚫 Sin cebolla',
+  '🧀 Extra queso (+₡500)',
+  '🥣 Salsa por separado',
+  '🥩 Término medio',
+  '🔥 Bien cocido',
+  '🧊 Poco hielo',
+  '🥤 Sin hielo',
+  '🌶️ Sin picante',
+  '🔥 Extra picante',
+  '🧂 Sin sal',
+  '🌾 Sin gluten',
+  '🥡 Para llevar'
+];
+
+window._modoGestionNotasRapidas = false;
+
+window.obtenerNotasRapidasConfiguradas = function() {
+  const nid = estado.negocioActual?.id || 1;
+  try {
+    const raw = localStorage.getItem(`pos_notas_rapidas_${nid}`) || localStorage.getItem('pos_notas_rapidas_global');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (_) {}
+  return [...NOTAS_RAPIDAS_DEFAULT];
+};
+
+window.guardarNotasRapidasConfiguradas = function(notas) {
+  const nid = estado.negocioActual?.id || 1;
+  try {
+    localStorage.setItem(`pos_notas_rapidas_${nid}`, JSON.stringify(notas));
+    localStorage.setItem('pos_notas_rapidas_global', JSON.stringify(notas));
+  } catch (_) {}
+};
+
+window.renderChipsModificadores = function() {
+  const container = document.getElementById('quickModifChips');
+  if (!container) return;
+  const notas = window.obtenerNotasRapidasConfiguradas();
+  const currentTxt = (document.getElementById('txtNotaAbiertaModif')?.value || '').trim();
+
+  container.innerHTML = '';
+  if (!notas.length) {
+    container.innerHTML = '<span style="color:#94a3b8; font-size:0.85rem;">No hay notas rápidas configuradas. Haz clic en "➕ Nueva Nota" para agregar.</span>';
+    return;
+  }
+
+  notas.forEach((nota, idx) => {
+    if (window._modoGestionNotasRapidas) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; background:#1e293b; border:1px solid #6366f1; border-radius:20px; padding:4px 10px; font-size:0.82rem; color:#e2e8f0;';
+      wrap.innerHTML = `
+        <span style="font-weight:600;">${escapeHtml(nota)}</span>
+        <button type="button" onclick="abrirModalEditarNotaRapida(${idx})" style="background:transparent; border:none; color:#38bdf8; cursor:pointer; padding:0 2px; font-size:0.85rem;" title="Editar texto de la nota">✏️</button>
+        <button type="button" onclick="eliminarNotaRapida(${idx})" style="background:transparent; border:none; color:#ef4444; cursor:pointer; padding:0 2px; font-size:0.85rem;" title="Eliminar nota rápida">🗑️</button>
+      `;
+      container.appendChild(wrap);
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip-modif';
+      btn.dataset.text = nota;
+      if (currentTxt.includes(nota)) {
+        btn.classList.add('selected');
+      }
+      btn.textContent = nota;
+      btn.onclick = () => window.toggleSeleccionChipModif(btn, nota);
+      container.appendChild(btn);
+    }
+  });
+};
+
+window.toggleSeleccionChipModif = function(btn, chipText) {
+  btn.classList.toggle('selected');
+  const txtArea = document.getElementById('txtNotaAbiertaModif');
+  if (!txtArea) return;
+  if (btn.classList.contains('selected')) {
+    txtArea.value = txtArea.value ? txtArea.value + ', ' + chipText : chipText;
+  } else {
+    txtArea.value = txtArea.value.replace(chipText, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
+  }
+};
+
+window.toggleModoGestionNotasRapidas = function() {
+  window._modoGestionNotasRapidas = !window._modoGestionNotasRapidas;
+  const btn = document.getElementById('btnToggleGestionNotasRapidas');
+  if (btn) {
+    btn.textContent = window._modoGestionNotasRapidas ? '✅ Listo' : '⚙️ Gestionar';
+    btn.style.background = window._modoGestionNotasRapidas ? 'rgba(16,185,129,0.2)' : 'rgba(99,102,241,0.15)';
+    btn.style.color = window._modoGestionNotasRapidas ? '#34d399' : '#a5b4fc';
+    btn.style.borderColor = window._modoGestionNotasRapidas ? '#10b981' : '#6366f1';
+  }
+  window.renderChipsModificadores();
+};
+
+window.abrirModalAgregarNotaRapida = function() {
+  const modal = document.getElementById('modalFormNotaRapida');
+  if (!modal) return;
+  document.getElementById('txtNotaRapidaIdx').value = '';
+  document.getElementById('txtNotaRapidaTexto').value = '';
+  document.getElementById('lblTituloNotaRapidaModal').textContent = '➕ Nueva Nota Rápida';
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('txtNotaRapidaTexto')?.focus(), 50);
+};
+
+window.abrirModalEditarNotaRapida = function(idx) {
+  const modal = document.getElementById('modalFormNotaRapida');
+  if (!modal) return;
+  const notas = window.obtenerNotasRapidasConfiguradas();
+  const current = notas[idx] || '';
+  document.getElementById('txtNotaRapidaIdx').value = String(idx);
+  document.getElementById('txtNotaRapidaTexto').value = current;
+  document.getElementById('lblTituloNotaRapidaModal').textContent = '✏️ Editar Nota Rápida';
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('txtNotaRapidaTexto')?.focus(), 50);
+};
+
+window.cerrarModalFormNotaRapida = function() {
+  const modal = document.getElementById('modalFormNotaRapida');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+};
+
+window.guardarNotaRapidaForm = function() {
+  const idxStr = document.getElementById('txtNotaRapidaIdx')?.value;
+  const texto = (document.getElementById('txtNotaRapidaTexto')?.value || '').trim();
+  if (!texto) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('❌ Ingresa el texto de la nota rápida.', 'warning');
+    } else {
+      alert('Ingresa el texto de la nota rápida.');
+    }
+    return;
+  }
+
+  const notas = window.obtenerNotasRapidasConfiguradas();
+  if (idxStr !== '' && idxStr !== undefined && idxStr !== null) {
+    const idx = parseInt(idxStr, 10);
+    if (idx >= 0 && idx < notas.length) {
+      notas[idx] = texto;
+    }
+  } else {
+    notas.push(texto);
+  }
+
+  window.guardarNotasRapidasConfiguradas(notas);
+  window.cerrarModalFormNotaRapida();
+  window.renderChipsModificadores();
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro('💾 Nota rápida guardada correctamente.', 'success');
+  }
+};
+
+window.eliminarNotaRapida = function(idx) {
+  const notas = window.obtenerNotasRapidasConfiguradas();
+  if (idx >= 0 && idx < notas.length) {
+    const eliminada = notas[idx];
+    if (confirm(`¿Eliminar la nota rápida "${eliminada}"?`)) {
+      notas.splice(idx, 1);
+      window.guardarNotasRapidasConfiguradas(notas);
+      window.renderChipsModificadores();
+    }
+  }
+};
+
 // Modificadores
 window.abrirModalModificadores = function(itemIdx) {
   estado.itemModificando = estado.mesaActiva.items[itemIdx];
@@ -13012,28 +13266,21 @@ window.abrirModalModificadores = function(itemIdx) {
     btn.classList.toggle('active', Number(btn.dataset.course) === (estado.itemModificando.curso || 2));
   });
 
-  document.querySelectorAll('.chip-modif').forEach(chip => {
-    chip.classList.toggle('selected', (estado.itemModificando.notas || '').includes(chip.dataset.text));
-  });
+  window._modoGestionNotasRapidas = false;
+  const btnManage = document.getElementById('btnToggleGestionNotasRapidas');
+  if (btnManage) {
+    btnManage.textContent = '⚙️ Gestionar';
+    btnManage.style.background = 'rgba(99,102,241,0.15)';
+    btnManage.style.color = '#a5b4fc';
+    btnManage.style.borderColor = '#6366f1';
+  }
 
+  window.renderChipsModificadores();
   document.getElementById('modalModificadores').classList.add('active');
 };
 
 document.getElementById('btnCloseModifModal').addEventListener('click', () => document.getElementById('modalModificadores').classList.remove('active'));
 document.getElementById('btnCancelarModif').addEventListener('click', () => document.getElementById('modalModificadores').classList.remove('active'));
-
-document.querySelectorAll('.chip-modif').forEach(chip => {
-  chip.addEventListener('click', () => {
-    chip.classList.toggle('selected');
-    const txtArea = document.getElementById('txtNotaAbiertaModif');
-    const chipText = chip.dataset.text;
-    if (chip.classList.contains('selected')) {
-      txtArea.value = txtArea.value ? txtArea.value + ', ' + chipText : chipText;
-    } else {
-      txtArea.value = txtArea.value.replace(chipText, '').replace(/, ,/g, ',').replace(/^, |, $/g, '').trim();
-    }
-  });
-});
 
 document.getElementById('btnGuardarModif').addEventListener('click', () => {
   if (estado.itemModificando) {
@@ -16716,6 +16963,9 @@ window.purgarVentasPruebaDev = async function() {
     if (typeof window.cargarMetricasDev === 'function') {
       window.cargarMetricasDev();
     }
+    if (typeof window.cargarDashboardMetricas === 'function') {
+      window.cargarDashboardMetricas();
+    }
     if (typeof window.cargarMesasDesdeBackend === 'function') {
       window.cargarMesasDesdeBackend();
     }
@@ -16820,6 +17070,9 @@ window.purgarAuditoriaDev = async function() {
 
     if (typeof window.cargarAuditoriaDev === 'function') {
       window.cargarAuditoriaDev();
+    }
+    if (typeof window.cargarAuditoriaAdmin === 'function') {
+      window.cargarAuditoriaAdmin();
     }
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('🧹 Bitácora de auditoría limpiada con éxito.', 'success');

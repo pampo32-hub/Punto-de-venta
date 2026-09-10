@@ -1821,26 +1821,37 @@ app.post('/api/dev/usuarios', async (req, res) => {
 
 app.put('/api/dev/usuarios/:id', async (req, res) => {
   try {
-    const { nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
+    const { usuario, nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
     const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos || {});
     
+    const userExist = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    if (!userExist) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const finalUsuario = usuario ? String(usuario).trim() : userExist.usuario;
+    const finalNombre = nombre_completo ? String(nombre_completo).trim() : userExist.nombre_completo;
+    const finalRol = rol || userExist.rol;
+    const finalGenero = genero || userExist.genero || 'M';
+    const finalPin = pin !== undefined ? String(pin).trim() : userExist.pin;
+    const finalNegocioId = negocio_id !== undefined ? Number(negocio_id) : userExist.negocio_id;
+    const finalActivo = activo !== undefined ? (activo ? 1 : 0) : (userExist.activo !== undefined ? userExist.activo : 1);
+
     if (password && String(password).trim()) {
       const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
-        `UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
+        `UPDATE Usuarios SET usuario = ?, nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
          WHERE id = ?`,
-        [nombre_completo, hashedPassword, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
+        [finalUsuario, finalNombre, hashedPassword, finalRol, finalGenero, finalPin, permisosStr, finalActivo, finalNegocioId, req.params.id]
       );
     } else {
       await dbRun(
-        `UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
+        `UPDATE Usuarios SET usuario = ?, nombre_completo = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
          WHERE id = ?`,
-        [nombre_completo, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
+        [finalUsuario, finalNombre, finalRol, finalGenero, finalPin, permisosStr, finalActivo, finalNegocioId, req.params.id]
       );
     }
     res.json({ message: 'Usuario actualizado exitosamente' });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message.includes('UNIQUE') ? 'El nombre de usuario ya existe' : e.message });
   }
 });
 
@@ -7755,11 +7766,14 @@ app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => 
 // --- SUGERENCIA DE REABASTECIMIENTO / COMPRAS ---
 app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, res) => {
   try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
-      WHERE stock_actual <= stock_minimo 
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+        AND stock_actual < stock_minimo
+        AND stock_minimo > 0
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
-    `);
+    `, [nid, nid]);
 
     let totalPresupuesto = 0;
     const items = insumosCriticos.map(ins => {
@@ -7802,13 +7816,12 @@ app.post('/api/admin/inventario/purgar-sugerencias', verificarAdmin, async (req,
     const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
     const { limpiarKardex = true } = req.body || {};
 
-    // Normalizar existencias de insumos por debajo del mínimo para que no generen sugerencias
+    // Normalizar existencias de insumos por encima del mínimo para que queden 0 sugerencias de compra
     await dbRun(`
       UPDATE Inventario 
-      SET stock_actual = stock_minimo,
+      SET stock_actual = CASE WHEN stock_minimo > 0 THEN stock_minimo * 2 ELSE 10 END,
           actualizado_en = ?
       WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-        AND (stock_actual < stock_minimo OR stock_actual <= 0)
     `, [new Date().toISOString(), nid, nid]);
 
     if (limpiarKardex) {

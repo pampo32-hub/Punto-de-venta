@@ -1270,8 +1270,8 @@
               <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
               <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)">📑 Corte X (Parcial) <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
-              <button class="btn-caja-op corte-x-ciego" id="btnCorteXCiego" onclick="abrirModalCorteXCiego()" title="Arqueo / Corte X a Ciegas (Conteo físico sin ver totales)" style="background: linear-gradient(135deg, rgba(139,92,246,0.18), rgba(109,40,217,0.18)); border: 1px solid #8b5cf6; color: #c4b5fd; font-weight: 700;">🙈 Cierre X a Ciegas</button>
-              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)" style="grid-column: span 2;">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
+              <button class="btn-caja-op corte-x-ciego" id="btnCorteXCiego" onclick="abrirModalCorteXCiego()" title="Arqueo / Corte X a Ciegas (Conteo físico sin ver totales)" style="display:none; grid-column: span 2; background: linear-gradient(135deg, rgba(139,92,246,0.18), rgba(109,40,217,0.18)); border: 1px solid #8b5cf6; color: #c4b5fd; font-weight: 700;">🙈 Cierre X a Ciegas</button>
               <button class="btn-caja-op btn-purgar-caja dev-purge-action" id="btnResetCajaPruebas" onclick="purgarHistorialCajaDev()" style="display:none; grid-column: span 2; background: rgba(239, 68, 68, 0.12); border: 1px dashed #ef4444; color: #f87171; font-size: 0.82rem; padding: 8px; margin-top: 4px;" title="Resetear historial financiero y dejar caja en blanco para entrega al cliente">
                 🧹 Resetear Historial Financiero de Caja
               </button>
@@ -1345,8 +1345,11 @@
               <div class="data-row"><span>Actividad Económica:</span><strong>561001 - Restaurantes y Bares</strong></div>
             </div>
 
-            <div class="form-row-actions" style="margin-top:20px;">
+            <div class="form-row-actions" style="margin-top:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
               <button class="btn-emitir-fe" id="btnEmitirFacturaExpress">⚡ Emitir & Enviar Factura a Hacienda</button>
+              <button class="btn-sec dev-purge-action" id="btnPurgarFacturasDev" onclick="purgarVentasPruebaDev()" style="display:none; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; font-weight:700; padding:10px 16px; border-radius:10px; cursor:pointer;" title="Eliminar ventas y facturación de prueba para entrega en blanco">
+                🧹 Purgar Facturas y Ventas
+              </button>
             </div>
           </div>
         </div>
@@ -1361,7 +1364,10 @@
               <span class="kds-live-tag" style="font-size:0.75rem;">⚡ Datos en Vivo</span>
             </h2>
           </div>
-          <div class="dashboard-actions">
+          <div class="dashboard-actions" style="display:flex; gap:8px; align-items:center;">
+            <button class="btn-sec dev-purge-action" id="btnPurgarVentasAdmin" onclick="purgarVentasPruebaDev()" style="display:none; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; font-weight:700; padding:8px 14px; border-radius:8px; cursor:pointer;" title="Eliminar ventas, facturas y órdenes de prueba para entregar en blanco">
+              🗑️ Purgar Ventas de Prueba
+            </button>
             <button class="btn-tool" onclick="cargarDashboardMetricas()">🔄 Actualizar Métricas</button>
           </div>
         </div>
@@ -1954,7 +1960,10 @@
               <span class="pill-counter" style="background:#3b82f6;" id="auditTotalCounter">0 eventos</span>
             </h2>
           </div>
-          <div class="audit-actions">
+          <div class="audit-actions" style="display:flex; gap:8px; align-items:center;">
+            <button class="btn-sec dev-purge-action" id="btnPurgarAuditoriaAdmin" onclick="purgarAuditoriaDev()" style="display:none; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; font-weight:700; padding:8px 12px; border-radius:8px; cursor:pointer;" title="Limpiar bitácora de auditoría de pruebas">
+              🧹 Limpiar Auditoría
+            </button>
             <button class="btn-tool" onclick="cargarAuditoriaAdmin()">🔄 Actualizar Bitácora</button>
           </div>
         </div>
@@ -2603,7 +2612,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL: REGISTRAR / CREAR USUARIO GLOBAL (DEVELOPER) -->
+  <!-- MODAL: REGISTRAR / CREAR / EDITAR USUARIO GLOBAL (DEVELOPER) -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalUsuarioDev" style="display:none; z-index: 100050;">
     <div class="dialog-box" style="max-width:560px; width:95vw; border-radius:16px; background:#0f172a; border:1px solid #38bdf8; box-shadow:0 20px 50px rgba(0,0,0,0.85); padding:0; overflow:hidden;">
@@ -2611,14 +2620,15 @@
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.4rem;">👥</span>
           <div>
-            <h3 style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:800;">Crear Nuevo Usuario (Global)</h3>
-            <span style="color:#38bdf8; font-size:0.78rem;">Registra un usuario y asígnalo a cualquier sucursal o comercio</span>
+            <h3 id="lblTituloUsuarioDev" style="margin:0; color:#f8fafc; font-size:1.05rem; font-weight:800;">Crear Nuevo Usuario (Global)</h3>
+            <span id="lblSubtituloUsuarioDev" style="color:#38bdf8; font-size:0.78rem;">Registra un usuario y asígnalo a cualquier sucursal o comercio</span>
           </div>
         </div>
         <button onclick="cerrarModalUsuarioDev()" style="background:transparent; border:none; color:#94a3b8; font-size:1.3rem; cursor:pointer;">✕</button>
       </div>
 
       <div style="padding:20px; display:flex; flex-direction:column; gap:14px; max-height:70vh; overflow-y:auto;">
+        <input type="hidden" id="devUserId" value="" />
         <div class="field-group">
           <label style="color:#94a3b8; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Comercio / Negocio Asignado:</label>
           <select id="devUserNegocioSelect" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#f8fafc; font-size:0.9rem;">
@@ -2634,6 +2644,7 @@
           <div class="field-group">
             <label style="color:#94a3b8; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Contraseña:</label>
             <input type="password" id="devUserPassword" placeholder="••••••••" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#f8fafc; font-size:0.9rem;" />
+            <small id="devUserPasswordHint" style="color:#38bdf8; font-size:0.75rem; display:none; margin-top:2px;">(Dejar en blanco para mantener actual)</small>
           </div>
         </div>
 
@@ -2647,10 +2658,12 @@
             <label style="color:#94a3b8; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Rol:</label>
             <select id="devUserRol" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#f8fafc; font-size:0.9rem;">
               <option value="salonero">Salonero / Salonera</option>
-              <option value="cajero">Cajero</option>
+              <option value="cajero">Cajero / Cajera</option>
               <option value="admin">Administrador</option>
               <option value="superadmin">👑 Super Admin</option>
               <option value="developer">Developer</option>
+              <option value="cocinero">Cocinero (KDS)</option>
+              <option value="bartender">Bartender (Bar)</option>
             </select>
           </div>
           <div class="field-group">
@@ -2669,7 +2682,7 @@
 
       <div class="dialog-footer" style="padding:14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
         <button class="btn-sec" onclick="cerrarModalUsuarioDev()" style="padding:8px 16px; font-size:0.88rem; cursor:pointer;">Cancelar</button>
-        <button class="btn-pri" onclick="guardarUsuarioDev()" style="background:linear-gradient(135deg,#38bdf8,#0284c7); color:#fff; border:none; padding:8px 20px; border-radius:8px; font-weight:700; cursor:pointer;">💾 Registrar Usuario</button>
+        <button class="btn-pri" id="btnGuardarUsuarioDevBtn" onclick="guardarUsuarioDev()" style="background:linear-gradient(135deg,#38bdf8,#0284c7); color:#fff; border:none; padding:8px 20px; border-radius:8px; font-weight:700; cursor:pointer;">💾 Registrar Usuario</button>
       </div>
     </div>
   </div>
@@ -2756,17 +2769,19 @@
           <button class="btn-course-opt" data-course="2">🥩 Tiempo 2: Plato Fuerte</button>
           <button class="btn-course-opt" data-course="3">🍰 Tiempo 3: Postre / Café</button>
         </div>
-        <label class="section-label" style="margin-top:14px;">Modificadores Rápidos Comunes:</label>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; margin-bottom:6px;">
+          <label class="section-label" style="margin:0;">Modificadores & Notas Rápidas:</label>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn-tool-sub" onclick="abrirModalAgregarNotaRapida()" style="font-size:0.75rem; padding:3px 8px; background:rgba(16,185,129,0.15); border:1px solid #10b981; color:#34d399; border-radius:6px; cursor:pointer; font-weight:700;">
+              ➕ Nueva Nota
+            </button>
+            <button type="button" class="btn-tool-sub" id="btnToggleGestionNotasRapidas" onclick="toggleModoGestionNotasRapidas()" style="font-size:0.75rem; padding:3px 8px; background:rgba(99,102,241,0.15); border:1px solid #6366f1; color:#a5b4fc; border-radius:6px; cursor:pointer; font-weight:700;">
+              ⚙️ Gestionar
+            </button>
+          </div>
+        </div>
         <div class="quick-chips-grid" id="quickModifChips">
-          <button class="chip-modif" data-text="Sin cebolla">🚫 Sin cebolla</button>
-          <button class="chip-modif" data-text="Extra queso (+₡500)">🧀 Extra queso (+₡500)</button>
-          <button class="chip-modif" data-text="Salsa por separado">🥣 Salsa por separado</button>
-          <button class="chip-modif" data-text="Término medio">🥩 Término medio</button>
-          <button class="chip-modif" data-text="Bien cocido">🔥 Bien cocido</button>
-          <button class="chip-modif" data-text="Poco hielo">🧊 Poco hielo</button>
-          <button class="chip-modif" data-text="Sin hielo">🥤 Sin hielo</button>
-          <button class="chip-modif" data-text="Sin picante">🌶️ Sin picante</button>
-          <button class="chip-modif" data-text="Extra picante">🔥 Extra picante</button>
+          <!-- Chips cargados dinámicamente -->
         </div>
         <label class="section-label" style="margin-top:16px;">Nota Abierta Especial:</label>
         <textarea id="txtNotaAbiertaModif" rows="3" placeholder="Ej: Extra queso en la mitad y salsa por separado..."></textarea>
@@ -2774,6 +2789,30 @@
       <div class="dialog-footer">
         <button class="btn-sec" id="btnCancelarModif">Cancelar</button>
         <button class="btn-pri" id="btnGuardarModif">✅ Aplicar al Platillo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AGREGAR / EDITAR NOTA RÁPIDA -->
+  <div class="modal-backdrop" id="modalFormNotaRapida" style="display:none; z-index: 100060;">
+    <div class="dialog-box" style="max-width:420px; width:90vw; border-radius:14px; background:#0f172a; border:1px solid #6366f1; padding:0; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.85);">
+      <div class="dialog-header" style="background:linear-gradient(135deg,#1e1b4b,#0f172a); border-bottom:1px solid #334155; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
+        <h4 id="lblTituloNotaRapidaModal" style="margin:0; color:#f8fafc; font-size:1rem; font-weight:800;">➕ Nueva Nota Rápida</h4>
+        <button onclick="cerrarModalFormNotaRapida()" style="background:transparent; border:none; color:#94a3b8; font-size:1.2rem; cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+        <input type="hidden" id="txtNotaRapidaIdx" value="" />
+        <div class="field-group">
+          <label style="color:#94a3b8; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Texto de la Nota / Modificador:</label>
+          <input type="text" id="txtNotaRapidaTexto" placeholder="Ej: Sin cebolla, Extra salsa, Término 3/4..." style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#f8fafc; font-size:0.92rem;" />
+        </div>
+        <div style="font-size:0.78rem; color:#94a3b8;">
+          💡 Puedes incluir emojis al inicio para que el botón sea fácil de identificar por los meseros y la cocina.
+        </div>
+      </div>
+      <div class="dialog-footer" style="padding:12px 16px; display:flex; justify-content:flex-end; gap:8px; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalFormNotaRapida()" style="padding:7px 14px; font-size:0.85rem;">Cancelar</button>
+        <button class="btn-pri" id="btnGuardarNotaRapidaForm" onclick="guardarNotaRapidaForm()" style="padding:7px 16px; font-size:0.85rem; background:linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; border-radius:6px; font-weight:700; cursor:pointer;">💾 Guardar</button>
       </div>
     </div>
   </div>
