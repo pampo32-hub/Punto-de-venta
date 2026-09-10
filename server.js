@@ -8716,7 +8716,7 @@ INSTRUCCIONES CLAVE:
 5. Usa respuestas breves, con viñetas claras y negritas, fáciles de leer rápidamente en una tablet o pantalla de restaurante.
 6. Si te saludan o hacen una pregunta general del restaurante, sé cortés y dispuesto a ayudar.`;
 
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`;
         const response = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
