@@ -1096,6 +1096,33 @@ window.guardarNuevoProducto = async function() {
       if (catObj && catObj.nombre) catNombre = catObj.nombre;
     }
 
+    let unidadFinalInsumo = unidadAuto;
+    let esLicorInsumo = 0;
+    let capMlInsumo = null;
+    let medidaShotMlInsumo = null;
+
+    if (unidadAuto === 'botellas_350') {
+      unidadFinalInsumo = 'botellas';
+      esLicorInsumo = 1;
+      capMlInsumo = 355;
+      medidaShotMlInsumo = 355;
+    } else if (unidadAuto === 'latas_350') {
+      unidadFinalInsumo = 'unidades';
+      esLicorInsumo = 1;
+      capMlInsumo = 350;
+      medidaShotMlInsumo = 350;
+    } else if (unidadAuto === 'latas_473') {
+      unidadFinalInsumo = 'unidades';
+      esLicorInsumo = 1;
+      capMlInsumo = 473;
+      medidaShotMlInsumo = 473;
+    } else if (unidadAuto === 'personalizada') {
+      unidadFinalInsumo = 'unidades';
+      esLicorInsumo = 1;
+      capMlInsumo = 355;
+      medidaShotMlInsumo = 355;
+    }
+
     try {
       const resInsumo = await fetch('/api/admin/inventario', {
         method: 'POST',
@@ -1107,11 +1134,13 @@ window.guardarNuevoProducto = async function() {
         body: JSON.stringify({
           nombre,
           categoria: catNombre,
-          unidad_medida: unidadAuto,
+          unidad_medida: unidadFinalInsumo,
           stock_actual: stockAuto,
           stock_minimo: 3,
           costo_unitario: costoAuto,
-          es_licor: 0,
+          es_licor: esLicorInsumo,
+          capacidad_ml: capMlInsumo,
+          medida_shot_ml: medidaShotMlInsumo,
           negocio_id: nid
         })
       });
@@ -14508,11 +14537,11 @@ window.guardarNuevoInsumo = async function() {
   const selCat = document.getElementById('selectNuevoInsumoCat')?.value;
   const txtCatManual = document.getElementById('txtNuevoInsumoCatManual')?.value?.trim();
   const categoria = (selCat === '__otra__' ? txtCatManual : selCat) || 'General';
-  const unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
+  let unidad_medida = document.getElementById('selectNuevoInsumoUnidad')?.value || 'unidades';
   const stock_actual = parseFloat(document.getElementById('txtNuevoInsumoStock')?.value) || 0;
   const stock_minimo = parseFloat(document.getElementById('txtNuevoInsumoMin')?.value) || 0;
   const costo_unitario = parseFloat(document.getElementById('txtNuevoInsumoCosto')?.value) || 0;
-  const es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+  let es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
 
   if (!nombre) {
     mostrarNotificacionCentro('⚠️ Por favor ingresa el nombre del insumo', 'warning');
@@ -14523,14 +14552,45 @@ window.guardarNuevoInsumo = async function() {
 
   let capacidad_ml = null;
   let medida_shot_ml = null;
+
+  if (unidad_medida === 'botellas_350') {
+    unidad_medida = 'botellas';
+    es_licor = 1;
+    capacidad_ml = 355;
+    medida_shot_ml = 355;
+  } else if (unidad_medida === 'latas_350') {
+    unidad_medida = 'unidades';
+    es_licor = 1;
+    capacidad_ml = 350;
+    medida_shot_ml = 350;
+  } else if (unidad_medida === 'latas_473') {
+    unidad_medida = 'unidades';
+    es_licor = 1;
+    capacidad_ml = 473;
+    medida_shot_ml = 473;
+  } else if (unidad_medida === 'personalizada') {
+    unidad_medida = 'unidades';
+    es_licor = 1;
+    capacidad_ml = 355;
+    medida_shot_ml = 355;
+  }
+
   if (es_licor) {
     const selCap = document.getElementById('selNuevoInsumoCapacidad')?.value;
     const txtCapCustom = parseFloat(document.getElementById('txtNuevoInsumoCapacidadCustom')?.value);
-    capacidad_ml = selCap === 'custom' ? (txtCapCustom || 750) : (parseFloat(selCap) || 750);
+    if (selCap === 'custom') {
+      capacidad_ml = txtCapCustom || capacidad_ml || 750;
+    } else if (selCap) {
+      capacidad_ml = parseFloat(selCap) || capacidad_ml || 750;
+    }
 
     const selShot = document.getElementById('selNuevoInsumoMedidaShot')?.value;
     const txtShotCustom = parseFloat(document.getElementById('txtNuevoInsumoMedidaShotCustom')?.value);
-    medida_shot_ml = selShot === 'custom' ? (txtShotCustom || 30) : (parseFloat(selShot) || 30);
+    if (selShot === 'custom') {
+      medida_shot_ml = txtShotCustom || medida_shot_ml || 30;
+    } else if (selShot) {
+      medida_shot_ml = parseFloat(selShot) || medida_shot_ml || 30;
+    }
   }
 
   const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
@@ -14654,21 +14714,52 @@ window.guardarEdicionInsumo = async function() {
   const selCat = document.getElementById('selectEditarInsumoCat')?.value;
   const txtCatManual = document.getElementById('txtEditarInsumoCatManual')?.value?.trim();
   const categoria = (selCat === '__otra__' ? txtCatManual : selCat) || 'General';
-  const unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
+  let unidad_medida = document.getElementById('selectEditarInsumoUnidad')?.value || 'unidades';
   const stock_minimo = parseFloat(document.getElementById('txtEditarInsumoMin')?.value) || 0;
   const costo_unitario = parseFloat(document.getElementById('txtEditarInsumoCosto')?.value) || 0;
-  const es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+  let es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
   
   let capacidad_ml = null;
   let medida_shot_ml = null;
+
+  if (unidad_medida === 'botellas_350') {
+    unidad_medida = 'botellas';
+    es_licor = 1;
+    capacidad_ml = 355;
+    medida_shot_ml = 355;
+  } else if (unidad_medida === 'latas_350') {
+    unidad_medida = 'unidades';
+    es_licor = 1;
+    capacidad_ml = 350;
+    medida_shot_ml = 350;
+  } else if (unidad_medida === 'latas_473') {
+    unidad_medida = 'unidades';
+    es_licor = 1;
+    capacidad_ml = 473;
+    medida_shot_ml = 473;
+  } else if (unidad_medida === 'personalizada') {
+    unidad_medida = 'unidades';
+    es_licor = 1;
+    capacidad_ml = 355;
+    medida_shot_ml = 355;
+  }
+
   if (es_licor) {
     const selCap = document.getElementById('selEditarInsumoCapacidad')?.value;
     const txtCapCustom = parseFloat(document.getElementById('txtEditarInsumoCapacidadCustom')?.value);
-    capacidad_ml = selCap === 'custom' ? (txtCapCustom || 750) : (parseFloat(selCap) || 750);
+    if (selCap === 'custom') {
+      capacidad_ml = txtCapCustom || capacidad_ml || 750;
+    } else if (selCap) {
+      capacidad_ml = parseFloat(selCap) || capacidad_ml || 750;
+    }
 
     const selShot = document.getElementById('selEditarInsumoMedidaShot')?.value;
     const txtShotCustom = parseFloat(document.getElementById('txtEditarInsumoMedidaShotCustom')?.value);
-    medida_shot_ml = selShot === 'custom' ? (txtShotCustom || 30) : (parseFloat(selShot) || 30);
+    if (selShot === 'custom') {
+      medida_shot_ml = txtShotCustom || medida_shot_ml || 30;
+    } else if (selShot) {
+      medida_shot_ml = parseFloat(selShot) || medida_shot_ml || 30;
+    }
   }
 
   if (!id || !nombre) {
@@ -14726,10 +14817,39 @@ window.onCambioUnidadInsumo = function(modo) {
   const selUni = document.getElementById(modo === 'nuevo' ? 'selectNuevoInsumoUnidad' : 'selectEditarInsumoUnidad');
   const selCap = document.getElementById(modo === 'nuevo' ? 'selNuevoInsumoCapacidad' : 'selEditarInsumoCapacidad');
   const selShot = document.getElementById(modo === 'nuevo' ? 'selNuevoInsumoMedidaShot' : 'selEditarInsumoMedidaShot');
+  const chkLicor = document.getElementById(modo === 'nuevo' ? 'chkNuevoInsumoEsLicor' : 'chkEditarInsumoEsLicor');
   if (!selUni || !selCap || !selShot) return;
 
   const u = selUni.value;
-  if (u === 'kg') {
+  if (u === 'botellas_350') {
+    selCap.innerHTML = '<option value="355" selected>Botella Cerveza (355 ml / Estándar)</option><option value="350">Botella Cerveza (350 ml)</option><option value="330">Botella Cerveza (330 ml)</option><option value="custom">Personalizado (ml)</option>';
+    selShot.innerHTML = '<option value="355" selected>1 Botella Completa (355 ml)</option><option value="350">1 Botella Completa (350 ml)</option><option value="177.5">1/2 Botella (Media)</option><option value="custom">Personalizado (ml)</option>';
+    if (chkLicor && !chkLicor.checked) {
+      chkLicor.checked = true;
+      window.toggleConfigFraccionable(modo, true);
+    }
+  } else if (u === 'latas_350') {
+    selCap.innerHTML = '<option value="350" selected>Lata Cerveza (350 ml)</option><option value="355">Lata Cerveza (355 ml)</option><option value="custom">Personalizado (ml)</option>';
+    selShot.innerHTML = '<option value="350" selected>1 Lata Completa (350 ml)</option><option value="175">1/2 Lata (Media)</option><option value="custom">Personalizado (ml)</option>';
+    if (chkLicor && !chkLicor.checked) {
+      chkLicor.checked = true;
+      window.toggleConfigFraccionable(modo, true);
+    }
+  } else if (u === 'latas_473') {
+    selCap.innerHTML = '<option value="473" selected>Lata Grande (473 ml / 16 oz)</option><option value="500">Lata Medio Litro (500 ml)</option><option value="custom">Personalizado (ml)</option>';
+    selShot.innerHTML = '<option value="473" selected>1 Lata Completa (473 ml)</option><option value="236.5">1/2 Lata (Media)</option><option value="custom">Personalizado (ml)</option>';
+    if (chkLicor && !chkLicor.checked) {
+      chkLicor.checked = true;
+      window.toggleConfigFraccionable(modo, true);
+    }
+  } else if (u === 'personalizada') {
+    selCap.innerHTML = '<option value="custom" selected>Personalizado (ml / oz / g)</option><option value="355">355 ml</option><option value="350">350 ml</option><option value="473">473 ml</option><option value="750">750 ml</option><option value="1000">1000 ml / 1 Kg</option>';
+    selShot.innerHTML = '<option value="custom" selected>Personalizado</option><option value="355">355 ml (1 Unidad)</option><option value="350">350 ml</option><option value="473">473 ml</option><option value="30">30 ml (1 oz)</option>';
+    if (chkLicor && !chkLicor.checked) {
+      chkLicor.checked = true;
+      window.toggleConfigFraccionable(modo, true);
+    }
+  } else if (u === 'kg') {
     selCap.innerHTML = '<option value="1000">1 Kg (1000 g)</option><option value="500">500 g (1/2 Kg)</option><option value="2000">2 Kg (2000 g)</option><option value="custom">Personalizado (g)</option>';
     selShot.innerHTML = '<option value="100">100 g (Porción)</option><option value="150">150 g (Carne/Pescado)</option><option value="200">200 g (Plato Fuerte)</option><option value="50">50 g (Guarnición)</option><option value="custom">Personalizado (g)</option>';
   } else if (u === 'litros') {
@@ -14905,7 +15025,14 @@ window.renderOpcionesProductosReceta = function(lista, valorSeleccionado = null)
     return;
   }
 
-  selectProd.innerHTML = lista.map(r => {
+  // Ordenar lista alfabéticamente de la A a la Z
+  const listaOrdenada = [...lista].sort((a, b) => {
+    const nomA = (a.producto_nombre || a.nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const nomB = (b.producto_nombre || b.nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return nomA.localeCompare(nomB, 'es', { sensitivity: 'base' });
+  });
+
+  selectProd.innerHTML = listaOrdenada.map(r => {
     const pid = r.producto_id || r.id;
     const pnom = r.producto_nombre || r.nombre || 'Platillo';
     const pvp = Number(r.precio_venta || r.precio || 0);
@@ -14915,13 +15042,13 @@ window.renderOpcionesProductosReceta = function(lista, valorSeleccionado = null)
   }).join('');
 
   if (badgeConteo) {
-    badgeConteo.textContent = `(${lista.length} platillos)`;
+    badgeConteo.textContent = `(${listaOrdenada.length} platillos)`;
   }
 
-  if (valorSeleccionado && lista.some(r => String(r.producto_id || r.id) === String(valorSeleccionado))) {
+  if (valorSeleccionado && listaOrdenada.some(r => String(r.producto_id || r.id) === String(valorSeleccionado))) {
     selectProd.value = String(valorSeleccionado);
-  } else if (lista.length > 0) {
-    selectProd.value = String(lista[0].producto_id || lista[0].id);
+  } else if (listaOrdenada.length > 0) {
+    selectProd.value = String(listaOrdenada[0].producto_id || listaOrdenada[0].id);
   }
 };
 
@@ -15243,7 +15370,13 @@ window.actualizarPlaceholderCantidadReceta = function() {
   const ins = (estado.inventario || []).find(i => Number(i.id) === insId);
   const tipo = selTipo.value;
 
-  if (tipo === 'oz') {
+  if (tipo === 'botella_350') {
+    txtCant.placeholder = 'Ej: 1 botella (350ml / 355ml)';
+  } else if (tipo === 'lata_350') {
+    txtCant.placeholder = 'Ej: 1 lata (350ml)';
+  } else if (tipo === 'lata_473') {
+    txtCant.placeholder = 'Ej: 1 lata grande (473ml / 16oz)';
+  } else if (tipo === 'oz') {
     txtCant.placeholder = 'Ej: 1, 1.5, 2 o 0.25 oz';
   } else if (tipo === 'shots') {
     if (ins && ins.es_licor && ins.rendimiento_shots > 0) {
@@ -15335,7 +15468,16 @@ window.recalcularCostoPreviewReceta = function() {
 
   if (ins.es_licor) {
     const capMl = ins.capacidad_ml || 750;
-    if (tipo === 'oz') {
+    if (tipo === 'botella_350') {
+      mlDeducidos = Math.round(cantidad * 355 * 10) / 10;
+      fraccionBotella = (cantidad * 355) / capMl;
+    } else if (tipo === 'lata_350') {
+      mlDeducidos = Math.round(cantidad * 350 * 10) / 10;
+      fraccionBotella = (cantidad * 350) / capMl;
+    } else if (tipo === 'lata_473') {
+      mlDeducidos = Math.round(cantidad * 473 * 10) / 10;
+      fraccionBotella = (cantidad * 473) / capMl;
+    } else if (tipo === 'oz') {
       mlDeducidos = Math.round(cantidad * 30 * 10) / 10;
       fraccionBotella = (cantidad * 30) / capMl;
     } else if (tipo === 'shots') {
@@ -15430,7 +15572,13 @@ window.guardarIngredienteReceta = async function() {
 
   if (insumo && insumo.es_licor) {
     const capMl = insumo.capacidad_ml || 750;
-    if (unidadTipo === 'oz') {
+    if (unidadTipo === 'botella_350') {
+      cantidadDeducir = parseFloat(((cantidad * 355) / capMl).toFixed(4));
+    } else if (unidadTipo === 'lata_350') {
+      cantidadDeducir = parseFloat(((cantidad * 350) / capMl).toFixed(4));
+    } else if (unidadTipo === 'lata_473') {
+      cantidadDeducir = parseFloat(((cantidad * 473) / capMl).toFixed(4));
+    } else if (unidadTipo === 'oz') {
       // 1 oz = 30ml -> Fracción = (cantidad * 30) / capMl
       cantidadDeducir = parseFloat(((cantidad * 30) / capMl).toFixed(4));
     } else if (unidadTipo === 'shots') {
@@ -15726,6 +15874,37 @@ window.cargarSugerenciaCompras = async function() {
     });
   } catch (e) {
     console.error('Error al cargar compras:', e);
+  }
+};
+
+window.actualizarSugerenciaCompras = window.cargarSugerenciaCompras;
+
+window.limpiarSugerenciasCompras = function() {
+  window.listaComprasActual = [];
+  const elItems = document.getElementById('comprasTotalItems');
+  const elPresupuesto = document.getElementById('comprasTotalPresupuesto');
+  const badge = document.getElementById('badgeComprasCriticas');
+  if (elItems) elItems.textContent = '0 insumos';
+  if (elPresupuesto) elPresupuesto.textContent = typeof formatCRC === 'function' ? formatCRC(0) : '₡0';
+  if (badge) badge.style.display = 'none';
+
+  const tbody = document.getElementById('tbodySugerenciaCompras');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align:center; padding:35px 20px; color:#94a3b8;">
+          <div style="font-size:2rem; margin-bottom:8px;">🧹</div>
+          <div style="font-size:1.05rem; font-weight:700; color:#f8fafc; margin-bottom:6px;">Sugerencias de compra limpiadas de pantalla</div>
+          <p style="margin:0 0 16px; font-size:0.85rem; color:#94a3b8; max-width:450px; margin-left:auto; margin-right:auto;">Las sugerencias mostradas han sido removidas. Puedes volver a calcularlas en cualquier momento según las existencias actuales de bodega.</p>
+          <button type="button" class="btn-pri" onclick="cargarSugerenciaCompras()" style="padding:9px 18px; border-radius:8px; font-weight:700; font-size:0.85rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+            <span>🔄</span> Volver a Calcular Sugerencias
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro('🧹 Sugerencias de compras limpiadas de pantalla.', 'info');
   }
 };
 

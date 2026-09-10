@@ -1581,6 +1581,9 @@
                     <label style="font-size:0.75rem; color:#9ca3af; font-weight:700;">Cantidad en Receta:</label>
                     <select id="selNuevoIngredienteUnidadTipo" style="background:#0f172a; color:#38bdf8; border:1px solid #374151; font-size:0.72rem; border-radius:4px; padding:2px 6px;" onchange="actualizarPlaceholderCantidadReceta()">
                       <option value="estandar">Unidad estándar (botella / kg / unidad)</option>
+                      <option value="botella_350">🍺 1 Botella Cerveza (350ml / 355ml)</option>
+                      <option value="lata_350">🥫 1 Lata Cerveza (350ml)</option>
+                      <option value="lata_473">🥫 1 Lata Grande (473ml)</option>
                       <option value="oz">🥃 En Onzas (oz)</option>
                       <option value="shots">🍹 En Shots / Tragos</option>
                       <option value="fraccion">🍾 Fracción Botella (1/4, 1/2...)</option>
@@ -1602,6 +1605,10 @@
               <!-- Píldoras / Botones Rápidos de Medida para Coctelería y Botellas -->
               <div id="boxMedidasRapidasReceta" style="margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
                 <span style="font-size:0.75rem; color:#9ca3af; margin-right:4px;">⚡ Medidas rápidas:</span>
+                <button type="button" class="chip-medida" data-medida="1-botella350" onclick="seleccionarMedidaRapidaReceta('botella_350', 1, this)">🍺 1 Botella (350ml/355ml)</button>
+                <button type="button" class="chip-medida" data-medida="1-lata350" onclick="seleccionarMedidaRapidaReceta('lata_350', 1, this)">🥫 1 Lata 350ml</button>
+                <button type="button" class="chip-medida" data-medida="1-lata473" onclick="seleccionarMedidaRapidaReceta('lata_473', 1, this)">🥫 1 Lata 473ml</button>
+                <span style="display:inline-block; width:1px; height:18px; background:#374151; margin:0 4px;"></span>
                 <button type="button" class="chip-medida" data-medida="0.25-oz" onclick="seleccionarMedidaRapidaReceta('oz', 0.25, this)">1/4 oz (7.5ml)</button>
                 <button type="button" class="chip-medida" data-medida="0.5-oz" onclick="seleccionarMedidaRapidaReceta('oz', 0.5, this)">1/2 oz (15ml)</button>
                 <button type="button" class="chip-medida" data-medida="0.75-oz" onclick="seleccionarMedidaRapidaReceta('oz', 0.75, this)">3/4 oz (22.5ml)</button>
@@ -1688,7 +1695,8 @@
                   Insumos que han alcanzado o superado el umbral de stock mínimo en bodega.
                 </p>
               </div>
-              <div class="compras-actions-top">
+              <div class="compras-actions-top" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-tool" style="background:#475569; border-color:#64748b;" onclick="limpiarSugerenciasCompras()" title="Limpiar todas las sugerencias que aparecen en pantalla">🧹 Limpiar Todo</button>
                 <button class="btn-tool" onclick="copiarListaComprasTexto()">📋 Copiar Lista</button>
                 <button class="btn-tool" style="background:#2563eb; border-color:#3b82f6;" onclick="imprimirListaCompras()">🖨️ Imprimir Pedido</button>
               </div>
@@ -3251,11 +3259,15 @@
                 <div>
                   <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">Unidad de Medida:</label>
                   <select id="selectAutoInsumoUnidad" style="width:100%; padding:6px 8px; font-size:0.84rem; border:1px solid #475569; background:#111827; color:#fff; border-radius:6px;">
-                    <option value="unidades">Unidades</option>
-                    <option value="botellas">Botellas</option>
-                    <option value="kg">Kilogramos (kg)</option>
-                    <option value="litros">Litros</option>
-                    <option value="porciones">Porciones</option>
+                    <option value="botellas_350">🍺 Botella Cerveza (350ml / 355ml)</option>
+                    <option value="latas_350">🥫 Lata Cerveza (350ml)</option>
+                    <option value="latas_473">🥫 Lata Grande (473ml / 16oz)</option>
+                    <option value="unidades" selected>📦 Unidades</option>
+                    <option value="botellas">🍾 Botellas (Licor / Vino)</option>
+                    <option value="kg">⚖️ Kilogramos (kg)</option>
+                    <option value="litros">🧃 Litros</option>
+                    <option value="porciones">🍽️ Porciones</option>
+                    <option value="personalizada">⚙️ Personalizada (ml, oz, kg)</option>
                   </select>
                 </div>
                 <div>
@@ -4355,11 +4367,15 @@
           <div>
             <label>Unidad de Medida:</label>
             <select id="selectNuevoInsumoUnidad" onchange="onCambioUnidadInsumo('nuevo')" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
-              <option value="unidades">Unidades</option>
-              <option value="botellas">Botellas</option>
-              <option value="kg">Kilogramos (kg)</option>
-              <option value="porciones">Porciones</option>
-              <option value="litros">Litros</option>
+              <option value="botellas_350">🍺 Botella Cerveza (350ml / 355ml)</option>
+              <option value="latas_350">🥫 Lata Cerveza (350ml)</option>
+              <option value="latas_473">🥫 Lata Grande (473ml / 16oz)</option>
+              <option value="unidades">📦 Unidades</option>
+              <option value="botellas">🍾 Botellas (Licor / Vino)</option>
+              <option value="kg">⚖️ Kilogramos (kg)</option>
+              <option value="litros">🧃 Litros</option>
+              <option value="porciones">🍽️ Porciones</option>
+              <option value="personalizada">⚙️ Personalizada (ml, oz, kg)</option>
             </select>
           </div>
         </div>
@@ -4446,11 +4462,15 @@
           <div>
             <label>Unidad de Medida:</label>
             <select id="selectEditarInsumoUnidad" onchange="onCambioUnidadInsumo('editar')" style="width:100%; padding:10px; border-radius:8px; background:#111827; border:1px solid #374151; color:#fff;">
-              <option value="unidades">Unidades</option>
-              <option value="botellas">Botellas</option>
-              <option value="kg">Kilogramos (kg)</option>
-              <option value="porciones">Porciones</option>
-              <option value="litros">Litros</option>
+              <option value="botellas_350">🍺 Botella Cerveza (350ml / 355ml)</option>
+              <option value="latas_350">🥫 Lata Cerveza (350ml)</option>
+              <option value="latas_473">🥫 Lata Grande (473ml / 16oz)</option>
+              <option value="unidades">📦 Unidades</option>
+              <option value="botellas">🍾 Botellas (Licor / Vino)</option>
+              <option value="kg">⚖️ Kilogramos (kg)</option>
+              <option value="litros">🧃 Litros</option>
+              <option value="porciones">🍽️ Porciones</option>
+              <option value="personalizada">⚙️ Personalizada (ml, oz, kg)</option>
             </select>
           </div>
         </div>
