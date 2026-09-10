@@ -1900,6 +1900,15 @@ try {
           sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
           localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
         } catch (_) {}
+        if (typeof aplicarRestriccionesModulos === 'function') {
+          aplicarRestriccionesModulos();
+        }
+        if (typeof aplicarConfiguracionMonedaNegocio === 'function') {
+          aplicarConfiguracionMonedaNegocio();
+        }
+        if (typeof cargarCajaDesdeBackend === 'function') {
+          cargarCajaDesdeBackend();
+        }
         if (typeof mostrarNotificacionCentro === 'function') {
           mostrarNotificacionCentro(`⚙️ Características del comercio actualizadas en tiempo real`, 'info');
         }
@@ -2059,7 +2068,8 @@ function formatCRCSinDecimales(num) {
 
 function negocioAceptaDolares() {
   const m = estado.negocioActual?.moneda || 'CRC';
-  return m === 'CRC_USD' || m === 'USD';
+  const flagBimoneda = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('bimoneda_dolares') : true;
+  return flagBimoneda && (m === 'CRC_USD' || m === 'USD');
 }
 window.negocioAceptaDolares = negocioAceptaDolares;
 
@@ -4218,20 +4228,59 @@ window.tieneModulo = function(moduloKey) {
   return true;
 };
 
+window.negocioTieneCaracteristica = function(flagId) {
+  let neg = estado.negocioActual;
+  if (!neg) {
+    try {
+      const s = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
+      if (s) neg = JSON.parse(s);
+    } catch (_) {}
+  }
+  if (!neg) return true;
+  const flags = neg.caracteristicas_activas;
+  if (!flags || flags === 'all') return true;
+
+  if (Array.isArray(flags)) {
+    return flags.includes(flagId);
+  }
+  if (typeof flags === 'string') {
+    try {
+      const arr = JSON.parse(flags);
+      if (Array.isArray(arr)) return arr.includes(flagId);
+    } catch (_) {}
+    const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
+    return splitArr.includes(String(flagId).toLowerCase());
+  }
+  return true;
+};
+
 window.aplicarRestriccionesModulos = function() {
-  const tieneKDS = tieneModulo('kds_cocina');
-  const tieneSplit = tieneModulo('split_bill');
+  const tieneKDS = tieneModulo('kds_cocina') && negocioTieneCaracteristica('despacho_cocina_barra');
+  const tieneSplit = tieneModulo('split_bill') && negocioTieneCaracteristica('division_cuentas');
   const tieneMesasPromos = tieneModulo('mesas_promos');
+  const tieneUnionMesas = tieneMesasPromos && negocioTieneCaracteristica('union_mesas');
+  const tieneHappyHour = tieneMesasPromos && negocioTieneCaracteristica('happy_hour_auto');
   const tieneInventario = tieneModulo('inventario_recetas');
-  const tieneQR = tieneModulo('menu_qr');
+  const tieneKardex = tieneInventario && negocioTieneCaracteristica('kardex_tiempo_real');
+  const tieneQR = tieneModulo('menu_qr') && negocioTieneCaracteristica('menu_digital_qr');
   const tieneAutoPago = tieneModulo('auto_pago_qr');
   const tieneOffline = tieneModulo('offline_first');
   const tieneWhatsApp = tieneModulo('notificaciones_whatsapp');
-  const tieneIA = tieneModulo('inteligencia_artificial');
-  const tieneFacturacion = tieneModulo('facturacion_electronica');
+  const tieneIA = tieneModulo('inteligencia_artificial') && negocioTieneCaracteristica('asistente_ia');
+  const tieneFacturacion = tieneModulo('facturacion_electronica') && negocioTieneCaracteristica('facturacion_electronica');
+  const tieneDescuentos = tieneModulo('descuentos_cortesias_pin') && negocioTieneCaracteristica('descuentos_cortesias');
+  const tienePrecuenta = negocioTieneCaracteristica('impresion_precuenta');
+  const tieneServicio10 = negocioTieneCaracteristica('servicio_10');
+  const tieneIVA13 = negocioTieneCaracteristica('desglose_iva_13');
+  const tieneStockCritico = negocioTieneCaracteristica('alertas_stock_critico');
+
+  // Bimoneda & Moneda Dólares
+  if (typeof aplicarConfiguracionMonedaNegocio === 'function') {
+    aplicarConfiguracionMonedaNegocio();
+  }
 
   // 1. KDS Cocina & Barra
-  document.querySelectorAll('.nav-pill[data-view="kds"], .nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds').forEach(el => {
+  document.querySelectorAll('.nav-pill[data-view="kds"], .nav-btn[data-view="kds"], #btnIrAKDS, .btn-kds, #btnEnviarCocina, #btnEnviarBarra').forEach(el => {
     el.style.display = tieneKDS ? '' : 'none';
   });
   if (!tieneKDS) {
@@ -4248,7 +4297,7 @@ window.aplicarRestriccionesModulos = function() {
   }
 
   // 2. Facturación Electrónica Legal & Express
-  document.querySelectorAll('.nav-pill[data-view="facturacion"], .nav-btn[data-view="facturacion"], #tabNavFacturacion, [data-view="facturacion"]').forEach(el => {
+  document.querySelectorAll('.nav-pill[data-view="facturacion"], .nav-btn[data-view="facturacion"], #tabNavFacturacion, [data-view="facturacion"], .btn-factura-electronica, #chkFacturaElectronicaContainer').forEach(el => {
     el.style.display = tieneFacturacion ? '' : 'none';
   });
   const subtabFact = document.getElementById('subtabBtn_facturacion');
@@ -4270,14 +4319,17 @@ window.aplicarRestriccionesModulos = function() {
   }
 
   // 3. Inventario & Escandallos & Kárdex
-  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-panel-card.card-kardex, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], .admin-view-tab[data-view="kardex"], #tabNavInventario').forEach(el => {
+  document.querySelectorAll('.admin-panel-card.card-inventario, .admin-panel-card.card-recetas, .admin-view-tab[data-view="inventario"], .admin-view-tab[data-view="recetas"], #tabNavInventario').forEach(el => {
     el.style.display = tieneInventario ? '' : 'none';
+  });
+  document.querySelectorAll('.admin-panel-card.card-kardex, .admin-view-tab[data-view="kardex"], #tabBtnInvKardex, [data-view="kardex"]').forEach(el => {
+    el.style.display = tieneKardex ? '' : 'none';
   });
   const btnSubRecetas = document.getElementById('tabBtnInvRecetas');
   const btnSubKardex = document.getElementById('tabBtnInvKardex');
   const btnSubCompras = document.getElementById('tabBtnInvCompras');
   if (btnSubRecetas) btnSubRecetas.style.display = tieneInventario ? '' : 'none';
-  if (btnSubKardex) btnSubKardex.style.display = tieneInventario ? '' : 'none';
+  if (btnSubKardex) btnSubKardex.style.display = tieneKardex ? '' : 'none';
   if (btnSubCompras) btnSubCompras.style.display = tieneInventario ? '' : 'none';
 
   if (!tieneInventario) {
@@ -4307,14 +4359,16 @@ window.aplicarRestriccionesModulos = function() {
 
   // 5. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
   document.querySelectorAll('#btnAbrirMoverUnirModal, .btn-mover-unir, .btn-unir-mesas, .btn-mover-mesa').forEach(el => {
-    el.style.display = tieneMesasPromos ? '' : 'none';
+    el.style.display = tieneUnionMesas ? '' : 'none';
   });
   document.querySelectorAll('.admin-panel-card.card-happyhour, #btnAdminHappyHour, #btnToggleHappyHour, .hh-status-bar, #btnHappyHourTop, .btn-happyhour-top').forEach(el => {
-    el.style.display = tieneMesasPromos ? '' : 'none';
+    el.style.display = tieneHappyHour ? '' : 'none';
   });
-  if (!tieneMesasPromos) {
-    document.getElementById('modalAdminHappyHour')?.classList.remove('active');
+  if (!tieneUnionMesas) {
     document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
+  }
+  if (!tieneHappyHour) {
+    document.getElementById('modalAdminHappyHour')?.classList.remove('active');
   }
 
   // 6. Menú QR & Auto-Pago
@@ -4347,7 +4401,7 @@ window.aplicarRestriccionesModulos = function() {
     el.style.display = tieneWhatsApp ? '' : 'none';
   });
 
-  // 10. Inteligencia Artificial Gastronómica (Chatbot Asistente IA, Voice POS & Upselling)
+  // 10. Inteligencia Artificial Gastronómica
   const btnFloatIA = document.getElementById('btnFloatAsistenteIA');
   if (btnFloatIA) {
     btnFloatIA.style.display = tieneIA ? 'flex' : 'none';
@@ -4362,11 +4416,30 @@ window.aplicarRestriccionesModulos = function() {
   });
 
   // 11. Descuentos & Cortesías con PIN y Auditoría
-  const tieneDescuentos = tieneModulo('descuentos_cortesias_pin');
   const btnDesc = document.getElementById('btnAbrirModalDescuento');
   if (btnDesc) btnDesc.style.display = tieneDescuentos ? '' : 'none';
-  document.querySelectorAll('.btn-descuento-trigger, #btnAbrirModalDescuento').forEach(el => {
+  document.querySelectorAll('.btn-descuento-trigger, #btnAbrirModalDescuento, .btn-descuento-pago').forEach(el => {
     el.style.display = tieneDescuentos ? '' : 'none';
+  });
+
+  // 12. Impresión de Pre-Cuenta
+  document.querySelectorAll('#btnImprimirPrecuenta, #btnImprimirPrecuentaComandero, .btn-precuenta, .btn-print-precuenta, #btnImprimirPrecuentaModal').forEach(el => {
+    el.style.display = tienePrecuenta ? '' : 'none';
+  });
+
+  // 13. Servicio 10% Salón
+  document.querySelectorAll('.row-servicio-10, #rowTotalServicio, .pill-servicio-10, #tipPoolSection').forEach(el => {
+    el.style.display = tieneServicio10 ? '' : 'none';
+  });
+
+  // 14. Desglose IVA 13%
+  document.querySelectorAll('.row-iva-13, #rowTotalIVA, .ticket-iva-row, .desglose-iva').forEach(el => {
+    el.style.display = tieneIVA13 ? '' : 'none';
+  });
+
+  // 15. Alertas de Stock Crítico
+  document.querySelectorAll('#devCriticalStockContainer, #badgeStockCritico, .stock-critico-badge, .badge-critico').forEach(el => {
+    el.style.display = tieneStockCritico ? '' : 'none';
   });
 };
 
@@ -4591,11 +4664,20 @@ window.guardarCaracteristicasNegocio = async function() {
         alert(`✅ ¡Características guardadas con éxito!\n\n• Funciones activas: ${activas.length} de ${total}`);
       }
 
-      // Si el negocio editado es el actual, actualizar estado en memoria
+      // Si el negocio editado es el actual, actualizar estado en memoria e interfaz de inmediato (0 delay)
       if (estado.negocioActual && Number(estado.negocioActual.id) === Number(_negocioCaracteristicasActivoId)) {
         estado.negocioActual.caracteristicas_activas = valorFinal;
         sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
         localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+        if (typeof aplicarRestriccionesModulos === 'function') {
+          aplicarRestriccionesModulos();
+        }
+        if (typeof aplicarConfiguracionMonedaNegocio === 'function') {
+          aplicarConfiguracionMonedaNegocio();
+        }
+        if (typeof cargarCajaDesdeBackend === 'function') {
+          cargarCajaDesdeBackend();
+        }
       }
     } else {
       const err = await res.json();
