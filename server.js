@@ -896,6 +896,32 @@ app.post('/api/usuarios/cambiar-pin', async (req, res) => {
 // ============================================================================
 // 2. PORTAL DE DESARROLLADOR (SAAS MULTI-COMERCIO & CONTROL GLOBAL)
 // ============================================================================
+
+// Función de Limpieza y Aislamiento Total (Cero Absoluto) para Comercios Nuevos / Clonados
+async function garantizarLimpiezaCeroNegocio(negocioId) {
+  const nid = Number(negocioId);
+  if (!nid || isNaN(nid)) return;
+  try {
+    // 1. Limpieza total de historial financiero, cajas y movimientos
+    await dbRun('DELETE FROM MovimientosCaja WHERE caja_id IN (SELECT id FROM Cajas WHERE negocio_id = ?)', [nid]);
+    await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [nid]);
+    // 2. Limpieza de pagos, facturación y órdenes
+    await dbRun('DELETE FROM Pagos WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
+    await dbRun('DELETE FROM DetalleOrden WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
+    await dbRun('DELETE FROM FacturasElectronicas WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
+    await dbRun('DELETE FROM Anulaciones WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
+    await dbRun('DELETE FROM Ordenes WHERE negocio_id = ?', [nid]);
+    await dbRun('DELETE FROM TableMerges WHERE negocio_id = ?', [nid]);
+    // 3. Limpieza de claves residuales de configuración tenant
+    await dbRun("DELETE FROM ConfigNegocio WHERE clave = ? OR clave = ?", [`salon_piso_fondo_negocio_${nid}`, `custom_page_settings_negocio_${nid}`]);
+    // 4. Reset estricto a cero de todas las mesas del comercio (libres y sin saldos)
+    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE negocio_id = ?", [nid]);
+    console.log(`🧹 [CERO ABSOLUTO] Comercio ID ${nid} inicializado con historial y saldos 100% limpios.`);
+  } catch (errLimpieza) {
+    console.warn(`⚠️ Error asegurando limpieza cero en negocio ${nid}:`, errLimpieza.message);
+  }
+}
+
 // Negocios (Comercios)
 app.get('/api/dev/negocios', async (req, res) => {
   try {
@@ -1001,6 +1027,9 @@ app.post('/api/dev/negocios', async (req, res) => {
         pin: finalAdminPin
       };
     }
+
+    // Garantizar aislamiento y limpieza total a Cero Absoluto
+    await garantizarLimpiezaCeroNegocio(nuevoNegocioId);
 
     const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevo);
@@ -1448,6 +1477,9 @@ const handlerClonarNegocio = async (req, res) => {
       };
     }
 
+    // 9. Garantizar aislamiento y limpieza total a Cero Absoluto (cajas, órdenes, pagos, comandas vacías)
+    await garantizarLimpiezaCeroNegocio(nuevoNegocioId);
+
     const nuevoNegocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevoNegocio);
     res.json({
@@ -1463,6 +1495,20 @@ const handlerClonarNegocio = async (req, res) => {
 
 app.post('/api/dev/negocios/:id/clonar', handlerClonarNegocio);
 app.post('/api/dev/negocios/:id/duplicar', handlerClonarNegocio);
+
+// Reset Manual a Cero Absoluto para cualquier comercio
+app.post('/api/dev/negocios/:id/reset-financiero', async (req, res) => {
+  try {
+    const negocioId = Number(req.params.id);
+    await garantizarLimpiezaCeroNegocio(negocioId);
+    io.emit('caja_actualizada');
+    io.emit('kds_actualizado');
+    io.emit('mesas_actualizadas');
+    res.json({ ok: true, message: `Historial financiero, cajas y órdenes del comercio ID ${negocioId} reseteados a Cero Absoluto.` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Obtener módulos activos de un negocio
 app.get('/api/dev/negocios/:id/modulos', async (req, res) => {

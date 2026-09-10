@@ -54,6 +54,10 @@ async function crearNuevoRestaurante({
       console.log(`✅ Zonas, Mesas y Categorías base creadas.`);
     }
 
+    // 2.1 Garantizar limpieza financiera a Cero Absoluto
+    await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [negocioId]);
+    await dbRun('DELETE FROM Ordenes WHERE negocio_id = ?', [negocioId]);
+
     // 3. Crear Usuario Administrador
     const permisosAdmin = JSON.stringify({
       salon: true,

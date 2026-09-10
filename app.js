@@ -4283,10 +4283,13 @@ window.abrirPosComoNegocio = async function(negocioId) {
       if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
       if (typeof marcarCambiosPendientes === 'function') marcarCambiosPendientes(false);
 
-      // Resetear estado local activo para evitar mezclar datos del comercio previo
+      // Resetear estado local activo y saldos financieros para evitar mezclar datos del comercio previo
       estado.mesaActiva = null;
       estado.comandasKDS = [];
       estado.mesas = [];
+      if (typeof window.resetearEstadoFinancieroCero === 'function') {
+        window.resetearEstadoFinancieroCero();
+      }
       const inpSearch = document.getElementById('globalSearchInput');
       if (inpSearch) inpSearch.value = '';
       document.getElementById('searchDropdown')?.classList.remove('active');
@@ -8802,8 +8805,29 @@ document.querySelectorAll('.kds-tab').forEach(tab => {
 });
 
 // ============================================================================
-// 7. CAJA, PROPINAS, COBRO Y FACTURACIÓN
+// 7. CAJA, PROPINAS, COBRO Y FACTURACIÓN (AISLAMIENTO TOTAL MULTI-NEGOCIO)
 // ============================================================================
+window.resetearEstadoFinancieroCero = function() {
+  window._cajaActivaData = null;
+  const zeroes = {
+    'cajaFondoInicial': 'CERRADA',
+    'cajaVentasEfectivo': '₡ 0.00',
+    'cajaVentasTarjeta': '₡ 0.00',
+    'cajaVentasSinpe': '₡ 0.00',
+    'cajaVentasDolares': '$ 0.00 (₡ 0)',
+    'cajaTotalEfectivo': '₡ 0.00',
+    'cajaEntradasTotal': '+₡ 0.00',
+    'cajaSalidasTotal': '-₡ 0.00',
+    'cajaTotalEsperadoEfectivo': '₡ 0.00',
+    'cajaTotalEsperadoDolares': '$ 0.00 (₡ 0)',
+    'cajeroTurnoNombre': 'Sin turno'
+  };
+  Object.entries(zeroes).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  });
+};
+
 async function cargarCajaDesdeBackend() {
   try {
     const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
@@ -8811,7 +8835,7 @@ async function cargarCajaDesdeBackend() {
       headers: { 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
-    if (data.caja) {
+    if (data && data.caja) {
       let efect = 0, tarj = 0, sinpe = 0, dolaresCRC = 0, dolaresUSD = 0;
       (data.ventas || []).forEach(v => {
         const m = (v.metodo || '').toLowerCase();
