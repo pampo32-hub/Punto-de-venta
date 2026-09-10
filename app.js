@@ -2677,6 +2677,9 @@ window.cerrarSesion = function() {
   const devTop = document.getElementById('devTopControls');
   if (devTop) devTop.style.display = 'none';
   document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
+  }
   document.getElementById('landingLoginView').classList.add('active');
   document.getElementById('developerPortalView').classList.remove('active');
   document.getElementById('posMainView').classList.remove('active');
@@ -2791,6 +2794,10 @@ function aplicarEnrutamientoPorRol() {
     }
   }
 
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
+  }
+
   // Cargar datos operativos del restaurante para el negocio actual
   const nid = estado.negocioActual?.id || 1;
   cargarMesasDesdeBackend();
@@ -2873,6 +2880,10 @@ window.irAPuntoDeVentaAdmin = function() {
   } else {
     if (devTop) devTop.style.display = 'none';
     document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'none');
+  }
+
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
   }
 
   const nid = estado.negocioActual?.id || 1;
@@ -3018,6 +3029,9 @@ window.abrirModuloAdmin = async function(modulo) {
   document.body.classList.add('is-admin');
   const adminTools = document.getElementById('adminExtraActions');
   if (adminTools) adminTools.style.display = 'flex';
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
+  }
 
   cerrarPanelAdmin();
 
@@ -4741,6 +4755,9 @@ window.abrirPosComoNegocio = async function(negocioId) {
 
       // Habilitar botones de modo edición en modales (comandero y split)
       document.querySelectorAll('.dev-modal-action').forEach(el => el.style.display = 'inline-flex');
+      if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+        window.actualizarVisibilidadBotonesPurgaDev();
+      }
 
       // Iniciar en modo normal (apagado pero disponible con un clic)
       if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
@@ -14156,6 +14173,10 @@ window.cambiarSubTabInventario = function(tab) {
     if (panel) panel.style.display = 'block';
     inicializarModuloVentasInventario();
   }
+
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
+  }
 };
 
 window.kardexMovimientosActuales = [];
@@ -16303,9 +16324,40 @@ window.limpiarSugerenciasCompras = function() {
   }
 };
 
-// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE) ---
+// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE - EXCLUSIVO DEVELOPER / SUPERADMIN) ---
+
+window.esUsuarioDeveloperOSuperAdmin = function() {
+  const u = estado.usuarioActual;
+  if (!u) {
+    try {
+      const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || '{}');
+      if (su && su.rol) {
+        const r = (su.rol || '').toLowerCase();
+        return r === 'developer' || r === 'superadmin';
+      }
+    } catch (_) {}
+    return false;
+  }
+  const rol = (u.rol || '').toLowerCase();
+  return rol === 'developer' || rol === 'superadmin';
+};
+
+window.actualizarVisibilidadBotonesPurgaDev = function() {
+  const esDevOSuper = window.esUsuarioDeveloperOSuperAdmin();
+  document.querySelectorAll('.dev-purge-action').forEach(el => {
+    if (el.id === 'btnResetCajaPruebas') {
+      el.style.display = esDevOSuper ? 'block' : 'none';
+    } else {
+      el.style.display = esDevOSuper ? 'inline-flex' : 'none';
+    }
+  });
+};
 
 window.purgarSugerenciasComprasDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
   const nid = estado.negocioActual?.id || 1;
   const negNombre = estado.negocioActual?.nombre || 'este comercio';
   const confirmar = confirm(`⚠️ ¿Deseas eliminar definitivamente las sugerencias de compra para ${negNombre}?\n\n• Se normalizarán las existencias de insumos por debajo del mínimo para que no generen sugerencias de compra.\n• Se limpiará el historial de movimientos de Kárdex de prueba.\n• El catálogo de insumos quedará listo y en blanco para la entrega oficial.`);
@@ -16339,6 +16391,10 @@ window.purgarSugerenciasComprasDev = async function() {
 };
 
 window.purgarHistorialCajaDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
   const nid = estado.negocioActual?.id || 1;
   const negNombre = estado.negocioActual?.nombre || 'este comercio';
   const confirmar = confirm(`⚠️ ¿Deseas resetear todo el historial financiero de caja para ${negNombre}?\n\n• Se cerrará el turno actual.\n• Se eliminarán los registros de turnos pasados, cortes X/Z y entradas/salidas de prueba.\n• La caja quedará en ₡0.00 / $0.00 lista para su primera apertura real por el cliente.`);
@@ -16369,6 +16425,10 @@ window.purgarHistorialCajaDev = async function() {
 };
 
 window.purgarVentasPruebaDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
   const nid = estado.negocioActual?.id || 1;
   const negNombre = estado.negocioActual?.nombre || 'este comercio';
   const confirmar = confirm(`⚠️ ¿Deseas purgar todas las ventas, órdenes y facturas de prueba para ${negNombre}?\n\n• Se eliminarán todas las órdenes y tiques de prueba.\n• Los gráficos, ventas del día y KPIs se reiniciarán a ₡0.\n• Las mesas quedarán libres de saldos retenidos.`);
@@ -16404,6 +16464,10 @@ window.purgarVentasPruebaDev = async function() {
 };
 
 window.purgarComandasKDSDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
   const nid = estado.negocioActual?.id || 1;
   const negNombre = estado.negocioActual?.nombre || 'este comercio';
   const confirmar = confirm(`⚠️ ¿Deseas limpiar todas las comandas activas de Cocina y Barra para ${negNombre}?\n\n• Todas las pantallas KDS quedarán en blanco y limpias.`);
@@ -16433,6 +16497,10 @@ window.purgarComandasKDSDev = async function() {
 };
 
 window.liberarTodasLasMesasDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
   const nid = estado.negocioActual?.id || 1;
   const negNombre = estado.negocioActual?.nombre || 'este comercio';
   const confirmar = confirm(`⚠️ ¿Deseas liberar y restablecer TODAS las mesas para ${negNombre}?\n\n• Todas las mesas volverán a estado libre (verde) con saldo ₡0.\n• Se desharán uniones temporales de mesas.`);
@@ -16462,6 +16530,10 @@ window.liberarTodasLasMesasDev = async function() {
 };
 
 window.purgarAuditoriaDev = async function() {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
+    return;
+  }
   const nid = estado.negocioActual?.id || 1;
   const negNombre = estado.negocioActual?.nombre || 'este comercio';
   const confirmar = confirm(`⚠️ ¿Deseas limpiar todos los registros de auditoría de prueba para ${negNombre}?`);
