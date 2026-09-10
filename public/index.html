@@ -1270,7 +1270,8 @@
               <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
               <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)">📑 Corte X (Parcial) <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
-              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
+              <button class="btn-caja-op corte-x-ciego" id="btnCorteXCiego" onclick="abrirModalCorteXCiego()" title="Arqueo / Corte X a Ciegas (Conteo físico sin ver totales)" style="background: linear-gradient(135deg, rgba(139,92,246,0.18), rgba(109,40,217,0.18)); border: 1px solid #8b5cf6; color: #c4b5fd; font-weight: 700;">🙈 Cierre X a Ciegas</button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)" style="grid-column: span 2;">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
               <button class="btn-caja-op btn-purgar-caja dev-purge-action" id="btnResetCajaPruebas" onclick="purgarHistorialCajaDev()" style="display:none; grid-column: span 2; background: rgba(239, 68, 68, 0.12); border: 1px dashed #ef4444; color: #f87171; font-size: 0.82rem; padding: 8px; margin-top: 4px;" title="Resetear historial financiero y dejar caja en blanco para entrega al cliente">
                 🧹 Resetear Historial Financiero de Caja
               </button>
@@ -3662,6 +3663,20 @@
             </div>
           </div>
 
+          <!-- 10. Características & Funcionalidades del Local -->
+          <div class="admin-panel-card card-caracteristicas" id="btnAdminCaracteristicas" onclick="ejecutarAccionAdmin('caracteristicas')">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">⚙️</div>
+              <span class="admin-card-tag" style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4);">Módulos & Flags</span>
+            </div>
+            <h4>Características del Local</h4>
+            <p>Activa o desactiva Cierre X a ciegas, bimoneda dólares, servicio 10%, happy hour y funciones operativas.</p>
+            <div class="admin-card-action">
+              <span>Configurar Funciones</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -3818,6 +3833,53 @@
         <button type="button" class="btn-sec" onclick="cerrarModalAdminHappyHour()" style="padding: 10px 18px; font-weight: 600;">Cancelar</button>
         <button type="button" class="btn-pri" id="btnGuardarAdminHHConfig" onclick="guardarAdminHappyHour()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 800; font-size: 0.95rem; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4); cursor: pointer;">
           💾 Guardar Configuración
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: GESTIÓN DE CARACTERÍSTICAS DEL LOCAL (ADMIN & DEVELOPER) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalAdminCaracteristicas" style="z-index: 100050;">
+    <div class="modal-dialog" style="max-width: 850px; width: 95vw; max-height: 92vh; border-radius: 18px; background: #0b1120; border: 1px solid #10b981; box-shadow: 0 25px 60px rgba(0,0,0,0.85); overflow: hidden; display: flex; flex-direction: column;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #064e3b, #0f172a); border-bottom: 1px solid rgba(16, 185, 129, 0.3); padding: 18px 24px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 1.8rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">⚙️</div>
+          <div>
+            <h3 style="margin: 0; color: #fff; font-size: 1.25rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+              Características & Funcionalidades del Local
+            </h3>
+            <small id="adminCaracteristicasSubtitulo" style="color: #6ee7b7; font-size: 0.82rem;">Activa o desactiva módulos y funciones operativas para tu restaurante</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalAdminCaracteristicas()" style="background: rgba(255,255,255,0.08); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 20px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 10px; padding: 12px 16px;">
+          <span style="font-size: 0.88rem; color: #e2e8f0; font-weight: 600;" id="adminCaracteristicasContador">
+            ⚡ 0 características activadas
+          </span>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-sec" onclick="toggleTodasCaracteristicasAdmin(true)" style="padding: 6px 12px; font-size: 0.78rem; background: #1e293b; color: #6ee7b7; border-color: #10b981; border-radius: 6px; cursor: pointer;">
+              ✅ Activar Todas
+            </button>
+            <button type="button" class="btn-sec" onclick="toggleTodasCaracteristicasAdmin(false)" style="padding: 6px 12px; font-size: 0.78rem; background: #1e293b; color: #fca5a5; border-color: #ef4444; border-radius: 6px; cursor: pointer;">
+              ❌ Desactivar Todas
+            </button>
+          </div>
+        </div>
+
+        <div class="admin-grid-caracteristicas" id="adminGridCaracteristicas" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px;">
+          <!-- Renderizado dinámico de tarjetas con interruptor switch -->
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="padding: 16px 24px; background: #080d18; border-top: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn-sec" onclick="cerrarModalAdminCaracteristicas()">Cancelar</button>
+        <button class="btn-pri" id="btnGuardarCaracteristicasAdmin" onclick="guardarCaracteristicasAdmin()" style="background: linear-gradient(135deg, #059669, #047857); border-color: #10b981; color: #fff; font-weight: 800; padding: 10px 24px; border-radius: 10px; cursor: pointer;">
+          💾 Guardar Características
         </button>
       </div>
     </div>
@@ -4818,6 +4880,82 @@
         <button class="btn-sec" onclick="cerrarModalCierreZ()">Cancelar</button>
         <button class="btn-pri" id="btnEjecutarCierreZ" onclick="ejecutarCierreZ()" style="background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none;">
           🔒 Confirmar y Cerrar Turno
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CORTE / CIERRE X A CIEGAS (ARQUEO PARCIAL CIEGO) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalCorteXCiego" style="z-index: 100020;">
+    <div class="modal-dialog" style="max-width: 520px; width: 94vw; max-height: 94vh; overflow-y: auto; border-radius: 18px; background: #0f172a; border: 1px solid #8b5cf6; box-shadow: 0 25px 50px -12px rgba(139, 92, 246, 0.35); overflow: hidden;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #2e1065, #0f172a); border-bottom: 1px solid rgba(139, 92, 246, 0.3); padding: 18px 22px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-size: 1.8rem; background: rgba(139, 92, 246, 0.2); border: 1px solid #8b5cf6; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">🙈</div>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#f8fafc; font-weight:800;">Cierre X a Ciegas (Arqueo Parcial)</h3>
+            <small style="color:#c4b5fd; font-size:0.82rem;">Conteo físico sin ver totales teóricos del sistema</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalCorteXCiego()">✕</button>
+      </div>
+      
+      <div class="dialog-body" style="padding: 22px; background: #0b0f19; display: flex; flex-direction: column; gap: 14px;">
+        <!-- Banner Informativo de Modo Ciego -->
+        <div style="background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 10px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px;">
+          <span style="font-size: 1.3rem;">🔒</span>
+          <div style="font-size: 0.84rem; color: #ddd6fe; line-height: 1.45;">
+            <strong style="color: #f5f3ff;">Modo Arqueo Ciego Activo:</strong> Los montos teóricos calculados por el sistema están ocultos para exigir un conteo físico real e imparcial de la gaveta. Al procesar, se revelará el resultado y la comparativa.
+          </div>
+        </div>
+
+        <!-- Inputs de Conteo Físico Real -->
+        <div class="field-row">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.9rem; color:#f8fafc;">
+            💵 Dinero Físico Contado en Colones (₡ CRC): <span style="color:#ef4444;">*</span>
+          </label>
+          <input type="number" id="txtCorteXCiegoEfectivoReal" min="0" step="any" placeholder="0" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.15rem; font-weight:800; border:2px solid #8b5cf6; background:#111827; color:#34d399; border-radius:10px; outline:none;" />
+        </div>
+
+        <div class="field-row" id="rowCorteXCiegoUSD" style="display:none;">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.9rem; color:#f8fafc;">
+            💲 Dólares Físicos Contados ($ USD):
+          </label>
+          <input type="number" id="txtCorteXCiegoDolaresReal" min="0" step="any" placeholder="0.00" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.15rem; font-weight:800; border:2px solid #38bdf8; background:#111827; color:#38bdf8; border-radius:10px; outline:none;" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="field-row">
+            <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.8rem; color:#94a3b8;">
+              💳 Vouchers Tarjeta (Opcional):
+            </label>
+            <input type="number" id="txtCorteXCiegoTarjetaReal" min="0" step="any" placeholder="₡ 0" class="select-styled" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#cbd5e1; border-radius:8px; outline:none;" />
+          </div>
+          <div class="field-row">
+            <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.8rem; color:#94a3b8;">
+              📱 Comprobantes SINPE (Opcional):
+            </label>
+            <input type="number" id="txtCorteXCiegoSinpeReal" min="0" step="any" placeholder="₡ 0" class="select-styled" style="width:100%; padding:8px 10px; font-size:0.9rem; border:1px solid #374151; background:#111827; color:#cbd5e1; border-radius:8px; outline:none;" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem; color:#94a3b8;">
+            📝 Notas u Observaciones del Arqueo (Opcional):
+          </label>
+          <textarea id="txtCorteXCiegoNotas" rows="2" placeholder="Observaciones de caja, conteo de billetes especiales, etc." class="select-styled" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px; resize:vertical;"></textarea>
+        </div>
+
+        <div style="font-size:0.78rem; color:#64748b; text-align:center;">
+          ℹ️ Al procesar el corte a ciegas, el turno permanece abierto y se genera el ticket térmico con la comparativa.
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:space-between; align-items:center; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalCorteXCiego()">Cancelar</button>
+        <button class="btn-pri" id="btnProcesarCorteXCiego" onclick="procesarCorteXCiego()" style="background: linear-gradient(135deg, #7c3aed, #6d28d9); border-color: #8b5cf6; color:#fff; font-weight:800; padding:10px 22px; border-radius:10px; cursor:pointer;">
+          🙈 Procesar Corte X a Ciegas
         </button>
       </div>
     </div>

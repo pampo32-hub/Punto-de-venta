@@ -1359,7 +1359,8 @@ const CATALOGO_CARACTERISTICAS = [
   { id: 'apertura_cajon_gaveta', nombre: 'Apertura Automática de Gaveta', categoria: 'hardware', icono: '🗄️', descripcion: 'Envía el pulso Kick Drawer para abrir el cajón en pagos en efectivo.' },
   { id: 'kardex_tiempo_real', nombre: 'Descuento de Kárdex en Tiempo Real', categoria: 'inventario', icono: '📦', descripcion: 'Rebaja inventario e insumos de recetas automáticamente al vender.' },
   { id: 'alertas_stock_critico', nombre: 'Alertas de Stock Crítico / Mínimo', categoria: 'inventario', icono: '⚠️', descripcion: 'Avisa visualmente cuando un producto o insumo alcanza stock mínimo.' },
-  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🙈', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real.' },
+  { id: 'cierre_x_ciegas', nombre: 'Corte / Cierre X a Ciegas (Arqueo Parcial)', categoria: 'seguridad', icono: '🙈', descripcion: 'Habilita el arqueo ciego parcial donde el cajero cuenta y declara el dinero físico sin ver los montos esperados del sistema.' },
+  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🔒', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real en el cierre final Z.' },
   { id: 'asistente_ia', nombre: 'Copiloto de Inteligencia Artificial (IA)', categoria: 'seguridad', icono: '🤖', descripcion: 'Habilita el asistente virtual inteligente de ventas, stock y soporte.' }
 ];
 
@@ -1690,6 +1691,65 @@ app.put('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
     // Notificar en tiempo real a todas las pantallas de ese negocio
     io.emit('negocio_caracteristicas_actualizadas', {
       negocioId: Number(req.params.id),
+      caracteristicas_activas: parsedFlags
+    });
+
+    res.json({ ok: true, negocio: actualizado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Obtener características para el panel de administración
+app.get('/api/admin/caracteristicas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const neg = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [negocioId]);
+    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    let caracteristicas = neg.caracteristicas_activas || 'all';
+    if (caracteristicas !== 'all') {
+      try { caracteristicas = JSON.parse(caracteristicas); } catch (_) { caracteristicas = 'all'; }
+    }
+
+    res.json({
+      negocio: neg,
+      negocioId: neg.id,
+      nombre: neg.nombre,
+      moneda: neg.moneda,
+      tipoCambioUSD: neg.tipo_cambio_usd || 520,
+      planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
+      caracteristicasActivas: caracteristicas,
+      catalogo: CATALOGO_CARACTERISTICAS
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Actualizar características desde el panel de administración
+app.put('/api/admin/caracteristicas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const { caracteristicas_activas } = req.body;
+    const valorFlags = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
+
+    await dbRun(
+      'UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?',
+      [valorFlags, negocioId]
+    );
+
+    const actualizado = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [negocioId]);
+
+    let parsedFlags = valorFlags;
+    try { parsedFlags = JSON.parse(valorFlags); } catch (_) {}
+    if (actualizado) {
+      actualizado.caracteristicas_activas = parsedFlags;
+    }
+
+    // Notificar en tiempo real por socket
+    io.emit('negocio_caracteristicas_actualizadas', {
+      negocioId: Number(negocioId),
       caracteristicas_activas: parsedFlags
     });
 
@@ -5997,6 +6057,178 @@ app.get('/api/caja/corte-x', async (req, res) => {
   }
 });
 
+// Procesar Corte X a Ciegas (Arqueo Parcial Ciego con Conteo Físico)
+app.post('/api/caja/corte-x-ciego', async (req, res) => {
+  try {
+    const {
+      efectivo_declarado_crc,
+      efectivo_declarado,
+      dolares_declarado_usd,
+      dolares_declarado,
+      tarjeta_declarada = 0,
+      sinpe_declarado = 0,
+      notas = '',
+      usuarioNombre = 'Cajero',
+      adminPin,
+      pin
+    } = req.body;
+
+    const pinVerificar = adminPin || pin || req.headers['x-supervisor-pin'];
+    if (pinVerificar) {
+      const esValido = await validarPinAdministrador(pinVerificar);
+      if (!esValido) {
+        return res.status(401).json({ error: 'PIN de Administrador inválido.' });
+      }
+    }
+
+    const negocioId = obtenerNegocioIdReq(req);
+    const caja = await dbGet(
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+      [negocioId]
+    );
+    if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente para realizar el arqueo.' });
+
+    const ventas = await dbAll(`
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
+      FROM Pagos p
+      WHERE p.caja_id = ?
+      GROUP BY p.metodo
+    `, [caja.id]);
+
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
+    const desgloseMetodos = {};
+
+    ventas.forEach(v => {
+      const m = (v.metodo || '').toLowerCase();
+      const tot = Number(v.total) || 0;
+      const totUSD = Number(v.total_usd) || 0;
+      desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
+
+      if (m.includes('efectivo') || m.includes('cash')) {
+        ventasEfectivo += tot;
+      } else if (m.includes('tarjeta') || m.includes('datafono') || m.includes('datáfono') || m.includes('card') || m.includes('credito') || m.includes('crédito') || m.includes('debito') || m.includes('débito')) {
+        ventasTarjeta += tot;
+      } else if (m.includes('sinpe')) {
+        ventasSinpe += tot;
+      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+        ventasDolares += tot;
+        ventasDolaresUSD += totUSD;
+      } else if (m.includes('transfer')) {
+        ventasTransferencia += tot;
+        ventasSinpe += tot;
+      } else {
+        ventasOtros += tot;
+      }
+    });
+    const totalVentas = ventas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
+
+    const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
+    let totalEntradas = 0, totalSalidas = 0;
+    movimientos.forEach(m => {
+      const mont = Number(m.monto) || 0;
+      if (m.tipo === 'entrada') totalEntradas += mont;
+      if (m.tipo === 'salida') totalSalidas += mont;
+    });
+
+    const fondoInicial = Number(caja.monto_inicial) || 0;
+    const fondoInicialUSD = Number(caja.monto_inicial_usd) || 0;
+    const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
+    const dolaresEsperadoUSD = Math.round((fondoInicialUSD + ventasDolaresUSD) * 100) / 100;
+    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
+
+    const efDecCRC = Number(efectivo_declarado_crc !== undefined ? efectivo_declarado_crc : (efectivo_declarado || 0));
+    const dolDecUSD = Number(dolares_declarado_usd !== undefined ? dolares_declarado_usd : (dolares_declarado || 0));
+    const tarjDec = Number(tarjeta_declarada || 0);
+    const sinpeDec = Number(sinpe_declarado || 0);
+
+    const diffEfectivo = Math.round((efDecCRC - efectivoEsperado) * 100) / 100;
+    const diffDolaresUSD = Math.round((dolDecUSD - dolaresEsperadoUSD) * 100) / 100;
+
+    let estadoCuadre = 'Cuadrado';
+    if (Math.abs(diffEfectivo) < 1) {
+      estadoCuadre = 'Exacto (₡0)';
+    } else if (diffEfectivo > 0) {
+      estadoCuadre = `Sobrante (+₡${diffEfectivo.toLocaleString('es-CR')})`;
+    } else {
+      estadoCuadre = `Faltante (-₡${Math.abs(diffEfectivo).toLocaleString('es-CR')})`;
+    }
+
+    const tipPool = await dbAll(`
+      SELECT 
+        COALESCE(p.mesero, 'Mesero General') as nombre,
+        COUNT(DISTINCT p.orden_id) as mesas,
+        SUM(p.monto) as ventas,
+        SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
+      FROM Pagos p
+      WHERE p.caja_id = ?
+      GROUP BY p.mesero
+    `, [caja.id]);
+
+    const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
+
+    const negocioInfo = await dbGet('SELECT * FROM Negocios WHERE id = ?', [negocioId]) || {};
+
+    // Registrar en auditoría
+    const descAudit = `Corte X a Ciegas realizado por ${usuarioNombre || caja.cajero}. Efectivo Declarado: ₡${efDecCRC.toLocaleString('es-CR')}, Esperado: ₡${efectivoEsperado.toLocaleString('es-CR')}, Diferencia: ₡${diffEfectivo.toLocaleString('es-CR')} (${estadoCuadre}).`;
+    await registrarAuditoria({
+      negocioId,
+      usuarioNombre: usuarioNombre || caja.cajero || 'Cajero',
+      accion: 'CORTE_X_CIEGO',
+      tipoEvento: 'caja',
+      modulo: 'caja',
+      detalle: descAudit,
+      monto: efDecCRC,
+      pinAutorizado: Boolean(pinVerificar)
+    });
+
+    const ticketData = {
+      ok: true,
+      tipo: 'corte_x_ciego',
+      titulo: 'CORTE X A CIEGAS (ARQUEO PARCIAL)',
+      negocio: {
+        nombre: negocioInfo.nombre || 'GastroBar Fuego & Brasas',
+        slogan: negocioInfo.slogan || 'Restaurante, Bar & Lounge',
+        tel: negocioInfo.telefono || '2222-3344',
+        dir: negocioInfo.direccion || 'San José, Costa Rica',
+        cedula: negocioInfo.cedula_juridica || negocioInfo.cedula || ''
+      },
+      caja_id: caja.id,
+      cajero: usuarioNombre || caja.cajero || 'Cajero',
+      fecha_apertura: caja.fecha_apertura,
+      fecha_corte: new Date().toISOString(),
+      fondo_inicial: fondoInicial,
+      fondo_inicial_usd: fondoInicialUSD,
+      ventas: {
+        efectivo: ventasEfectivo,
+        tarjeta: ventasTarjeta,
+        sinpe: ventasSinpe,
+        dolares: ventasDolares,
+        dolares_usd: ventasDolaresUSD,
+        desglose_por_metodo: desgloseMetodos,
+        total: totalVentas
+      },
+      total_entradas: totalEntradas,
+      total_salidas: totalSalidas,
+      efectivo_esperado: efectivoEsperado,
+      efectivo_declarado: efDecCRC,
+      diferencia_efectivo: diffEfectivo,
+      dolares_esperado_usd: dolaresEsperadoUSD,
+      dolares_declarado_usd: dolDecUSD,
+      diferencia_dolares_usd: diffDolaresUSD,
+      tarjeta_declarada: tarjDec,
+      sinpe_declarado: sinpeDec,
+      estado_cuadre: estadoCuadre,
+      notas: notas || '',
+      tip_pool: tipPool,
+      total_propinas: totalPropinas
+    };
+
+    res.json(ticketData);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Cierre Z definitivo del turno con arqueo físico de caja (Colones y Dólares)
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
@@ -8858,6 +9090,30 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         total_salidas: ticketVisual.total_salidas || 0,
         efectivo_esperado: ticketVisual.efectivo_esperado || 0,
         movimientos_detalle: ticketVisual.movimientos_detalle || [],
+        tip_pool: ticketVisual.tip_pool || [],
+        total_propinas: ticketVisual.total_propinas || 0
+      });
+    } else if (ticketVisual.tipo === 'corte_x_ciego') {
+      tInfo = printerService.generarTicketCorteXCiego({
+        negocio: ticketVisual.negocio,
+        caja_id: ticketVisual.caja_id,
+        cajero: ticketVisual.cajero,
+        fecha_apertura: ticketVisual.fecha_apertura,
+        fecha_corte: ticketVisual.fecha_corte,
+        fondo_inicial: ticketVisual.fondo_inicial,
+        ventas: ticketVisual.ventas || {},
+        total_entradas: ticketVisual.total_entradas || 0,
+        total_salidas: ticketVisual.total_salidas || 0,
+        efectivo_esperado: ticketVisual.efectivo_esperado || 0,
+        efectivo_declarado: ticketVisual.efectivo_declarado || 0,
+        diferencia_efectivo: ticketVisual.diferencia_efectivo || 0,
+        dolares_esperado_usd: ticketVisual.dolares_esperado_usd || 0,
+        dolares_declarado_usd: ticketVisual.dolares_declarado_usd || 0,
+        diferencia_dolares_usd: ticketVisual.diferencia_dolares_usd || 0,
+        tarjeta_declarada: ticketVisual.tarjeta_declarada || 0,
+        sinpe_declarado: ticketVisual.sinpe_declarado || 0,
+        estado_cuadre: ticketVisual.estado_cuadre || 'Cuadre',
+        notas: ticketVisual.notas || '',
         tip_pool: ticketVisual.tip_pool || [],
         total_propinas: ticketVisual.total_propinas || 0
       });

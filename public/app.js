@@ -2985,6 +2985,8 @@ window.ejecutarAccionAdmin = function(tipo) {
     if (typeof abrirModalMonitorImpresoras === 'function') abrirModalMonitorImpresoras();
   } else if (tipo === 'agotados') {
     abrirModalAgotados();
+  } else if (tipo === 'caracteristicas') {
+    if (typeof abrirModalAdminCaracteristicas === 'function') abrirModalAdminCaracteristicas();
   }
 };
 
@@ -4455,6 +4457,12 @@ window.aplicarRestriccionesModulos = function() {
   document.querySelectorAll('#devCriticalStockContainer, #badgeStockCritico, .stock-critico-badge, .badge-critico').forEach(el => {
     el.style.display = tieneStockCritico ? '' : 'none';
   });
+
+  // 16. Corte / Cierre X a Ciegas (Arqueo Parcial)
+  const tieneCorteXCiego = negocioTieneCaracteristica('cierre_x_ciegas');
+  document.querySelectorAll('#btnCorteXCiego, .corte-x-ciego').forEach(el => {
+    el.style.display = tieneCorteXCiego ? 'inline-flex' : 'none';
+  });
 };
 
 // ============================================================================
@@ -4710,6 +4718,165 @@ window.abrirCaracteristicasDeNegocio = function(negocioId) {
   const panel = document.getElementById('devTabCaracteristicas');
   if (panel) panel.classList.add('active');
   window.cargarTabCaracteristicasDev(Number(negocioId));
+};
+
+// ============================================================================
+// GESTIÓN DE CARACTERÍSTICAS (FEATURE FLAGS) EN PANEL DE ADMINISTRACIÓN
+// ============================================================================
+window._catalogoAdminCaracteristicas = [];
+
+window.abrirModalAdminCaracteristicas = async function() {
+  const modal = document.getElementById('modalAdminCaracteristicas');
+  if (!modal) return;
+
+  try {
+    const nid = estado.negocioActual?.id || 1;
+    const res = await fetch(`/api/admin/caracteristicas`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('⚠️ ' + (data.error || 'No se pudieron cargar las características'));
+      return;
+    }
+
+    const subtitulo = document.getElementById('adminCaracteristicasSubtitulo');
+    if (subtitulo && data.nombre) {
+      subtitulo.textContent = `Configurando funcionalidades para: ${data.nombre} (${data.moneda === 'CRC_USD' ? 'Bimoneda ₡/$' : (data.moneda === 'USD' ? 'Dólares $' : 'Colones ₡')})`;
+    }
+
+    window._catalogoAdminCaracteristicas = data.catalogo || [];
+    window.renderizarGridCaracteristicasAdmin(data.catalogo, data.caracteristicasActivas);
+    modal.classList.add('active');
+  } catch (e) {
+    alert('❌ Error al abrir características del local: ' + e.message);
+  }
+};
+
+window.cerrarModalAdminCaracteristicas = function() {
+  const modal = document.getElementById('modalAdminCaracteristicas');
+  if (modal) modal.classList.remove('active');
+};
+
+window.renderizarGridCaracteristicasAdmin = function(catalogo, activas) {
+  const grid = document.getElementById('adminGridCaracteristicas');
+  if (!grid) return;
+
+  const esAll = !activas || activas === 'all';
+  let activasArray = [];
+  if (Array.isArray(activas)) {
+    activasArray = activas;
+  } else if (typeof activas === 'string' && !esAll) {
+    try { activasArray = JSON.parse(activas); } catch (_) { activasArray = []; }
+  }
+
+  let totalActivas = 0;
+  grid.innerHTML = (catalogo || []).map(feat => {
+    const isChecked = esAll || activasArray.includes(feat.id);
+    if (isChecked) totalActivas++;
+
+    return `
+      <div class="feat-card" style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.5rem;">${feat.icono || '⚙️'}</span>
+              <h4 style="margin: 0; font-size: 0.95rem; color: #f8fafc; font-weight: 700;">${feat.nombre}</h4>
+            </div>
+            <span class="badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600;">
+              ${feat.categoria || 'Sistema'}
+            </span>
+          </div>
+          <p style="margin: 0 0 14px 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.4;">
+            ${feat.descripcion || ''}
+          </p>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1e293b; padding-top: 10px; margin-top: 6px;">
+          <code style="font-size: 0.72rem; color: #64748b; font-family: monospace;">${feat.id}</code>
+          <label class="switch-toggle" style="position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; cursor: pointer;">
+            <input type="checkbox" id="switch_admin_feat_${feat.id}" data-feat-id="${feat.id}" ${isChecked ? 'checked' : ''} onchange="actualizarContadorCaracteristicasAdmin()" style="opacity: 0; width: 0; height: 0;">
+            <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: ${isChecked ? '#10b981' : '#334155'}; transition: .3s; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1);">
+              <span style="position: absolute; content: ''; height: 18px; width: 18px; left: ${isChecked ? '22px' : '3px'}; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+            </span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  actualizarContadorCaracteristicasAdmin();
+};
+
+window.actualizarContadorCaracteristicasAdmin = function() {
+  const checkboxes = document.querySelectorAll('#adminGridCaracteristicas input[type="checkbox"]');
+  let activas = 0;
+  checkboxes.forEach(chk => {
+    if (chk.checked) activas++;
+    const slider = chk.nextElementSibling;
+    if (slider) {
+      slider.style.backgroundColor = chk.checked ? '#10b981' : '#334155';
+      const knob = slider.querySelector('span');
+      if (knob) knob.style.left = chk.checked ? '22px' : '3px';
+    }
+  });
+  const contador = document.getElementById('adminCaracteristicasContador');
+  if (contador) {
+    contador.textContent = `⚡ ${activas} de ${checkboxes.length} características activas`;
+  }
+};
+
+window.toggleTodasCaracteristicasAdmin = function(activar) {
+  const checkboxes = document.querySelectorAll('#adminGridCaracteristicas input[type="checkbox"]');
+  checkboxes.forEach(chk => { chk.checked = activar; });
+  actualizarContadorCaracteristicasAdmin();
+};
+
+window.guardarCaracteristicasAdmin = async function() {
+  try {
+    const checkboxes = document.querySelectorAll('#adminGridCaracteristicas input[type="checkbox"]');
+    const seleccionadas = [];
+    checkboxes.forEach(chk => {
+      if (chk.checked && chk.dataset.featId) {
+        seleccionadas.push(chk.dataset.featId);
+      }
+    });
+
+    const nid = estado.negocioActual?.id || 1;
+    const todosSeleccionados = seleccionadas.length === (window._catalogoAdminCaracteristicas?.length || 0);
+    const valorFinal = todosSeleccionados ? 'all' : seleccionadas;
+
+    const res = await fetch(`/api/admin/caracteristicas`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ caracteristicas_activas: valorFinal })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error al guardar características: ' + (data.error || 'Error del servidor'));
+      return;
+    }
+
+    if (estado.negocioActual && estado.negocioActual.id === nid) {
+      estado.negocioActual.caracteristicas_activas = valorFinal;
+      sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+      localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+    }
+
+    if (typeof aplicarRestriccionesModulos === 'function') {
+      aplicarRestriccionesModulos();
+    }
+
+    cerrarModalAdminCaracteristicas();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('✅ Características del local actualizadas y sincronizadas en vivo', 'success');
+    }
+  } catch (e) {
+    alert('❌ Error guardando características: ' + e.message);
+  }
 };
 
 window.abrirPosComoNegocio = async function(negocioId) {
@@ -10029,6 +10196,106 @@ window.generarCorteX = async function() {
     window.mostrarVisorTicketTermico(ticketData);
   } catch (e) {
     alert('❌ Error al generar Corte X: ' + e.message);
+  }
+};
+
+window.abrirModalCorteXCiego = async function() {
+  const pinAutorizado = await window.solicitarPinAdmin({
+    icono: '🙈',
+    titulo: 'Autorización: Cierre X a Ciegas',
+    subtitulo: 'Arqueo parcial ciego de turno',
+    mensaje: 'Ingresa el PIN de Administrador / Cajero para realizar el conteo a ciegas.'
+  });
+  if (!pinAutorizado) return;
+  window._adminPinCorteXCiego = pinAutorizado;
+
+  const modal = document.getElementById('modalCorteXCiego');
+  if (!modal) return;
+
+  const aceptaUSD = typeof negocioAceptaDolares === 'function' ? negocioAceptaDolares() : false;
+  const rowUSD = document.getElementById('rowCorteXCiegoUSD');
+  if (rowUSD) rowUSD.style.display = aceptaUSD ? 'block' : 'none';
+
+  const txtCRC = document.getElementById('txtCorteXCiegoEfectivoReal');
+  const txtUSD = document.getElementById('txtCorteXCiegoDolaresReal');
+  const txtTarj = document.getElementById('txtCorteXCiegoTarjetaReal');
+  const txtSinpe = document.getElementById('txtCorteXCiegoSinpeReal');
+  const txtNotas = document.getElementById('txtCorteXCiegoNotas');
+
+  if (txtCRC) { txtCRC.value = ''; txtCRC.placeholder = '0'; }
+  if (txtUSD) { txtUSD.value = ''; txtUSD.placeholder = '0.00'; }
+  if (txtTarj) { txtTarj.value = ''; txtTarj.placeholder = '₡ 0'; }
+  if (txtSinpe) { txtSinpe.value = ''; txtSinpe.placeholder = '₡ 0'; }
+  if (txtNotas) { txtNotas.value = ''; }
+
+  modal.classList.add('active');
+  setTimeout(() => {
+    if (txtCRC) txtCRC.focus();
+  }, 100);
+};
+
+window.cerrarModalCorteXCiego = function() {
+  const modal = document.getElementById('modalCorteXCiego');
+  if (modal) modal.classList.remove('active');
+};
+
+window.procesarCorteXCiego = async function() {
+  const txtCRC = document.getElementById('txtCorteXCiegoEfectivoReal');
+  const txtUSD = document.getElementById('txtCorteXCiegoDolaresReal');
+  const txtTarj = document.getElementById('txtCorteXCiegoTarjetaReal');
+  const txtSinpe = document.getElementById('txtCorteXCiegoSinpeReal');
+  const txtNotas = document.getElementById('txtCorteXCiegoNotas');
+
+  const valCRC = txtCRC ? txtCRC.value.trim() : '';
+  if (valCRC === '' || isNaN(Number(valCRC))) {
+    alert('⚠️ Por favor ingresa el monto de dinero físico contado en colones (₡).');
+    if (txtCRC) txtCRC.focus();
+    return;
+  }
+
+  const efectivoDeclarado = Number(valCRC);
+  const dolaresDeclarado = txtUSD && txtUSD.value.trim() !== '' ? Number(txtUSD.value.trim()) : 0;
+  const tarjetaDeclarada = txtTarj && txtTarj.value.trim() !== '' ? Number(txtTarj.value.trim()) : 0;
+  const sinpeDeclarado = txtSinpe && txtSinpe.value.trim() !== '' ? Number(txtSinpe.value.trim()) : 0;
+  const notas = txtNotas ? txtNotas.value.trim() : '';
+
+  try {
+    mostrarNotificacionCentro('🙈 Procesando Corte X a ciegas...', 'info');
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+
+    const res = await fetch('/api/caja/corte-x-ciego', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
+        'x-supervisor-pin': window._adminPinCorteXCiego || ''
+      },
+      body: JSON.stringify({
+        negocio_id: nid,
+        efectivo_declarado_crc: efectivoDeclarado,
+        dolares_declarado_usd: dolaresDeclarado,
+        tarjeta_declarada: tarjetaDeclarada,
+        sinpe_declarado: sinpeDeclarado,
+        notas: notas,
+        usuarioNombre: estado.usuarioActual?.nombre || 'Cajero',
+        adminPin: window._adminPinCorteXCiego
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo procesar el corte a ciegas'));
+      return;
+    }
+
+    cerrarModalCorteXCiego();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ Arqueo a ciegas completado: ${data.estado_cuadre}`, 'success');
+    }
+
+    window.mostrarVisorTicketTermico(data);
+  } catch (e) {
+    alert('❌ Error al procesar Corte X a ciegas: ' + e.message);
   }
 };
 
@@ -17992,6 +18259,122 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
       <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
         <div>*** ESTADO: TURNO PERMANECE ABIERTO ***</div>
         <div>Corte informativo sin impacto en cierre contable</div>
+      </div>
+    `;
+  } else if (ticketData.tipo === 'corte_x_ciego') {
+    if (txtTitulo) txtTitulo.textContent = `🙈 Corte X a Ciegas - Turno #${ticketData.caja_id || 1}`;
+    if (txtSub) txtSub.textContent = `Arqueo Parcial Ciego • ${ticketData.cajero} • ESC/POS 80mm`;
+
+    const v = ticketData.ventas || {};
+    const fApertura = ticketData.fecha_apertura ? formatearFechaHoraCR(ticketData.fecha_apertura) : '-';
+    const fCorte = ticketData.fecha_corte ? formatearFechaHoraCR(ticketData.fecha_corte) : formatearFechaHoraCR(new Date());
+    const diff = Number(ticketData.diferencia_efectivo) || 0;
+
+    html = `
+      <div class="receipt-header" style="text-align:center; color:#000000; font-weight:800;">
+        <div style="font-size:1.3rem; margin-bottom:2px;">🙈</div>
+        <div class="receipt-business-name" style="font-size:18px; font-weight:900; color:#000000; text-transform:uppercase;">${ticketData.negocio?.nombre || 'GastroBar Fuego & Brasas'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">${ticketData.negocio?.slogan || 'Restaurante, Bar & Lounge'}</div>
+        <div style="font-size:12px; color:#000000; font-weight:700;">Tel: ${ticketData.negocio?.tel || '2222-3344'}</div>
+        ${ticketData.negocio?.dir ? `<div style="font-size:11px; color:#000000;">${ticketData.negocio.dir}</div>` : ''}
+        ${ticketData.negocio?.cedula ? `<div style="font-size:11px; color:#000000;">Ced. Juridica: ${ticketData.negocio.cedula}</div>` : ''}
+      </div>
+      <div class="receipt-double-line" style="text-align:center; font-weight:900; color:#000000; margin:4px 0;">================================================</div>
+      <div style="text-align:center; margin:4px 0; color:#000000;">
+        <div style="font-size:14px; font-weight:900; letter-spacing:0.5px; border-top:1px solid #000; border-bottom:1px solid #000; padding:3px 0;">*** CORTE X A CIEGAS ***</div>
+        <div style="font-size:11.5px; font-weight:900; margin-top:2px;">[ ARQUEO FISICO PARCIAL DE TURNO ]</div>
+      </div>
+      <div class="receipt-meta-grid" style="margin:6px 0; color:#000000; font-size:12px; font-weight:800; line-height:1.4;">
+        <div>Turno / Caja: #${ticketData.caja_id || 1} | Cajero: ${escapeHtml(ticketData.cajero || 'Cajero')}</div>
+        <div>Apertura: ${fApertura}</div>
+        <div>Corte Ciego: ${fCorte}</div>
+      </div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">RESULTADO DE ARQUEO A CIEGAS</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Efectivo Declarado (Físico):</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_declarado || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Efectivo Esperado (Sistema):</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.efectivo_esperado || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:4px; font-size:13px; font-weight:900; border-top:1px dashed #000; padding-top:3px;">
+          <span>DIFERENCIA EFECTIVO:</span>
+          <span>${diff === 0 ? '₡ 0 (CUADRADO)' : (diff > 0 ? `+${formatCRCSinDecimales(diff)} (SOBRANTE)` : `-${formatCRCSinDecimales(Math.abs(diff))} (FALTANTE)`)}</span>
+        </div>
+      </div>
+      ${(ticketData.dolares_declarado_usd > 0 || ticketData.dolares_esperado_usd > 0) ? `
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Dólares Declarados ($ USD):</span>
+          <span style="font-weight:900;">$ ${Number(ticketData.dolares_declarado_usd || 0).toFixed(2)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Dólares Esperados ($ USD):</span>
+          <span style="font-weight:900;">$ ${Number(ticketData.dolares_esperado_usd || 0).toFixed(2)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:2px; font-weight:900;">
+          <span>Diferencia USD:</span>
+          <span>$ ${(Number(ticketData.diferencia_dolares_usd) || 0) >= 0 ? '+' : ''}${(Number(ticketData.diferencia_dolares_usd) || 0).toFixed(2)}</span>
+        </div>
+      </div>
+      ` : ''}
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">DESGLOSE DE VENTAS EN SISTEMA</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Efectivo:</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.efectivo || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Tarjeta:</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.tarjeta || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas SINPE Móvil:</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(v.sinpe || 0)}</span>
+        </div>
+        ${(v.dolares > 0 || v.dolares_usd > 0) ? `
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>Ventas Dólares ($ USD):</span>
+          <span style="font-weight:900;">$ ${(v.dolares_usd || (v.dolares / 520) || 0).toFixed(2)} (${formatCRCSinDecimales(v.dolares || 0)})</span>
+        </div>
+        ` : ''}
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-top:3px; font-weight:900; border-top:1px solid #000; padding-top:2px;">
+          <span>TOTAL VENTAS:</span>
+          <span>${formatCRCSinDecimales(v.total || 0)}</span>
+        </div>
+      </div>
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div style="font-size:12px; font-weight:900; color:#000000;">MOVIMIENTOS DE GAVETA</div>
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div class="receipt-calculations" style="color:#000000; font-size:12px; font-weight:800; padding:2px 0;">
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Fondo Inicial:</span>
+          <span style="font-weight:900;">${formatCRCSinDecimales(ticketData.fondo_inicial || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(+) Entradas Efectivo:</span>
+          <span style="font-weight:900;">+${formatCRCSinDecimales(ticketData.total_entradas || 0)}</span>
+        </div>
+        <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span>(-) Salidas Menores:</span>
+          <span style="font-weight:900;">-${formatCRCSinDecimales(ticketData.total_salidas || 0)}</span>
+        </div>
+      </div>
+      ${ticketData.notas ? `
+      <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:4px 0;">------------------------------------------------</div>
+      <div style="font-size:11px; color:#000000; font-weight:700;">Notas: ${escapeHtml(ticketData.notas)}</div>
+      ` : ''}
+      <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
+      <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
+        <div>*** ESTADO: TURNO PERMANECE ABIERTO ***</div>
+        <div>Arqueo ciego registrado en bitácora de auditoría</div>
       </div>
     `;
   } else if (ticketData.tipo === 'cierre_z') {

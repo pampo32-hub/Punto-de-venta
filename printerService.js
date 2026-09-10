@@ -744,6 +744,131 @@ function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_c
 }
 
 /**
+ * Generador de Comprobante Corte X a Ciegas (Arqueo Parcial con Conteo Ciego)
+ */
+function generarTicketCorteXCiego({
+  negocio,
+  caja_id,
+  cajero,
+  fecha_apertura,
+  fecha_corte,
+  fondo_inicial,
+  ventas = {},
+  total_entradas = 0,
+  total_salidas = 0,
+  efectivo_esperado = 0,
+  efectivo_declarado = 0,
+  diferencia_efectivo = 0,
+  dolares_esperado_usd = 0,
+  dolares_declarado_usd = 0,
+  diferencia_dolares_usd = 0,
+  tarjeta_declarada = 0,
+  sinpe_declarado = 0,
+  estado_cuadre = 'Cuadrado',
+  notas = '',
+  tip_pool = [],
+  total_propinas = 0
+}) {
+  const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
+  const fCorte = fecha_corte ? new Date(fecha_corte).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+
+  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
+  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
+  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
+  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+
+  let raw = '';
+  raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += `${negSlogan}\n`;
+  raw += `Tel: ${negTel}\n`;
+  if (negDir) raw += `${negDir}\n`;
+  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `*** CORTE X A CIEGAS ***\n`;
+  raw += `[ ARQUEO FISICO PARCIAL DE TURNO ]\n` + ESCPOS.BOLD_OFF;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += `Turno / Caja: #${caja_id || 1} | Cajero: ${limpiarTextoTermica(cajero || 'Cajero')}\n`;
+  raw += `Apertura: ${limpiarTextoTermica(fApertura)}\n`;
+  raw += `Corte Ciego: ${limpiarTextoTermica(fCorte)}\n`;
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `RESULTADO DE ARQUEO A CIEGAS\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('Efectivo Declarado (Fisico):', formatMontoTermica(efectivo_declarado || 0)) + '\n';
+  raw += formatearLinea2Col('Efectivo Esperado (Sistema):', formatMontoTermica(efectivo_esperado || 0)) + '\n';
+  const diffVal = Number(diferencia_efectivo) || 0;
+  const diffTxt = diffVal === 0 ? '0 (CUADRADO)' : (diffVal > 0 ? `+${formatMontoTermica(diffVal)} (SOBRANTE)` : `-${formatMontoTermica(Math.abs(diffVal))} (FALTANTE)`);
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('DIFERENCIA EFECTIVO:', diffTxt) + '\n' + ESCPOS.BOLD_OFF;
+
+  if (dolares_declarado_usd !== undefined && dolares_declarado_usd !== null && Number(dolares_declarado_usd) > 0) {
+    raw += '-'.repeat(48) + '\n';
+    raw += formatearLinea2Col('Dolares Declarados ($):', `$${Number(dolares_declarado_usd).toFixed(2)}`) + '\n';
+    raw += formatearLinea2Col('Dolares Esperados ($):', `$${Number(dolares_esperado_usd || 0).toFixed(2)}`) + '\n';
+    const diffDol = (Number(dolares_declarado_usd) || 0) - (Number(dolares_esperado_usd) || 0);
+    raw += formatearLinea2Col('Diferencia USD ($):', diffDol >= 0 ? `+$${diffDol.toFixed(2)}` : `-$${Math.abs(diffDol).toFixed(2)}`) + '\n';
+  }
+
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `DESGLOSE DE VENTAS EN SISTEMA\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('Ventas Efectivo:', formatMontoTermica(ventas.efectivo || 0)) + '\n';
+  raw += formatearLinea2Col('Ventas Tarjeta:', formatMontoTermica(ventas.tarjeta || 0)) + '\n';
+  raw += formatearLinea2Col('Ventas SINPE Movil:', formatMontoTermica(ventas.sinpe || 0)) + '\n';
+  if ((ventas.dolares && ventas.dolares > 0) || (ventas.dolares_usd && ventas.dolares_usd > 0)) {
+    const usdTxt = ventas.dolares_usd ? `$${ventas.dolares_usd.toFixed(2)} (${formatMontoTermica(ventas.dolares || 0)})` : formatMontoTermica(ventas.dolares || 0);
+    raw += formatearLinea2Col('Ventas Dolares ($ USD):', usdTxt) + '\n';
+  }
+  raw += '-'.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + formatearLinea2Col('TOTAL VENTAS:', formatMontoTermica(ventas.total || 0)) + '\n' + ESCPOS.BOLD_OFF;
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.BOLD_ON + `MOVIMIENTOS DE GAVETA\n` + ESCPOS.BOLD_OFF;
+  raw += '-'.repeat(48) + '\n';
+  raw += formatearLinea2Col('(+) Fondo Inicial:', formatMontoTermica(fondo_inicial || 0)) + '\n';
+  raw += formatearLinea2Col('(+) Entradas Efectivo:', `+${formatMontoTermica(total_entradas || 0)}`) + '\n';
+  raw += formatearLinea2Col('(-) Salidas Menores:', `-${formatMontoTermica(total_salidas || 0)}`) + '\n';
+  if (notas) {
+    raw += '-'.repeat(48) + '\n';
+    raw += `Notas: ${limpiarTextoTermica(notas)}\n`;
+  }
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.ALIGN_CENTER;
+  raw += `*** ESTADO: TURNO PERMANECE ABIERTO ***\n`;
+  raw += `Arqueo ciego registrado en bitacora de auditoria\n`;
+  raw += ESCPOS.FEED_LINES(4);
+  raw += ESCPOS.CUT_FULL;
+
+  const ticketVisual = {
+    tipo: 'corte_x_ciego',
+    titulo: 'CORTE X A CIEGAS (ARQUEO PARCIAL)',
+    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    caja_id,
+    cajero,
+    fecha_apertura,
+    fecha_corte,
+    fondo_inicial,
+    ventas,
+    total_entradas,
+    total_salidas,
+    efectivo_esperado,
+    efectivo_declarado,
+    diferencia_efectivo,
+    dolares_esperado_usd,
+    dolares_declarado_usd,
+    diferencia_dolares_usd,
+    tarjeta_declarada,
+    sinpe_declarado,
+    estado_cuadre,
+    notas,
+    tip_pool,
+    total_propinas
+  };
+
+  return { raw, ticketVisual };
+}
+
+/**
  * Generador de Comprobante Cierre Z (Liquidación Definitiva de Turno)
  */
 function generarTicketCierreZ({ negocio, caja_id, cajero, fecha_apertura, fecha_cierre, fondo_inicial, ventas = {}, total_entradas, total_salidas, efectivo_esperado, efectivo_real_contado, diferencia, estado_cuadre, notas, tip_pool = [], total_propinas = 0 }) {
@@ -953,6 +1078,7 @@ module.exports = {
   generarTicketPreFactura,
   generarTicketPagoParcial,
   generarTicketCorteX,
+  generarTicketCorteXCiego,
   generarTicketCierreZ,
   enviarAPuertoTCP,
   sendRawToWindowsPrinter,
