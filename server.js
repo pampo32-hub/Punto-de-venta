@@ -8656,12 +8656,12 @@ app.post('/api/ia/chat', async (req, res) => {
       });
     }
 
-    const { mensaje = '', historial = [] } = req.body || {};
-    if (!mensaje || !String(mensaje).trim()) {
+    const mensajeRaw = req.body?.mensaje || req.body?.pregunta || req.body?.prompt || req.body?.q || req.body?.query || '';
+    if (!mensajeRaw || !String(mensajeRaw).trim()) {
       return res.status(400).json({ error: 'El mensaje es requerido' });
     }
 
-    const q = String(mensaje).trim();
+    const q = String(mensajeRaw).trim();
 
     // 1. Extraer contexto fresco en tiempo real de la BD (PostgreSQL / Supabase)
     const [negocio, inventario, productos, cajaActiva, mesasOcupadas] = await Promise.all([
@@ -8723,7 +8723,7 @@ PAUTAS:
                 ],
                 generationConfig: {
                   temperature: 0.4,
-                  maxOutputTokens: 600
+                  maxOutputTokens: 1000
                 }
               })
             });
