@@ -87,6 +87,9 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
   db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
   db.run("ALTER TABLE DetalleOrden ADD COLUMN en_happy_hour INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE Productos ADD COLUMN ingredientes TEXT", () => {});
+  db.run("UPDATE Productos SET ingredientes = 'Doble carne de res 100%, Queso cheddar fundido, Tiras de tocino crujiente, Pan brioche artesanal, Salsa especial de la casa' WHERE LOWER(nombre) LIKE '%hamburguesa%' AND (ingredientes IS NULL OR ingredientes = '')", () => {});
+  db.run("UPDATE Productos SET ingredientes = 'Patacones, Carne Mechada, Chimichurri, Frijoles Molidos' WHERE LOWER(nombre) LIKE '%patacon%' AND (ingredientes IS NULL OR ingredientes = '')", () => {});
   db.run("ALTER TABLE Ordenes ADD COLUMN modo_happy_hour TEXT DEFAULT 'estricto'", () => {});
   db.run("ALTER TABLE InventarioRecetas ADD COLUMN merma_porcentaje REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN es_licor INTEGER DEFAULT 0", () => {});
@@ -3450,7 +3453,7 @@ app.get('/api/menu', async (req, res) => {
       )
       WHERE (p.activo = 1 OR p.activo IS NULL)
         AND (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
-      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
+      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.ingredientes, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
       ORDER BY p.categoria_id ASC, total_vendidos DESC, p.id ASC
     `, [negocioId, negocioId]);
     const productos = rawProductos.map(p => ({
@@ -3460,6 +3463,7 @@ app.get('/api/menu', async (req, res) => {
       precio: Number(p.precio),
       curso: Number(p.curso) || 2,
       total_vendidos: Number(p.total_vendidos) || 0,
+      ingredientes: p.ingredientes || '',
       happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
       agotado: (Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1') ? 1 : 0,
       activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1
@@ -3552,6 +3556,7 @@ app.post('/api/productos', async (req, res) => {
       destino,
       curso,
       imagen_url,
+      ingredientes,
       kardex_tipo,
       insumo_id,
       ml_shot,
@@ -3607,9 +3612,9 @@ app.post('/api/productos', async (req, res) => {
     const cursoNum = Number(curso) || (destinoFinal === 'barra' ? 1 : 2);
 
     const result = await dbRun(
-      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, agotado, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
-      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
+      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, ingredientes, happy_hour, agotado, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
+      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null, (ingredientes ? String(ingredientes).trim() : null)]
     );
 
     const prodId = result.lastID;
@@ -3720,6 +3725,7 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
       destino,
       curso,
       imagen_url,
+      ingredientes,
       happy_hour,
       agotado,
       kardex_tipo,
@@ -3755,11 +3761,13 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     const hhVal = happy_hour !== undefined ? (happy_hour ? 1 : 0) : prod.happy_hour;
     const agotadoVal = agotado !== undefined ? (agotado ? 1 : 0) : prod.agotado;
 
+    const ingredientesVal = ingredientes !== undefined ? (String(ingredientes).trim() || null) : prod.ingredientes;
+
     await dbRun(
       `UPDATE Productos 
-       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, happy_hour = ?, agotado = ?
+       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, ingredientes = ?, happy_hour = ?, agotado = ?
        WHERE id = ?`,
-      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, hhVal, agotadoVal, prodId]
+      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, ingredientesVal, hhVal, agotadoVal, prodId]
     );
 
     let huboCambiosKardex = false;

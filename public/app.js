@@ -716,6 +716,8 @@ window.abrirModalNuevoProducto = async function() {
   if (txtNombre) txtNombre.value = '';
   if (txtPrecio) txtPrecio.value = '';
   if (txtImg) txtImg.value = '';
+  const txtIng = document.getElementById('txtNuevoProdIngredientes');
+  if (txtIng) txtIng.value = '';
   if (previewCont) previewCont.style.display = 'none';
   if (selCurso) selCurso.value = '2';
   if (boxNuevaCat) boxNuevaCat.style.display = 'none';
@@ -852,6 +854,8 @@ window.abrirModalEditarProducto = async function(prodId) {
   if (txtNombre) txtNombre.value = prod.nombre || '';
   if (txtPrecio) txtPrecio.value = prod.precio !== undefined ? prod.precio : '';
   if (txtImg) txtImg.value = prod.imagen_url || '';
+  const txtIng = document.getElementById('txtNuevoProdIngredientes');
+  if (txtIng) txtIng.value = prod.ingredientes || '';
   const previewCont = document.getElementById('previewContainerNuevoProd');
   const previewImg = document.getElementById('previewModalNuevoProd');
   if (previewCont && previewImg) {
@@ -970,6 +974,7 @@ window.guardarNuevoProducto = async function() {
   const selCat = document.getElementById('selectNuevoProdCategoria');
   const selDest = document.getElementById('selectNuevoProdDestino');
   const txtImg = document.getElementById('txtNuevoProdImagen');
+  const txtIng = document.getElementById('txtNuevoProdIngredientes');
   const selCurso = document.getElementById('selectNuevoProdCurso');
   const chkHH = document.getElementById('chkProdHappyHour');
   const chkAgotado = document.getElementById('chkProdAgotado');
@@ -1144,6 +1149,8 @@ window.guardarNuevoProducto = async function() {
     }
   }
 
+  const ingredientes = txtIng ? txtIng.value.trim() : '';
+
   const payload = {
     nombre,
     precio,
@@ -1151,6 +1158,7 @@ window.guardarNuevoProducto = async function() {
     destino,
     curso,
     imagen_url,
+    ingredientes,
     happy_hour,
     agotado,
     kardex_tipo,

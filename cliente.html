@@ -467,6 +467,161 @@
       cursor: pointer;
       box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
     }
+  
+    /* ===================================================================== */
+    /* EFECTO INTERACTIVO DE PULSACIÓN PROLONGADA (LONG-PRESS) E INGREDIENTES */
+    /* ===================================================================== */
+    .menu-card {
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      cursor: pointer;
+    }
+
+    .menu-card-img, .menu-card-no-img {
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s ease;
+      transform-origin: center center;
+      pointer-events: none;
+    }
+
+    .menu-card.long-press-active .menu-card-img,
+    .menu-card.long-press-active .menu-card-no-img {
+      transform: scale(0.92);
+      filter: brightness(0.85);
+    }
+
+    .overlay-long-press {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 15, 29, 0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease-out;
+    }
+
+    .overlay-long-press.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .card-ingredientes-glass {
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1.5px solid rgba(255, 255, 255, 0.9);
+      border-radius: 24px;
+      padding: 22px 20px 18px;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 35px rgba(255, 255, 255, 0.35);
+      transform: scale(0.88) translateY(12px);
+      opacity: 0;
+      transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.22s ease;
+      color: #0f172a;
+      text-align: center;
+    }
+
+    .overlay-long-press.active .card-ingredientes-glass {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+
+    .card-ingredientes-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .card-ingredientes-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-close-ingredientes {
+      background: rgba(0, 0, 0, 0.08);
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #475569;
+      font-weight: bold;
+      font-size: 0.85rem;
+      transition: background 0.15s ease;
+    }
+
+    .btn-close-ingredientes:hover {
+      background: rgba(0, 0, 0, 0.16);
+      color: #0f172a;
+    }
+
+    .card-ingredientes-title {
+      margin: 0 0 14px;
+      font-size: 1.18rem;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.3;
+    }
+
+    .card-ingredientes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+
+    .ingrediente-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(241, 245, 249, 0.88);
+      border: 1px solid rgba(203, 213, 225, 0.7);
+      border-radius: 12px;
+      padding: 9px 13px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #1e293b;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .ingrediente-pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    }
+
+    .card-ingredientes-footer {
+      font-size: 0.75rem;
+      color: #64748b;
+      font-weight: 600;
+    }
+
   </style>
 </head>
 <body>
@@ -568,12 +723,165 @@
     </button>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="/socket.io/socket.io.js">
+    // =========================================================================
+    // LÓGICA DE PULSACIÓN PROLONGADA (LONG PRESS 500MS) E INGREDIENTES
+    // =========================================================================
+    let _longPressTimer = null;
+    let _currentLongPressCard = null;
+    let _longPressStartX = 0;
+    let _longPressStartY = 0;
+    let _longPressTriggered = false;
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function initLongPressIngredientes() {
+      const container = document.getElementById('clientProductsGrid');
+      if (!container) return;
+
+      function onPointerDown(e) {
+        const card = e.target.closest('.menu-card');
+        if (!card) return;
+
+        _longPressStartX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        _longPressStartY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        _currentLongPressCard = card;
+        _longPressTriggered = false;
+
+        clearTimeout(_longPressTimer);
+        _longPressTimer = setTimeout(() => {
+          _longPressTriggered = true;
+          triggerLongPressCard(card);
+        }, 500);
+      }
+
+      function onPointerMove(e) {
+        if (!_longPressTimer) return;
+        const curX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const curY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const dist = Math.hypot(curX - _longPressStartX, curY - _longPressStartY);
+        if (dist > 10) {
+          clearTimeout(_longPressTimer);
+          _longPressTimer = null;
+          if (_currentLongPressCard) {
+            _currentLongPressCard.classList.remove('long-press-active');
+          }
+        }
+      }
+
+      function onPointerUp(e) {
+        clearTimeout(_longPressTimer);
+        _longPressTimer = null;
+        if (_longPressTriggered) {
+          cerrarCardIngredientes();
+        }
+        if (_currentLongPressCard) {
+          _currentLongPressCard.classList.remove('long-press-active');
+          _currentLongPressCard = null;
+        }
+      }
+
+      container.addEventListener('pointerdown', onPointerDown, { passive: true });
+      window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('pointerup', onPointerUp, { passive: true });
+      window.addEventListener('pointercancel', onPointerUp, { passive: true });
+    }
+
+    function triggerLongPressCard(card) {
+      card.classList.add('long-press-active');
+
+      const prodNombre = card.dataset.nombre || 'Platillo';
+      const prodIngredientesRaw = card.dataset.ingredientes || '';
+
+      let ingredientesList = [];
+      if (prodIngredientesRaw && prodIngredientesRaw.trim()) {
+        ingredientesList = prodIngredientesRaw.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+      }
+
+      // Diccionario inteligente de respaldo (fallback culinario)
+      if (ingredientesList.length === 0) {
+        const nomLower = prodNombre.toLowerCase();
+        if (nomLower.includes('hamburguesa')) {
+          ingredientesList = [
+            'Doble carne de res 100% Angus',
+            'Queso Cheddar fundido',
+            'Tiras de Tocino crujiente',
+            'Pan Brioche artesanal',
+            'Salsa especial de la casa'
+          ];
+        } else if (nomLower.includes('patacon')) {
+          ingredientesList = [
+            'Patacones crujientes',
+            'Carne Mechada sazonada',
+            'Chimichurri artesanal',
+            'Frijoles Molidos tradicionales'
+          ];
+        } else {
+          ingredientesList = [
+            'Ingredientes frescos seleccionados',
+            'Receta exclusiva del chef',
+            'Preparación artesanal al momento'
+          ];
+        }
+      }
+
+      const elTitle = document.getElementById('cardIngredientesTitle');
+      const elList = document.getElementById('cardIngredientesList');
+      const overlay = document.getElementById('overlayIngredientesLongPress');
+
+      if (elTitle) elTitle.textContent = prodNombre;
+      if (elList) {
+        elList.innerHTML = ingredientesList.map(ing => `
+          <div class="ingrediente-pill">
+            <span class="ingrediente-pill-dot"></span>
+            <span>${escapeHtml(ing)}</span>
+          </div>
+        `).join('');
+      }
+
+      if (overlay) {
+        overlay.classList.add('active');
+      }
+
+      if (navigator.vibrate) {
+        try { navigator.vibrate(35); } catch (_) {}
+      }
+    }
+
+    window.cerrarCardIngredientes = function(e) {
+      if (e) e.stopPropagation();
+      const overlay = document.getElementById('overlayIngredientesLongPress');
+      if (overlay) overlay.classList.remove('active');
+      if (_currentLongPressCard) {
+        _currentLongPressCard.classList.remove('long-press-active');
+        _currentLongPressCard = null;
+      }
+    };
+
+  </script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
   <script>
     function formatCRC(num) {
       return '₡ ' + Math.round(Number(num) || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
 
     function obtenerMesaId() {
@@ -781,15 +1089,18 @@
       const prods = catId === 'todos' ? menuProductos : menuProductos.filter(p => p.categoria_id === catId);
       const grid = document.getElementById('clientProductsGrid');
 
-      grid.innerHTML = prods.map(p => `
-        <div class="menu-card">
-          ${p.imagen_url ? `<img class="menu-card-img" src="${p.imagen_url}" alt="${p.nombre}" loading="lazy" />` : '<div class="menu-card-no-img">🍽️</div>'}
-          <div class="menu-card-info">
-            <span class="menu-card-name">${p.nombre}</span>
-            <span class="menu-card-price">${formatCRC(p.precio)}</span>
+      grid.innerHTML = prods.map(p => {
+        const ingStr = (p.ingredientes || '').replace(/"/g, '&quot;');
+        return `
+          <div class="menu-card" data-id="${p.id}" data-nombre="${escapeHtml(p.nombre)}" data-ingredientes="${ingStr}" title="Mantén presionado para ver ingredientes">
+            ${p.imagen_url ? `<img class="menu-card-img" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" loading="lazy" />` : '<div class="menu-card-no-img">🍽️</div>'}
+            <div class="menu-card-info">
+              <span class="menu-card-name">${escapeHtml(p.nombre)}</span>
+              <span class="menu-card-price">${formatCRC(p.precio)}</span>
+            </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     window.filtrarMenuCliente = function(catId) {
@@ -927,6 +1238,120 @@
         navigator.serviceWorker.register('/sw.js').catch(() => {});
       });
     }
+  </script>
+
+  <!-- OVERLAY FLOTANTE LONG-PRESS INGREDIENTES -->
+  <div id="overlayIngredientesLongPress" class="overlay-long-press" onclick="cerrarCardIngredientes(event)">
+    <div class="card-ingredientes-glass" id="cardIngredientesFlotante" onclick="event.stopPropagation()">
+      <div class="card-ingredientes-header">
+        <div class="card-ingredientes-badge">🥗 Ingredientes</div>
+        <button type="button" class="btn-close-ingredientes" onclick="cerrarCardIngredientes(event)">✕</button>
+      </div>
+      <h3 class="card-ingredientes-title" id="cardIngredientesTitle">Platillo</h3>
+      <div class="card-ingredientes-list" id="cardIngredientesList">
+        <!-- Lista dinámica de ingredientes -->
+      </div>
+      <div class="card-ingredientes-footer">
+        <small>👆 Toca fuera o suelta para cerrar</small>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let _longPressTimer = null;
+    let _longPressStartX = 0;
+    let _longPressStartY = 0;
+    let _activeLongPressCard = null;
+
+    function iniciarLongPress(e, card) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      _longPressStartX = e.clientX;
+      _longPressStartY = e.clientY;
+      _activeLongPressCard = card;
+
+      if (_longPressTimer) clearTimeout(_longPressTimer);
+      _longPressTimer = setTimeout(() => {
+        abrirCardIngredientes(card);
+      }, 500);
+    }
+
+    function moverLongPress(e) {
+      if (!_longPressTimer) return;
+      const dx = Math.abs(e.clientX - _longPressStartX);
+      const dy = Math.abs(e.clientY - _longPressStartY);
+      if (dx > 10 || dy > 10) {
+        cancelarLongPress();
+      }
+    }
+
+    function cancelarLongPress() {
+      if (_longPressTimer) {
+        clearTimeout(_longPressTimer);
+        _longPressTimer = null;
+      }
+      if (_activeLongPressCard) {
+        _activeLongPressCard.classList.remove('long-press-active');
+        _activeLongPressCard = null;
+      }
+    }
+
+    function soltarLongPress(e) {
+      cancelarLongPress();
+      cerrarCardIngredientes();
+    }
+
+    function abrirCardIngredientes(card) {
+      if (!card) return;
+      card.classList.add('long-press-active');
+      const nombre = card.getAttribute('data-nombre') || 'Platillo';
+      const ingRaw = card.getAttribute('data-ingredientes') || '';
+
+      const overlay = document.getElementById('overlayIngredientesLongPress');
+      const titleEl = document.getElementById('cardIngredientesTitle');
+      const listEl = document.getElementById('cardIngredientesList');
+
+      if (titleEl) titleEl.textContent = nombre;
+
+      let items = [];
+      if (ingRaw.trim()) {
+        items = ingRaw.split(/[,\n•;]+/).map(s => s.trim()).filter(Boolean);
+      }
+
+      if (items.length === 0) {
+        listEl.innerHTML = '<div style="color:#64748b; font-size:0.9rem; font-style:italic; padding:8px 0;">Ingredientes no especificados para este platillo.</div>';
+      } else {
+        listEl.innerHTML = items.map(item => `
+          <div class="ingrediente-item">
+            <span class="ingrediente-bullet">🥗</span>
+            <span class="ingrediente-text">${escapeHtml(item)}</span>
+          </div>
+        `).join('');
+      }
+
+      if (overlay) overlay.classList.add('active');
+    }
+
+    function cerrarCardIngredientes(e) {
+      if (e) e.stopPropagation();
+      const overlay = document.getElementById('overlayIngredientesLongPress');
+      if (overlay) overlay.classList.remove('active');
+      if (_activeLongPressCard) {
+        _activeLongPressCard.classList.remove('long-press-active');
+        _activeLongPressCard = null;
+      }
+    }
+
+    // Event delegation para gestos de pulsación prolongada
+    document.addEventListener('pointerdown', (e) => {
+      const card = e.target.closest('.menu-card');
+      if (card) {
+        iniciarLongPress(e, card);
+      }
+    });
+
+    document.addEventListener('pointermove', moverLongPress);
+    document.addEventListener('pointerup', soltarLongPress);
+    document.addEventListener('pointercancel', soltarLongPress);
   </script>
 </body>
 </html>
