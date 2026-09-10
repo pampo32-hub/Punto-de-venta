@@ -5617,14 +5617,32 @@ async function procesarCobroOrden(ordenId, {
       nuevoSubtotal += Number(it.subtotal) || 0;
     }
 
-    const nuevoIva = Math.round(nuevoSubtotal * 0.13);
-    const nuevoServicio = Math.round(nuevoSubtotal * 0.10);
-    const nuevoTotal = nuevoSubtotal + nuevoIva + nuevoServicio;
+    let nuevoIva = Math.round(nuevoSubtotal * 0.13);
+    let nuevoServicio = Math.round(nuevoSubtotal * 0.10);
+    let nuevoTotal = nuevoSubtotal + nuevoIva + nuevoServicio;
+
+    if (nuevoTotal === orden.total && monto > 0) {
+      nuevoTotal = Math.max(0, orden.total - monto);
+      nuevoSubtotal = Math.round(nuevoTotal / 1.23);
+      nuevoIva = Math.round(nuevoSubtotal * 0.13);
+      nuevoServicio = Math.max(0, nuevoTotal - nuevoSubtotal - nuevoIva);
+    }
 
     await dbRun(
       'UPDATE Ordenes SET subtotal = ?, iva_13 = ?, servicio_10 = ?, total = ? WHERE id = ?',
       [nuevoSubtotal, nuevoIva, nuevoServicio, nuevoTotal, ordenId]
     );
+
+    if (nuevoTotal <= 0) {
+      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE id = ?", [ahora, ordenId]);
+      if (orden.mesa_id) {
+        await dbRun(
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+          [orden.mesa_id]
+        );
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0 });
+      }
+    }
 
     const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
     const impParcial = Math.round(subParcial * 0.23);
@@ -6955,7 +6973,8 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
 });
 
 async function verificarAdmin(req, res, next) {
-  const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+  const rawRol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+  const rol = rawRol.replace(/[\s_-]/g, '');
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
 
@@ -8008,6 +8027,90 @@ app.post('/api/admin/ventas/purgar-pruebas', verificarAdmin, async (req, res) =>
     res.json({
       ok: true,
       mensaje: 'Ventas, órdenes, pagos y reportes de prueba purgados exitosamente.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 3.1 Purga Integral de Dashboard Ejecutivo & Métricas (Ventas, órdenes, kárdex y normalización de mínimos de stock a 0)
+app.post('/api/admin/dashboard/purgar-integral', verificarAdmin, async (req, res) => {
+  try {
+    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
+    const usuarioNombre = req.usuario?.nombre || req.body?.usuarioNombre || 'Super Admin';
+
+    // 1. Eliminar pagos
+    await dbRun(`
+      DELETE FROM Pagos 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    // 2. Eliminar facturas electrónicas
+    await dbRun(`
+      DELETE FROM FacturasElectronicas 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    // 3. Eliminar anulaciones
+    await dbRun(`
+      DELETE FROM Anulaciones 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    // 4. Eliminar detalles de órdenes
+    await dbRun(`
+      DELETE FROM DetalleOrden 
+      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
+    `, [nid, nid]);
+
+    // 5. Eliminar órdenes
+    await dbRun('DELETE FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+
+    // 6. Limpiar movimientos de kárdex
+    await dbRun('DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+
+    // 7. Normalizar stock_minimo a 0 para limpiar alertas críticas y sugerencias
+    await dbRun(`
+      UPDATE Inventario 
+      SET stock_minimo = 0,
+          actualizado_en = ?
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [new Date().toISOString(), nid, nid]);
+
+    // 8. Restablecer mesas a estado libre
+    await dbRun(`
+      UPDATE Mesas 
+      SET estado = 'libre',
+          mesero = NULL,
+          cliente = 'Cliente General',
+          pidio_cuenta_qr = 0,
+          hora_pidio_cuenta = NULL,
+          unida_a_mesa_id = NULL,
+          unida_con = NULL,
+          grupo_mesas = NULL,
+          transferida_de = NULL
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [nid, nid]);
+
+    await registrarAuditoria({
+      usuarioNombre,
+      accion: 'purga_dashboard_integral',
+      tipoEvento: 'sistema',
+      modulo: 'metricas_dashboard',
+      detalle: `Dashboard Ejecutivo y métricas purgadas a ₡0 para entrega limpia de negocio #${nid}`
+    });
+
+    io.emit('ordenes_actualizadas', { negocioId: nid });
+    io.emit('ventas_actualizadas', { negocioId: nid });
+    io.emit('mesas_actualizadas', { negocioId: nid });
+    io.emit('comandas_actualizadas', { negocioId: nid });
+    io.emit('kardex_actualizado', { negocioId: nid });
+    io.emit('inventario_actualizado', { negocioId: nid });
+    io.emit('menu_actualizado');
+
+    res.json({
+      ok: true,
+      mensaje: 'Métricas de dashboard, ventas, kárdex y alertas de inventario purgadas exitosamente. Sistema limpio a ₡0.'
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
