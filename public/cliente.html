@@ -428,11 +428,85 @@
       word-break: break-word;
     }
 
-    .menu-card-price {
-      font-size: 0.95rem;
-      font-weight: 800;
+    .menu-card-media {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .menu-card-badge-ingredientes {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       color: #38bdf8;
-      margin-top: 6px;
+      border: 1px solid rgba(56, 189, 248, 0.55);
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4), 0 0 10px rgba(56, 189, 248, 0.25);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* BANNER INFORMATIVO TIP LONG PRESS */
+    .tip-long-press-banner {
+      background: linear-gradient(135deg, rgba(2, 132, 199, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 14px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    .tip-long-press-icon {
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+
+    .tip-long-press-text {
+      flex: 1;
+      font-size: 0.78rem;
+      color: #e2e8f0;
+      line-height: 1.35;
+    }
+
+    .tip-long-press-text strong {
+      display: block;
+      color: #38bdf8;
+      font-size: 0.82rem;
+      font-weight: 800;
+      margin-bottom: 2px;
+    }
+
+    .tip-long-press-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #94a3b8;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .tip-long-press-close:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
     }
 
     /* BARRA FLOTANTE INFERIOR */
@@ -707,6 +781,16 @@
       </div>
 
       <div class="menu-categories-chips" id="clientCategoryChips"></div>
+      
+      <div class="tip-long-press-banner" id="tipLongPressBanner">
+        <div class="tip-long-press-icon">💡</div>
+        <div class="tip-long-press-text">
+          <strong>¿Deseas saber qué contiene un platillo?</strong>
+          <span>Mantén presionado cualquier platillo para ver sus ingredientes detallados.</span>
+        </div>
+        <button type="button" class="tip-long-press-close" onclick="document.getElementById('tipLongPressBanner').style.display='none'" title="Cerrar aviso">✕</button>
+      </div>
+
       <div class="menu-products-grid" id="clientProductsGrid"></div>
     </div>
 
@@ -1091,9 +1175,13 @@
 
       grid.innerHTML = prods.map(p => {
         const ingStr = (p.ingredientes || '').replace(/"/g, '&quot;');
+        const tieneIngredientes = Boolean(p.ingredientes && p.ingredientes.trim().length > 0);
         return `
           <div class="menu-card" data-id="${p.id}" data-nombre="${escapeHtml(p.nombre)}" data-ingredientes="${ingStr}" title="Mantén presionado para ver ingredientes">
-            ${p.imagen_url ? `<img class="menu-card-img" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" loading="lazy" />` : '<div class="menu-card-no-img">🍽️</div>'}
+            <div class="menu-card-media">
+              ${p.imagen_url ? `<img class="menu-card-img" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" loading="lazy" />` : '<div class="menu-card-no-img">🍽️</div>'}
+              ${tieneIngredientes ? `<div class="menu-card-badge-ingredientes"><span>👆</span> Ingredientes</div>` : ''}
+            </div>
             <div class="menu-card-info">
               <span class="menu-card-name">${escapeHtml(p.nombre)}</span>
               <span class="menu-card-price">${formatCRC(p.precio)}</span>
