@@ -17649,6 +17649,10 @@ window.abrirVisorTicketDesdeVenta = function(ventaId) {
     })),
     subtotal: venta.subtotal,
     descuentoHH: venta.descuento_happy_hour || 0,
+    descuento: venta.descuento_monto || 0,
+    descuentoMonto: venta.descuento_monto || 0,
+    descuentoPorcentaje: venta.descuento_porcentaje || 0,
+    descuentoMotivo: venta.descuento_motivo || '',
     servicio: venta.servicio_10 || 0,
     iva: venta.iva_13 || 0,
     total: venta.total,
@@ -18514,7 +18518,10 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
 
     const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
     const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
-    const baseImp = Math.max(0, subNum - descHH);
+    const descEsp = Math.round(Number(ticketData.descuentoMonto || ticketData.descuento_monto || ticketData.descuento) || 0);
+    const descMotivo = ticketData.descuentoMotivo || ticketData.descuento_motivo || '';
+    const descPorc = Number(ticketData.descuentoPorcentaje || ticketData.descuento_porcentaje) || 0;
+    const baseImp = Math.max(0, subNum - descHH - descEsp);
     const esParaLlevarTicket = Boolean(
       ticketData.es_para_llevar ||
       ticketData.tipo_orden === 'para_llevar' ||
@@ -18584,6 +18591,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
             <span>Descuento Happy Hour 2x1:</span>
             <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
+          </div>
+        ` : ''}
+        ${descEsp > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#059669;">
+            <span>🎁 ${escapeHtml(descMotivo ? `Descuento (${descMotivo})` : (descPorc > 0 ? `Descuento (${descPorc}%)` : 'Descuento Aplicado'))}:</span>
+            <span style="font-weight:900;">-${formatCRCSinDecimales(descEsp)}</span>
           </div>
         ` : ''}
         ${servNum > 0 ? `
@@ -19128,7 +19141,10 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
 
     const subNum = Math.round(Number(ticketData.subtotal) || subCalculado || 0);
     const descHH = Math.round(Number(ticketData.descuentoHH || ticketData.descuento_happy_hour) || 0);
-    const baseImp = Math.max(0, subNum - descHH);
+    const descEsp = Math.round(Number(ticketData.descuentoMonto || ticketData.descuento_monto || ticketData.descuento) || 0);
+    const descMotivo = ticketData.descuentoMotivo || ticketData.descuento_motivo || '';
+    const descPorc = Number(ticketData.descuentoPorcentaje || ticketData.descuento_porcentaje) || 0;
+    const baseImp = Math.max(0, subNum - descHH - descEsp);
     const esParaLlevarTicket = Boolean(
       ticketData.es_para_llevar ||
       ticketData.tipo_orden === 'para_llevar' ||
@@ -19196,6 +19212,12 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
           <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
             <span>Descuento Happy Hour 2x1:</span>
             <span style="font-weight:900;">-${formatCRCSinDecimales(descHH)}</span>
+          </div>
+        ` : ''}
+        ${descEsp > 0 ? `
+          <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px; color:#059669;">
+            <span>🎁 ${escapeHtml(descMotivo ? `Descuento (${descMotivo})` : (descPorc > 0 ? `Descuento (${descPorc}%)` : 'Descuento Aplicado'))}:</span>
+            <span style="font-weight:900;">-${formatCRCSinDecimales(descEsp)}</span>
           </div>
         ` : ''}
         ${servNum > 0 ? `

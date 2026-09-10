@@ -281,7 +281,10 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
 
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
-  const baseImponible = Math.max(0, subNum - descHHNum);
+  const descEspecialNum = Math.round(Number(datos.descuento || datos.descuentoMonto || datos.descuento_monto) || 0);
+  const descMotivoStr = datos.descuentoMotivo || datos.descuento_motivo || '';
+  const descPorcNum = Number(datos.descuentoPorcentaje || datos.descuento_porcentaje) || 0;
+  const baseImponible = Math.max(0, subNum - descHHNum - descEspecialNum);
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
@@ -333,6 +336,10 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
+  if (descEspecialNum > 0) {
+    const etiquetaDesc = descMotivoStr ? `Descuento (${limpiarTextoTermica(descMotivoStr)}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col(etiquetaDesc, `-${formatMontoTermica(descEspecialNum)}`) + '\n' + ESCPOS.BOLD_OFF;
+  }
   if (servNum > 0) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
   } else if (esParaLlevarTicket) {
@@ -358,43 +365,42 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
 
   if (Array.isArray(pagos) && pagos.length > 1) {
     raw += `Metodo de Pago: PAGO MIXTO / COMBINADO\n`;
-    pagos.forEach(p => {
-      const nomP = limpiarTextoTermica(p.metodo || 'Pago');
-      const mtoP = formatMontoTermica(p.monto);
-      const usdDetalle = (p.metodo === 'Dolares' || p.metodo === 'Dólares' || Number(p.monto_usd) > 0)
-        ? ` ($ ${(Number(p.monto_usd) || (Number(p.monto) / (Number(p.tipo_cambio) || 520))).toFixed(2)} USD)`
-        : '';
-      raw += `  * ${nomP}: ${mtoP}${usdDetalle}${p.referencia ? ` (Ref: ${limpiarTextoTermica(p.referencia)})` : ''}\n`;
+    pagos.forEach((p, idx) => {
+      const metNom = p.metodo || 'Efectivo';
+      const mCRC = Number(p.monto) || 0;
+      const mUSD = Number(p.monto_usd) || 0;
+      if (mUSD > 0 || metNom.toLowerCase().includes('dolar') || metNom.toLowerCase().includes('dólar')) {
+        raw += ` ${idx + 1}. ${metNom}: $ ${mUSD.toFixed(2)} (${formatMontoTermica(mCRC)})\n`;
+      } else {
+        raw += ` ${idx + 1}. ${metNom}: ${formatMontoTermica(mCRC)}\n`;
+      }
     });
     if (vuelto > 0) {
-      raw += `  * Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
+      raw += formatearLinea2Col('Vuelto / Cambio:', formatMontoTermica(vuelto)) + '\n';
     }
   } else if (esDolaresPago) {
-    const finalUSD = montoUSDTotal > 0 ? montoUSDTotal : (montoRecibido > 0 && tcUsado > 0 ? Number((montoRecibido / tcUsado).toFixed(2)) : 0);
-    raw += `Metodo de Pago: DOLARES ($ USD)\n`;
-    raw += `Dolares Recibidos: $ ${finalUSD.toFixed(2)} (T.C: ${formatMontoTermica(tcUsado)})\n`;
-    raw += `Equivalente en Colones: ${formatMontoTermica(montoRecibido)}\n`;
-    if (vuelto > 0) {
-      raw += `Vuelto / Cambio en Colones: ${formatMontoTermica(vuelto)}\n`;
+    raw += `Metodo de Pago: DOLARES (USD)\n`;
+    raw += `Tipo de Cambio: ₡${tcUsado} / USD\n`;
+    if (montoUSDTotal > 0) {
+      raw += `Monto Cobrado (USD): $ ${montoUSDTotal.toFixed(2)}\n`;
     }
+    raw += formatearLinea2Col('Monto Recibido:', formatMontoTermica(montoRecibido)) + '\n';
+    raw += formatearLinea2Col('Vuelto / Cambio:', formatMontoTermica(vuelto)) + '\n';
   } else {
     raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
-    if ((metodoPago === 'Efectivo' || !metodoPago) && montoRecibido > 0) {
-      raw += `Monto Recibido: ${formatMontoTermica(montoRecibido)}\n`;
-      raw += `Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
-    }
+    raw += formatearLinea2Col('Monto Recibido:', formatMontoTermica(montoRecibido)) + '\n';
+    raw += formatearLinea2Col('Vuelto / Cambio:', formatMontoTermica(vuelto)) + '\n';
   }
 
+  raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_CENTER;
-  raw += '\n';
-  raw += 'Muchas gracias por su preferencia!\n';
-  raw += 'Esperamos servirle de nuevo muy pronto.\n';
-  raw += 'Autorizado mediante resolucion DGT-R-033-2019\n';
+  raw += 'Gracias por su visita!\n';
+  raw += 'Favor conservar este comprobante.\n';
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_FULL;
 
   const ticketVisual = {
-    tipo: 'cuenta_total',
+    tipo: 'factura',
     titulo: 'COMPROBANTE DE PAGO / FACTURA',
     negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
     ordenId,
@@ -406,6 +412,13 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     items: itemsNormalizados,
     subtotal: subNum,
     descuentoHH: descHHNum,
+    descuento: descEspecialNum,
+    descuentoMonto: descEspecialNum,
+    descuento_monto: descEspecialNum,
+    descuentoMotivo: descMotivoStr,
+    descuento_motivo: descMotivoStr,
+    descuentoPorcentaje: descPorcNum,
+    descuento_porcentaje: descPorcNum,
     servicio: servNum,
     iva: ivaNum,
     total: totNum,
@@ -481,7 +494,10 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
 
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
-  const baseImponible = Math.max(0, subNum - descHHNum);
+  const descEspecialNum = Math.round(Number(datos.descuento || datos.descuentoMonto || datos.descuento_monto) || 0);
+  const descMotivoStr = datos.descuentoMotivo || datos.descuento_motivo || '';
+  const descPorcNum = Number(datos.descuentoPorcentaje || datos.descuento_porcentaje) || 0;
+  const baseImponible = Math.max(0, subNum - descHHNum - descEspecialNum);
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
@@ -535,6 +551,10 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
+  if (descEspecialNum > 0) {
+    const etiquetaDesc = descMotivoStr ? `Descuento (${limpiarTextoTermica(descMotivoStr)}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col(etiquetaDesc, `-${formatMontoTermica(descEspecialNum)}`) + '\n' + ESCPOS.BOLD_OFF;
+  }
   if (servNum > 0) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
   } else if (esParaLlevarTicket) {
@@ -574,6 +594,13 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     items: itemsNormalizados,
     subtotal: subNum,
     descuentoHH: descHHNum,
+    descuento: descEspecialNum,
+    descuentoMonto: descEspecialNum,
+    descuento_monto: descEspecialNum,
+    descuentoMotivo: descMotivoStr,
+    descuento_motivo: descMotivoStr,
+    descuentoPorcentaje: descPorcNum,
+    descuento_porcentaje: descPorcNum,
     servicio: servNum,
     iva: ivaNum,
     total: totNum,
