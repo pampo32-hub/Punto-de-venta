@@ -1351,7 +1351,6 @@ const CATALOGO_CARACTERISTICAS = [
   { id: 'servicio_10', nombre: 'Cobro de 10% Servicio de Salón', categoria: 'cobro', icono: '🍽️', descripcion: 'Recargo automático del 10% legal de servicio/propinas en mesas.' },
   { id: 'desglose_iva_13', nombre: 'Desglose de IVA (13%)', categoria: 'cobro', icono: '🧾', descripcion: 'Calcula y desglosa el 13% de impuesto de valor agregado en cuentas.' },
   { id: 'descuentos_cortesias', nombre: 'Descuentos y Cortesías Manuales', categoria: 'cobro', icono: '🎟️', descripcion: 'Permite aplicar descuentos y cortesías con control de permisos.' },
-  { id: 'facturacion_electronica', nombre: 'Facturación Electrónica Express', categoria: 'cobro', icono: '⚡', descripcion: 'Consulta de cédulas y timbrado electrónico tributario.' },
   { id: 'union_mesas', nombre: 'Unión y Fusión de Mesas', categoria: 'salon', icono: '🔗', descripcion: 'Permite unir múltiples mesas para grupos grandes y cuentas unificadas.' },
   { id: 'division_cuentas', nombre: 'División de Cuentas (Split Bill)', categoria: 'salon', icono: '👥', descripcion: 'Permite pagar por partes iguales, por comensal o por ítems.' },
   { id: 'liberar_mesas_pin', nombre: 'Liberación de Mesas con PIN', categoria: 'salon', icono: '🔒', descripcion: 'Exige PIN de administrador para liberar mesas con saldo pendiente.' },
@@ -1364,8 +1363,7 @@ const CATALOGO_CARACTERISTICAS = [
   { id: 'kardex_tiempo_real', nombre: 'Descuento de Kárdex en Tiempo Real', categoria: 'inventario', icono: '📦', descripcion: 'Rebaja inventario e insumos de recetas automáticamente al vender.' },
   { id: 'alertas_stock_critico', nombre: 'Alertas de Stock Crítico / Mínimo', categoria: 'inventario', icono: '⚠️', descripcion: 'Avisa visualmente cuando un producto o insumo alcanza stock mínimo.' },
   { id: 'cierre_x_ciegas', nombre: 'Corte / Cierre X a Ciegas (Arqueo Parcial)', categoria: 'seguridad', icono: '🙈', descripcion: 'Habilita el arqueo ciego parcial donde el cajero cuenta y declara el dinero físico sin ver los montos esperados del sistema.' },
-  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🔒', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real en el cierre final Z.' },
-  { id: 'asistente_ia', nombre: 'Copiloto de Inteligencia Artificial (IA)', categoria: 'seguridad', icono: '🤖', descripcion: 'Habilita el asistente virtual inteligente de ventas, stock y soporte.' }
+  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🔒', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real en el cierre final Z.' }
 ];
 
 // Helper global para verificar si un negocio tiene un módulo/feature activo
