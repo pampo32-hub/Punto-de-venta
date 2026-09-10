@@ -6524,12 +6524,16 @@ body.is-admin .admin-only-tab {
   transform: translateY(-1px);
 }
 
-/* Scroll horizontal suave en barra superior si la pantalla es estrecha */
+/* Barra superior con visibilidad total para dropdowns emergentes */
 .top-nav {
+  overflow: visible !important;
+  z-index: 10000 !important;
+}
+.nav-pills {
   overflow-x: auto !important;
   scrollbar-width: none !important;
 }
-.top-nav::-webkit-scrollbar {
+.nav-pills::-webkit-scrollbar {
   display: none;
 }
 .nav-pills, .admin-extra-actions, .brand, .user-status-pill {

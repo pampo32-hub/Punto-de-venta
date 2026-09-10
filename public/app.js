@@ -12239,11 +12239,32 @@ function initBuscadorRapido() {
   if (!inp || !dropdown) return;
 
   inp.value = '';
-  // Blindaje contra autocompletado involuntario del navegador (ej: usuario guardado 'dev')
-  setTimeout(() => { if (inp && (inp.value === 'dev' || inp.value === 'admin')) inp.value = ''; }, 100);
-  setTimeout(() => { if (inp && (inp.value === 'dev' || inp.value === 'admin')) inp.value = ''; }, 500);
+  inp.setAttribute('readonly', 'readonly');
+
+  const limpiarAutofill = () => {
+    if (inp && (inp.value === 'dev' || inp.value === 'admin' || inp.value === 'cajero' || inp.value === 'carlos' || inp.value === 'sofia')) {
+      inp.value = '';
+      dropdown.classList.remove('active');
+    }
+  };
+
+  inp.addEventListener('focus', () => {
+    inp.removeAttribute('readonly');
+    limpiarAutofill();
+  });
+
+  inp.addEventListener('blur', () => {
+    if (!inp.value) inp.setAttribute('readonly', 'readonly');
+  });
+
+  // Chequeos periódicos tras login/carga
+  setTimeout(limpiarAutofill, 50);
+  setTimeout(limpiarAutofill, 200);
+  setTimeout(limpiarAutofill, 600);
+  setTimeout(limpiarAutofill, 1200);
 
   inp.addEventListener('input', (e) => {
+    limpiarAutofill();
     const q = e.target.value.toLowerCase().trim();
     if (!q) {
       dropdown.classList.remove('active');
@@ -12275,6 +12296,7 @@ function initBuscadorRapido() {
       const isOtherInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
       if (!isOtherInput) {
         e.preventDefault();
+        inp.removeAttribute('readonly');
         inp.focus();
         inp.select?.();
       }
