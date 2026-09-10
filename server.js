@@ -1346,6 +1346,7 @@ const CATALOGO_MODULOS = [
 
 // Catálogo de Características y Feature Flags por Negocio
 const CATALOGO_CARACTERISTICAS = [
+  { id: 'precios_con_impuestos', nombre: 'Precios de Menú Incluyen Impuestos (IVA 13% y Servicio 10%)', categoria: 'cobro', icono: '🏷️', descripcion: 'Si está activo, los precios de carta ya incluyen impuestos y el desglose de IVA y Servicio es puramente informativo. Si se desactiva, los impuestos se sumarán al total.' },
   { id: 'bimoneda_dolares', nombre: 'Soporte Bimoneda / Dólares ($ USD)', categoria: 'cobro', icono: '💵', descripcion: 'Habilita pagos, cobros mixtos, fondo inicial y arqueo en dólares.' },
   { id: 'servicio_10', nombre: 'Cobro de 10% Servicio de Salón', categoria: 'cobro', icono: '🍽️', descripcion: 'Recargo automático del 10% legal de servicio/propinas en mesas.' },
   { id: 'desglose_iva_13', nombre: 'Desglose de IVA (13%)', categoria: 'cobro', icono: '🧾', descripcion: 'Calcula y desglosa el 13% de impuesto de valor agregado en cuentas.' },
@@ -3648,33 +3649,15 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
       descuentoPorcentaje = subtotalBruto > 0 ? Math.round((descuentoMonto / subtotalBruto) * 100) : 0;
     }
 
-    descuentoMonto = Number(descuentoMonto) || 0;
-    descuentoPorcentaje = Number(descuentoPorcentaje) || 0;
-
-    const subtotalNeto = Math.max(0, (subtotalBruto || 0) - descuentoMonto);
-    const tieneServ10 = await negocioTieneCaracteristica(ordenNegocioId, 'servicio_10');
-    const tieneIva13 = await negocioTieneCaracteristica(ordenNegocioId, 'desglose_iva_13');
-    const esParaLlevar = Boolean(orden.tipo_orden === 'para_llevar' || orden.tipo === 'para_llevar' || orden.es_para_llevar === 1 || !orden.mesa_id);
-
-    const aplicaServ = tieneServ10 && !esParaLlevar;
-    const aplicaIva = tieneIva13;
-
-    let servicio10 = 0;
-    let iva13 = 0;
-    if (aplicaServ) {
-      servicio10 = Math.round(subtotalNeto * 0.10);
-    }
-    if (aplicaIva) {
-      iva13 = Math.round(subtotalNeto * 0.13);
-    }
-    const totalFinal = (subtotalNeto + servicio10 + iva13) || 0;
-
     await dbRun(
       `UPDATE Ordenes 
-       SET subtotal = ?, descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?, servicio_10 = ?, iva_13 = ?, total = ?
+       SET descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?
        WHERE id = ?`,
-      [subtotalBruto || 0, descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorNombre, servicio10, iva13, totalFinal, ordenId]
+      [descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorNombre, ordenId]
     );
+
+    const totales = await recalcularTotalesOrden(ordenId);
+    const totalFinal = totales.total;
 
     // Registrar en Auditoría
     await registrarAuditoria({
@@ -4364,43 +4347,63 @@ async function recalcularTotalesOrden(ordenId) {
   }
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
-  const total = Math.max(0, totalBruto - descuentoHH);
   const ordenNegocioId = Number(orden.negocio_id) || 1;
   const tieneServicio10 = await negocioTieneCaracteristica(ordenNegocioId, 'servicio_10');
   const tieneIVA13 = await negocioTieneCaracteristica(ordenNegocioId, 'desglose_iva_13');
+  const preciosConImpuestos = await negocioTieneCaracteristica(ordenNegocioId, 'precios_con_impuestos');
 
   const aplicaServicio = tieneServicio10 && !esParaLlevar;
   const aplicaIVA = tieneIVA13;
 
-  let subtotal, servicio = 0, iva = 0;
-  if (aplicaServicio && aplicaIVA) {
-    // Salón / Consumo en mesa: 10% Servicio + 13% IVA (1.23)
-    subtotal = Math.round(total / 1.23);
-    servicio = Math.round(subtotal * 0.10);
-    iva = total - subtotal - servicio;
-  } else if (!aplicaServicio && aplicaIVA) {
-    // Solo 13% IVA (1.13)
-    subtotal = Math.round(total / 1.13);
-    servicio = 0;
-    iva = total - subtotal;
-  } else if (aplicaServicio && !aplicaIVA) {
-    // Solo 10% Servicio (1.10)
-    subtotal = Math.round(total / 1.10);
-    servicio = total - subtotal;
-    iva = 0;
+  // Manejo de Descuento Manual / Especial
+  const baseAntesDescuento = Math.max(0, totalBruto - descuentoHH);
+  let descMonto = 0;
+  const descPorc = Number(orden.descuento_porcentaje) || 0;
+  if (descPorc > 0) {
+    descMonto = Math.round((baseAntesDescuento * descPorc) / 100);
+  } else if (Number(orden.descuento_monto) > 0) {
+    descMonto = Math.min(baseAntesDescuento, Number(orden.descuento_monto));
+  }
+
+  let subtotal, servicio = 0, iva = 0, total = 0;
+
+  if (preciosConImpuestos !== false) {
+    // MODO A (Por defecto): Precios de menú INCLUYEN 13% IVA y 10% Servicio.
+    // El cliente paga exactamente la suma de productos menos descuentos.
+    // El desglose de IVA y Servicio es puramente informativo (no se suma al total).
+    total = Math.max(0, baseAntesDescuento - descMonto);
+    if (aplicaServicio && aplicaIVA) {
+      subtotal = Math.round(total / 1.23);
+      servicio = Math.round(subtotal * 0.10);
+      iva = total - subtotal - servicio;
+    } else if (!aplicaServicio && aplicaIVA) {
+      subtotal = Math.round(total / 1.13);
+      servicio = 0;
+      iva = total - subtotal;
+    } else if (aplicaServicio && !aplicaIVA) {
+      subtotal = Math.round(total / 1.10);
+      servicio = total - subtotal;
+      iva = 0;
+    } else {
+      subtotal = Math.round(total);
+      servicio = 0;
+      iva = 0;
+    }
   } else {
-    // Sin desglose
-    subtotal = Math.round(total);
-    servicio = 0;
-    iva = 0;
+    // MODO B: Precios de menú SIN impuestos. Se calculan y se SUMAN al total.
+    const baseNeta = Math.max(0, baseAntesDescuento - descMonto);
+    subtotal = baseNeta;
+    servicio = aplicaServicio ? Math.round(baseNeta * 0.10) : 0;
+    iva = aplicaIVA ? Math.round(baseNeta * 0.13) : 0;
+    total = baseNeta + servicio + iva;
   }
 
   await dbRun(
-    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-    [subtotal, descuentoHH, servicio, iva, total, ordenId]
+    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, descuento_monto = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+    [subtotal, descuentoHH, descMonto, servicio, iva, total, ordenId]
   );
 
-  return { subtotal, descuentoHH, servicio, iva, total, modoHH, esParaLlevar };
+  return { subtotal, descuentoHH, descuentoMonto: descMonto, servicio, iva, total, modoHH, esParaLlevar, preciosConImpuestos };
 }
 
 async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null, negocioId = null, usuarioRol = null, tipo_orden = null, es_para_llevar = false }) {
@@ -5550,6 +5553,7 @@ async function procesarCobroOrden(ordenId, {
       servicio: orden.servicio_10,
       iva: orden.iva_13,
       total: orden.total,
+      preciosConImpuestos: await negocioTieneCaracteristica(orden.negocio_id || 1, 'precios_con_impuestos'),
       recibido: monto || totalPagadoAcum,
       cambio,
       items: itemsOrden,
@@ -5802,8 +5806,9 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       descuentoPorcentaje: orden.descuento_porcentaje || 0,
       descuentoMotivo: orden.descuento_motivo || '',
       servicio: orden.servicio_10 || 0,
-      iva: orden.iva_13 || 0,
+      iva: orden.iva_13,
       total: orden.total || 0,
+      preciosConImpuestos: await negocioTieneCaracteristica(orden.negocio_id || 1, 'precios_con_impuestos'),
       items: itemsOrden,
       fechaHora: ahora
     });
@@ -5894,6 +5899,7 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       servicio: orden.servicio_10 || 0,
       iva: orden.iva_13 || 0,
       total: orden.total || 0,
+      preciosConImpuestos: await negocioTieneCaracteristica(orden.negocio_id || mesa.negocio_id || 1, 'precios_con_impuestos'),
       items: itemsOrden,
       fechaHora: ahora
     });

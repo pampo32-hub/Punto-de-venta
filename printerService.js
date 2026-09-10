@@ -330,9 +330,12 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     }
   });
 
+  const preciosConImpuestos = (datos.preciosConImpuestos !== false && datos.precios_con_impuestos !== false);
+  const montoProductos = subCalculado > 0 ? subCalculado : (subNum > 0 ? subNum : totNum);
+
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
+  raw += formatearLinea2Col('Subtotal Productos:', formatMontoTermica(montoProductos)) + '\n';
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
@@ -340,19 +343,41 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     const etiquetaDesc = descMotivoStr ? `Descuento (${limpiarTextoTermica(descMotivoStr)}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
     raw += ESCPOS.BOLD_ON + formatearLinea2Col(etiquetaDesc, `-${formatMontoTermica(descEspecialNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  if (servNum > 0) {
-    raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
-  } else if (esParaLlevarTicket) {
-    raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
+
+  if (preciosConImpuestos) {
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+    raw += '='.repeat(48) + '\n';
+
+    if (servNum > 0 || ivaNum > 0) {
+      const baseInformativa = Math.max(0, totNum - servNum - ivaNum);
+      raw += ESCPOS.ALIGN_CENTER + '[ IMPUESTOS INCLUIDOS EN EL PRECIO ]\n';
+      raw += ESCPOS.ALIGN_RIGHT;
+      raw += formatearLinea2Col('  Base Imponible:', formatMontoTermica(baseInformativa)) + '\n';
+      if (servNum > 0) {
+        raw += formatearLinea2Col('  10% Servicio Salon:', formatMontoTermica(servNum)) + '\n';
+      }
+      if (ivaNum > 0) {
+        raw += formatearLinea2Col('  13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
+      }
+      raw += '-'.repeat(48) + '\n';
+      raw += ESCPOS.ALIGN_LEFT;
+    }
+  } else {
+    if (servNum > 0) {
+      raw += formatearLinea2Col('10% Servicio (Ley):', `+${formatMontoTermica(servNum)}`) + '\n';
+    }
+    if (ivaNum > 0) {
+      raw += formatearLinea2Col('13% I.V.A.:', `+${formatMontoTermica(ivaNum)}`) + '\n';
+    }
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+    raw += '='.repeat(48) + '\n';
   }
-  if (ivaNum > 0) {
-    raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
-  }
-  raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.ALIGN_LEFT;
-  raw += '='.repeat(48) + '\n';
 
   const esDolaresPago = Boolean(
     metodoPago === 'Dolares' ||
@@ -411,6 +436,9 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     fechaHora: fechaStr,
     items: itemsNormalizados,
     subtotal: subNum,
+    subtotalProductos: montoProductos,
+    preciosConImpuestos: preciosConImpuestos,
+    baseInformativa: (servNum > 0 || ivaNum > 0) ? Math.max(0, totNum - servNum - ivaNum) : totNum,
     descuentoHH: descHHNum,
     descuento: descEspecialNum,
     descuentoMonto: descEspecialNum,
@@ -545,9 +573,12 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     }
   });
 
+  const preciosConImpuestos = (datos.preciosConImpuestos !== false && datos.precios_con_impuestos !== false);
+  const montoProductos = subCalculado > 0 ? subCalculado : (subNum > 0 ? subNum : totNum);
+
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
+  raw += formatearLinea2Col('Subtotal Productos:', formatMontoTermica(montoProductos)) + '\n';
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
@@ -555,19 +586,41 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     const etiquetaDesc = descMotivoStr ? `Descuento (${limpiarTextoTermica(descMotivoStr)}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
     raw += ESCPOS.BOLD_ON + formatearLinea2Col(etiquetaDesc, `-${formatMontoTermica(descEspecialNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  if (servNum > 0) {
-    raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
-  } else if (esParaLlevarTicket) {
-    raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
+
+  if (preciosConImpuestos) {
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+    raw += '='.repeat(48) + '\n';
+
+    if (servNum > 0 || ivaNum > 0) {
+      const baseInformativa = Math.max(0, totNum - servNum - ivaNum);
+      raw += ESCPOS.ALIGN_CENTER + '[ IMPUESTOS INCLUIDOS EN EL PRECIO ]\n';
+      raw += ESCPOS.ALIGN_RIGHT;
+      raw += formatearLinea2Col('  Base Imponible:', formatMontoTermica(baseInformativa)) + '\n';
+      if (servNum > 0) {
+        raw += formatearLinea2Col('  10% Servicio Salon:', formatMontoTermica(servNum)) + '\n';
+      }
+      if (ivaNum > 0) {
+        raw += formatearLinea2Col('  13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
+      }
+      raw += '-'.repeat(48) + '\n';
+      raw += ESCPOS.ALIGN_LEFT;
+    }
+  } else {
+    if (servNum > 0) {
+      raw += formatearLinea2Col('10% Servicio (Ley):', `+${formatMontoTermica(servNum)}`) + '\n';
+    }
+    if (ivaNum > 0) {
+      raw += formatearLinea2Col('13% I.V.A.:', `+${formatMontoTermica(ivaNum)}`) + '\n';
+    }
+    raw += '='.repeat(48) + '\n';
+    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+    raw += ESCPOS.ALIGN_LEFT;
+    raw += '='.repeat(48) + '\n';
   }
-  if (ivaNum > 0) {
-    raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
-  }
-  raw += '='.repeat(48) + '\n';
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += ESCPOS.ALIGN_LEFT;
-  raw += '='.repeat(48) + '\n';
 
   raw += ESCPOS.ALIGN_CENTER;
   raw += ESCPOS.BOLD_ON + 'PROPINA VOLUNTARIA SUGERIDA\n' + ESCPOS.BOLD_OFF;
@@ -593,6 +646,9 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     fechaHora: fechaStr,
     items: itemsNormalizados,
     subtotal: subNum,
+    subtotalProductos: montoProductos,
+    preciosConImpuestos: preciosConImpuestos,
+    baseInformativa: (servNum > 0 || ivaNum > 0) ? Math.max(0, totNum - servNum - ivaNum) : totNum,
     descuentoHH: descHHNum,
     descuento: descEspecialNum,
     descuentoMonto: descEspecialNum,
