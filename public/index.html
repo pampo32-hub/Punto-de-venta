@@ -1194,14 +1194,12 @@
               <div class="stat-row"><span id="lblCajeroTurno">Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
               <div class="stat-row"><span id="lblCajaFondoInicial">Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000</strong></div>
               <div class="stat-row"><span id="lblCajaVentasEfectivo">Ventas en Efectivo (₡):</span><strong id="cajaVentasEfectivo">₡ 0</strong></div>
-              <div class="stat-row"><span id="lblCajaVentasDolares">Ventas en Dólares ($ USD):</span><strong id="cajaVentasDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong></div>
               <div class="stat-row"><span id="lblCajaVentasTarjeta">Ventas con Tarjeta (Datáfono):</span><strong id="cajaVentasTarjeta">₡ 0</strong></div>
               <div class="stat-row"><span id="lblCajaVentasSinpe">Ventas con SINPE Móvil:</span><strong id="cajaVentasSinpe">₡ 0</strong></div>
               <div class="stat-row"><span id="lblCajaEntradas">Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0</strong></div>
               <div class="stat-row"><span id="lblCajaSalidas">Salidas / Gastos Menores (-):</span><strong id="cajaSalidasTotal" style="color:#f87171;">-₡ 0</strong></div>
               <div class="stat-row" style="border-top: 1px dashed #334155; padding-top: 6px;"><span id="lblCajaTotalEsperadoEfectivo">Total Esperado en Efectivo (₡):</span><strong id="cajaTotalEsperadoEfectivo" style="color:#34d399;">₡ 50,000</strong></div>
-              <div class="stat-row"><span id="lblCajaTotalEsperadoDolares">Total Esperado en Dólares ($ USD):</span><strong id="cajaTotalEsperadoDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong></div>
-              <div class="stat-row total" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 12px; margin-top: 6px;"><span id="lblCajaTotalEfectivo" style="font-weight:800; color:#fbbf24;">Total General en Gaveta (₡ con Dólares):</span><strong id="cajaTotalEfectivo" style="font-size:1.15rem; color:#34d399;">₡ 50,000</strong></div>
+              <div class="stat-row total" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 12px; margin-top: 6px;"><span id="lblCajaTotalEfectivo" style="font-weight:800; color:#fbbf24;">Total General en Gaveta (Efectivo):</span><strong id="cajaTotalEfectivo" style="font-size:1.15rem; color:#34d399;">₡ 50,000</strong></div>
             </div>
             
             <div class="caja-actions-grid">
@@ -2355,7 +2353,6 @@
             <label>Moneda Principal:</label>
             <select id="devNegocioMoneda" style="width: 100%; padding: 8px 10px; border-radius: 8px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; font-weight: 600;">
               <option value="CRC">🇨🇷 CRC (Colones ₡)</option>
-              <option value="USD">🇺🇸 USD (Dólares $)</option>
             </select>
           </div>
           <div class="field-group">
@@ -2473,7 +2470,6 @@
             <label style="color:#cbd5e1; font-size:0.85rem; font-weight:700; margin-bottom:4px; display:block;">Moneda:</label>
             <select id="devClonMoneda" style="width:100%; padding:10px; border-radius:8px; background:#1e293b; border:1px solid #334155; color:#fff; font-size:0.9rem; font-weight:700;">
               <option value="CRC">🇨🇷 CRC (Colones ₡)</option>
-              <option value="USD">🇺🇸 USD (Dólares $)</option>
             </select>
           </div>
           <div class="field-group">
@@ -4100,8 +4096,7 @@
           <button class="pay-method-tab active" data-method="Efectivo">💵 Efectivo <kbd class="kbd-sub-shortcut">1 / E</kbd></button>
           <button class="pay-method-tab" data-method="Tarjeta">💳 Tarjeta <kbd class="kbd-sub-shortcut">2 / T</kbd></button>
           <button class="pay-method-tab" data-method="SINPE">📱 SINPE <kbd class="kbd-sub-shortcut">3 / S</kbd></button>
-          <button class="pay-method-tab" data-method="Dolares">💵 Dólares ($) <kbd class="kbd-sub-shortcut">4 / D</kbd></button>
-          <button class="pay-method-tab" data-method="Mixto">🔀 Mixto <kbd class="kbd-sub-shortcut">5 / M</kbd></button>
+          <button class="pay-method-tab" data-method="Mixto">🔀 Mixto <kbd class="kbd-sub-shortcut">4 / M</kbd></button>
         </div>
 
         <!-- PANEL 1: EFECTIVO -->
@@ -4156,45 +4151,7 @@
           </div>
         </div>
 
-        <!-- PANEL 4: DÓLARES (USD $) -->
-        <div id="cobroDolaresPanel" class="pay-panel">
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
-            <div style="background:#111827; border:1px solid #374151; border-radius:8px; padding:8px 10px;">
-              <small style="color:#9ca3af; display:block; font-size:0.75rem;">Total en USD ($):</small>
-              <strong id="cobroTotalUSDDisplay" style="font-size:1.25rem; color:#38bdf8;">$ 0.00</strong>
-            </div>
-            <div style="background:#111827; border:1px solid #374151; border-radius:8px; padding:8px 10px;">
-              <small style="color:#9ca3af; display:block; font-size:0.75rem;">Tipo de Cambio (₡ / $):</small>
-              <input type="number" id="txtTipoCambioUSD" value="520" step="1" style="width:100%; background:transparent; border:none; color:#fbbf24; font-size:1.15rem; font-weight:800; padding:0; outline:none;" />
-            </div>
-          </div>
-          <div class="field-row">
-            <label>Dólares Recibidos del Cliente ($ USD):</label>
-            <div class="cash-input-wrapper">
-              <span class="currency-prefix">$</span>
-              <input type="number" id="txtDolaresRecibidos" placeholder="0.00" step="1" />
-            </div>
-          </div>
-          <div class="quick-cash-chips">
-            <button class="cash-chip chip-usd" data-usd="10">$ 10</button>
-            <button class="cash-chip chip-usd" data-usd="20">$ 20</button>
-            <button class="cash-chip chip-usd" data-usd="50">$ 50</button>
-            <button class="cash-chip chip-usd" data-usd="100">$ 100</button>
-            <button class="cash-chip exact" id="btnPagoExactoUSD">Exacto USD</button>
-          </div>
-          <div class="vuelto-box">
-            <div>
-              <span style="font-size:0.8rem; color:#9ca3af; display:block;">Vuelto a Entregar en Colones:</span>
-              <strong id="cobroVueltoUSDEnColones" style="font-size:1.25rem; color:#34d399;">₡ 0</strong>
-            </div>
-            <div style="text-align:right;">
-              <span style="font-size:0.75rem; color:#9ca3af; display:block;">Equivalente en USD:</span>
-              <span id="cobroVueltoUSDDisplay" style="font-size:1rem; font-weight:700; color:#cbd5e1;">$ 0.00</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- PANEL 5: PAGO MIXTO / COMBINADO -->
+        <!-- PANEL 4: PAGO MIXTO / COMBINADO -->
         <div id="cobroMixtoPanel" class="pay-panel">
           <!-- Accesos rápidos / atajos mixto -->
           <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">
@@ -4237,17 +4194,6 @@
                 </div>
               </div>
               <input type="text" id="txtMixtoSinpeRef" placeholder="Comprobante / Tel SINPE (Opcional)" style="padding:4px 8px; font-size:0.8rem; background:#1e293b; border:1px solid #374151; border-radius:4px; color:#cbd5e1;" />
-            </div>
-            <!-- Dólares -->
-            <div class="mixto-row-item">
-              <div style="display:flex; flex-direction:column;">
-                <span class="mixto-label">💵 USD ($):</span>
-                <small id="txtMixtoUSDEquiv" style="font-size:0.7rem; color:#38bdf8;">₡ 0</small>
-              </div>
-              <div class="mixto-input-wrap">
-                <input type="number" id="txtMixtoUSD" placeholder="$ 0.00" step="1" class="mixto-calc-trigger" />
-                <button type="button" class="mixto-btn-restante" id="btnCubrirMixtoUSD" data-cubrir="usd" onclick="autoAsignarRestanteMixto('usd')">⚡ Cubrir</button>
-              </div>
             </div>
           </div>
 
@@ -4658,10 +4604,6 @@
             <strong id="czVentasEfectivo" style="color:#34d399;">+₡ 0</strong>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
-            <span>Ventas en Dólares ($ USD):</span>
-            <strong id="czVentasDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong>
-          </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem; color:#94a3b8;">
             <span>Ventas con Tarjeta:</span>
             <strong id="czVentasTarjeta" style="color:#cbd5e1;">₡ 0</strong>
           </div>
@@ -4682,33 +4624,22 @@
             <span>Esperado en Efectivo (₡):</span>
             <strong id="czEsperadoEfectivoCRC" style="color:#34d399;">₡ 0</strong>
           </div>
-          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.88rem; color:#94a3b8;">
-            <span>Esperado en Dólares ($ USD):</span>
-            <strong id="czEsperadoDolaresUSD" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong>
-          </div>
           <div style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; color:#fbbf24; background:rgba(251,191,36,0.1); padding:8px 10px; border-radius:6px; border:1px solid rgba(251,191,36,0.25);">
-            <span id="lblCzTotalEsperado">Total General en Gaveta (₡ con USD):</span>
+            <span id="lblCzTotalEsperado">Total General Esperado en Gaveta:</span>
             <strong id="czTotalEsperado" style="color:#fbbf24;">₡ 0</strong>
           </div>
         </div>
 
-        <!-- Inputs de Conteo Físico Real (Colones y Dólares) -->
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 12px;">
+        <!-- Inputs de Conteo Físico Real -->
+        <div style="margin-bottom: 12px;">
           <div class="field-row">
             <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.86rem; color:#f8fafc;">
-              💵 Colones en Gaveta (₡): <span style="color:#ef4444;">*</span>
+              💵 Dinero Contado en Gaveta (₡): <span style="color:#ef4444;">*</span>
             </label>
             <input type="number" id="txtCierreZEfectivoReal" min="0" step="any" placeholder="0" oninput="calcularDiferenciaCierreZ()" class="select-styled" style="width:100%; padding:10px 12px; font-size:1.05rem; font-weight:800; border:2px solid #34d399; background:#111827; color:#34d399; border-radius:8px; outline:none;" />
           </div>
-          <div class="field-row">
-            <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.86rem; color:#f8fafc;">
-              💲 Dólares en Gaveta ($):
-            </label>
-            <input type="number" id="txtCierreZDolaresReal" min="0" step="any" placeholder="0.00" oninput="calcularDiferenciaCierreZ()" class="select-styled" style="width:100%; padding:10px 12px; font-size:1.05rem; font-weight:800; border:2px solid #38bdf8; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
-          </div>
         </div>
-        <div style="margin-bottom:12px; font-size:0.78rem; color:#94a3b8; display:flex; justify-content:space-between;">
-          <span id="czTipoCambioInfo">💱 Tipo de Cambio: ₡520 / $1 USD</span>
+        <div style="margin-bottom:12px; font-size:0.78rem; color:#94a3b8; display:flex; justify-content:flex-end;">
           <span id="czTotalContadoCombinado" style="font-weight:700; color:#f8fafc;">Total Contado: ₡ 0</span>
         </div>
 
