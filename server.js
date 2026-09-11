@@ -2738,6 +2738,18 @@ app.post('/api/mesas/unir', async (req, res) => {
       return res.status(404).json({ error: 'Mesa no encontrada' });
     }
 
+    const negocioId = mesaPrincipal.negocio_id || req.headers['x-negocio-id'] || 1;
+    const neg = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId]);
+    if (neg) {
+      let feats = neg.caracteristicas_activas || 'all';
+      if (feats !== 'all') {
+        try { feats = JSON.parse(feats); } catch (_) { feats = String(feats).split(',').map(s => s.trim()); }
+        if (Array.isArray(feats) && !feats.includes('union_mesas')) {
+          return res.status(403).json({ error: 'La función de Unión de Mesas se encuentra desactivada para este local en el Panel de Características.' });
+        }
+      }
+    }
+
     let orden1 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaPrincipalId]);
     let orden2 = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaSecundariaId]);
 
@@ -2848,6 +2860,18 @@ app.post('/api/mesas/agrupar', async (req, res) => {
     const mesa2 = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesa2Id]);
     if (!mesa1 || !mesa2) {
       return res.status(404).json({ error: 'Mesa no encontrada' });
+    }
+
+    const negocioId = mesa1.negocio_id || req.headers['x-negocio-id'] || 1;
+    const neg = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId]);
+    if (neg) {
+      let feats = neg.caracteristicas_activas || 'all';
+      if (feats !== 'all') {
+        try { feats = JSON.parse(feats); } catch (_) { feats = String(feats).split(',').map(s => s.trim()); }
+        if (Array.isArray(feats) && !feats.includes('union_mesas')) {
+          return res.status(403).json({ error: 'La función de Unión de Mesas se encuentra desactivada para este local en el Panel de Características.' });
+        }
+      }
     }
 
     // Conservar datos y órdenes intactos: solo crear/asignar el grupo visual

@@ -4406,14 +4406,44 @@ window.aplicarRestriccionesModulos = function() {
   }
 
   // 5. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
-  document.querySelectorAll('#btnAbrirMoverUnirModal, .btn-mover-unir, .btn-unir-mesas, .btn-mover-mesa').forEach(el => {
+  // Pestañas y paneles de Unir / Separar dentro del modal de Mover/Unir
+  document.querySelectorAll('.transfer-tab[data-tab="unir"], .transfer-tab[data-tab="separar"], .btn-unir-mesas').forEach(el => {
     el.style.display = tieneUnionMesas ? '' : 'none';
   });
+
+  const panelUnir = document.getElementById('transferPanelUnir');
+  if (panelUnir && !tieneUnionMesas) {
+    panelUnir.classList.remove('active');
+  }
+  const panelSep = document.getElementById('transferPanelSeparar');
+  if (panelSep && !tieneUnionMesas) {
+    panelSep.classList.remove('active');
+  }
+
+  // Si la unión está desactivada y el modal está abierto en pestaña unir o separar, pasar a mover
+  const tabMover = document.querySelector('.transfer-tab[data-tab="mover"]');
+  const panelMover = document.getElementById('transferPanelMover');
+  if (!tieneUnionMesas && tabMover && panelMover) {
+    const tabUnirActiva = document.querySelector('.transfer-tab[data-tab="unir"]')?.classList.contains('active');
+    const tabSepActiva = document.querySelector('.transfer-tab[data-tab="separar"]')?.classList.contains('active');
+    if (tabUnirActiva || tabSepActiva) {
+      document.querySelectorAll('.transfer-tab').forEach(t => t.classList.remove('active'));
+      tabMover.classList.add('active');
+      panelMover.classList.add('active');
+    }
+  }
+
+  const btnMoverUnirModal = document.getElementById('btnAbrirMoverUnirModal');
+  if (btnMoverUnirModal) {
+    btnMoverUnirModal.innerHTML = tieneUnionMesas ? '🔄 Mover / Unir Mesas' : '🔁 Mover Mesa';
+  }
+
   document.querySelectorAll('.admin-panel-card.card-happyhour, #btnAdminHappyHour, #btnToggleHappyHour, .hh-status-bar, #btnHappyHourTop, .btn-happyhour-top').forEach(el => {
     el.style.display = tieneHappyHour ? '' : 'none';
   });
   if (!tieneUnionMesas) {
-    document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
+    document.getElementById('modalConfirmarUnir')?.classList.remove('active');
+    document.getElementById('modalConfirmarSeparar')?.classList.remove('active');
   }
   if (!tieneHappyHour) {
     document.getElementById('modalAdminHappyHour')?.classList.remove('active');
@@ -7398,13 +7428,23 @@ function updateDragPosition(clientX, clientY) {
       if (targetMesa) {
         dragState.hoverTargetMesa = targetMesa;
         const isTargetLibre = targetMesa.estado === 'libre';
-        foundCard.classList.add(isTargetLibre ? 'mesa-drop-target-move' : 'mesa-drop-target-merge');
+        const puedeUnir = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('union_mesas') : true;
+
+        if (isTargetLibre) {
+          foundCard.classList.add('mesa-drop-target-move');
+        } else if (puedeUnir) {
+          foundCard.classList.add('mesa-drop-target-merge');
+        }
         
         const badge = dragState.ghost.querySelector('.drag-badge-indicator');
         if (badge) {
-          badge.textContent = isTargetLibre 
-            ? `🔁 Soltar para Mover a ${targetMesa.numero}` 
-            : `🔗 Soltar para Unir con ${targetMesa.numero}`;
+          if (isTargetLibre) {
+            badge.textContent = `🔁 Soltar para Mover a ${targetMesa.numero}`;
+          } else if (puedeUnir) {
+            badge.textContent = `🔗 Soltar para Unir con ${targetMesa.numero}`;
+          } else {
+            badge.textContent = `🚫 Unión de mesas desactivada (${targetMesa.numero} ocupada)`;
+          }
         }
       }
     } else {
@@ -7429,10 +7469,18 @@ function finalizarDrop(clientX, clientY) {
   if (sourceMesa.id === targetMesa.id) return;
 
   const isTargetLibre = targetMesa.estado === 'libre';
+  const puedeUnir = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('union_mesas') : true;
+
   if (isTargetLibre) {
     mostrarModalConfirmarMover(sourceMesa, targetMesa);
-  } else {
+  } else if (puedeUnir) {
     mostrarModalConfirmarUnir(sourceMesa, targetMesa);
+  } else {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`🚫 La función de Unión de Mesas está desactivada en las características del local (${targetMesa.numero} ocupada)`, 'warning');
+    } else {
+      alert(`🚫 La función de Unión de Mesas está desactivada para este comercio.`);
+    }
   }
 }
 
@@ -7563,6 +7611,14 @@ function agregarDragMesa(card, mesaData, canvas) {
 }
 
 function mostrarModalConfirmarUnir(sourceMesa, targetMesa) {
+  if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('union_mesas')) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('🚫 La función de Unión de Mesas está desactivada en las características de este local', 'warning');
+    } else {
+      alert('🚫 La función de Unión de Mesas está desactivada.');
+    }
+    return;
+  }
   const modal = document.getElementById('modalConfirmarUnir');
   if (!modal) {
     ejecutarUnirMesas(targetMesa.id, sourceMesa.id);
@@ -7655,6 +7711,10 @@ async function ejecutarMoverMesa(origenId, destinoId) {
 }
 
 async function ejecutarUnirMesas(mesaPrincipalId, mesaSecundariaId) {
+  if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('union_mesas')) {
+    mostrarNotificacionCentro('🚫 La función de Unión de Mesas está desactivada en las características del local', 'warning');
+    return;
+  }
   try {
     const res = await fetch('/api/mesas/unir', {
       method: 'POST',
@@ -7671,6 +7731,10 @@ async function ejecutarUnirMesas(mesaPrincipalId, mesaSecundariaId) {
 }
 
 async function ejecutarAgruparMesas(mesa1Id, mesa2Id) {
+  if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('union_mesas')) {
+    mostrarNotificacionCentro('🚫 La función de Unión de Mesas está desactivada en las características del local', 'warning');
+    return;
+  }
   try {
     const res = await fetch('/api/mesas/agrupar', {
       method: 'POST',
@@ -12387,6 +12451,9 @@ function initMoverUnirMesas() {
   });
 
   document.getElementById('btnEjecutarUnirMesas').addEventListener('click', async () => {
+    if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('union_mesas')) {
+      return alert('🚫 La función de Unión de Mesas se encuentra desactivada en las características del local.');
+    }
     const m1Id = Number(document.getElementById('selUnirMesa1').value);
     const m2Id = Number(document.getElementById('selUnirMesa2').value);
     if (!m1Id || !m2Id) return alert('Selecciona las dos mesas que deseas unir.');
@@ -12421,6 +12488,18 @@ function initMoverUnirMesas() {
 }
 
 function cargarSelectoresMoverUnir() {
+  const tieneUnionMesas = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('union_mesas') : true;
+  document.querySelectorAll('.transfer-tab[data-tab="unir"], .transfer-tab[data-tab="separar"]').forEach(el => {
+    el.style.display = tieneUnionMesas ? '' : 'none';
+  });
+  if (!tieneUnionMesas) {
+    document.querySelectorAll('.transfer-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.transfer-tab[data-tab="mover"]')?.classList.add('active');
+    document.getElementById('transferPanelMover')?.classList.add('active');
+    document.getElementById('transferPanelUnir')?.classList.remove('active');
+    document.getElementById('transferPanelSeparar')?.classList.remove('active');
+  }
+
   const selOrig = document.getElementById('selMoverOrigen');
   const selDest = document.getElementById('selMoverDestino');
   const selU1 = document.getElementById('selUnirMesa1');
@@ -14882,20 +14961,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (estado.negocioActual && estado.negocioActual.id) {
-      fetch(`/api/dev/negocios/${estado.negocioActual.id}/modulos`)
-        .then(r => r.json())
-        .then(d => {
-          if (d && d.modulosActivos) {
-            estado.negocioActual.modulos_activos = d.modulosActivos;
-            estado.negocioActual.plan_nombre = d.planNombre;
-            sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
-            localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
-            if (typeof aplicarRestriccionesModulos === 'function') {
-              aplicarRestriccionesModulos();
-            }
+      Promise.all([
+        fetch(`/api/dev/negocios/${estado.negocioActual.id}/modulos`).then(r => r.json()).catch(() => null),
+        fetch(`/api/dev/negocios/${estado.negocioActual.id}/caracteristicas`).then(r => r.json()).catch(() => null)
+      ]).then(([dMod, dFeat]) => {
+        let huboCambios = false;
+        if (dMod && dMod.modulosActivos) {
+          estado.negocioActual.modulos_activos = dMod.modulosActivos;
+          estado.negocioActual.plan_nombre = dMod.planNombre;
+          huboCambios = true;
+        }
+        if (dFeat && dFeat.caracteristicasActivas !== undefined) {
+          estado.negocioActual.caracteristicas_activas = dFeat.caracteristicasActivas;
+          huboCambios = true;
+        }
+        if (huboCambios) {
+          sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+          localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+          if (typeof aplicarRestriccionesModulos === 'function') {
+            aplicarRestriccionesModulos();
           }
-        })
-        .catch(() => {});
+          if (typeof aplicarConfiguracionMonedaNegocio === 'function') {
+            aplicarConfiguracionMonedaNegocio();
+          }
+        }
+      }).catch(() => {});
     }
     if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
       window.aplicarConfiguracionMonedaNegocio();
