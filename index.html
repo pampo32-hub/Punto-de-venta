@@ -3952,10 +3952,62 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- ===================================================================== -->
   <!-- MODAL: SEGURIDAD, RED WIFI, DISPOSITIVOS & SESIÓN ÚNICA (ADMIN & DEV) -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalAdminSeguridadRed" style="z-index: 100050;">
+    <style>
+      #modalAdminSeguridadRed .switch-toggle {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 26px;
+        margin: 0;
+        cursor: pointer;
+      }
+      #modalAdminSeguridadRed .switch-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+      #modalAdminSeguridadRed .slider-round {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #334155;
+        transition: background-color 0.25s ease, border-color 0.25s ease;
+        border-radius: 26px;
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+      #modalAdminSeguridadRed .slider-round span {
+        position: absolute;
+        height: 20px;
+        width: 20px;
+        left: 3px;
+        bottom: 2px;
+        background-color: white;
+        transition: transform 0.25s ease;
+        border-radius: 50%;
+        display: block;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+      }
+      #modalAdminSeguridadRed #chkAdminRestringirIP:checked + .slider-round {
+        background-color: #0284c7 !important;
+        border-color: #38bdf8 !important;
+      }
+      #modalAdminSeguridadRed #chkAdminRestringirDispositivos:checked + .slider-round {
+        background-color: #10b981 !important;
+        border-color: #34d399 !important;
+      }
+      #modalAdminSeguridadRed #chkAdminSesionUnica:checked + .slider-round {
+        background-color: #6366f1 !important;
+        border-color: #818cf8 !important;
+      }
+      #modalAdminSeguridadRed input:checked + .slider-round span {
+        transform: translateX(24px) !important;
+      }
+    </style>
+
     <div class="modal-dialog" style="max-width: 680px; width: 94vw; max-height: 90vh; border-radius: 18px; background: #0b1120; border: 1px solid #38bdf8; box-shadow: 0 25px 60px rgba(0,0,0,0.85); overflow: hidden; display: flex; flex-direction: column;">
       <div class="dialog-header" style="background: linear-gradient(135deg, #0c4a6e, #0f172a); border-bottom: 1px solid rgba(56, 189, 248, 0.3); padding: 16px 22px; display: flex; align-items: center; justify-content: space-between;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -3983,11 +4035,9 @@
                 Saloneros, cajeros y cocineros solo podrán iniciar sesión conectados a la conexión de Internet del negocio.
               </small>
             </div>
-            <label class="switch-toggle" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; cursor: pointer;">
-              <input type="checkbox" id="chkAdminRestringirIP" style="opacity: 0; width: 0; height: 0;" onchange="actualizarEstadoVisualSeguridadRed()" />
-              <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1);">
-                <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
-              </span>
+            <label class="switch-toggle" for="chkAdminRestringirIP">
+              <input type="checkbox" id="chkAdminRestringirIP" onchange="actualizarEstadoVisualSeguridadRed()" />
+              <span class="slider-round"><span></span></span>
             </label>
           </div>
 
@@ -4029,11 +4079,9 @@
                 Bloquea el acceso a clientes y celulares ajenos. Solo las tablets y computadoras vinculadas por el Administrador pueden operar.
               </small>
             </div>
-            <label class="switch-toggle" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; cursor: pointer;">
-              <input type="checkbox" id="chkAdminRestringirDispositivos" style="opacity: 0; width: 0; height: 0;" />
-              <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1);">
-                <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
-              </span>
+            <label class="switch-toggle" for="chkAdminRestringirDispositivos">
+              <input type="checkbox" id="chkAdminRestringirDispositivos" onchange="actualizarEstadoVisualSeguridadRed()" />
+              <span class="slider-round"><span></span></span>
             </label>
           </div>
 
@@ -4065,11 +4113,9 @@
               Permite solo una sesión activa a la vez por usuario. Si un salonero abre su cuenta en otro equipo, la sesión previa se cierra automáticamente en tiempo real.
             </small>
           </div>
-          <label class="switch-toggle" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; cursor: pointer;">
-            <input type="checkbox" id="chkAdminSesionUnica" checked style="opacity: 0; width: 0; height: 0;" />
-            <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1);">
-              <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
-            </span>
+          <label class="switch-toggle" for="chkAdminSesionUnica">
+            <input type="checkbox" id="chkAdminSesionUnica" checked onchange="actualizarEstadoVisualSeguridadRed()" />
+            <span class="slider-round"><span></span></span>
           </label>
         </div>
 
