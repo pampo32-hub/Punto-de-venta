@@ -10927,15 +10927,63 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
     }
   }
 
+  if (typeof window.cerrarTodosLosModales === 'function') {
+    window.cerrarTodosLosModales('modalMovimientoCaja');
+  }
+  modal.style.display = 'flex';
   modal.classList.add('active');
+  window._modalActivoId = 'modalMovimientoCaja';
+
   setTimeout(() => {
-    if (txtMonto) txtMonto.focus();
+    if (txtMonto) {
+      txtMonto.focus();
+      txtMonto.select?.();
+    }
   }, 100);
 };
 
 window.cerrarModalMovimientoCaja = function() {
   const modal = document.getElementById('modalMovimientoCaja');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  if (window._modalActivoId === 'modalMovimientoCaja') {
+    window._modalActivoId = null;
+  }
+};
+
+window.agregarMontoMovimientoCaja = function(monto) {
+  const txtMonto = document.getElementById('txtMovimientoCajaMonto');
+  if (!txtMonto) return;
+  const actual = parseFloat(txtMonto.value || 0) || 0;
+  const nuevo = actual + Number(monto);
+  txtMonto.value = String(nuevo);
+  txtMonto.focus();
+};
+
+window.limpiarMontoMovimientoCaja = function() {
+  const txtMonto = document.getElementById('txtMovimientoCajaMonto');
+  if (txtMonto) {
+    txtMonto.value = '';
+    txtMonto.focus();
+  }
+};
+
+window.teclaNumpadMovimientoCaja = function(tecla) {
+  const txtMonto = document.getElementById('txtMovimientoCajaMonto');
+  if (!txtMonto) return;
+  let val = String(txtMonto.value || '');
+  if (tecla === 'backspace') {
+    val = val.slice(0, -1);
+  } else if (tecla === '00') {
+    if (val && val !== '0') val += '00';
+  } else {
+    if (val === '0') val = String(tecla);
+    else val += String(tecla);
+  }
+  txtMonto.value = val;
+  txtMonto.focus();
 };
 
 window.guardarMovimientoCaja = async function() {
@@ -10944,7 +10992,8 @@ window.guardarMovimientoCaja = async function() {
   const txtConcepto = document.getElementById('txtMovimientoCajaConcepto');
 
   const tipo = txtTipo ? txtTipo.value : 'entrada';
-  const monto = parseFloat(txtMonto ? txtMonto.value : 0);
+  const valMonto = txtMonto ? String(txtMonto.value).trim().replace(/[^0-9.]/g, '') : '0';
+  const monto = parseFloat(valMonto || 0);
   const concepto = (txtConcepto ? txtConcepto.value : '').trim();
 
   if (isNaN(monto) || monto <= 0) {
@@ -10990,62 +11039,6 @@ window.guardarMovimientoCaja = async function() {
   } catch (e) {
     mostrarNotificacionCentro('❌ Error de conexión: ' + e.message, 'error');
   }
-};
-
-window.generarCorteX = async function() {
-  try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const targetCajaId = window._cajaActivaData?.caja?.id || '';
-    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}&caja_id=${targetCajaId}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert('❌ Error generando Corte X: ' + (data.error || 'No se pudo generar el reporte'));
-      return;
-    }
-
-    const ticketData = {
-      tipo: 'CORTE_X',
-      fecha: new Date().toISOString(),
-      negocio: estado.negocioActual || { nombre: 'GastroBar POS' },
-      corte: data
-    };
-
-    if (typeof window.abrirModalVisorTicket === 'function') {
-      window.abrirModalVisorTicket(ticketData);
-    } else {
-      alert(`📑 CORTE X GENERADO\n\nCaja: ${data.caja_nombre || 'Principal'}\nCajero: ${data.cajero}\nVentas Totales: ${formatCRC(data.ventas.total)}\nEfectivo Esperado: ${formatCRC(data.efectivo_esperado)}`);
-    }
-  } catch (e) {
-    alert('❌ Error: ' + e.message);
-  }
-};
-
-window.abrirModalCierreZ = function(esCiego = false) {
-  const modal = document.getElementById('modalCierreZ');
-  if (!modal) return;
-  window._cierreZEsCiego = !!esCiego;
-
-  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
-  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
-  const txtNotas = document.getElementById('txtCierreZNotas');
-  if (txtRealCRC) txtRealCRC.value = '';
-  if (txtRealUSD) txtRealUSD.value = '';
-  if (txtNotas) txtNotas.value = '';
-
-  modal.classList.add('active');
-  if (typeof window.calcularDiferenciaCierreZ === 'function') {
-    window.calcularDiferenciaCierreZ();
-  }
-  setTimeout(() => {
-    if (txtRealCRC) txtRealCRC.focus();
-  }, 100);
-};
-
-window.cerrarModalCierreZ = function() {
-  const modal = document.getElementById('modalCierreZ');
-  if (modal) modal.classList.remove('active');
 };
 
 // -------------------------------------------------------------
@@ -11136,9 +11129,18 @@ window.abrirModalAperturaCaja = async function() {
     }
   }
 
+  if (typeof window.cerrarTodosLosModales === 'function') {
+    window.cerrarTodosLosModales('modalAperturaCaja');
+  }
+  modal.style.display = 'flex';
   modal.classList.add('active');
+  window._modalActivoId = 'modalAperturaCaja';
+
   setTimeout(() => {
-    if (txtMonto) txtMonto.focus();
+    if (txtMonto) {
+      txtMonto.focus();
+      txtMonto.select?.();
+    }
   }, 100);
 };
 
@@ -11160,7 +11162,13 @@ window.seleccionarCajaFisicaApertura = function(cajaId) {
 
 window.cerrarModalAperturaCaja = function() {
   const modal = document.getElementById('modalAperturaCaja');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  if (window._modalActivoId === 'modalAperturaCaja') {
+    window._modalActivoId = null;
+  }
 };
 
 window.ejecutarAperturaCaja = async function() {
@@ -11282,7 +11290,13 @@ window.abrirModalReasignarCajaTurno = async function() {
     window.actualizarValoresFormularioReasignacion(selTarget.value);
   }
 
+  if (typeof window.cerrarTodosLosModales === 'function') {
+    window.cerrarTodosLosModales('modalReasignarCajaTurno');
+  }
+  modal.style.display = 'flex';
   modal.classList.add('active');
+  window._modalActivoId = 'modalReasignarCajaTurno';
+
   setTimeout(() => {
     if (txtPin) txtPin.focus();
   }, 100);
@@ -11311,7 +11325,13 @@ window.actualizarValoresFormularioReasignacion = function(turnoId) {
 
 window.cerrarModalReasignarCajaTurno = function() {
   const modal = document.getElementById('modalReasignarCajaTurno');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  if (window._modalActivoId === 'modalReasignarCajaTurno') {
+    window._modalActivoId = null;
+  }
 };
 
 window.ejecutarReasignacionTurnoCaja = async function() {
@@ -11817,6 +11837,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.generarCorteX = async function() {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const targetCajaId = window._cajaActivaData?.caja?.id || window._cajaVisualFiltroId || '';
+
   const pinAutorizado = await window.solicitarPinAdmin({
     icono: '📑',
     titulo: 'Autorización: Corte X Parcial',
@@ -11827,8 +11850,10 @@ window.generarCorteX = async function() {
 
   try {
     mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}`, {
+    const urlCorte = targetCajaId 
+      ? `/api/caja/corte-x?negocio_id=${nid}&caja_id=${targetCajaId}` 
+      : `/api/caja/corte-x?negocio_id=${nid}`;
+    const res = await fetch(urlCorte, {
       headers: { 'x-supervisor-pin': pinAutorizado, 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
@@ -11901,7 +11926,13 @@ window.abrirModalCorteXCiego = async function() {
   if (txtSinpe) { txtSinpe.value = ''; txtSinpe.placeholder = '₡ 0'; }
   if (txtNotas) { txtNotas.value = ''; }
 
+  if (typeof window.cerrarTodosLosModales === 'function') {
+    window.cerrarTodosLosModales('modalCorteXCiego');
+  }
+  modal.style.display = 'flex';
   modal.classList.add('active');
+  window._modalActivoId = 'modalCorteXCiego';
+
   setTimeout(() => {
     if (txtCRC) txtCRC.focus();
   }, 100);
@@ -11909,7 +11940,13 @@ window.abrirModalCorteXCiego = async function() {
 
 window.cerrarModalCorteXCiego = function() {
   const modal = document.getElementById('modalCorteXCiego');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  if (window._modalActivoId === 'modalCorteXCiego') {
+    window._modalActivoId = null;
+  }
 };
 
 window.procesarCorteXCiego = async function() {
@@ -11990,7 +12027,11 @@ window.abrirModalCierreZ = async function(forzarCiego = null) {
 
   try {
     const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}`, {
+    const targetCajaId = window._cajaActivaData?.caja?.id || window._cajaVisualFiltroId || '';
+    const urlCorte = targetCajaId 
+      ? `/api/caja/corte-x?negocio_id=${nid}&caja_id=${targetCajaId}` 
+      : `/api/caja/corte-x?negocio_id=${nid}`;
+    const res = await fetch(urlCorte, {
       headers: { 'x-supervisor-pin': pinAutorizado, 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
@@ -12101,7 +12142,13 @@ window.abrirModalCierreZ = async function(forzarCiego = null) {
           : '⚖️ Ingresa el dinero físico contado en colones para calcular el cuadre de arqueo.');
     }
 
+    if (typeof window.cerrarTodosLosModales === 'function') {
+      window.cerrarTodosLosModales('modalCierreZ');
+    }
+    modal.style.display = 'flex';
     modal.classList.add('active');
+    window._modalActivoId = 'modalCierreZ';
+
     setTimeout(() => {
       if (txtRealCRC) txtRealCRC.focus();
     }, 100);
@@ -12112,7 +12159,13 @@ window.abrirModalCierreZ = async function(forzarCiego = null) {
 
 window.cerrarModalCierreZ = function() {
   const modal = document.getElementById('modalCierreZ');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+  if (window._modalActivoId === 'modalCierreZ') {
+    window._modalActivoId = null;
+  }
   window._datosCierreZPrecargados = null;
   window._cierreZEsCiego = false;
 };

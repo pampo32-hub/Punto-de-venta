@@ -5253,8 +5253,8 @@
   </div>
 
   <!-- MODAL ENTRADA / SALIDA DE EFECTIVO (MOVIMIENTOS DE CAJA) -->
-  <div class="modal-backdrop" id="modalMovimientoCaja" style="z-index: 100015;">
-    <div class="modal-dialog" style="max-width: 480px; width: 92vw;">
+  <div class="modal-backdrop" id="modalMovimientoCaja" style="z-index: 100015; display: none;">
+    <div class="modal-dialog" style="max-width: 480px; width: 94vw; max-height: 94vh; overflow-y: auto;">
       <div class="dialog-header" style="background: #0f172a; border-bottom: 1px solid #1e293b;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.4rem;" id="iconModalMovimientoCaja">📥</span>
@@ -5265,20 +5265,47 @@
         </div>
         <button class="btn-icon-close" onclick="cerrarModalMovimientoCaja()">✕</button>
       </div>
-      <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+      <div class="dialog-body" style="padding: 18px; background: #0b0f19;">
         <input type="hidden" id="txtMovimientoCajaTipo" value="entrada" />
         
-        <div class="field-row" style="margin-bottom: 14px;">
+        <div class="field-row" style="margin-bottom: 12px;">
           <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
             Monto en Efectivo (₡ CRC): <span style="color:#ef4444;">*</span>
           </label>
           <div style="position:relative;">
-            <input type="number" id="txtMovimientoCajaMonto" min="1" step="any" placeholder="Ej: 15000" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
-            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700;">CRC</span>
+            <input type="number" inputmode="decimal" id="txtMovimientoCajaMonto" min="1" step="any" placeholder="Ej: 15000" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.25rem; font-weight:800; border:2px solid #38bdf8; background:#111827; color:#38bdf8; border-radius:10px; outline:none;" />
+            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700; pointer-events:none;">CRC</span>
           </div>
         </div>
 
-        <div class="field-row" style="margin-bottom: 14px;">
+        <!-- Chips de Montos Rápidos -->
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;">
+          <button type="button" class="btn-sec" onclick="agregarMontoMovimientoCaja(1000)" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;">+₡1,000</button>
+          <button type="button" class="btn-sec" onclick="agregarMontoMovimientoCaja(2000)" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;">+₡2,000</button>
+          <button type="button" class="btn-sec" onclick="agregarMontoMovimientoCaja(5000)" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;">+₡5,000</button>
+          <button type="button" class="btn-sec" onclick="agregarMontoMovimientoCaja(10000)" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;">+₡10,000</button>
+          <button type="button" class="btn-sec" onclick="agregarMontoMovimientoCaja(20000)" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;">+₡20,000</button>
+          <button type="button" class="btn-sec" onclick="agregarMontoMovimientoCaja(50000)" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;">+₡50,000</button>
+          <button type="button" class="btn-sec" onclick="limpiarMontoMovimientoCaja()" style="padding:6px 10px; font-size:0.8rem; font-weight:700; border-radius:6px; background:#334155; color:#f87171; border:1px solid #475569; cursor:pointer;">🧹 Limpiar</button>
+        </div>
+
+        <!-- Teclado Numérico Táctil Integrado -->
+        <div class="numeric-keypad" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:14px;">
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('1')">1</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('2')">2</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('3')">3</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('4')">4</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('5')">5</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('6')">6</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('7')">7</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('8')">8</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('9')">9</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1rem; font-weight:800; border-radius:8px; background:#1e293b; color:#38bdf8; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('00')">00</button>
+          <button type="button" class="num-btn" style="padding:10px; font-size:1.15rem; font-weight:800; border-radius:8px; background:#1e293b; color:#fff; border:1px solid #334155; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('0')">0</button>
+          <button type="button" class="num-btn del" style="padding:10px; font-size:1.1rem; font-weight:800; border-radius:8px; background:#334155; color:#f87171; border:1px solid #475569; cursor:pointer;" onclick="teclaNumpadMovimientoCaja('backspace')">⌫</button>
+        </div>
+
+        <div class="field-row" style="margin-bottom: 12px;">
           <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
             Concepto / Motivo: <span style="color:#ef4444;">*</span>
           </label>
@@ -5291,7 +5318,7 @@
       </div>
       <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
         <button class="btn-sec" onclick="cerrarModalMovimientoCaja()">Cancelar</button>
-        <button class="btn-pri" id="btnGuardarMovimientoCaja" onclick="guardarMovimientoCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; padding:10px 20px; border-radius:8px; border:none;">
+        <button class="btn-pri" id="btnGuardarMovimientoCaja" onclick="guardarMovimientoCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; padding:10px 20px; border-radius:8px; border:none; cursor:pointer;">
           💾 Registrar Movimiento
         </button>
       </div>
@@ -5486,17 +5513,14 @@
     </div>
   </div>
 
-  <!-- MODAL APERTURA DE NUEVO TURNO DE CAJA -->
   <!-- MODAL APERTURA DE NUEVO TURNO DE CAJA (SELECCIÓN DINÁMICA DE CAJA FÍSICA) -->
-  <div class="modal-backdrop" id="modalAperturaCaja" style="z-index: 100025;">
-    <div class="modal-dialog" style="max-width: 460px; width: 92vw;">
-    <div class="modal-dialog" style="max-width: 520px; width: 94vw;">
+  <div class="modal-backdrop" id="modalAperturaCaja" style="z-index: 100025; display: none;">
+    <div class="modal-dialog" style="max-width: 520px; width: 94vw; max-height: 94vh; overflow-y: auto;">
       <div class="dialog-header" style="background: linear-gradient(135deg, #064e3b, #0f172a); border-bottom: 1px solid #047857;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.5rem;">🔓</span>
           <div>
             <h3 style="margin:0; font-size:1.2rem; color:#fff;">Apertura de Nuevo Turno</h3>
-            <small style="color:#a7f3d0;">Abrir gaveta e ingresar fondo inicial de caja</small>
             <small style="color:#a7f3d0;">Selecciona tu punto de cobro e ingresa el fondo inicial</small>
           </div>
         </div>
@@ -5528,8 +5552,8 @@
             Fondo Inicial de Caja (₡ CRC): <span style="color:#ef4444;">*</span>
           </label>
           <div style="position:relative;">
-            <input type="number" id="txtAperturaMontoInicial" min="0" step="any" value="50000" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#34d399; border-radius:8px; outline:none;" />
-            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700;">CRC</span>
+            <input type="number" inputmode="decimal" id="txtAperturaMontoInicial" min="0" step="any" value="50000" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#34d399; border-radius:8px; outline:none;" />
+            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700; pointer-events:none;">CRC</span>
           </div>
         </div>
 
@@ -5538,14 +5562,13 @@
             Fondo Inicial en Dólares ($ USD - Opcional):
           </label>
           <div style="position:relative;">
-            <input type="number" id="txtAperturaMontoInicialUSD" name="txtAperturaMontoInicialUSD" min="0" step="any" value="0" placeholder="0.00" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
-            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700;">USD</span>
+            <input type="number" inputmode="decimal" id="txtAperturaMontoInicialUSD" name="txtAperturaMontoInicialUSD" min="0" step="any" value="0" placeholder="0.00" class="select-styled" style="width:100%; padding:12px 14px; font-size:1.1rem; font-weight:700; border:1px solid #374151; background:#111827; color:#38bdf8; border-radius:8px; outline:none;" />
+            <span style="position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#64748b; font-weight:700; pointer-events:none;">USD</span>
           </div>
         </div>
       </div>
       <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
         <button class="btn-sec" onclick="cerrarModalAperturaCaja()">Cancelar</button>
-        <button class="btn-pri" onclick="ejecutarAperturaCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none;">
         <button class="btn-pri" id="btnEjecutarAperturaCaja" onclick="ejecutarAperturaCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none; cursor:pointer;">
           🔓 Abrir Turno de Caja
         </button>
