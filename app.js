@@ -11075,32 +11075,6 @@ window.generarCorteX = async function() {
   }
 };
 
-window.abrirModalCierreZ = function(esCiego = false) {
-  const modal = document.getElementById('modalCierreZ');
-  if (!modal) return;
-  window._cierreZEsCiego = !!esCiego;
-
-  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
-  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
-  const txtNotas = document.getElementById('txtCierreZNotas');
-  if (txtRealCRC) txtRealCRC.value = '';
-  if (txtRealUSD) txtRealUSD.value = '';
-  if (txtNotas) txtNotas.value = '';
-
-  modal.classList.add('active');
-  if (typeof window.calcularDiferenciaCierreZ === 'function') {
-    window.calcularDiferenciaCierreZ();
-  }
-  setTimeout(() => {
-    if (txtRealCRC) txtRealCRC.focus();
-  }, 100);
-};
-
-window.cerrarModalCierreZ = function() {
-  const modal = document.getElementById('modalCierreZ');
-  if (modal) modal.classList.remove('active');
-};
-
 // -------------------------------------------------------------
 // APERTURA DINÁMICA DE CAJA CON SELECCIÓN DE PUNTOS FÍSICOS
 // -------------------------------------------------------------
@@ -12076,9 +12050,10 @@ window.procesarCorteXCiego = async function() {
   }
 };
 
-window.abrirModalCierreZ = async function(forzarCiego = null) {
-  const tieneArqueoCiego = typeof negocioTieneCaracteristica === 'function' && negocioTieneCaracteristica('arqueo_ciego_cierre_z');
-  const esModoCiego = (forzarCiego === true) || (forzarCiego !== false && tieneArqueoCiego);
+window.abrirModalCierreZ = async function(forzarCiego = false) {
+  // Arqueo Ciego solo se activa cuando se invoca explícitamente el botón de Cierre Z a Ciegas
+  const tieneArqueoCiegoConfigurado = typeof negocioTieneCaracteristica === 'function' && negocioTieneCaracteristica('arqueo_ciego_cierre_z');
+  const esModoCiego = (forzarCiego === true);
   window._cierreZEsCiego = esModoCiego;
 
   const pinAutorizado = await window.solicitarPinAdmin({
