@@ -25,7 +25,7 @@ describe('Tier 46: Impresion Directa Silenciosa a Impresora Termica (192.168.1.3
       const funcMatch = code.match(/window\.solicitarPreFacturaMesa\s*=\s*async\s*function[\s\S]*?catch\s*\(e\)/);
       assert.ok(funcMatch, `${target} debe contener window.solicitarPreFacturaMesa`);
       const body = funcMatch[0];
-      assert.ok(body.includes('mostrarVisorTicketTermico(data.ticket, true)'), `${target} solicitarPreFacturaMesa debe abrir visor modal de ticket`);
+      assert.ok(body.includes('mostrarVisorTicketTermico(ticketGenerado, true)'), `${target} solicitarPreFacturaMesa debe abrir visor modal de ticket`);
     });
   });
 

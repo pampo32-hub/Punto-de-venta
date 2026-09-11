@@ -11023,9 +11023,13 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
   try {
     const mesaActiva = estado.mesaActiva;
     const mId = mesaId || (mesaActiva && mesaActiva.id);
-    const oId = ordenId || (mesaActiva && (mesaActiva.orden_id || mesaActiva.ordenId));
+    const oId = ordenId || (mesaActiva && (mesaActiva.orden_id || mesaActiva.ordenId || mesaActiva.orden_activa_id));
 
-    if (!mId && !oId) {
+    const itemsMesa = (mesaActiva && mesaActiva.items && mesaActiva.items.length > 0)
+      ? mesaActiva.items
+      : ((estado.mesas || []).find(m => m.id === Number(mId))?.items || []);
+
+    if (!mId && !oId && itemsMesa.length === 0) {
       if (typeof mostrarNotificacionCentro === 'function') {
         mostrarNotificacionCentro('⚠️ Por favor selecciona una mesa u orden activa para generar la pre-factura.', 'warning');
       } else {
@@ -11033,10 +11037,6 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       }
       return;
     }
-
-    const itemsMesa = (mesaActiva && mesaActiva.items && mesaActiva.items.length > 0)
-      ? mesaActiva.items
-      : ((estado.mesas || []).find(m => m.id === Number(mId))?.items || []);
 
     if (itemsMesa.length === 0 && !oId) {
       if (typeof mostrarNotificacionCentro === 'function') {
@@ -11047,67 +11047,81 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       return;
     }
 
-    const endpoint = oId ? `/api/ordenes/${oId}/prefactura` : `/api/mesas/${mId}/prefactura`;
+    const endpoint = oId ? `/api/ordenes/${oId}/prefactura` : (mId && !isNaN(Number(mId)) ? `/api/mesas/${mId}/prefactura` : null);
     const meseroActual = (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno';
 
-    const resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mesero: meseroActual,
-        items: itemsMesa
-      })
-    });
+    let ticketGenerado = null;
 
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok || !data?.ok) {
-      // Fallback local si el backend falló o estamos offline
-      if (itemsMesa.length > 0) {
-        const subtotal = itemsMesa.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
-        const iva = Math.round(subtotal * 0.13);
-        const servicio = Math.round(subtotal * 0.10);
-        const total = subtotal + iva + servicio;
-        const fallbackTicket = {
-          tipo: 'prefactura',
-          titulo: 'PRE-CUENTA / PRE-FACTURA',
-          negocio: {
-            nombre: estado.configuracion?.nombreComercio || 'GastroBar Fuego & Brasas',
-            slogan: estado.configuracion?.slogan || 'Restaurante, Bar & Lounge',
-            tel: estado.configuracion?.telefono || '2222-3344',
-            dir: estado.configuracion?.direccion || 'San José, Costa Rica',
-            cedula: estado.configuracion?.cedula || '3-101-789458'
-          },
-          ordenId: oId || mId || 1,
-          numeroOrden: oId || mId || 1,
-          mesa: (mesaActiva && mesaActiva.numero) ? (mesaActiva.numero.startsWith('Mesa') ? mesaActiva.numero : 'Mesa ' + mesaActiva.numero) : ('Mesa ' + mId),
-          mesero: meseroActual,
-          cliente: (mesaActiva && (mesaActiva.cliente || mesaActiva.mesa_cliente)) || 'Cliente General',
-          fechaHora: formatearFechaHoraCR(new Date()),
-          items: itemsMesa.map(it => ({
-            cantidad: Number(it.cantidad) || 1,
-            nombre: it.nombre || it.nombre_producto || 'Producto',
-            precioUnitario: Number(it.precio || it.precio_unitario || 0),
-            totalLinea: Number(it.subtotal || it.totalLinea || ((it.precio || it.precio_unitario || 0) * (it.cantidad || 1))),
-            notas: it.notas || ''
-          })),
-          subtotal,
-          servicio,
-          iva,
-          total
-        };
-        if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-          return await window.ejecutarImpresionDirectaTermica(fallbackTicket, false);
+    if (endpoint) {
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mesero: meseroActual,
+            items: itemsMesa
+          })
+        });
+        const data = await resp.json().catch(() => null);
+        if (resp.ok && data?.ok && data.ticket) {
+          ticketGenerado = data.ticket;
         }
+      } catch (errApi) {
+        console.warn('Fallo al llamar endpoint de prefactura en backend, usando fallback local:', errApi);
       }
-      throw new Error(data?.error || 'Error al generar la pre-factura.');
     }
 
-    if (data.ticket) {
-      if (typeof window.mostrarVisorTicketTermico === 'function') {
-        window.mostrarVisorTicketTermico(data.ticket, true);
-      } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-        window.ejecutarImpresionDirectaTermica(data.ticket, false);
-      }
+    // Si no se obtuvo ticket desde backend o falló el endpoint, construir ticket fallback completo
+    if (!ticketGenerado) {
+      const subtotal = itemsMesa.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
+      const descHH = Number(mesaActiva?.descuento_happy_hour || 0);
+      const descEsp = Number(mesaActiva?.descuento_monto || 0);
+      const baseImp = Math.max(0, subtotal - descHH - descEsp);
+      const iva = Math.round(baseImp * 0.13);
+      const servicio = Math.round(baseImp * 0.10);
+      const total = baseImp + iva + servicio;
+      const prop10 = Math.round(subtotal * 0.10);
+      const prop15 = Math.round(subtotal * 0.15);
+
+      ticketGenerado = {
+        tipo: 'prefactura',
+        titulo: 'PRE-CUENTA / PRE-FACTURA',
+        negocio: {
+          nombre: estado.configuracion?.nombreComercio || 'GastroBar Fuego & Brasas',
+          slogan: estado.configuracion?.slogan || 'Restaurante, Bar & Lounge',
+          tel: estado.configuracion?.telefono || '2222-3344',
+          dir: estado.configuracion?.direccion || 'San José, Costa Rica',
+          cedula: estado.configuracion?.cedula || '3-101-789458'
+        },
+        ordenId: oId || mId || 1,
+        numeroOrden: oId || mId || 1,
+        mesa: (mesaActiva && mesaActiva.numero) ? (mesaActiva.numero.startsWith('Mesa') ? mesaActiva.numero : 'Mesa ' + mesaActiva.numero) : (mId ? ('Mesa ' + mId) : 'Mesa Principal'),
+        mesero: meseroActual,
+        cliente: (mesaActiva && (mesaActiva.cliente || mesaActiva.mesa_cliente)) || 'Cliente General',
+        fechaHora: formatearFechaHoraCR(new Date()),
+        items: itemsMesa.map(it => ({
+          cantidad: Number(it.cantidad) || 1,
+          nombre: it.nombre || it.nombre_producto || 'Producto',
+          precioUnitario: Number(it.precio || it.precio_unitario || 0),
+          totalLinea: Number(it.subtotal || it.totalLinea || ((it.precio || it.precio_unitario || 0) * (it.cantidad || 1))),
+          notas: it.notas || ''
+        })),
+        subtotal,
+        descuentoHH: descHH,
+        descuentoMonto: descEsp,
+        servicio,
+        iva,
+        total,
+        propina10: prop10,
+        propina15: prop15
+      };
+    }
+
+    // SIEMPRE abrir el visor de ticket en pantalla Y despachar a impresión térmica
+    if (typeof window.mostrarVisorTicketTermico === 'function') {
+      window.mostrarVisorTicketTermico(ticketGenerado, true);
+    } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      window.ejecutarImpresionDirectaTermica(ticketGenerado, false);
     }
 
     if (mId && typeof cargarMesasDesdeBackend === 'function') {
@@ -13296,9 +13310,11 @@ window.imprimirPrefacturaPersonaSplit = function(personaIndex) {
   // Marcar que la prefactura ya fue emitida para esta persona
   p.prefacturaEmitida = true;
 
-  // Despachar a impresora térmica en segundo plano sin abrir visor
-  if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-    window.ejecutarImpresionDirectaTermica(ticketPrefactura);
+  // Despachar a visor de ticket térmico en pantalla Y a impresora térmica física
+  if (typeof window.mostrarVisorTicketTermico === 'function') {
+    window.mostrarVisorTicketTermico(ticketPrefactura, true);
+  } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+    window.ejecutarImpresionDirectaTermica(ticketPrefactura, false);
   }
 
   // Pre-factura impresa en segundo plano silenciosamente
