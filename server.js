@@ -3919,17 +3919,45 @@ async function recalcularTotalesOrden(ordenId) {
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
   const total = Math.max(0, totalBruto - descuentoHH);
+  
+  const negocio = orden?.negocio_id ? await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id]) : null;
+
+  const tieneServicio10 = negocio ? (
+    !negocio.caracteristicas_activas ||
+    negocio.caracteristicas_activas === 'all' ||
+    (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
+  ) : true;
+
+  const tieneIVA13 = negocio ? (
+    !negocio.caracteristicas_activas ||
+    negocio.caracteristicas_activas === 'all' ||
+    (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
+  ) : true;
+
+  const aplicaServicio = tieneServicio10 && !esParaLlevar;
+  const aplicaIVA = tieneIVA13;
+
   let subtotal, servicio, iva;
-  if (esParaLlevar) {
-    // Para Llevar: EXENTO de 10% de Servicio. Solo aplica IVA 13% (1.13)
-    subtotal = Math.round(total / 1.13);
-    servicio = 0;
-    iva = total - subtotal;
-  } else {
-    // Salón / Consumo en mesa: 10% Servicio + 13% IVA (1.23)
+  if (aplicaServicio && aplicaIVA) {
+    // Salón / Consumo en mesa con ambos: 10% Servicio + 13% IVA (1.23)
     subtotal = Math.round(total / 1.23);
     servicio = Math.round(subtotal * 0.10);
     iva = total - subtotal - servicio;
+  } else if (!aplicaServicio && aplicaIVA) {
+    // Solo IVA 13% (1.13)
+    subtotal = Math.round(total / 1.13);
+    servicio = 0;
+    iva = total - subtotal;
+  } else if (aplicaServicio && !aplicaIVA) {
+    // Solo Servicio 10% (1.10)
+    subtotal = Math.round(total / 1.10);
+    servicio = total - subtotal;
+    iva = 0;
+  } else {
+    // Sin servicio ni IVA (exento / 0%)
+    subtotal = total;
+    servicio = 0;
+    iva = 0;
   }
 
   await dbRun(

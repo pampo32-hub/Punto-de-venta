@@ -279,6 +279,22 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     };
   });
 
+function negocioTieneCaracteristica(negocio, flagId) {
+  if (!negocio) return true;
+  const flags = negocio.caracteristicas_activas;
+  if (!flags || flags === 'all') return true;
+  if (Array.isArray(flags)) return flags.includes(flagId);
+  if (typeof flags === 'string') {
+    try {
+      const arr = JSON.parse(flags);
+      if (Array.isArray(arr)) return arr.includes(flagId);
+    } catch (_) {}
+    const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
+    return splitArr.includes(String(flagId).toLowerCase());
+  }
+  return true;
+}
+
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
   const baseImponible = Math.max(0, subNum - descHHNum);
@@ -288,15 +304,24 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
     (servicio !== undefined && servicio !== null && Number(servicio) === 0)
   );
-  let servNum;
+
+  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : true;
+  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : true;
+
+  let servNum = 0;
   if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
     servNum = Math.max(0, Math.round(Number(servicio)));
-  } else if (esParaLlevarTicket) {
-    servNum = 0;
-  } else {
+  } else if (tieneServicio10 && !esParaLlevarTicket) {
     servNum = Math.round(baseImponible * 0.10);
   }
-  const ivaNum = (iva !== undefined && iva !== null && !isNaN(Number(iva))) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
+
+  let ivaNum = 0;
+  if (iva !== undefined && iva !== null && !isNaN(Number(iva))) {
+    ivaNum = Math.max(0, Math.round(Number(iva)));
+  } else if (tieneIVA13) {
+    ivaNum = Math.round(baseImponible * 0.13);
+  }
+
   const totNum = (total !== undefined && total !== null && Number(total) > 0) ? Math.round(Number(total)) : (baseImponible + servNum + ivaNum);
   const montoRecibido = Number(recibido) > 0 ? Math.round(Number(recibido)) : totNum;
   const vuelto = Number(cambio) >= 0 ? Math.round(Number(cambio)) : Math.max(0, montoRecibido - totNum);
@@ -334,12 +359,12 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  if (servNum > 0) {
+  if (servNum > 0 && tieneServicio10) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
-  } else if (esParaLlevarTicket) {
+  } else if (esParaLlevarTicket && tieneServicio10) {
     raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
   }
-  if (ivaNum > 0) {
+  if (ivaNum > 0 && tieneIVA13) {
     raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   }
   raw += '='.repeat(48) + '\n';
@@ -489,15 +514,24 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
     (servicio !== undefined && servicio !== null && Number(servicio) === 0)
   );
-  let servNum;
+
+  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : true;
+  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : true;
+
+  let servNum = 0;
   if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
     servNum = Math.max(0, Math.round(Number(servicio)));
-  } else if (esParaLlevarTicket) {
-    servNum = 0;
-  } else {
+  } else if (tieneServicio10 && !esParaLlevarTicket) {
     servNum = Math.round(baseImponible * 0.10);
   }
-  const ivaNum = (iva !== undefined && iva !== null && !isNaN(Number(iva))) ? Math.round(Number(iva)) : Math.round(baseImponible * 0.13);
+
+  let ivaNum = 0;
+  if (iva !== undefined && iva !== null && !isNaN(Number(iva))) {
+    ivaNum = Math.max(0, Math.round(Number(iva)));
+  } else if (tieneIVA13) {
+    ivaNum = Math.round(baseImponible * 0.13);
+  }
+
   const totNum = (total !== undefined && total !== null && Number(total) > 0) ? Math.round(Number(total)) : (baseImponible + servNum + ivaNum);
   const prop10 = Math.round(subNum * 0.10);
   const prop15 = Math.round(subNum * 0.15);
@@ -537,12 +571,12 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  if (servNum > 0) {
+  if (servNum > 0 && tieneServicio10) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
-  } else if (esParaLlevarTicket) {
+  } else if (esParaLlevarTicket && tieneServicio10) {
     raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
   }
-  if (ivaNum > 0) {
+  if (ivaNum > 0 && tieneIVA13) {
     raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   }
   raw += '='.repeat(48) + '\n';

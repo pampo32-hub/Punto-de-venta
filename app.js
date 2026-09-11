@@ -18756,17 +18756,27 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       ticketData.tipo_orden === 'para_llevar' ||
       (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar')))
     );
-    let servNum;
-    if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
-      servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
-    } else if (esParaLlevarTicket) {
-      servNum = 0;
-    } else {
-      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-      servNum = tieneServ10 ? Math.round(baseImp * 0.10) : 0;
-    }
+    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
     const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : (tieneIva13 ? Math.round(baseImp * 0.13) : 0);
+
+    let servNum = 0;
+    if (tieneServ10 && !esParaLlevarTicket) {
+      if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
+        servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
+      } else {
+        servNum = Math.round(baseImp * 0.10);
+      }
+    }
+
+    let ivaNum = 0;
+    if (tieneIva13) {
+      if (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) {
+        ivaNum = Math.max(0, Math.round(Number(ticketData.iva)));
+      } else {
+        ivaNum = Math.round(baseImp * 0.13);
+      }
+    }
+
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const prop10 = Math.round(subNum * 0.10);
     const prop15 = Math.round(subNum * 0.15);
@@ -19399,17 +19409,27 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       ticketData.tipo_orden === 'para_llevar' ||
       (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar')))
     );
-    let servNum;
-    if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
-      servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
-    } else if (esParaLlevarTicket) {
-      servNum = 0;
-    } else {
-      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-      servNum = tieneServ10 ? Math.round(baseImp * 0.10) : 0;
-    }
+    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
     const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
-    const ivaNum = (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) ? Math.round(Number(ticketData.iva)) : (tieneIva13 ? Math.round(baseImp * 0.13) : 0);
+
+    let servNum = 0;
+    if (tieneServ10 && !esParaLlevarTicket) {
+      if (ticketData.servicio !== undefined && ticketData.servicio !== null && !isNaN(Number(ticketData.servicio))) {
+        servNum = Math.max(0, Math.round(Number(ticketData.servicio)));
+      } else {
+        servNum = Math.round(baseImp * 0.10);
+      }
+    }
+
+    let ivaNum = 0;
+    if (tieneIva13) {
+      if (ticketData.iva !== undefined && ticketData.iva !== null && !isNaN(Number(ticketData.iva))) {
+        ivaNum = Math.max(0, Math.round(Number(ticketData.iva)));
+      } else {
+        ivaNum = Math.round(baseImp * 0.13);
+      }
+    }
+
     const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
     const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;
     const montoCambio = Number(ticketData.cambio) >= 0 ? Math.round(Number(ticketData.cambio)) : Math.max(0, montoRec - totalNum);
