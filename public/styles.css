@@ -7341,6 +7341,8 @@ body.is-admin .admin-only-tab {
   padding-top: 4px;
   line-height: 1.4;
   color: #000000 !important;
+}
+
 #modalVisorTicket {
   z-index: 100300 !important;
 }
