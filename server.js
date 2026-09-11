@@ -9493,14 +9493,17 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
       });
     }
 
+    console.log(`🖨️ [DESPACHO DIRECTO] Tipo: ${ticketVisual.tipo || 'general'} | Destino: ${destino} | Titulo: ${ticketVisual.titulo || '-'}`);
     const reg = await printerService.procesarImpresion({
       destinoImpresora: destino,
       ticketInfo: tInfo,
       io
     });
+    console.log(`🖨️ [DESPACHO RESULTADO] Estado: ${reg.estado} | Detalle: ${reg.detalleConexion}`);
 
     res.json({ ok: true, mensaje: 'Ticket despachado directamente a impresora térmica', registro: reg });
   } catch (e) {
+    console.error('❌ [ERROR IMPRESION DIRECTA]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

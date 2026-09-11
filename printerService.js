@@ -45,7 +45,7 @@ const ESC = '\x1B';
 const GS = '\x1D';
 
 const ESCPOS = {
-  INIT: `${ESC}@`,
+  INIT: `${ESC}@${ESC}c4\x00${ESC}t\x00`,
   FONT_A: `${ESC}M\x00`,
   DOUBLE_STRIKE_ON: `${ESC}G\x01`,
   DOUBLE_STRIKE_OFF: `${ESC}G\x00`,
@@ -60,8 +60,8 @@ const ESCPOS = {
   NORMAL: `${GS}!\x00`,
   UNDERLINE_ON: `${ESC}-\x01`,
   UNDERLINE_OFF: `${ESC}-\x00`,
-  CUT_FULL: `${GS}V\x00`,
-  CUT_PARTIAL: `${GS}V\x01`,
+  CUT_FULL: `${GS}V\x41\x00`,
+  CUT_PARTIAL: `${GS}V\x42\x00`,
   FEED_LINES: (n = 4) => `${ESC}d${String.fromCharCode(n)}`,
   BEEP: `${ESC}B\x03\x02` // 3 beeps
 };
@@ -1184,7 +1184,7 @@ function enviarAPuertoTCP(ip, puerto, rawData) {
           socket.end(() => {
             resolve({ ok: true, mensaje: `Enviados ${buf.length} bytes a ${ip}:${puerto}` });
           });
-        }, 150);
+        }, 800);
       });
     });
 
@@ -1351,7 +1351,7 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
             s.end(() => {
               resolve({ ok: true });
             });
-          }, 200);
+          }, 800);
         });
       });
 
