@@ -69,19 +69,6 @@ db.serialize(() => {
     }
   });
 
-  // Cargar configuración de impresoras térmicas persistente
-  db.get("SELECT valor FROM ConfigNegocio WHERE clave = 'printer_config'", [], (err, row) => {
-    if (!err && row && row.valor) {
-      try {
-        const saved = JSON.parse(row.valor);
-        if (saved && typeof saved === 'object') {
-          Object.assign(printerService.printerConfig, saved);
-          console.log('🖨️ Configuración persistente de impresoras térmicas cargada');
-        }
-      } catch (e) {}
-    }
-  });
-
   // Migraciones automáticas para trazabilidad y unión/separación de mesas
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero TEXT", () => {});
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_id INTEGER", () => {});
@@ -100,9 +87,6 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
   db.run("UPDATE Productos SET happy_hour = 1 WHERE categoria_id = 4 OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%rock ice%' OR LOWER(nombre) LIKE '%corona%' OR LOWER(nombre) LIKE '%cerveza%'", () => {});
   db.run("ALTER TABLE DetalleOrden ADD COLUMN en_happy_hour INTEGER DEFAULT 0", () => {});
-  db.run("ALTER TABLE Productos ADD COLUMN ingredientes TEXT", () => {});
-  db.run("UPDATE Productos SET ingredientes = 'Doble carne de res 100%, Queso cheddar fundido, Tiras de tocino crujiente, Pan brioche artesanal, Salsa especial de la casa' WHERE LOWER(nombre) LIKE '%hamburguesa%' AND (ingredientes IS NULL OR ingredientes = '')", () => {});
-  db.run("UPDATE Productos SET ingredientes = 'Patacones, Carne Mechada, Chimichurri, Frijoles Molidos' WHERE LOWER(nombre) LIKE '%patacon%' AND (ingredientes IS NULL OR ingredientes = '')", () => {});
   db.run("ALTER TABLE Ordenes ADD COLUMN modo_happy_hour TEXT DEFAULT 'estricto'", () => {});
   db.run("ALTER TABLE InventarioRecetas ADD COLUMN merma_porcentaje REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN es_licor INTEGER DEFAULT 0", () => {});
@@ -117,9 +101,6 @@ db.serialize(() => {
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN monto_final_dolares REAL DEFAULT 0", () => {});
-  db.run("UPDATE Categorias SET icono = '🍽️' WHERE icono LIKE '%fa-%utensils%' OR icono LIKE 'fa %' OR icono = 'fas fa-utensils'", () => {});
-  db.run("UPDATE Categorias SET icono = '🍸' WHERE icono LIKE '%fa-%glass%' OR icono LIKE '%martini%' OR icono = 'fas fa-glass-martini-alt'", () => {});
-  db.run("UPDATE Categorias SET destino = 'barra' WHERE destino = 'bar'", () => {});
   db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     negocio_id INTEGER DEFAULT 1,
@@ -468,15 +449,10 @@ function extraerUsuarioJWT(req, res, next) {
 }
 
 function obtenerNegocioIdReq(req, idFallback = 1) {
-  const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
-  if (explicitId) {
-    if (!req.usuario || req.usuario.rol === 'developer' || req.usuario.rol === 'superadmin' || req.usuario.rol === 'admin') {
-      return Number(explicitId);
-    }
-  }
   if (req.usuario && req.usuario.rol !== 'developer') {
-    return Number(req.usuario.negocio_id) || (explicitId ? Number(explicitId) : idFallback);
+    return Number(req.usuario.negocio_id) || idFallback;
   }
+  const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
   if (explicitId) return Number(explicitId);
   if (req.negocioId) return Number(req.negocioId);
   return idFallback;
@@ -489,18 +465,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/m/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'cliente.html'));
 });
-
-// Rutas comerciales y presentación de la página web del sistema
-app.get(['/landing', '/pagina', '/sitio', '/web', '/dark'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
-});
-
-// Ruta versión minimalista elegante (colores claros, marfil y oro)
-app.get(['/landing-minimal', '/elegante', '/minimal', '/pagina-minimal'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'landing-minimal.html'));
-});
-
-
 
 
 // WebSockets para tiempo real (KDS Cocina / Barra / Meseros / Admin)
@@ -596,9 +560,6 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
       if (u.rol === 'developer') {
         rolDisplay = 'Developer';
         avatar = '🛠️';
-      } else if (u.rol === 'superadmin') {
-        rolDisplay = 'Super Admin';
-        avatar = '👑';
       } else if (u.rol === 'admin') {
         rolDisplay = 'Admin';
         avatar = '👑';
@@ -912,71 +873,6 @@ app.post('/api/usuarios/cambiar-pin', async (req, res) => {
 // ============================================================================
 // 2. PORTAL DE DESARROLLADOR (SAAS MULTI-COMERCIO & CONTROL GLOBAL)
 // ============================================================================
-
-// Función de Limpieza y Aislamiento Total (Cero Absoluto) para Comercios Nuevos / Clonados
-async function garantizarLimpiezaCeroNegocio(negocioId) {
-  const nid = Number(negocioId);
-  if (!nid || isNaN(nid)) return;
-  try {
-    // 1. Limpieza de pagos asociados al negocio (por orden_id o por caja_id) ANTES de eliminar cajas y órdenes
-    await dbRun(`
-      DELETE FROM Pagos 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)
-         OR caja_id IN (SELECT id FROM Cajas WHERE negocio_id = ?)
-    `, [nid, nid]);
-
-    // 2. Limpieza de movimientos de caja
-    await dbRun('DELETE FROM MovimientosCaja WHERE caja_id IN (SELECT id FROM Cajas WHERE negocio_id = ?)', [nid]);
-
-    // 3. Limpieza de cajas
-    await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [nid]);
-
-    // 4. Limpieza de detalles de órdenes, facturas electrónicas, anulaciones y órdenes
-    await dbRun('DELETE FROM DetalleOrden WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
-    await dbRun('DELETE FROM FacturasElectronicas WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
-    await dbRun('DELETE FROM Anulaciones WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [nid]);
-    await dbRun('DELETE FROM Ordenes WHERE negocio_id = ?', [nid]);
-    await dbRun('DELETE FROM TableMerges WHERE negocio_id = ?', [nid]);
-
-    // 5. Limpieza de claves residuales de configuración tenant
-    await dbRun("DELETE FROM ConfigNegocio WHERE clave = ? OR clave = ?", [`salon_piso_fondo_negocio_${nid}`, `custom_page_settings_negocio_${nid}`]);
-
-    // 6. Reset estricto a cero de todas las mesas del comercio (libres y sin saldos)
-    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, transferida_de = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE negocio_id = ?", [nid]);
-    console.log(`🧹 [CERO ABSOLUTO] Comercio ID ${nid} inicializado con historial y saldos 100% limpios.`);
-  } catch (errLimpieza) {
-    console.warn(`⚠️ Error asegurando limpieza cero en negocio ${nid}:`, errLimpieza.message);
-  }
-}
-
-// Tipo de Cambio oficial (BCCR / Hacienda) con cache y fallback
-let cacheTipoCambio = { valor: 520, fecha: 0 };
-app.get('/api/tipo-cambio', async (req, res) => {
-  const ahora = Date.now();
-  if (cacheTipoCambio.fecha && (ahora - cacheTipoCambio.fecha < 60 * 60 * 1000)) {
-    return res.json({ tipo_cambio: cacheTipoCambio.valor, venta: cacheTipoCambio.valor, fuente: 'cache' });
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const resp = await fetch('https://api.hacienda.go.cr/indicadores/tc/dolar', { signal: controller.signal });
-    clearTimeout(timeout);
-    if (resp.ok) {
-      const data = await resp.json();
-      const valor = data?.venta?.valor || data?.compra?.valor;
-      if (valor && Number(valor) > 0) {
-        cacheTipoCambio = { valor: Math.round(Number(valor)), fecha: ahora };
-        return res.json({ tipo_cambio: cacheTipoCambio.valor, venta: cacheTipoCambio.valor, fuente: 'hacienda_bccr' });
-      }
-    }
-  } catch (err) {
-    console.warn('[TC] Error consultando API de tipo de cambio:', err.message);
-  }
-
-  res.json({ tipo_cambio: cacheTipoCambio.valor || 520, venta: cacheTipoCambio.valor || 520, fuente: 'fallback' });
-});
-
 // Negocios (Comercios)
 app.get('/api/dev/negocios', async (req, res) => {
   try {
@@ -995,103 +891,17 @@ app.get('/api/dev/negocios', async (req, res) => {
 
 app.post('/api/dev/negocios', async (req, res) => {
   try {
-    const { 
-      nombre, 
-      slogan = '', 
-      logo_url = '', 
-      moneda = 'CRC', 
-      tipo_cambio_usd = 520,
-      telefono = '', 
-      direccion = '', 
-      activo = 1,
-      plan_nombre = 'Plan Full Tech 2026',
-      modulos_activos = 'all',
-      crear_admin = false,
-      crearAdmin = false,
-      admin_usuario = '',
-      adminUsuario = '',
-      admin_nombre = '',
-      adminNombre = '',
-      admin_password = '',
-      adminPassword = '',
-      admin_pin = '1234',
-      adminPin = '1234',
-      crear_estructura_base = false,
-      crearEstructuraBase = false
-    } = req.body;
-
-    if (!nombre || !nombre.trim()) {
-      return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
-    }
+    const { nombre, slogan = '', logo_url = '', moneda = 'CRC', telefono = '', direccion = '', activo = 1 } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
 
     const valActivo = activo === 0 ? 0 : 1;
-    const monedaFinal = (moneda && moneda.trim()) ? moneda.trim() : 'CRC';
-    const tcFinal = Number(tipo_cambio_usd) || 520;
     const r = await dbRun(
-      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, tipo_cambio_usd, telefono, direccion, activo, plan_nombre, modulos_activos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [nombre.trim(), slogan.trim(), logo_url.trim(), monedaFinal, tcFinal, telefono.trim(), direccion.trim(), valActivo, plan_nombre, typeof modulos_activos === 'object' ? JSON.stringify(modulos_activos) : modulos_activos]
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo]
     );
-    const nuevoNegocioId = r.lastID;
-
-    // Crear estructura base inicial (Zonas, Mesas, Categorías) si se solicitó
-    const debeCrearEstructura = Boolean(crear_estructura_base || crearEstructuraBase);
-    if (debeCrearEstructura) {
-      const rZona = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, 'Salón Principal']);
-      const zonaId = rZona.lastID;
-      for (let i = 1; i <= 6; i++) {
-        await dbRun(
-          `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
-           VALUES (?, ?, ?, 4, 'libre', ?, ?, 130, 120, 'square', 1)`,
-          [nuevoNegocioId, `Mesa ${i}`, zonaId, 40 + ((i - 1) % 3) * 160, 40 + Math.floor((i - 1) / 3) * 150]
-        );
-      }
-      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Comidas', '🍽️', 'cocina')`, [nuevoNegocioId]);
-      await dbRun(`INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, 'Bebidas', '🍸', 'barra')`, [nuevoNegocioId]);
-    }
-
-    // Crear Usuario Administrador para el nuevo negocio si se especificó
-    let adminCreado = null;
-    const debeCrearAdmin = Boolean(crear_admin || crearAdmin || admin_usuario || adminUsuario);
-    const finalAdminUser = (admin_usuario || adminUsuario || '').trim().toLowerCase();
-    const finalAdminPass = (admin_password || adminPassword || '').trim();
-    const finalAdminNombre = (admin_nombre || adminNombre || '').trim() || `Super Admin ${nombre.trim()}`;
-    const finalAdminPin = String(admin_pin || adminPin || '1234').trim();
-
-    if (debeCrearAdmin && finalAdminUser && finalAdminPass) {
-      const permisosAdmin = JSON.stringify({
-        superadmin: true,
-        salon: true,
-        kds: true,
-        caja: true,
-        facturacion: true,
-        empleados: true,
-        catalogo: true,
-        reportes: true,
-        configuracion: true
-      });
-      const hashedPassword = await bcrypt.hash(finalAdminPass, 10);
-
-      const rUser = await dbRun(
-        `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
-         VALUES (?, ?, ?, ?, 'superadmin', 'M', ?, ?, 1, 0)`,
-        [nuevoNegocioId, finalAdminUser, finalAdminNombre, hashedPassword, finalAdminPin, permisosAdmin]
-      );
-      adminCreado = {
-        id: rUser.lastID,
-        negocio_id: nuevoNegocioId,
-        usuario: finalAdminUser,
-        nombre_completo: finalAdminNombre,
-        rol: 'superadmin',
-        pin: finalAdminPin
-      };
-    }
-
-    // Garantizar aislamiento y limpieza total a Cero Absoluto
-    await garantizarLimpiezaCeroNegocio(nuevoNegocioId);
-
-    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [nuevoNegocioId]);
+    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [r.lastID]);
     io.emit('negocio_creado', nuevo);
-    res.json({ ...nuevo, admin: adminCreado });
+    res.json(nuevo);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1099,16 +909,14 @@ app.post('/api/dev/negocios', async (req, res) => {
 
 app.put('/api/dev/negocios/:id', async (req, res) => {
   try {
-    const { nombre, slogan, logo_url, moneda, tipo_cambio_usd, telefono, direccion, activo } = req.body;
+    const { nombre, slogan, logo_url, moneda, telefono, direccion, activo } = req.body;
     const negocioId = Number(req.params.id);
 
     let valActivo = (activo !== undefined && activo !== null) ? (Number(activo) === 0 ? 0 : 1) : 1;
-    const monedaFinal = (moneda && moneda.trim()) ? moneda.trim() : null;
-    const tcFinal = tipo_cambio_usd !== undefined && tipo_cambio_usd !== null ? Number(tipo_cambio_usd) : null;
 
     await dbRun(
-      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = COALESCE(?, moneda), tipo_cambio_usd = COALESCE(?, tipo_cambio_usd), telefono = ?, direccion = ?, activo = ? WHERE id = ?',
-      [nombre, slogan, logo_url, monedaFinal, tcFinal, telefono, direccion, valActivo, negocioId]
+      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ?, activo = ? WHERE id = ?',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, negocioId]
     );
     const actualizado = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [negocioId]);
     io.emit('negocio_actualizado', actualizado);
@@ -1326,6 +1134,16 @@ const CATALOGO_MODULOS = [
     esBase: true
   },
   {
+    id: 'caja_arqueo_dual_dolares',
+    nombre: 'Caja & Arqueo Dual Multidivisa (USD / CRC)',
+    icono: '💵',
+    categoria: 'Caja',
+    descripcion: 'Desglose de efectivo en colones, dólares y total consolidado en gaveta con arqueo físico dual en Cierre Z.',
+    precioCRC: 0,
+    precioUSD: 0,
+    esBase: true
+  },
+  {
     id: 'comanda_express_cobro_anticipado',
     nombre: 'Comanda Express & Cobro Anticipado',
     icono: '⚡',
@@ -1357,28 +1175,6 @@ const CATALOGO_MODULOS = [
   }
 ];
 
-// Catálogo de Características y Feature Flags por Negocio
-const CATALOGO_CARACTERISTICAS = [
-  { id: 'precios_con_impuestos', nombre: 'Precios de Menú Incluyen Impuestos (IVA 13% y Servicio 10%)', categoria: 'cobro', icono: '🏷️', descripcion: 'Si está activo, los precios de carta ya incluyen impuestos y el desglose de IVA y Servicio es puramente informativo. Si se desactiva, los impuestos se sumarán al total.' },
-  { id: 'bimoneda_dolares', nombre: 'Soporte Bimoneda / Dólares ($ USD)', categoria: 'cobro', icono: '💵', descripcion: 'Habilita pagos, cobros mixtos, fondo inicial y arqueo en dólares.' },
-  { id: 'servicio_10', nombre: 'Cobro de 10% Servicio de Salón', categoria: 'cobro', icono: '🍽️', descripcion: 'Recargo automático del 10% legal de servicio/propinas en mesas.' },
-  { id: 'desglose_iva_13', nombre: 'Desglose de IVA (13%)', categoria: 'cobro', icono: '🧾', descripcion: 'Calcula y desglosa el 13% de impuesto de valor agregado en cuentas.' },
-  { id: 'descuentos_cortesias', nombre: 'Descuentos y Cortesías Manuales', categoria: 'cobro', icono: '🎟️', descripcion: 'Permite aplicar descuentos y cortesías con control de permisos.' },
-  { id: 'union_mesas', nombre: 'Unión y Fusión de Mesas', categoria: 'salon', icono: '🔗', descripcion: 'Permite unir múltiples mesas para grupos grandes y cuentas unificadas.' },
-  { id: 'division_cuentas', nombre: 'División de Cuentas (Split Bill)', categoria: 'salon', icono: '👥', descripcion: 'Permite pagar por partes iguales, por comensal o por ítems.' },
-  { id: 'liberar_mesas_pin', nombre: 'Liberación de Mesas con PIN', categoria: 'salon', icono: '🔒', descripcion: 'Exige PIN de administrador para liberar mesas con saldo pendiente.' },
-  { id: 'menu_digital_qr', nombre: 'Menú Digital QR para Clientes', categoria: 'salon', icono: '📱', descripcion: 'Permite a clientes escanear el QR de mesa para ver carta y pedir cuenta.' },
-  { id: 'happy_hour_auto', nombre: 'Happy Hour Automático (2x1 y Promos)', categoria: 'salon', icono: '🍸', descripcion: 'Aplica promociones y descuentos programados según el horario.' },
-  { id: 'impresion_auto_cobro', nombre: 'Impresión Automática al Cobrar', categoria: 'hardware', icono: '📄', descripcion: 'Dispara la impresión de factura térmica inmediatamente al liquidar.' },
-  { id: 'impresion_precuenta', nombre: 'Impresión de Pre-Cuenta / Pre-Factura', categoria: 'hardware', icono: '🧾', descripcion: 'Permite a los saloneros imprimir la pre-cuenta antes del pago.' },
-  { id: 'despacho_cocina_barra', nombre: 'Despacho de Comandas a Cocina/Barra', categoria: 'hardware', icono: '🍳', descripcion: 'Envía tickets físicos a impresoras térmicas de barra y cocina.' },
-  { id: 'apertura_cajon_gaveta', nombre: 'Apertura Automática de Gaveta', categoria: 'hardware', icono: '🗄️', descripcion: 'Envía el pulso Kick Drawer para abrir el cajón en pagos en efectivo.' },
-  { id: 'kardex_tiempo_real', nombre: 'Descuento de Kárdex en Tiempo Real', categoria: 'inventario', icono: '📦', descripcion: 'Rebaja inventario e insumos de recetas automáticamente al vender.' },
-  { id: 'alertas_stock_critico', nombre: 'Alertas de Stock Crítico / Mínimo', categoria: 'inventario', icono: '⚠️', descripcion: 'Avisa visualmente cuando un producto o insumo alcanza stock mínimo.' },
-  { id: 'cierre_x_ciegas', nombre: 'Corte / Cierre X a Ciegas (Arqueo Parcial)', categoria: 'seguridad', icono: '🙈', descripcion: 'Habilita el arqueo ciego parcial donde el cajero cuenta y declara el dinero físico sin ver los montos esperados del sistema.' },
-  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🔒', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real en el cierre final Z.' }
-];
-
 // Helper global para verificar si un negocio tiene un módulo/feature activo
 async function negocioTieneModulo(negocioId, moduloId) {
   try {
@@ -1397,77 +1193,32 @@ async function negocioTieneModulo(negocioId, moduloId) {
   }
 }
 
-// Helper global para verificar si un negocio tiene una característica activa
-async function negocioTieneCaracteristica(negocioId, flagId) {
-  try {
-    const neg = await dbGet('SELECT caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId || 1]);
-    if (!neg) return true;
-    if (!neg.caracteristicas_activas || neg.caracteristicas_activas === 'all') return true;
-    let flags = neg.caracteristicas_activas;
-    if (typeof flags === 'string') {
-      try { flags = JSON.parse(flags); } catch (_) { return true; }
-    }
-    if (Array.isArray(flags)) return flags.includes(flagId);
-    if (typeof flags === 'object' && flags !== null) return flags[flagId] !== false;
-    return true;
-  } catch (e) {
-    return true;
-  }
-}
-
 // Obtener catálogo de módulos
 app.get('/api/dev/modulos/catalogo', (req, res) => {
   res.json(CATALOGO_MODULOS);
 });
 
-// Obtener catálogo de características
-app.get('/api/dev/caracteristicas/catalogo', (req, res) => {
-  res.json(CATALOGO_CARACTERISTICAS);
-});
-
-// Clonar un negocio completo de forma 100% aislada (Zonas, Mesas, Categorías, Productos, Inventario y Super Admin)
-const handlerClonarNegocio = async (req, res) => {
+// Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario)
+app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
   try {
     const origenId = Number(req.params.id);
-    const { 
-      nombreNuevo = '', 
-      sloganNuevo = '',
-      moneda = '',
-      telefono = '',
-      direccion = '',
-      logo_url = '',
-      crear_admin = true,
-      crearAdmin = true,
-      admin_usuario = '',
-      adminUsuario = '',
-      admin_nombre = '',
-      adminNombre = '',
-      admin_password = '',
-      adminPassword = '',
-      admin_pin = '1234',
-      adminPin = '1234'
-    } = req.body || {};
+    const { nombreNuevo = '', sloganNuevo = '' } = req.body || {};
     
     const origen = await dbGet('SELECT * FROM Negocios WHERE id = ?', [origenId]);
     if (!origen) return res.status(404).json({ error: 'Negocio de origen no encontrado' });
 
-    const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Clon)`;
-    const sloganClon = sloganNuevo.trim() || origen.slogan || 'Restaurante & Bar';
-    const monedaClon = (moneda && moneda.trim()) ? moneda.trim() : (origen.moneda || 'CRC');
-    const tcClon = origen.tipo_cambio_usd || 520;
-    const telClon = telefono.trim() || origen.telefono || '';
-    const dirClon = direccion.trim() || origen.direccion || '';
-    const logoClon = logo_url.trim() || origen.logo_url || '';
+    const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Copia)`;
+    const sloganClon = sloganNuevo.trim() || origen.slogan || 'Copia de restaurante';
 
-    // 1. Insertar nuevo Negocio totalmente independiente
+    // 1. Insertar nuevo Negocio
     const rNeg = await dbRun(
-      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, tipo_cambio_usd, telefono, direccion, activo, plan_nombre, modulos_activos)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-      [nombreClon, sloganClon, logoClon, monedaClon, tcClon, telClon, dirClon, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
+      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [nombreClon, sloganClon, origen.logo_url, origen.moneda || 'CRC', origen.telefono, origen.direccion, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
     );
     const nuevoNegocioId = rNeg.lastID;
 
-    // 2. Clonar Zonas y mapear IDs
+    // 2. Duplicar Zonas y mapear IDs
     const zonasOrigen = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ?', [origenId]);
     const mapaZonas = {};
     for (const z of zonasOrigen) {
@@ -1475,7 +1226,7 @@ const handlerClonarNegocio = async (req, res) => {
       mapaZonas[z.id] = rZ.lastID;
     }
 
-    // 3. Clonar Mesas asociadas a las nuevas zonas (con estado 'libre' y sin historial de órdenes)
+    // 3. Duplicar Mesas asociadas a las nuevas zonas
     const mesasOrigen = await dbAll('SELECT * FROM Mesas WHERE negocio_id = ?', [origenId]);
     for (const m of mesasOrigen) {
       const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
@@ -1486,7 +1237,7 @@ const handlerClonarNegocio = async (req, res) => {
       );
     }
 
-    // 4. Clonar Categorías y mapear IDs
+    // 4. Duplicar Categorías y mapear IDs
     const catsOrigen = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ?', [origenId]);
     const mapaCats = {};
     for (const c of catsOrigen) {
@@ -1494,113 +1245,30 @@ const handlerClonarNegocio = async (req, res) => {
       mapaCats[c.id] = rC.lastID;
     }
 
-    // 5. Clonar Productos asociados a las nuevas categorías y mapear IDs
+    // 5. Duplicar Productos asociados a las nuevas categorías
     const prodsOrigen = await dbAll('SELECT * FROM Productos WHERE negocio_id = ?', [origenId]);
-    const mapaProds = {};
     for (const p of prodsOrigen) {
       const nuevaCatId = mapaCats[p.categoria_id] || (Object.values(mapaCats)[0] || 1);
-      const rP = await dbRun(
+      await dbRun(
         `INSERT INTO Productos (negocio_id, categoria_id, codigo, nombre, precio, descripcion, destino, curso, happy_hour, agotado, imagen_url, color_badge, activo)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [nuevoNegocioId, nuevaCatId, p.codigo, p.nombre, p.precio, p.descripcion, p.destino, p.curso || 2, p.happy_hour || 0, p.agotado || 0, p.imagen_url, p.color_badge, p.activo !== undefined ? p.activo : 1]
       );
-      mapaProds[p.id] = rP.lastID;
     }
 
-    // 6. Clonar Inventario y mapear IDs
+    // 6. Duplicar Inventario
     const invOrigen = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [origenId]);
-    const mapaInsumos = {};
     for (const i of invOrigen) {
-      const nuevoProdId = i.producto_id ? (mapaProds[i.producto_id] || null) : null;
-      const rI = await dbRun(
-        `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, nuevoProdId, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
+      await dbRun(
+        `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
       );
-      mapaInsumos[i.id] = rI.lastID;
     }
-
-    // 7. Clonar Recetas mapeadas (InventarioRecetas)
-    const oldProdIds = Object.keys(mapaProds);
-    if (oldProdIds.length > 0) {
-      const placeholders = oldProdIds.map(() => '?').join(',');
-      const recetas = await dbAll(`SELECT * FROM InventarioRecetas WHERE producto_id IN (${placeholders})`, oldProdIds);
-      for (const rec of recetas) {
-        const nuevoPId = mapaProds[rec.producto_id];
-        const nuevoIId = mapaInsumos[rec.insumo_id] || rec.insumo_id;
-        if (nuevoPId && nuevoIId) {
-          await dbRun(
-            'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, ?)',
-            [nuevoPId, nuevoIId, rec.cantidad, rec.merma_porcentaje || 0]
-          );
-        }
-      }
-    }
-
-    // 8. Crear Usuario Super Admin para el nuevo clon
-    let adminCreado = null;
-    const finalAdminUser = (admin_usuario || adminUsuario || '').trim().toLowerCase();
-    const finalAdminPass = (admin_password || adminPassword || '').trim();
-    const finalAdminNombre = (admin_nombre || adminNombre || '').trim() || `Super Admin ${nombreClon}`;
-    const finalAdminPin = String(admin_pin || adminPin || '1234').trim();
-
-    if (finalAdminUser && finalAdminPass) {
-      const permisosAdmin = JSON.stringify({
-        superadmin: true,
-        salon: true,
-        kds: true,
-        caja: true,
-        facturacion: true,
-        empleados: true,
-        catalogo: true,
-        reportes: true,
-        configuracion: true
-      });
-      const hashedPassword = await bcrypt.hash(finalAdminPass, 10);
-
-      const rUser = await dbRun(
-        `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
-         VALUES (?, ?, ?, ?, 'superadmin', 'M', ?, ?, 1, 0)`,
-        [nuevoNegocioId, finalAdminUser, finalAdminNombre, hashedPassword, finalAdminPin, permisosAdmin]
-      );
-      adminCreado = {
-        id: rUser.lastID,
-        negocio_id: nuevoNegocioId,
-        usuario: finalAdminUser,
-        nombre_completo: finalAdminNombre,
-        rol: 'superadmin',
-        pin: finalAdminPin
-      };
-    }
-
-    // 9. Garantizar aislamiento y limpieza total a Cero Absoluto (cajas, órdenes, pagos, comandas vacías)
-    await garantizarLimpiezaCeroNegocio(nuevoNegocioId);
 
     const nuevoNegocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevoNegocio);
-    res.json({
-      ok: true,
-      message: `Restaurante clonado exitosamente bajo el nombre "${nombreClon}".`,
-      negocio: nuevoNegocio,
-      admin: adminCreado
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-};
-
-app.post('/api/dev/negocios/:id/clonar', handlerClonarNegocio);
-app.post('/api/dev/negocios/:id/duplicar', handlerClonarNegocio);
-
-// Reset Manual a Cero Absoluto para cualquier comercio
-app.post('/api/dev/negocios/:id/reset-financiero', async (req, res) => {
-  try {
-    const negocioId = Number(req.params.id);
-    await garantizarLimpiezaCeroNegocio(negocioId);
-    io.emit('caja_actualizada');
-    io.emit('kds_actualizado');
-    io.emit('mesas_actualizadas');
-    res.json({ ok: true, message: `Historial financiero, cajas y órdenes del comercio ID ${negocioId} reseteados a Cero Absoluto.` });
+    res.json({ ok: true, message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`, negocio: nuevoNegocio });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1650,122 +1318,6 @@ app.put('/api/dev/negocios/:id/modulos', async (req, res) => {
       negocioId: Number(req.params.id),
       modulos_activos: parsedModulos,
       plan_nombre
-    });
-
-    res.json({ ok: true, negocio: actualizado });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Obtener características activas de un negocio
-app.get('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
-  try {
-    const neg = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [req.params.id]);
-    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
-
-    let caracteristicas = neg.caracteristicas_activas || 'all';
-    if (caracteristicas !== 'all') {
-      try { caracteristicas = JSON.parse(caracteristicas); } catch (_) { caracteristicas = 'all'; }
-    }
-
-    res.json({
-      negocio: neg,
-      negocioId: neg.id,
-      nombre: neg.nombre,
-      moneda: neg.moneda,
-      tipoCambioUSD: neg.tipo_cambio_usd || 520,
-      planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
-      caracteristicasActivas: caracteristicas,
-      catalogo: CATALOGO_CARACTERISTICAS
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Actualizar características activas de un negocio
-app.put('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
-  try {
-    const { caracteristicas_activas } = req.body;
-    const valorFlags = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
-
-    await dbRun(
-      'UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?',
-      [valorFlags, req.params.id]
-    );
-
-    const actualizado = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [req.params.id]);
-
-    let parsedFlags = valorFlags;
-    try { parsedFlags = JSON.parse(valorFlags); } catch (_) {}
-    if (actualizado) {
-      actualizado.caracteristicas_activas = parsedFlags;
-    }
-
-    // Notificar en tiempo real a todas las pantallas de ese negocio
-    io.emit('negocio_caracteristicas_actualizadas', {
-      negocioId: Number(req.params.id),
-      caracteristicas_activas: parsedFlags
-    });
-
-    res.json({ ok: true, negocio: actualizado });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Obtener características para el panel de administración
-app.get('/api/admin/caracteristicas', async (req, res) => {
-  try {
-    const negocioId = obtenerNegocioIdReq(req);
-    const neg = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [negocioId]);
-    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
-
-    let caracteristicas = neg.caracteristicas_activas || 'all';
-    if (caracteristicas !== 'all') {
-      try { caracteristicas = JSON.parse(caracteristicas); } catch (_) { caracteristicas = 'all'; }
-    }
-
-    res.json({
-      negocio: neg,
-      negocioId: neg.id,
-      nombre: neg.nombre,
-      moneda: neg.moneda,
-      tipoCambioUSD: neg.tipo_cambio_usd || 520,
-      planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
-      caracteristicasActivas: caracteristicas,
-      catalogo: CATALOGO_CARACTERISTICAS
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Actualizar características desde el panel de administración
-app.put('/api/admin/caracteristicas', async (req, res) => {
-  try {
-    const negocioId = obtenerNegocioIdReq(req);
-    const { caracteristicas_activas } = req.body;
-    const valorFlags = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
-
-    await dbRun(
-      'UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?',
-      [valorFlags, negocioId]
-    );
-
-    const actualizado = await dbGet('SELECT id, nombre, moneda, tipo_cambio_usd, caracteristicas_activas, plan_nombre FROM Negocios WHERE id = ?', [negocioId]);
-
-    let parsedFlags = valorFlags;
-    try { parsedFlags = JSON.parse(valorFlags); } catch (_) {}
-    if (actualizado) {
-      actualizado.caracteristicas_activas = parsedFlags;
-    }
-
-    // Notificar en tiempo real por socket
-    io.emit('negocio_caracteristicas_actualizadas', {
-      negocioId: Number(negocioId),
-      caracteristicas_activas: parsedFlags
     });
 
     res.json({ ok: true, negocio: actualizado });
@@ -1836,37 +1388,26 @@ app.post('/api/dev/usuarios', async (req, res) => {
 
 app.put('/api/dev/usuarios/:id', async (req, res) => {
   try {
-    const { usuario, nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
+    const { nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
     const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos || {});
     
-    const userExist = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
-    if (!userExist) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-    const finalUsuario = usuario ? String(usuario).trim() : userExist.usuario;
-    const finalNombre = nombre_completo ? String(nombre_completo).trim() : userExist.nombre_completo;
-    const finalRol = rol || userExist.rol;
-    const finalGenero = genero || userExist.genero || 'M';
-    const finalPin = pin !== undefined ? String(pin).trim() : userExist.pin;
-    const finalNegocioId = negocio_id !== undefined ? Number(negocio_id) : userExist.negocio_id;
-    const finalActivo = activo !== undefined ? (activo ? 1 : 0) : (userExist.activo !== undefined ? userExist.activo : 1);
-
     if (password && String(password).trim()) {
       const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
-        `UPDATE Usuarios SET usuario = ?, nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
+        `UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
          WHERE id = ?`,
-        [finalUsuario, finalNombre, hashedPassword, finalRol, finalGenero, finalPin, permisosStr, finalActivo, finalNegocioId, req.params.id]
+        [nombre_completo, hashedPassword, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
       );
     } else {
       await dbRun(
-        `UPDATE Usuarios SET usuario = ?, nombre_completo = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
+        `UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ?, permisos = ?, activo = ?, negocio_id = ?
          WHERE id = ?`,
-        [finalUsuario, finalNombre, finalRol, finalGenero, finalPin, permisosStr, finalActivo, finalNegocioId, req.params.id]
+        [nombre_completo, rol, genero, pin, permisosStr, activo !== undefined ? activo : 1, negocio_id, req.params.id]
       );
     }
     res.json({ message: 'Usuario actualizado exitosamente' });
   } catch (e) {
-    res.status(500).json({ error: e.message.includes('UNIQUE') ? 'El nombre de usuario ya existe' : e.message });
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -2094,14 +1635,12 @@ app.get('/api/admin/empleados', async (req, res) => {
       ORDER BY id ASC
     `, [negocioId, negocioId]);
 
-    // Mapear etiquetas con género y rol
+    // Mapear etiquetas con género
     const listado = empleados.map(e => {
       let rolDisplay = e.rol;
-      if (e.rol === 'superadmin') rolDisplay = 'Super Administrador';
-      else if (e.rol === 'superadmin') rolDisplay = 'Super Admin';
-      else if (e.rol === 'admin') rolDisplay = 'Administrador';
-      else if (e.rol === 'cajero') rolDisplay = 'Cajero';
-      else if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';
+      if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';
+      if (e.rol === 'cajero') rolDisplay = 'Cajero';
+      if (e.rol === 'admin') rolDisplay = 'Administrador';
       return { ...e, rolDisplay };
     });
 
@@ -2114,29 +1653,18 @@ app.get('/api/admin/empleados', async (req, res) => {
 app.post('/api/admin/empleados', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
-    const solicitanteRol = (req.usuario?.rol || req.headers['x-user-rol'] || 'admin').toLowerCase();
     const { usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234' } = req.body;
     
-    // Bloqueo estricto: nadie puede crear roles developer desde este panel
+    // Bloqueo estricto: el admin NO puede crear roles developer
     if (rol === 'developer') {
       return res.status(403).json({ error: 'Permiso denegado: El administrador no puede crear usuarios de desarrollador' });
     }
 
-    // REGLA CLAVE: Solo Superadmin o Developer pueden crear usuarios con rol admin o superadmin
-    if (['admin', 'superadmin'].includes(rol.toLowerCase()) && !['superadmin', 'developer'].includes(solicitanteRol)) {
-      return res.status(403).json({ error: 'Permiso denegado: Solo el Super Administrador o Desarrollador puede crear usuarios con perfil Administrador.' });
-    }
+    const permisos = rol === 'cajero' 
+      ? '{"salon":true,"caja":true,"facturacion":true}'
+      : '{"salon":true,"kds":true}';
 
-    let permisos = '{"salon":true,"kds":true}';
-    if (rol === 'superadmin') {
-      permisos = '{"superadmin":true,"salon":true,"kds":true,"caja":true,"facturacion":true,"empleados":true,"catalogo":true,"reportes":true,"configuracion":true}';
-    } else if (rol === 'admin') {
-      permisos = '{"salon":true,"kds":true,"caja":true,"facturacion":true,"empleados":true,"catalogo":true,"reportes":true,"configuracion":true}';
-    } else if (rol === 'cajero') {
-      permisos = '{"salon":true,"caja":true,"facturacion":true}';
-    }
-
-    const debeCambiar = (!['admin', 'superadmin', 'developer'].includes(rol)) ? 1 : 0;
+    const debeCambiar = (rol !== 'admin' && rol !== 'developer') ? 1 : 0;
     const hashedPassword = await bcrypt.hash(password.trim(), 10);
 
     const r = await dbRun(
@@ -2156,16 +1684,9 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
     const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
     if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
 
-    const solicitanteRol = (req.usuario?.rol || req.headers['x-user-rol'] || 'admin').toLowerCase();
-
-    // Bloqueo estricto: Jamás permitir modificar a un developer desde este módulo
+    // Bloqueo estricto: Jamás permitir que un admin modifique a un developer
     if (target.rol === 'developer') {
       return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil' });
-    }
-
-    // Un admin normal no puede modificar a un superadmin
-    if (target.rol === 'superadmin' && solicitanteRol !== 'superadmin' && solicitanteRol !== 'developer') {
-      return res.status(403).json({ error: 'Acceso denegado: Solo el Super Administrador o Desarrollador puede modificar a un Super Administrador.' });
     }
 
     if (req.usuario && req.usuario.rol !== 'developer') {
@@ -2177,23 +1698,17 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
     const { nombre_completo, password, rol, genero, pin, debe_cambiar_password } = req.body;
     if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
 
-    if (rol && ['admin', 'superadmin'].includes(rol.toLowerCase()) && !['superadmin', 'developer'].includes(solicitanteRol)) {
-      return res.status(403).json({ error: 'Permiso denegado: Solo el Super Administrador o Desarrollador puede asignar el rol de Administrador.' });
-    }
-
-    const rolFinal = rol || target.rol;
-
     if (password && String(password).trim()) {
-      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((!['admin', 'superadmin', 'developer'].includes(rolFinal)) ? 1 : 0);
+      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((rol !== 'admin' && rol !== 'developer') ? 1 : 0);
       const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
         'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ? WHERE id = ?',
-        [nombre_completo, hashedPassword, rolFinal, genero, pin, debeCambiar, req.params.id]
+        [nombre_completo, hashedPassword, rol, genero, pin, debeCambiar, req.params.id]
       );
     } else {
       await dbRun(
         'UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ? WHERE id = ?',
-        [nombre_completo, rolFinal, genero, pin, req.params.id]
+        [nombre_completo, rol, genero, pin, req.params.id]
       );
     }
 
@@ -2258,19 +1773,7 @@ app.put('/api/productos/:id/visual', async (req, res) => {
 app.get('/api/mesas', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    let zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
-    if (zonas.length === 0) {
-      const rZona = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [negocioId, 'Salón Principal']);
-      const zonaId = rZona.lastID;
-      for (let i = 1; i <= 6; i++) {
-        await dbRun(
-          `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
-           VALUES (?, ?, ?, 4, 'libre', ?, ?, 130, 120, 'square', 1)`,
-          [negocioId, `Mesa ${i}`, zonaId, 40 + ((i - 1) % 3) * 160, 40 + Math.floor((i - 1) / 3) * 150]
-        );
-      }
-      zonas = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ? ORDER BY id ASC', [negocioId]);
-    }
+    const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
     const mesas = await dbAll(`
       SELECT m.*, z.nombre as zonaNombre,
              o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
@@ -3620,9 +3123,8 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 
     const ordenNegocioId = Number(orden.negocio_id) || negocioId || 1;
     const moduloActivo = await negocioTieneModulo(ordenNegocioId, 'descuentos_cortesias_pin');
-    const featureActivo = await negocioTieneCaracteristica(ordenNegocioId, 'descuentos_cortesias');
-    if (!moduloActivo || !featureActivo) {
-      return res.status(403).json({ error: 'La función de Descuentos & Cortesías está deshabilitada para este restaurante.' });
+    if (!moduloActivo) {
+      return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
     }
 
     // Validar PIN de Administrador/Supervisor OBLIGATORIO SIEMPRE
@@ -3660,15 +3162,20 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
       descuentoPorcentaje = subtotalBruto > 0 ? Math.round((descuentoMonto / subtotalBruto) * 100) : 0;
     }
 
+    descuentoMonto = Number(descuentoMonto) || 0;
+    descuentoPorcentaje = Number(descuentoPorcentaje) || 0;
+
+    const subtotalNeto = Math.max(0, (subtotalBruto || 0) - descuentoMonto);
+    const servicio10 = Math.round(subtotalNeto * 0.10) || 0;
+    const iva13 = Math.round(subtotalNeto * 0.13) || 0;
+    const totalFinal = (subtotalNeto + servicio10 + iva13) || 0;
+
     await dbRun(
       `UPDATE Ordenes 
-       SET descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?
+       SET subtotal = ?, descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?, servicio_10 = ?, iva_13 = ?, total = ?
        WHERE id = ?`,
-      [descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorNombre, ordenId]
+      [subtotalBruto || 0, descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorNombre, servicio10, iva13, totalFinal, ordenId]
     );
-
-    const totales = await recalcularTotalesOrden(ordenId);
-    const totalFinal = totales.total;
 
     // Registrar en Auditoría
     await registrarAuditoria({
@@ -3706,12 +3213,7 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 app.get('/api/menu', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    let categorias = await dbAll('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
-    if (categorias.length === 0) {
-      await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Comidas', '🍽️', 'cocina']);
-      await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Bebidas', '🍹', 'barra']);
-      categorias = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ? ORDER BY id ASC', [negocioId]);
-    }
+    const categorias = await dbAll('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
     const rawProductos = await dbAll(`
       SELECT 
         p.*,
@@ -3723,7 +3225,7 @@ app.get('/api/menu', async (req, res) => {
       )
       WHERE (p.activo = 1 OR p.activo IS NULL)
         AND (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
-      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.ingredientes, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
+      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
       ORDER BY p.categoria_id ASC, total_vendidos DESC, p.id ASC
     `, [negocioId, negocioId]);
     const productos = rawProductos.map(p => ({
@@ -3733,7 +3235,6 @@ app.get('/api/menu', async (req, res) => {
       precio: Number(p.precio),
       curso: Number(p.curso) || 2,
       total_vendidos: Number(p.total_vendidos) || 0,
-      ingredientes: p.ingredientes || '',
       happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
       agotado: (Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1') ? 1 : 0,
       activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1
@@ -3777,42 +3278,6 @@ const handlerCrearCategoria = async (req, res) => {
 
 app.post('/api/categorias', handlerCrearCategoria);
 app.post('/api/admin/categorias', verificarAdmin, handlerCrearCategoria);
-
-// Editar categoría del menú
-const handlerEditarCategoria = async (req, res) => {
-  try {
-    const catId = Number(req.params.id);
-    const { nombre, icono, destino } = req.body;
-    const cat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
-    if (!cat) {
-      return res.status(404).json({ error: 'Categoría no encontrada.' });
-    }
-
-    const finalNombre = nombre ? String(nombre).trim() : cat.nombre;
-    const finalIcono = icono !== undefined ? String(icono).trim() : cat.icono;
-    const finalDestino = destino || cat.destino || 'cocina';
-
-    await dbRun(
-      'UPDATE Categorias SET nombre = ?, icono = ?, destino = ? WHERE id = ?',
-      [finalNombre, finalIcono, finalDestino, catId]
-    );
-
-    const updated = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
-    io.emit('categoria_actualizada', updated);
-    io.emit('menu_actualizado');
-
-    res.json({
-      ok: true,
-      message: `Categoría "${finalNombre}" actualizada exitosamente.`,
-      categoria: updated
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'Error al actualizar categoría: ' + e.message });
-  }
-};
-
-app.put('/api/categorias/:id', handlerEditarCategoria);
-app.put('/api/admin/categorias/:id', verificarAdmin, handlerEditarCategoria);
 
 // Eliminar categoría del menú
 const handlerEliminarCategoria = async (req, res) => {
@@ -3862,14 +3327,13 @@ app.post('/api/productos', async (req, res) => {
       destino,
       curso,
       imagen_url,
-      ingredientes,
       kardex_tipo,
       insumo_id,
       ml_shot,
       cantidad_descuento,
       negocio_id
     } = req.body;
-    const negocioId = obtenerNegocioIdReq(req, negocio_id || 1);
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const nombreLimpio = (nombre || '').trim();
     const precioNum = parseFloat(precio);
 
@@ -3885,30 +3349,13 @@ app.post('/api/productos', async (req, res) => {
 
     if (catId) {
       const cat = await dbGet('SELECT * FROM Categorias WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catId, negocioId, negocioId]);
-      if (cat) {
-        if (!destinoFinal) destinoFinal = cat.destino || 'cocina';
-      } else {
-        // Si la categoría no pertenece a este negocio, buscar o crear la primera de este negocio
-        const primeraCat = await dbGet('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1', [negocioId, negocioId]);
-        if (primeraCat) {
-          catId = primeraCat.id;
-          if (!destinoFinal) destinoFinal = primeraCat.destino || 'cocina';
-        } else {
-          const rNueva = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Comidas', '🍽️', 'cocina']);
-          catId = rNueva.lastID;
-          if (!destinoFinal) destinoFinal = 'cocina';
-        }
+      if (cat && !destinoFinal) {
+        destinoFinal = cat.destino || 'cocina';
       }
     } else {
       const primeraCat = await dbGet('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1', [negocioId, negocioId]);
-      if (primeraCat) {
-        catId = primeraCat.id;
-        if (!destinoFinal) destinoFinal = primeraCat.destino || 'cocina';
-      } else {
-        const rNueva = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [negocioId, 'Comidas', '🍽️', 'cocina']);
-        catId = rNueva.lastID;
-        if (!destinoFinal) destinoFinal = 'cocina';
-      }
+      catId = primeraCat ? primeraCat.id : 1;
+      if (!destinoFinal) destinoFinal = primeraCat ? (primeraCat.destino || 'cocina') : 'cocina';
     }
 
     if (!destinoFinal || (destinoFinal !== 'barra' && destinoFinal !== 'cocina')) {
@@ -3918,9 +3365,9 @@ app.post('/api/productos', async (req, res) => {
     const cursoNum = Number(curso) || (destinoFinal === 'barra' ? 1 : 2);
 
     const result = await dbRun(
-      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, ingredientes, happy_hour, agotado, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
-      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null, (ingredientes ? String(ingredientes).trim() : null)]
+      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, agotado, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
+      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
     );
 
     const prodId = result.lastID;
@@ -3950,7 +3397,7 @@ app.post('/api/productos', async (req, res) => {
     io.emit('producto_creado', nuevoProd);
     io.emit('menu_actualizado');
 
-    res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd, id: prodId });
+    res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -4031,7 +3478,6 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
       destino,
       curso,
       imagen_url,
-      ingredientes,
       happy_hour,
       agotado,
       kardex_tipo,
@@ -4067,13 +3513,11 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     const hhVal = happy_hour !== undefined ? (happy_hour ? 1 : 0) : prod.happy_hour;
     const agotadoVal = agotado !== undefined ? (agotado ? 1 : 0) : prod.agotado;
 
-    const ingredientesVal = ingredientes !== undefined ? (String(ingredientes).trim() || null) : prod.ingredientes;
-
     await dbRun(
       `UPDATE Productos 
-       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, ingredientes = ?, happy_hour = ?, agotado = ?
+       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, happy_hour = ?, agotado = ?
        WHERE id = ?`,
-      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, ingredientesVal, hhVal, agotadoVal, prodId]
+      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, hhVal, agotadoVal, prodId]
     );
 
     let huboCambiosKardex = false;
@@ -4358,63 +3802,26 @@ async function recalcularTotalesOrden(ordenId) {
   }
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
-  const ordenNegocioId = Number(orden.negocio_id) || 1;
-  const tieneServicio10 = await negocioTieneCaracteristica(ordenNegocioId, 'servicio_10');
-  const tieneIVA13 = await negocioTieneCaracteristica(ordenNegocioId, 'desglose_iva_13');
-  const preciosConImpuestos = await negocioTieneCaracteristica(ordenNegocioId, 'precios_con_impuestos');
-
-  const aplicaServicio = tieneServicio10 && !esParaLlevar;
-  const aplicaIVA = tieneIVA13;
-
-  // Manejo de Descuento Manual / Especial
-  const baseAntesDescuento = Math.max(0, totalBruto - descuentoHH);
-  let descMonto = 0;
-  const descPorc = Number(orden.descuento_porcentaje) || 0;
-  if (descPorc > 0) {
-    descMonto = Math.round((baseAntesDescuento * descPorc) / 100);
-  } else if (Number(orden.descuento_monto) > 0) {
-    descMonto = Math.min(baseAntesDescuento, Number(orden.descuento_monto));
-  }
-
-  let subtotal, servicio = 0, iva = 0, total = 0;
-
-  if (preciosConImpuestos !== false) {
-    // MODO A (Por defecto): Precios de menú INCLUYEN 13% IVA y 10% Servicio.
-    // El cliente paga exactamente la suma de productos menos descuentos.
-    // El desglose de IVA y Servicio es puramente informativo (no se suma al total).
-    total = Math.max(0, baseAntesDescuento - descMonto);
-    if (aplicaServicio && aplicaIVA) {
-      subtotal = Math.round(total / 1.23);
-      servicio = Math.round(subtotal * 0.10);
-      iva = total - subtotal - servicio;
-    } else if (!aplicaServicio && aplicaIVA) {
-      subtotal = Math.round(total / 1.13);
-      servicio = 0;
-      iva = total - subtotal;
-    } else if (aplicaServicio && !aplicaIVA) {
-      subtotal = Math.round(total / 1.10);
-      servicio = total - subtotal;
-      iva = 0;
-    } else {
-      subtotal = Math.round(total);
-      servicio = 0;
-      iva = 0;
-    }
+  const total = Math.max(0, totalBruto - descuentoHH);
+  let subtotal, servicio, iva;
+  if (esParaLlevar) {
+    // Para Llevar: EXENTO de 10% de Servicio. Solo aplica IVA 13% (1.13)
+    subtotal = Math.round(total / 1.13);
+    servicio = 0;
+    iva = total - subtotal;
   } else {
-    // MODO B: Precios de menú SIN impuestos. Se calculan y se SUMAN al total.
-    const baseNeta = Math.max(0, baseAntesDescuento - descMonto);
-    subtotal = baseNeta;
-    servicio = aplicaServicio ? Math.round(baseNeta * 0.10) : 0;
-    iva = aplicaIVA ? Math.round(baseNeta * 0.13) : 0;
-    total = baseNeta + servicio + iva;
+    // Salón / Consumo en mesa: 10% Servicio + 13% IVA (1.23)
+    subtotal = Math.round(total / 1.23);
+    servicio = Math.round(subtotal * 0.10);
+    iva = total - subtotal - servicio;
   }
 
   await dbRun(
-    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, descuento_monto = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
-    [subtotal, descuentoHH, descMonto, servicio, iva, total, ordenId]
+    "UPDATE Ordenes SET subtotal = ?, descuento_happy_hour = ?, servicio_10 = ?, iva_13 = ?, total = ? WHERE id = ?",
+    [subtotal, descuentoHH, servicio, iva, total, ordenId]
   );
 
-  return { subtotal, descuentoHH, descuentoMonto: descMonto, servicio, iva, total, modoHH, esParaLlevar, preciosConImpuestos };
+  return { subtotal, descuentoHH, servicio, iva, total, modoHH, esParaLlevar };
 }
 
 async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null, negocioId = null, usuarioRol = null, tipo_orden = null, es_para_llevar = false }) {
@@ -4495,16 +3902,18 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
-    // Respetar estrictamente el destino configurado en el producto
-    if (!destino) {
-      const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(nombre || '') || /rock ice/i.test(nombre || '');
-      const esBebidaCat = (prodDb && (prodDb.es_licor || prodDb.destino === 'barra')) || (it.destino === 'barra');
+    const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(nombre || '') || /rock ice/i.test(nombre || '');
+    const esBebidaCat = (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6 || prodDb.categoria_id === 7 || prodDb.es_licor || prodDb.destino === 'barra')) ||
+      (it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7);
 
-      if (esBebidaCat || esBebidaKeyword) {
+    if (esBebidaCat || esBebidaKeyword) {
+      destino = 'barra';
+      curso = curso || 1;
+    } else if (!destino) {
+      if (curso === 1 || curso === 5 || curso === 6) {
         destino = 'barra';
-        curso = curso || 1;
       } else {
-        destino = (curso === 1 || curso === 5 || curso === 6) ? 'barra' : 'cocina';
+        destino = 'cocina';
       }
     }
 
@@ -5180,7 +4589,6 @@ async function procesarCobroOrden(ordenId, {
   mesero = 'Juan Jival',
   referencia = null,
   tipo_cambio = 1,
-  tipo_cambio_usd = null,
   monto_usd = 0,
   pagos = [],
   desglose = null,
@@ -5283,14 +4691,12 @@ async function procesarCobroOrden(ordenId, {
       const itNombre = it.nombre_producto || it.nombre || 'Producto';
       const cant = Number(it.cantidad) || 1;
       const subtotal = (Number(it.precio) || 0) * cant;
-      let destItem = (it.destino || '').trim().toLowerCase();
-      if (!destItem) {
-        const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);
-        if (esBebidaKey) {
-          destItem = 'barra';
-        } else {
-          destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
-        }
+      const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);
+      let destItem = it.destino;
+      if (esBebidaKey || it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7) {
+        destItem = 'barra';
+      } else if (!destItem) {
+        destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
       }
       const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
       const estadoComanda = (debeEnviarCocina && esParaCocinaOBarra) ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
@@ -5436,8 +4842,8 @@ async function procesarCobroOrden(ordenId, {
   }
 
 
-  const negocioIdFinal = orden.negocio_id || reqNegocioId || 1;
-  let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [negocioIdFinal]);
+  const negocioIdFinal = orden.negocio_id || 1;
+  let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
   if (!caja) {
     const ahoraApertura = new Date().toISOString();
     const rCaja = await dbRun(`
@@ -5449,13 +4855,10 @@ async function procesarCobroOrden(ordenId, {
   const cajaId = caja ? caja.id : null;
   const montoFinal = (monto !== undefined && monto !== null) ? Number(monto) : (Number(orden.total) || 0);
 
-  // Registrar los pagos asociados a la orden
+  // Normalizar lista de pagos a registrar en la tabla Pagos (unitaria o multi-método)
   let listaPagos = [];
   if (Array.isArray(pagos) && pagos.length > 0) {
-    listaPagos = pagos.map(p => ({
-      ...p,
-      monto_usd: Number(p.monto_usd) || (p.metodo === 'Dólares' ? (Number(p.monto) > 0 && Number(p.tipo_cambio) > 0 ? Number((Number(p.monto) / Number(p.tipo_cambio)).toFixed(2)) : 0) : 0)
-    }));
+    listaPagos = pagos.filter(p => p && Number(p.monto) > 0);
   } else if (desglose && typeof desglose === 'object') {
     if (Number(desglose.efectivo) > 0) {
       listaPagos.push({
@@ -5479,6 +4882,18 @@ async function procesarCobroOrden(ordenId, {
         referencia: desglose.referencia_sinpe || desglose.referencia || null
       });
     }
+    if (Number(desglose.dolares) > 0 || Number(desglose.usd) > 0) {
+      const tc = Number(desglose.tipo_cambio) || Number(tipo_cambio) || 520;
+      const mUsd = Number(desglose.monto_usd) || (Number(desglose.dolares || desglose.usd) / tc);
+      listaPagos.push({
+        metodo: 'Dólares',
+        monto: Number(desglose.dolares || desglose.usd),
+        monto_usd: mUsd,
+        tipo_cambio: tc,
+        recibido: Number(desglose.recibido_usd) ? Number(desglose.recibido_usd) * tc : undefined,
+        cambio: Number(desglose.cambio_dolares) || 0
+      });
+    }
     if (Number(desglose.transferencia) > 0) {
       listaPagos.push({
         metodo: 'Transferencia',
@@ -5486,45 +4901,29 @@ async function procesarCobroOrden(ordenId, {
         referencia: desglose.referencia_transferencia || desglose.referencia || null
       });
     }
-    if (Number(desglose.dolares || desglose.usd) > 0) {
-      const tc = Number(desglose.tipo_cambio) || Number(tipo_cambio) || 520;
-      const mUSD = Number(desglose.monto_usd || desglose.usd || desglose.dolares);
-      const mCRC = Number(desglose.monto_crc) || Math.round(mUSD * tc);
-      listaPagos.push({
-        metodo: 'Dólares',
-        monto: mCRC,
-        monto_usd: mUSD,
-        tipo_cambio: tc,
-        referencia: desglose.referencia_dolares || desglose.referencia || null
-      });
-    }
   }
 
   if (listaPagos.length === 0) {
-    const tcReq = Number(tipo_cambio) || (metodoFinal === 'Dólares' ? (Number(tipo_cambio_usd) || 520) : 1);
-    const usdReq = Number(monto_usd) || (metodoFinal === 'Dólares' ? (Number(montoFinal) > 0 ? Number((Number(montoFinal) / tcReq).toFixed(2)) : 0) : 0);
     listaPagos.push({
       metodo: metodoFinal,
       monto: montoFinal,
       propina: Number(propina) || 0,
       cambio: Number(cambio) || 0,
       referencia: referencia || null,
-      tipo_cambio: tcReq,
-      monto_usd: usdReq
+      tipo_cambio: Number(tipo_cambio) || 1,
+      monto_usd: Number(monto_usd) || 0
     });
   }
 
   const totalPagadoAcum = listaPagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
-  const totalUSDOrden = listaPagos.reduce((acc, p) => acc + (Number(p.monto_usd) || 0), 0);
-
   for (const p of listaPagos) {
     const metPago = p.metodo || 'Efectivo';
     const mtoPago = Number(p.monto) || 0;
     const propPago = p.propina !== undefined ? Number(p.propina) : (listaPagos.length === 1 ? (Number(propina) || 0) : Math.round((Number(propina) || 0) * (mtoPago / (totalPagadoAcum || 1))));
     const camPago = Number(p.cambio) || (listaPagos.length === 1 ? (Number(cambio) || 0) : 0);
     const refPago = p.referencia || (listaPagos.length === 1 ? (referencia || null) : null);
-    const tcPago = Number(p.tipo_cambio) || 1;
-    const usdPago = Number(p.monto_usd) || 0;
+    const tcPago = Number(p.tipo_cambio) || (listaPagos.length === 1 ? (Number(tipo_cambio) || 1) : 1);
+    const usdPago = Number(p.monto_usd) || (listaPagos.length === 1 ? (Number(monto_usd) || 0) : 0);
 
     await dbRun(
       'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, referencia, tipo_cambio, monto_usd, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -5542,7 +4941,7 @@ async function procesarCobroOrden(ordenId, {
   let ticketGenerado = null;
 
   if (liquidar_total) {
-    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL, total_usd = ? WHERE id = ?", [ahora, totalUSDOrden, ordenId]);
+    await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
 
     // Consultar todos los ítems de la orden para el tiquete final
     const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
@@ -5557,14 +4956,9 @@ async function procesarCobroOrden(ordenId, {
       metodoPago: metodoFinalTicket,
       subtotal: orden.subtotal,
       descuentoHH: orden.descuento_happy_hour,
-      descuento: orden.descuento_monto || 0,
-      descuentoMonto: orden.descuento_monto || 0,
-      descuentoPorcentaje: orden.descuento_porcentaje || 0,
-      descuentoMotivo: orden.descuento_motivo || '',
       servicio: orden.servicio_10,
       iva: orden.iva_13,
       total: orden.total,
-      preciosConImpuestos: await negocioTieneCaracteristica(orden.negocio_id || 1, 'precios_con_impuestos'),
       recibido: monto || totalPagadoAcum,
       cambio,
       items: itemsOrden,
@@ -5667,32 +5061,14 @@ async function procesarCobroOrden(ordenId, {
       nuevoSubtotal += Number(it.subtotal) || 0;
     }
 
-    let nuevoIva = Math.round(nuevoSubtotal * 0.13);
-    let nuevoServicio = Math.round(nuevoSubtotal * 0.10);
-    let nuevoTotal = nuevoSubtotal + nuevoIva + nuevoServicio;
-
-    if (nuevoTotal === orden.total && monto > 0) {
-      nuevoTotal = Math.max(0, orden.total - monto);
-      nuevoSubtotal = Math.round(nuevoTotal / 1.23);
-      nuevoIva = Math.round(nuevoSubtotal * 0.13);
-      nuevoServicio = Math.max(0, nuevoTotal - nuevoSubtotal - nuevoIva);
-    }
+    const nuevoIva = Math.round(nuevoSubtotal * 0.13);
+    const nuevoServicio = Math.round(nuevoSubtotal * 0.10);
+    const nuevoTotal = nuevoSubtotal + nuevoIva + nuevoServicio;
 
     await dbRun(
       'UPDATE Ordenes SET subtotal = ?, iva_13 = ?, servicio_10 = ?, total = ? WHERE id = ?',
       [nuevoSubtotal, nuevoIva, nuevoServicio, nuevoTotal, ordenId]
     );
-
-    if (nuevoTotal <= 0) {
-      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE id = ?", [ahora, ordenId]);
-      if (orden.mesa_id) {
-        await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
-          [orden.mesa_id]
-        );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0 });
-      }
-    }
 
     const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
     const impParcial = Math.round(subParcial * 0.23);
@@ -5812,14 +5188,9 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       cliente: orden.cliente || 'Cliente General',
       subtotal: orden.subtotal || 0,
       descuentoHH: orden.descuento_happy_hour || 0,
-      descuento: orden.descuento_monto || 0,
-      descuentoMonto: orden.descuento_monto || 0,
-      descuentoPorcentaje: orden.descuento_porcentaje || 0,
-      descuentoMotivo: orden.descuento_motivo || '',
       servicio: orden.servicio_10 || 0,
-      iva: orden.iva_13,
+      iva: orden.iva_13 || 0,
       total: orden.total || 0,
-      preciosConImpuestos: await negocioTieneCaracteristica(orden.negocio_id || 1, 'precios_con_impuestos'),
       items: itemsOrden,
       fechaHora: ahora
     });
@@ -5903,14 +5274,9 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       cliente: orden.cliente || 'Cliente General',
       subtotal: orden.subtotal || 0,
       descuentoHH: orden.descuento_happy_hour || 0,
-      descuento: orden.descuento_monto || 0,
-      descuentoMonto: orden.descuento_monto || 0,
-      descuentoPorcentaje: orden.descuento_porcentaje || 0,
-      descuentoMotivo: orden.descuento_motivo || '',
       servicio: orden.servicio_10 || 0,
       iva: orden.iva_13 || 0,
       total: orden.total || 0,
-      preciosConImpuestos: await negocioTieneCaracteristica(orden.negocio_id || mesa.negocio_id || 1, 'precios_con_impuestos'),
       items: itemsOrden,
       fechaHora: ahora
     });
@@ -5988,10 +5354,10 @@ app.get('/api/caja/actual', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
     const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
-      [negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
     );
-    if (!caja) return res.json({ caja: null, ventas: [], movimientos: [], tipPool: [] });
+    if (!caja) return res.json({ caja: null });
 
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
@@ -6030,8 +5396,8 @@ app.post('/api/caja/movimiento', async (req, res) => {
     }
 
     let caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
-      [negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
     );
     if (!caja) {
       const ahoraApertura = new Date().toISOString();
@@ -6078,8 +5444,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
 
     const negocioId = obtenerNegocioIdReq(req);
     const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
-      [negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
     );
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
@@ -6126,11 +5492,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
     });
 
     const fondoInicial = Number(caja.monto_inicial) || 0;
-    const fondoInicialUSD = Number(caja.monto_inicial_usd) || 0;
     const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
-    const dolaresEsperadoUSD = Math.round((fondoInicialUSD + ventasDolaresUSD) * 100) / 100;
-    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
-    const totalGeneralEsperadoGaveta = Math.round((efectivoEsperado + dolaresEsperadoCRC) * 100) / 100;
+    const totalGeneralEsperadoGaveta = Math.round((efectivoEsperado + ventasDolares) * 100) / 100;
 
     const tipPool = await dbAll(`
       SELECT 
@@ -6156,7 +5519,6 @@ app.get('/api/caja/corte-x', async (req, res) => {
       fecha_apertura: caja.fecha_apertura,
       fecha_corte: new Date().toISOString(),
       fondo_inicial: fondoInicial,
-      fondo_inicial_usd: fondoInicialUSD,
       ventas: {
         efectivo: ventasEfectivo,
         tarjeta: ventasTarjeta,
@@ -6174,184 +5536,12 @@ app.get('/api/caja/corte-x', async (req, res) => {
       total_salidas: totalSalidas,
       efectivo_esperado: efectivoEsperado,
       esperado_efectivo_crc: efectivoEsperado,
-      esperado_dolares_usd: dolaresEsperadoUSD,
-      esperado_dolares_crc: dolaresEsperadoCRC,
+      esperado_dolares_usd: ventasDolaresUSD,
+      esperado_dolares_crc: ventasDolares,
       total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
       tip_pool: tipPool,
       total_propinas: totalPropinas
     });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Procesar Corte X a Ciegas (Arqueo Parcial Ciego con Conteo Físico)
-app.post('/api/caja/corte-x-ciego', async (req, res) => {
-  try {
-    const {
-      efectivo_declarado_crc,
-      efectivo_declarado,
-      dolares_declarado_usd,
-      dolares_declarado,
-      tarjeta_declarada = 0,
-      sinpe_declarado = 0,
-      notas = '',
-      usuarioNombre = 'Cajero',
-      adminPin,
-      pin
-    } = req.body;
-
-    const pinVerificar = adminPin || pin || req.headers['x-supervisor-pin'];
-    if (pinVerificar) {
-      const esValido = await validarPinAdministrador(pinVerificar);
-      if (!esValido) {
-        return res.status(401).json({ error: 'PIN de Administrador inválido.' });
-      }
-    }
-
-    const negocioId = obtenerNegocioIdReq(req);
-    const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
-      [negocioId]
-    );
-    if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente para realizar el arqueo.' });
-
-    const ventas = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
-      FROM Pagos p
-      WHERE p.caja_id = ?
-      GROUP BY p.metodo
-    `, [caja.id]);
-
-    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
-    const desgloseMetodos = {};
-
-    ventas.forEach(v => {
-      const m = (v.metodo || '').toLowerCase();
-      const tot = Number(v.total) || 0;
-      const totUSD = Number(v.total_usd) || 0;
-      desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
-
-      if (m.includes('efectivo') || m.includes('cash')) {
-        ventasEfectivo += tot;
-      } else if (m.includes('tarjeta') || m.includes('datafono') || m.includes('datáfono') || m.includes('card') || m.includes('credito') || m.includes('crédito') || m.includes('debito') || m.includes('débito')) {
-        ventasTarjeta += tot;
-      } else if (m.includes('sinpe')) {
-        ventasSinpe += tot;
-      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
-        ventasDolares += tot;
-        ventasDolaresUSD += totUSD;
-      } else if (m.includes('transfer')) {
-        ventasTransferencia += tot;
-        ventasSinpe += tot;
-      } else {
-        ventasOtros += tot;
-      }
-    });
-    const totalVentas = ventas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
-
-    const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
-    let totalEntradas = 0, totalSalidas = 0;
-    movimientos.forEach(m => {
-      const mont = Number(m.monto) || 0;
-      if (m.tipo === 'entrada') totalEntradas += mont;
-      if (m.tipo === 'salida') totalSalidas += mont;
-    });
-
-    const fondoInicial = Number(caja.monto_inicial) || 0;
-    const fondoInicialUSD = Number(caja.monto_inicial_usd) || 0;
-    const efectivoEsperado = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
-    const dolaresEsperadoUSD = Math.round((fondoInicialUSD + ventasDolaresUSD) * 100) / 100;
-    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
-
-    const efDecCRC = Number(efectivo_declarado_crc !== undefined ? efectivo_declarado_crc : (efectivo_declarado || 0));
-    const dolDecUSD = Number(dolares_declarado_usd !== undefined ? dolares_declarado_usd : (dolares_declarado || 0));
-    const tarjDec = Number(tarjeta_declarada || 0);
-    const sinpeDec = Number(sinpe_declarado || 0);
-
-    const diffEfectivo = Math.round((efDecCRC - efectivoEsperado) * 100) / 100;
-    const diffDolaresUSD = Math.round((dolDecUSD - dolaresEsperadoUSD) * 100) / 100;
-
-    let estadoCuadre = 'Cuadrado';
-    if (Math.abs(diffEfectivo) < 1) {
-      estadoCuadre = 'Exacto (₡0)';
-    } else if (diffEfectivo > 0) {
-      estadoCuadre = `Sobrante (+₡${diffEfectivo.toLocaleString('es-CR')})`;
-    } else {
-      estadoCuadre = `Faltante (-₡${Math.abs(diffEfectivo).toLocaleString('es-CR')})`;
-    }
-
-    const tipPool = await dbAll(`
-      SELECT 
-        COALESCE(p.mesero, 'Mesero General') as nombre,
-        COUNT(DISTINCT p.orden_id) as mesas,
-        SUM(p.monto) as ventas,
-        SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
-      FROM Pagos p
-      WHERE p.caja_id = ?
-      GROUP BY p.mesero
-    `, [caja.id]);
-
-    const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
-
-    const negocioInfo = await dbGet('SELECT * FROM Negocios WHERE id = ?', [negocioId]) || {};
-
-    // Registrar en auditoría
-    const descAudit = `Corte X a Ciegas realizado por ${usuarioNombre || caja.cajero}. Efectivo Declarado: ₡${efDecCRC.toLocaleString('es-CR')}, Esperado: ₡${efectivoEsperado.toLocaleString('es-CR')}, Diferencia: ₡${diffEfectivo.toLocaleString('es-CR')} (${estadoCuadre}).`;
-    await registrarAuditoria({
-      negocioId,
-      usuarioNombre: usuarioNombre || caja.cajero || 'Cajero',
-      accion: 'CORTE_X_CIEGO',
-      tipoEvento: 'caja',
-      modulo: 'caja',
-      detalle: descAudit,
-      monto: efDecCRC,
-      pinAutorizado: Boolean(pinVerificar)
-    });
-
-    const ticketData = {
-      ok: true,
-      tipo: 'corte_x_ciego',
-      titulo: 'CORTE X A CIEGAS (ARQUEO PARCIAL)',
-      negocio: {
-        nombre: negocioInfo.nombre || 'GastroBar Fuego & Brasas',
-        slogan: negocioInfo.slogan || 'Restaurante, Bar & Lounge',
-        tel: negocioInfo.telefono || '2222-3344',
-        dir: negocioInfo.direccion || 'San José, Costa Rica',
-        cedula: negocioInfo.cedula_juridica || negocioInfo.cedula || ''
-      },
-      caja_id: caja.id,
-      cajero: usuarioNombre || caja.cajero || 'Cajero',
-      fecha_apertura: caja.fecha_apertura,
-      fecha_corte: new Date().toISOString(),
-      fondo_inicial: fondoInicial,
-      fondo_inicial_usd: fondoInicialUSD,
-      ventas: {
-        efectivo: ventasEfectivo,
-        tarjeta: ventasTarjeta,
-        sinpe: ventasSinpe,
-        dolares: ventasDolares,
-        dolares_usd: ventasDolaresUSD,
-        desglose_por_metodo: desgloseMetodos,
-        total: totalVentas
-      },
-      total_entradas: totalEntradas,
-      total_salidas: totalSalidas,
-      efectivo_esperado: efectivoEsperado,
-      efectivo_declarado: efDecCRC,
-      diferencia_efectivo: diffEfectivo,
-      dolares_esperado_usd: dolaresEsperadoUSD,
-      dolares_declarado_usd: dolDecUSD,
-      diferencia_dolares_usd: diffDolaresUSD,
-      tarjeta_declarada: tarjDec,
-      sinpe_declarado: sinpeDec,
-      estado_cuadre: estadoCuadre,
-      notas: notas || '',
-      tip_pool: tipPool,
-      total_propinas: totalPropinas
-    };
-
-    res.json(ticketData);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -6363,8 +5553,8 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     const {
       efectivo_real_contado,
       efectivo_real_contado_crc,
+      dolares_real_contado,
       dolares_real_contado_usd,
-      dolares_real,
       tipo_cambio,
       notas = '',
       usuarioNombre = 'Cajero',
@@ -6381,15 +5571,16 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     }
 
     const efectivoRealCRC = parseFloat(efectivo_real_contado_crc != null ? efectivo_real_contado_crc : efectivo_real_contado) || 0;
+    const dolaresRealUSD = parseFloat(dolares_real_contado_usd != null ? dolares_real_contado_usd : (dolares_real_contado || 0)) || 0;
 
-    if (efectivoRealCRC < 0 || isNaN(efectivoRealCRC)) {
-      return res.status(400).json({ error: 'Por favor ingresa un monto válido de efectivo en gaveta' });
+    if (efectivoRealCRC < 0 || dolaresRealUSD < 0 || isNaN(efectivoRealCRC) || isNaN(dolaresRealUSD)) {
+      return res.status(400).json({ error: 'Por favor ingresa montos válidos de efectivo en gaveta' });
     }
 
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
-      [negocioId]
+      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
     );
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
 
@@ -6436,14 +5627,12 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     });
 
     const fondoInicial = Number(caja.monto_inicial) || 0;
-    const fondoInicialUSD = Number(caja.monto_inicial_usd) || 0;
     const efectivoEsperadoCRC = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
-    const dolaresEsperadoUSD = Math.round((fondoInicialUSD + ventasDolaresUSD) * 100) / 100;
+    const dolaresEsperadoUSD = Math.round(ventasDolaresUSD * 100) / 100;
     const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
     const totalGeneralEsperadoGavetaCRC = Math.round((efectivoEsperadoCRC + dolaresEsperadoCRC) * 100) / 100;
 
-    const tc = parseFloat(tipo_cambio) || (dolaresEsperadoUSD > 0 && dolaresEsperadoCRC > 0 ? (dolaresEsperadoCRC / dolaresEsperadoUSD) : 520);
-    const dolaresRealUSD = parseFloat(dolares_real_contado_usd != null ? dolares_real_contado_usd : (dolares_real != null ? dolares_real : 0)) || 0;
+    const tc = parseFloat(tipo_cambio) || (dolaresEsperadoUSD > 0 ? (dolaresEsperadoCRC / dolaresEsperadoUSD) : 520);
     const dolaresRealCRC = Math.round(dolaresRealUSD * tc * 100) / 100;
     const totalRealContadoGavetaCRC = Math.round((efectivoRealCRC + dolaresRealCRC) * 100) / 100;
 
@@ -6499,7 +5688,6 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       fecha_apertura: caja.fecha_apertura,
       fecha_cierre: ahora,
       fondo_inicial: fondoInicial,
-      fondo_inicial_usd: fondoInicialUSD,
       tipo_cambio: tc,
       ventas: {
         efectivo: ventasEfectivo,
@@ -6529,9 +5717,6 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       diferencia_crc: diferenciaCRC,
       diferencia_usd: diferenciaUSD,
       diferencia_total: diferenciaTotal,
-      monto_final_dolares: dolaresRealUSD,
-      total_ventas_dolares: ventasDolares,
-      total_ventas_usd: ventasDolaresUSD,
       estado_cuadre: estadoCuadre,
       tip_pool: tipPool,
       total_propinas: totalPropinas,
@@ -6545,42 +5730,29 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 // Apertura de nuevo turno de caja
 app.post('/api/caja/abrir', async (req, res) => {
   try {
-    const { cajero = 'Cajero Turno', monto_inicial = 50000, monto_inicial_usd = 0, negocio_id } = req.body;
-    const negocioId = obtenerNegocioIdReq(req, negocio_id || 1);
+    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const montoNum = parseFloat(monto_inicial);
-    const montoUSDNum = parseFloat(monto_inicial_usd) || 0;
     if (isNaN(montoNum) || montoNum < 0) {
       return res.status(400).json({ error: 'Monto inicial de apertura inválido' });
     }
 
     const activa = await dbGet(
-      "SELECT id, monto_inicial, monto_inicial_usd FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
-      [negocioId]
+      "SELECT id FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+      [negocioId, negocioId]
     );
     if (activa) {
-      return res.json({
-        ok: true,
-        message: 'Ya existe una caja abierta para este comercio',
-        caja_id: activa.id,
-        monto_inicial: activa.monto_inicial || 0,
-        monto_inicial_usd: activa.monto_inicial_usd || 0
-      });
+      return res.json({ ok: true, message: 'Ya existe una caja abierta para este comercio', caja_id: activa.id });
     }
 
     const ahoraApertura = new Date().toISOString();
     const r = await dbRun(`
-      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, monto_inicial_usd, estado)
-      VALUES (?, ?, ?, ?, ?, 'abierta')
-    `, [negocioId, cajero, ahoraApertura, montoNum, montoUSDNum]);
+      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
+      VALUES (?, ?, ?, ?, 'abierta')
+    `, [negocioId, cajero, ahoraApertura, montoNum]);
 
     io.emit('caja_actualizada');
-    res.json({
-      ok: true,
-      message: 'Nuevo turno de caja abierto con éxito',
-      caja_id: r.lastID,
-      monto_inicial: montoNum,
-      monto_inicial_usd: montoUSDNum
-    });
+    res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -6708,54 +5880,6 @@ async function registrarAuditoria({ negocioId = 1, usuarioId = null, usuarioNomb
   }
 }
 
-function resolverInsumoCerveza(todosLosInsumos, subProd, subNombre) {
-  const clean = (s) => (s || '').toLowerCase().replace(/cerveza\s+/gi, '').replace(/\(.*\)/g, '').replace(/unidades/g, '').replace(/\d+x/g, '').trim();
-  const nombreBuscado = clean(subNombre || (subProd ? subProd.nombre : ''));
-  
-  if (subProd && subProd.id) {
-    const porProdId = todosLosInsumos.find(i => i.producto_id && String(i.producto_id) === String(subProd.id));
-    if (porProdId) return porProdId;
-  }
-  
-  const exacta = todosLosInsumos.find(i => clean(i.nombre) === nombreBuscado || clean(i.nombre) === ('cerveza ' + nombreBuscado));
-  if (exacta) return exacta;
-
-  if (nombreBuscado.includes('silver')) {
-    const s = todosLosInsumos.find(i => clean(i.nombre).includes('silver'));
-    if (s) return s;
-  }
-  if (nombreBuscado.includes('ultra')) {
-    const u = todosLosInsumos.find(i => clean(i.nombre).includes('ultra'));
-    if (u) return u;
-  }
-  if (nombreBuscado.includes('light')) {
-    const l = todosLosInsumos.find(i => clean(i.nombre).includes('light'));
-    if (l) return l;
-  }
-  if (nombreBuscado.includes('6.0') || nombreBuscado.includes('60')) {
-    const seis = todosLosInsumos.find(i => clean(i.nombre).includes('6.0') || clean(i.nombre).includes('6'));
-    if (seis) return seis;
-  }
-  if (nombreBuscado.includes('pilsen')) {
-    const p = todosLosInsumos.find(i => clean(i.nombre).includes('pilsen'));
-    if (p) return p;
-  }
-  if (nombreBuscado.includes('bavaria')) {
-    const b = todosLosInsumos.find(i => clean(i.nombre).includes('bavaria'));
-    if (b) return b;
-  }
-  if (nombreBuscado.includes('regular') || nombreBuscado.includes('imperial')) {
-    const imp = todosLosInsumos.find(i => clean(i.nombre).includes('imperial') && !clean(i.nombre).includes('silver') && !clean(i.nombre).includes('light') && !clean(i.nombre).includes('ultra'));
-    if (imp) return imp;
-  }
-
-  const parcial = todosLosInsumos.find(i => clean(i.nombre).includes(nombreBuscado) || (nombreBuscado.length >= 3 && nombreBuscado.includes(clean(i.nombre))));
-  if (parcial) return parcial;
-
-  const algunaCerveza = todosLosInsumos.find(i => (i.categoria && i.categoria.toLowerCase().includes('cerveza')) || /imperial|pilsen/i.test(i.nombre));
-  return algunaCerveza || null;
-}
-
 async function descontarInventarioPorItems(items = []) {
   try {
     let huboCambios = false;
@@ -6785,14 +5909,13 @@ async function descontarInventarioPorItems(items = []) {
           for (const [subIdStr, subCantNum] of Object.entries(desgloseObj)) {
             const subCant = Number(subCantNum) * cant;
             if (subCant <= 0) continue;
-            let subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [Number(subIdStr) || 0]);
+            let subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [subIdStr]);
             let subInsumo = null;
             if (!subProd) {
-              subInsumo = await dbGet('SELECT * FROM Inventario WHERE CAST(producto_id AS TEXT) = CAST(? AS TEXT) OR CAST(id AS TEXT) = CAST(? AS TEXT)', [subIdStr, subIdStr]);
+              subInsumo = await dbGet('SELECT * FROM Inventario WHERE id = ? OR producto_id = ?', [subIdStr, subIdStr]);
             }
             listaCervezas.push({
-              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id : null),
-              insumoId: subInsumo ? subInsumo.id : null,
+              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id || subInsumo.id : subIdStr),
               nombre: subProd ? subProd.nombre : (subInsumo ? subInsumo.nombre : `Cerveza #${subIdStr}`),
               cant: subCant
             });
@@ -6814,109 +5937,93 @@ async function descontarInventarioPorItems(items = []) {
           }
         }
 
-        if (listaCervezas.length === 0) {
-          listaCervezas.push({
-            prodId: null,
-            nombre: 'Cerveza Imperial Regular',
-            cant: 6 * cant
-          });
-        }
+        if (listaCervezas.length > 0) {
+          for (const itemCerveza of listaCervezas) {
+            const subProdId = itemCerveza.prodId;
+            const subCant = itemCerveza.cant;
+            const subNombre = itemCerveza.nombre;
 
-        const todosLosInsumosActuales = await dbAll('SELECT * FROM Inventario');
-        const negocioIdFinal = Number(it.negocio_id || it.negocioId || 1);
-
-        for (const itemCerveza of listaCervezas) {
-          const subProdId = itemCerveza.prodId;
-          const subCant = itemCerveza.cant;
-          const subNombre = itemCerveza.nombre;
-
-          let insumo = null;
-
-          // 1. Revisar recetas
-          if (subProdId) {
-            const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [subProdId]);
-            if (recetas && recetas.length > 0) {
-              for (const r of recetas) {
-                const totalDesc = r.cantidad * subCant;
-                const ins = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
-                if (ins) {
-                  const stockPrevio = ins.stock_actual;
-                  const stockNuevo = Math.max(0, stockPrevio - totalDesc);
-                  await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, ins.id]);
-                  const costoMov = Math.round(totalDesc * (ins.costo_unitario || 0));
-                  const motivoMov = `Consumo comanda (Balde Nacional): ${ins.nombre || subNombre} (x${subCant})`;
-                  await dbRun(
-                    `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                     VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                    [negocioIdFinal, ins.id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
-                  );
-                  huboCambios = true;
-                  if (stockNuevo <= ins.stock_minimo) {
-                    io.emit('inventario_alerta_stock', {
-                      insumoId: ins.id,
-                      insumo: ins.nombre,
-                      nombre: ins.nombre,
-                      stock_actual: stockNuevo,
-                      stock_minimo: ins.stock_minimo,
-                      unidad: ins.unidad_medida || 'uds',
-                      estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
-                    });
+            let descontado = false;
+            // 1. Revisar recetas
+            if (subProdId) {
+              const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [subProdId]);
+              if (recetas && recetas.length > 0) {
+                for (const r of recetas) {
+                  const totalDesc = r.cantidad * subCant;
+                  const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
+                  if (insumo) {
+                    const stockPrevio = insumo.stock_actual;
+                    const stockNuevo = Math.max(0, stockPrevio - totalDesc);
+                    await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, r.insumo_id]);
+                    const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
+                    const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
+                    await dbRun(
+                      `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+                       VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+                      [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+                    );
+                    huboCambios = true;
+                    descontado = true;
+                    if (stockNuevo <= insumo.stock_minimo) {
+                      io.emit('inventario_alerta_stock', {
+                        insumoId: insumo.id,
+                        insumo: insumo.nombre,
+                        nombre: insumo.nombre,
+                        stock_actual: stockNuevo,
+                        stock_minimo: insumo.stock_minimo,
+                        unidad: insumo.unidad || 'uds',
+                        estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+                      });
+                    }
                   }
                 }
               }
-              continue;
+            }
+
+            // 2. Si no hubo receta, buscar insumo directo
+            if (!descontado) {
+              let insumo = null;
+              if (subProdId) {
+                insumo = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [subProdId]);
+                if (!insumo) {
+                  insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [subProdId]);
+                }
+              }
+              if (!insumo && subNombre) {
+                insumo = await dbGet(
+                  'SELECT * FROM Inventario WHERE LOWER(nombre) = LOWER(?) OR LOWER(nombre) = LOWER(?) OR LOWER(nombre) LIKE ? ORDER BY CASE WHEN LOWER(nombre) = LOWER(?) THEN 1 WHEN LOWER(nombre) LIKE ? THEN 2 ELSE 3 END LIMIT 1',
+                  [subNombre, `Cerveza ${subNombre}`, `%${subNombre}%`, subNombre, `%${subNombre}%`]
+                );
+              }
+
+              if (insumo) {
+                const stockPrevio = insumo.stock_actual;
+                const stockNuevo = Math.max(0, stockPrevio - subCant);
+                await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, insumo.id]);
+                const costoMov = Math.round(subCant * (insumo.costo_unitario || 0));
+                const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
+                await dbRun(
+                  `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+                   VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+                  [insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+                );
+                huboCambios = true;
+                if (stockNuevo <= insumo.stock_minimo) {
+                  io.emit('inventario_alerta_stock', {
+                    insumoId: insumo.id,
+                    insumo: insumo.nombre,
+                    nombre: insumo.nombre,
+                    stock_actual: stockNuevo,
+                    stock_minimo: insumo.stock_minimo,
+                    unidad: insumo.unidad || 'uds',
+                    estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+                  });
+                }
+              }
             }
           }
-
-          // 2. Si no hubo receta, resolver insumo directo usando resolverInsumoCerveza
-          insumo = resolverInsumoCerveza(todosLosInsumosActuales, subProdId ? { id: subProdId, nombre: subNombre } : null, subNombre);
-
-          // 3. Si aún no existe el insumo de cerveza en inventario, auto-crearlo
-          if (!insumo) {
-            const nomNuevo = subNombre || 'Cerveza Imperial Regular';
-            const rCrear = await dbRun(
-              `INSERT INTO Inventario (nombre, unidad_medida, stock_actual, stock_minimo, costo_unitario, categoria, producto_id, negocio_id)
-               VALUES (?, 'botellas', 0, 10, 950, 'Cerveza Nacional', ?, ?)`,
-              [nomNuevo, subProdId || null, negocioIdFinal]
-            );
-            insumo = {
-              id: rCrear.lastID,
-              nombre: nomNuevo,
-              unidad_medida: 'botellas',
-              stock_actual: 0,
-              stock_minimo: 10,
-              costo_unitario: 950
-            };
-            todosLosInsumosActuales.push(insumo);
-          }
-
-          if (insumo) {
-            const stockPrevio = insumo.stock_actual;
-            const stockNuevo = Math.max(0, stockPrevio - subCant);
-            await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, insumo.id]);
-            const costoMov = Math.round(subCant * (insumo.costo_unitario || 0));
-            const motivoMov = `Consumo comanda (Balde Nacional): ${insumo.nombre} (x${subCant})`;
-            await dbRun(
-              `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-               VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-              [negocioIdFinal, insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
-            );
-            huboCambios = true;
-            if (stockNuevo <= insumo.stock_minimo) {
-              io.emit('inventario_alerta_stock', {
-                insumoId: insumo.id,
-                insumo: insumo.nombre,
-                nombre: insumo.nombre,
-                stock_actual: stockNuevo,
-                stock_minimo: insumo.stock_minimo,
-                unidad: insumo.unidad_medida || 'uds',
-                estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
-              });
-            }
-          }
+          continue; // Terminar procesamiento de este item de balde
         }
-
-        continue; // Terminar procesamiento del balde
       }
 
       // 1. Revisar si hay recetas vinculadas en InventarioRecetas
@@ -6933,11 +6040,22 @@ async function descontarInventarioPorItems(items = []) {
               [stockNuevo, ahora, r.insumo_id]
             );
             const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
-            const motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
+            let motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
+            if (insumo.es_licor && insumo.rendimiento_shots > 0) {
+              const shotsDeducidos = Math.round(totalDesc * insumo.rendimiento_shots * 10) / 10;
+              const botEnteras = Math.floor(stockNuevo);
+              const shotsRem = Math.round((stockNuevo - botEnteras) * insumo.rendimiento_shots);
+              if (totalDesc < 1) {
+                motivoMov = `Consumo comanda: ${prodNombre} (-${shotsDeducidos} shot${shotsDeducidos === 1 ? '' : 's'} / ${Math.round(shotsDeducidos * (insumo.medida_shot_ml || 30))}ml) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
+              } else {
+                motivoMov = `Consumo comanda: ${prodNombre} (-${totalDesc} botella${totalDesc === 1 ? '' : 's'} / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
+              }
+            }
+
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-               VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-              [insumo.negocio_id || 1, r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+               VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+              [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
             );
             huboCambios = true;
             if (stockNuevo <= insumo.stock_minimo) {
@@ -6947,7 +6065,7 @@ async function descontarInventarioPorItems(items = []) {
                 nombre: insumo.nombre,
                 stock_actual: stockNuevo,
                 stock_minimo: insumo.stock_minimo,
-                unidad: insumo.unidad_medida || 'uds',
+                unidad: insumo.unidad || 'uds',
                 estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
               });
             }
@@ -6964,11 +6082,19 @@ async function descontarInventarioPorItems(items = []) {
             [stockNuevo, ahora, insumo.id]
           );
           const costoMov = Math.round(cant * (insumo.costo_unitario || 0));
-          const motivoMov = `Consumo comanda: ${prodNombre} (x${cant})`;
+
+          let motivoDirecto = `Consumo directo: ${prodNombre} (x${cant})`;
+          if (insumo.es_licor && insumo.rendimiento_shots > 0) {
+            const shotsDeducidos = Math.round(cant * insumo.rendimiento_shots);
+            const botEnteras = Math.floor(stockNuevo);
+            const shotsRem = Math.round((stockNuevo - botEnteras) * insumo.rendimiento_shots);
+            motivoDirecto = `Consumo directo: ${prodNombre} (-${cant} bot. / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
+          }
+
           await dbRun(
             `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-             VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-            [insumo.negocio_id || 1, insumo.id, cant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+             VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+            [insumo.id, cant, stockPrevio, stockNuevo, motivoDirecto, costoMov, ahora]
           );
           huboCambios = true;
           if (stockNuevo <= insumo.stock_minimo) {
@@ -6978,20 +6104,18 @@ async function descontarInventarioPorItems(items = []) {
               nombre: insumo.nombre,
               stock_actual: stockNuevo,
               stock_minimo: insumo.stock_minimo,
-              unidad: insumo.unidad_medida || 'uds',
+              unidad: insumo.unidad || 'uds',
               estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
             });
           }
         }
       }
     }
-
     if (huboCambios) {
       io.emit('inventario_actualizado');
-      io.emit('kardex_actualizado');
     }
-  } catch (errDesc) {
-    console.error('Error al descontar inventario:', errDesc.message);
+  } catch (e) {
+    console.error('Error descontando inventario:', e.message);
   }
 }
 
@@ -7000,7 +6124,7 @@ async function validarPinAdministrador(pin, negocioId = null) {
   const pinStr = String(pin).trim();
   try {
     const usuariosAdmin = await dbAll(
-      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'superadmin', 'developer') AND activo = 1"
+      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'developer') AND activo = 1"
     );
     for (const u of usuariosAdmin) {
       if (negocioId && u.rol !== 'developer' && u.negocio_id != null && Number(u.negocio_id) !== Number(negocioId)) {
@@ -7033,12 +6157,11 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
 });
 
 async function verificarAdmin(req, res, next) {
-  const rawRol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
-  const rol = rawRol.replace(/[\s_-]/g, '');
+  const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
 
-  if (['admin', 'superadmin', 'developer', 'supervisor'].includes(rol)) {
+  if (['admin', 'developer', 'supervisor'].includes(rol)) {
     return next();
   }
 
@@ -7100,7 +6223,6 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
 
 app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
   try {
-    const negocioId = obtenerNegocioIdReq(req);
     const {
       nombre, categoria = 'General', unidad_medida = 'unidades',
       stock_actual = 0, stock_minimo = 5, costo_unitario = 0,
@@ -7119,9 +6241,9 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       `INSERT INTO Inventario (
         negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo,
         costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        negocioId, nombre.trim(), categoria.trim(), unidad_medida.trim(),
+        nombre.trim(), categoria.trim(), unidad_medida.trim(),
         Number(stock_actual), Number(stock_minimo), Number(costo_unitario),
         producto_id ? Number(producto_id) : null, ahora,
         esLic, capMl, shotMl, rendShots
@@ -7129,20 +6251,16 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
     );
 
     await registrarAuditoria({
-      negocioId,
       usuarioNombre,
       accion: 'crear_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida}) en negocio ${negocioId}${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
+      detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida})${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
     });
-
-    if (io) io.emit('inventario_actualizado');
 
     res.status(201).json({
       id: result.lastID,
       insumoId: result.lastID,
-      negocio_id: negocioId,
       message: 'Insumo registrado correctamente',
       es_licor: esLic,
       capacidad_ml: capMl,
@@ -7244,31 +6362,24 @@ app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Insumo no encontrado' });
     }
 
-    const reqNegocioId = obtenerNegocioIdReq(req);
-    const negocioIdInsumo = insumo.negocio_id || reqNegocioId;
-
     // Limpiar relaciones en recetas y movimientos de kardex
     await dbRun('DELETE FROM InventarioRecetas WHERE insumo_id = ?', [id]);
     await dbRun('DELETE FROM InventarioMovimientos WHERE insumo_id = ?', [id]);
     await dbRun('DELETE FROM Inventario WHERE id = ?', [id]);
 
     await registrarAuditoria({
-      negocioId: negocioIdInsumo,
       usuarioNombre: req.body?.usuarioNombre || 'Administrador',
       accion: 'eliminar_insumo',
       tipoEvento: 'operativo',
       modulo: 'inventario',
-      detalle: `Eliminación definitiva de insumo ID ${id}: "${insumo.nombre}" (Stock final: ${insumo.stock_actual} ${insumo.unidad_medida})`
+      detalle: `Eliminación de insumo ID ${id}: "${insumo.nombre}" (Stock final: ${insumo.stock_actual} ${insumo.unidad_medida})`
     });
 
-    if (io) {
-      io.emit('inventario_actualizado');
-      io.emit('inventario_eliminado', { id: Number(id), negocio_id: negocioIdInsumo });
-    }
+    if (io) io.emit('inventario_actualizado');
 
     res.json({
       success: true,
-      message: `Insumo "${insumo.nombre}" eliminado permanentemente de la base de datos`,
+      message: `Insumo "${insumo.nombre}" eliminado correctamente`,
       id: Number(id)
     });
   } catch (e) {
@@ -7282,31 +6393,29 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
   try {
     const id = req.params.id;
     const { motivo = 'Eliminación manual de existencias en bodega', usuarioNombre = 'Administrador' } = req.body || {};
-    const reqNegocioId = obtenerNegocioIdReq(req);
 
     let insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) {
       return res.status(404).json({ error: 'Insumo no encontrado en bodega.' });
     }
 
-    const negocioIdInsumo = insumo.negocio_id || reqNegocioId;
     const stockPrevio = Number(insumo.stock_actual || insumo.stock || 0);
     const ahora = new Date().toISOString();
 
     await dbRun('UPDATE Inventario SET stock_actual = 0, actualizado_en = ? WHERE id = ?', [ahora, id]);
 
-    // Registrar en InventarioMovimientos con negocio_id correcto
+    // Registrar en InventarioMovimientos
     try {
       await dbRun(
         `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-         VALUES (?, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
-        [negocioIdInsumo, id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
+         VALUES (1, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
+        [id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
       );
     } catch (_) {}
 
     // Registrar en Auditoria
     await registrarAuditoria({
-      negocioId: negocioIdInsumo,
+      negocioId: insumo.negocio_id || 1,
       usuarioNombre,
       accion: 'eliminar_existencia_bodega',
       tipoEvento: 'inventario',
@@ -7316,10 +6425,7 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
       pinAutorizado: 1
     });
 
-    if (io) {
-      io.emit('inventario_actualizado');
-      io.emit('inventario_cambio', { insumoId: id, stock_actual: 0, negocio_id: negocioIdInsumo });
-    }
+    if (io) io.emit('inventario_actualizado');
 
     res.json({
       success: true,
@@ -7348,7 +6454,6 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
     const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
 
-    const negocioId = insumo.negocio_id || obtenerNegocioIdReq(req);
     let nuevoStock = insumo.stock_actual;
     let accionAuditoria = 'ajuste_inventario';
     let tipoEvento = 'operativo';
@@ -7371,7 +6476,6 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
     const costoTotalAjuste = Math.abs(cantNum) * (insumo.costo_unitario || 0);
 
     await registrarAuditoria({
-      negocioId,
       usuarioNombre,
       accion: accionAuditoria,
       tipoEvento,
@@ -7383,14 +6487,11 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 
     await dbRun(
       `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocioId, id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
     );
 
-    if (io) {
-      io.emit('inventario_actualizado');
-      io.emit('inventario_cambio', { insumoId: id, stock_actual: nuevoStock, negocio_id: negocioId });
-    }
+    io.emit('inventario_actualizado');
 
     res.json({
       message: 'Ajuste de inventario aplicado',
@@ -7406,17 +6507,12 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 // --- RECETAS & ESCANDALLOS ---
 app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
   try {
-    const negocioId = obtenerNegocioIdReq(req);
-    const productos = await dbAll(
-      'SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 AND (negocio_id = ? OR negocio_id IS NULL) ORDER BY categoria_id ASC, nombre ASC',
-      [negocioId]
-    );
+    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
     const recetas = await dbAll(`
       SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-      WHERE (i.negocio_id = ? OR i.negocio_id IS NULL)
-    `, [negocioId]);
+    `);
 
     const costosMap = {};
     const cantIngredientesMap = {};
@@ -7441,7 +6537,6 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
         producto_nombre: p.nombre,
         categoria_id: p.categoria_id,
         precio_venta: pvp,
-        precio: pvp,
         costo_receta: costo,
         margen_bruto: margenBruto,
         margen_porcentaje: margenPorc,
@@ -7462,7 +6557,7 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
 app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
   try {
     const prodId = req.params.productoId;
-    const prod = await dbGet('SELECT id, nombre, precio, categoria_id, negocio_id FROM Productos WHERE id = ?', [prodId]);
+    const prod = await dbGet('SELECT id, nombre, precio, categoria_id FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
     const ingredientes = await dbAll(`
@@ -7570,10 +6665,10 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       return res.status(400).json({ error: 'Insumo y cantidad válida mayor a 0 son requeridos' });
     }
 
-    const prod = await dbGet('SELECT id, nombre, negocio_id FROM Productos WHERE id = ?', [prodId]);
+    const prod = await dbGet('SELECT id, nombre FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    const ins = await dbGet('SELECT id, nombre, negocio_id FROM Inventario WHERE id = ?', [insId]);
+    const ins = await dbGet('SELECT id, nombre FROM Inventario WHERE id = ?', [insId]);
     if (!ins) return res.status(404).json({ error: 'Insumo no encontrado' });
 
     const existente = await dbGet('SELECT id FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
@@ -7589,10 +6684,7 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       );
     }
 
-    const negocioId = prod.negocio_id || ins.negocio_id || obtenerNegocioIdReq(req);
-
     await registrarAuditoria({
-      negocioId,
       usuarioNombre,
       accion: 'modificar_escandallo',
       tipoEvento: 'operativo',
@@ -7600,7 +6692,7 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       detalle: `Ingrediente ${ins.nombre} (${cantNum}) asignado a receta de ${prod.nombre}`
     });
 
-    if (io) io.emit('receta_actualizada', { producto_id: prodId, negocio_id: negocioId });
+    io.emit('receta_actualizada', { producto_id: prodId });
     res.json({ ok: true, message: 'Ingrediente guardado en la receta' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7623,10 +6715,7 @@ app.put('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdmin,
       [cantNum, Number(merma_porcentaje || 0), prodId, insId]
     );
 
-    const prod = await dbGet('SELECT negocio_id FROM Productos WHERE id = ?', [prodId]);
-    const negocioId = prod ? prod.negocio_id : obtenerNegocioIdReq(req);
-
-    if (io) io.emit('receta_actualizada', { producto_id: prodId, negocio_id: negocioId });
+    io.emit('receta_actualizada', { producto_id: prodId });
     res.json({ ok: true, message: 'Ingrediente actualizado con éxito' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7640,11 +6729,53 @@ app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdm
 
     await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
 
-    const prod = await dbGet('SELECT negocio_id FROM Productos WHERE id = ?', [prodId]);
-    const negocioId = prod ? prod.negocio_id : obtenerNegocioIdReq(req);
-
-    if (io) io.emit('receta_actualizada', { producto_id: prodId, negocio_id: negocioId });
+    io.emit('receta_actualizada', { producto_id: prodId });
     res.json({ ok: true, message: 'Ingrediente eliminado de la receta' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
+  try {
+    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
+    const recetas = await dbAll(`
+      SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
+      FROM InventarioRecetas r
+      JOIN Inventario i ON r.insumo_id = i.id
+    `);
+
+    const costosMap = {};
+    const cantIngredientesMap = {};
+    recetas.forEach(r => {
+      const mermaFactor = 1 + (Number(r.merma_porcentaje) / 100);
+      const subtotal = Number(r.cantidad) * Number(r.costo_unitario) * mermaFactor;
+      costosMap[r.producto_id] = (costosMap[r.producto_id] || 0) + subtotal;
+      cantIngredientesMap[r.producto_id] = (cantIngredientesMap[r.producto_id] || 0) + 1;
+    });
+
+    const resumen = productos.map(p => {
+      const costo = Math.round((costosMap[p.id] || 0) * 100) / 100;
+      const pvp = Number(p.precio || 0);
+      const margenBruto = Math.round((pvp - costo) * 100) / 100;
+      const margenPorc = pvp > 0 ? Math.round((margenBruto / pvp) * 1000) / 10 : 0;
+      const foodCostPorc = pvp > 0 ? Math.round((costo / pvp) * 1000) / 10 : 0;
+
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        categoria_id: p.categoria_id,
+        precio_venta: pvp,
+        costo_receta: costo,
+        margen_bruto: margenBruto,
+        margen_porcentaje: margenPorc,
+        food_cost_porcentaje: foodCostPorc,
+        total_ingredientes: cantIngredientesMap[p.id] || 0,
+        tiene_receta: Boolean(cantIngredientesMap[p.id])
+      };
+    });
+
+    res.json(resumen);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -7653,15 +6784,14 @@ app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdm
 // --- KARDEX GENERAL / MOVIMIENTOS COMPLETOS ---
 app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, res) => {
   try {
-    const negocioId = obtenerNegocioIdReq(req);
     const { insumo_id, tipo, limit } = req.query;
     let query = `
       SELECT m.*, i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, i.es_licor, i.rendimiento_shots
       FROM InventarioMovimientos m
       LEFT JOIN Inventario i ON m.insumo_id = i.id
-      WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND i.negocio_id = ?) OR (m.negocio_id IS NULL AND i.negocio_id IS NULL AND ? = 1))
+      WHERE 1=1
     `;
-    const params = [negocioId, negocioId, negocioId];
+    const params = [];
     if (insumo_id && insumo_id !== 'todos') {
       query += ' AND m.insumo_id = ?';
       params.push(insumo_id);
@@ -7775,70 +6905,36 @@ app.delete('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async
       req.query?.revertir_stock === '1'
     );
 
-    let stockNuevo = null;
-    let insumoActualizado = null;
-
     if (revertirStock && movimiento.insumo_id) {
       const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [movimiento.insumo_id]);
       if (insumo) {
         let ajusteReversion = 0;
-        const tipoNorm = String(movimiento.tipo || '').toLowerCase().trim();
-
-        if (tipoNorm === 'entrada' || tipoNorm === 'compra' || tipoNorm === 'ingreso') {
+        if (movimiento.tipo === 'entrada') {
           // Revertir una entrada significa restar lo que había ingresado
           ajusteReversion = -Number(movimiento.cantidad);
-        } else if (['merma', 'venta', 'salida', 'consumo', 'descarte'].includes(tipoNorm)) {
+        } else if (['merma', 'venta', 'salida'].includes(movimiento.tipo)) {
           // Revertir una merma o venta significa devolver el insumo al stock
           ajusteReversion = Number(movimiento.cantidad);
-        } else if (tipoNorm === 'ajuste' || tipoNorm === 'fijar') {
+        } else if (movimiento.tipo === 'ajuste' || movimiento.tipo === 'fijar') {
           // Revertir un ajuste devuelve el stock previo
-          if (movimiento.stock_previo !== null && movimiento.stock_previo !== undefined) {
-            stockNuevo = Math.max(0, Number(movimiento.stock_previo));
+          if (movimiento.stock_previo !== null && movimiento.stock_nuevo !== null) {
+            ajusteReversion = Number(movimiento.stock_previo) - Number(movimiento.stock_nuevo);
           }
         }
 
-        if (stockNuevo === null && ajusteReversion !== 0) {
-          stockNuevo = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + ajusteReversion) * 1000) / 1000);
-        }
-
-        if (stockNuevo !== null) {
-          await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [
-            stockNuevo,
-            new Date().toISOString(),
-            insumo.id
-          ]);
-          insumoActualizado = { ...insumo, stock_actual: stockNuevo };
+        if (ajusteReversion !== 0) {
+          const nuevoStock = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + ajusteReversion) * 1000) / 1000);
+          await dbRun('UPDATE Inventario SET stock_actual = ? WHERE id = ?', [nuevoStock, insumo.id]);
         }
       }
     }
 
     await dbRun('DELETE FROM InventarioMovimientos WHERE id = ?', [id]);
 
-    await registrarAuditoria({
-      negocioId: movimiento.negocio_id || 1,
-      usuarioNombre: req.body?.usuarioNombre || 'Administrador',
-      accion: 'eliminar_movimiento_kardex',
-      tipoEvento: 'inventario',
-      modulo: 'kardex',
-      detalle: `Eliminación de movimiento Kárdex #${id} (${movimiento.tipo} de ${movimiento.cantidad})${revertirStock ? ` con reversión de stock a ${stockNuevo}` : ' sin modificar stock'}`
-    });
-
-    if (io) {
-      io.emit('inventario_actualizado');
-      if (insumoActualizado) {
-        io.emit('inventario_cambio', {
-          insumoId: insumoActualizado.id,
-          stock_actual: stockNuevo,
-          negocio_id: insumoActualizado.negocio_id
-        });
-      }
-    }
-
     res.json({
       success: true,
       message: 'Movimiento de Kárdex eliminado correctamente',
-      revertir_stock: revertirStock,
-      stock_actual: stockNuevo
+      revertir_stock: revertirStock
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7884,14 +6980,11 @@ app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => 
 // --- SUGERENCIA DE REABASTECIMIENTO / COMPRAS ---
 app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, res) => {
   try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || 1);
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-        AND stock_actual < stock_minimo
-        AND stock_minimo > 0
+      WHERE stock_actual <= stock_minimo 
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
-    `, [nid, nid]);
+    `);
 
     let totalPresupuesto = 0;
     const items = insumosCriticos.map(ins => {
@@ -7926,340 +7019,6 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
   }
 });
 
-// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE) ---
-
-// 1. Purgar sugerencias de compra e insumos de prueba
-app.post('/api/admin/inventario/purgar-sugerencias', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-    const { limpiarKardex = true } = req.body || {};
-
-    // Establecer el stock mínimo en 0 para que ninguna sugerencia se dispare hasta que el cliente configure sus mínimos
-    await dbRun(`
-      UPDATE Inventario 
-      SET stock_minimo = 0,
-          actualizado_en = ?
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [new Date().toISOString(), nid, nid]);
-
-    if (limpiarKardex) {
-      await dbRun('DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
-    }
-
-    io.emit('inventario_actualizado', { negocioId: nid });
-    io.emit('kardex_actualizado', { negocioId: nid });
-
-    res.json({
-      ok: true,
-      mensaje: 'Sugerencias de compra eliminadas definitivamente (mínimos en 0 y kárdex limpio).'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 1.1 Purgar historial de ventas de productos y consumo kárdex (Entrega en blanco para el cliente)
-app.post('/api/admin/ventas-kardex/purgar', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-    const usuarioNombre = req.usuario?.nombre || req.body?.usuarioNombre || 'Super Admin';
-
-    await dbRun(`
-      DELETE FROM Pagos 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM FacturasElectronicas 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM Anulaciones 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM DetalleOrden 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM Ordenes 
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM InventarioMovimientos 
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [nid, nid]);
-
-    await dbRun(`
-      UPDATE Mesas 
-      SET estado = 'libre',
-          mesero = NULL,
-          cliente = 'Cliente General',
-          pidio_cuenta_qr = 0,
-          hora_pidio_cuenta = NULL,
-          unida_a_mesa_id = NULL,
-          unida_con = NULL,
-          grupo_mesas = NULL,
-          transferida_de = NULL
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [nid, nid]);
-
-    await registrarAuditoria({
-      usuarioNombre,
-      accion: 'purga_ventas_kardex_entrega_limpia',
-      tipoEvento: 'sistema',
-      modulo: 'ventas_kardex',
-      detalle: `Historial de ventas de productos y consumo kárdex purgado para entrega limpia de negocio #${nid}`
-    });
-
-    io.emit('mesas_actualizadas');
-    io.emit('comandas_actualizadas');
-    io.emit('kardex_actualizado', { negocioId: nid });
-    io.emit('menu_actualizado');
-
-    res.json({
-      ok: true,
-      mensaje: 'Historial de ventas de productos y consumo kárdex eliminado definitivamente. El sistema quedó limpio para el cliente.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 2. Purgar historial financiero de caja
-app.post('/api/caja/purgar-historial', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-
-    await dbRun(`
-      DELETE FROM MovimientosCaja 
-      WHERE caja_id IN (SELECT id FROM Cajas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun('DELETE FROM Cajas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
-
-    io.emit('caja_actualizada', { negocioId: nid });
-
-    res.json({
-      ok: true,
-      mensaje: 'Historial de turnos y movimientos de caja purgado con éxito. Caja reseteada a ₡0.00 / $0.00.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 3. Purgar ventas, órdenes y facturas de prueba
-app.post('/api/admin/ventas/purgar-pruebas', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-
-    await dbRun(`
-      DELETE FROM DetalleOrden 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM Pagos 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM FacturasElectronicas 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun(`
-      DELETE FROM Anulaciones 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    await dbRun('DELETE FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
-
-    io.emit('ordenes_actualizadas', { negocioId: nid });
-    io.emit('ventas_actualizadas', { negocioId: nid });
-    io.emit('mesas_actualizadas', { negocioId: nid });
-
-    res.json({
-      ok: true,
-      mensaje: 'Ventas, órdenes, pagos y reportes de prueba purgados exitosamente.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 3.1 Purga Integral de Dashboard Ejecutivo & Métricas (Ventas, órdenes, kárdex y normalización de mínimos de stock a 0)
-app.post('/api/admin/dashboard/purgar-integral', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-    const usuarioNombre = req.usuario?.nombre || req.body?.usuarioNombre || 'Super Admin';
-
-    // 1. Eliminar pagos
-    await dbRun(`
-      DELETE FROM Pagos 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    // 2. Eliminar facturas electrónicas
-    await dbRun(`
-      DELETE FROM FacturasElectronicas 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    // 3. Eliminar anulaciones
-    await dbRun(`
-      DELETE FROM Anulaciones 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    // 4. Eliminar detalles de órdenes
-    await dbRun(`
-      DELETE FROM DetalleOrden 
-      WHERE orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [nid, nid]);
-
-    // 5. Eliminar órdenes
-    await dbRun('DELETE FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
-
-    // 6. Limpiar movimientos de kárdex
-    await dbRun('DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
-
-    // 7. Normalizar stock_minimo a 0 para limpiar alertas críticas y sugerencias
-    await dbRun(`
-      UPDATE Inventario 
-      SET stock_minimo = 0,
-          actualizado_en = ?
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [new Date().toISOString(), nid, nid]);
-
-    // 8. Restablecer mesas a estado libre
-    await dbRun(`
-      UPDATE Mesas 
-      SET estado = 'libre',
-          mesero = NULL,
-          cliente = 'Cliente General',
-          pidio_cuenta_qr = 0,
-          hora_pidio_cuenta = NULL,
-          unida_a_mesa_id = NULL,
-          unida_con = NULL,
-          grupo_mesas = NULL,
-          transferida_de = NULL
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [nid, nid]);
-
-    await registrarAuditoria({
-      usuarioNombre,
-      accion: 'purga_dashboard_integral',
-      tipoEvento: 'sistema',
-      modulo: 'metricas_dashboard',
-      detalle: `Dashboard Ejecutivo y métricas purgadas a ₡0 para entrega limpia de negocio #${nid}`
-    });
-
-    io.emit('ordenes_actualizadas', { negocioId: nid });
-    io.emit('ventas_actualizadas', { negocioId: nid });
-    io.emit('mesas_actualizadas', { negocioId: nid });
-    io.emit('comandas_actualizadas', { negocioId: nid });
-    io.emit('kardex_actualizado', { negocioId: nid });
-    io.emit('inventario_actualizado', { negocioId: nid });
-    io.emit('menu_actualizado');
-
-    res.json({
-      ok: true,
-      mensaje: 'Métricas de dashboard, ventas, kárdex y alertas de inventario purgadas exitosamente. Sistema limpio a ₡0.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 4. Purgar comandas de cocina y barra (KDS)
-app.post('/api/kds/purgar-comandas', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-
-    await dbRun(`
-      UPDATE DetalleOrden 
-      SET estado_comanda = 'entregado', hora_listo = ?
-      WHERE estado_comanda IN ('pendiente', 'preparando', 'listo')
-        AND orden_id IN (SELECT id FROM Ordenes WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))
-    `, [new Date().toISOString(), nid, nid]);
-
-    io.emit('kds_actualizado', { negocioId: nid });
-    io.emit('actualizar_pantalla_kds', { negocioId: nid });
-    io.emit('comanda_lista', { negocioId: nid });
-
-    res.json({
-      ok: true,
-      mensaje: 'Pantallas de KDS (Cocina y Barra) limpiadas con éxito.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 5. Liberar y resetear todas las mesas a verde
-app.post('/api/mesas/liberar-todas', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-
-    await dbRun(`
-      UPDATE Mesas 
-      SET estado = 'libre',
-          mesero = NULL,
-          cliente = 'Cliente General',
-          pidio_cuenta_qr = 0,
-          hora_pidio_cuenta = NULL,
-          unida_a_mesa_id = NULL,
-          unida_con = NULL,
-          grupo_mesas = NULL,
-          transferida_de = NULL
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [nid, nid]);
-
-    // Cerrar cualquier orden abierta que haya estado asociada a esas mesas
-    await dbRun(`
-      UPDATE Ordenes 
-      SET estado = 'cancelada', fecha_cierre = ?
-      WHERE estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')
-        AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [new Date().toISOString(), nid, nid]);
-
-    // Eliminar uniones registradas
-    await dbRun('UPDATE TableMerges SET activo = 0 WHERE activo = 1');
-
-    io.emit('mesas_actualizadas', { negocioId: nid });
-    io.emit('ordenes_actualizadas', { negocioId: nid });
-
-    res.json({
-      ok: true,
-      mensaje: 'Todas las mesas han sido liberadas a verde y sus estados restablecidos.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// 6. Purgar bitácora de auditoría de prueba
-app.post('/api/admin/auditoria/purgar', verificarAdmin, async (req, res) => {
-  try {
-    const nid = Number(req.headers['x-negocio-id'] || req.query.negocio_id || req.body.negocio_id || 1);
-
-    await dbRun('DELETE FROM Auditoria WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
-
-    res.json({
-      ok: true,
-      mensaje: 'Bitácora de auditoría de prueba purgada exitosamente.'
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // --- REPORTE DE VENTAS POR PERÍODO & CONSUMO DE INSUMOS EN KÁRDEX ---
 app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res) => {
   try {
@@ -8283,10 +7042,10 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     let sqlVentas = `
       SELECT 
         d.producto_id,
-        d.nombre_producto,
+        COALESCE(MAX(p.nombre), MAX(d.nombre_producto)) AS producto_nombre,
         COALESCE(MAX(p.categoria_id), MAX(c.id), 4) AS categoria_id,
-        COALESCE(MAX(c.nombre), CASE WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN 'Cervezas' ELSE 'General' END) AS categoria_nombre,
-        COALESCE(MAX(c.icono), CASE WHEN LOWER(d.nombre_producto) LIKE '%balde%' THEN '🍺' ELSE '🍽️' END) AS categoria_icono,
+        COALESCE(MAX(c.nombre), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN 'Cervezas' ELSE 'General' END) AS categoria_nombre,
+        COALESCE(MAX(c.icono), CASE WHEN LOWER(MAX(d.nombre_producto)) LIKE '%balde%' THEN '🍺' ELSE '🍽️' END) AS categoria_icono,
         MAX(p.imagen_url) AS imagen_url,
         COALESCE(MAX(p.precio), AVG(CAST(d.precio_unitario AS DOUBLE PRECISION)), 7500) AS precio_actual,
         SUM(d.cantidad) AS cantidad_vendida,
@@ -8306,14 +7065,13 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
     const paramsVentas = [desde, hasta, nid, nid];
 
     if (producto_id) {
-      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ? OR (LOWER(CAST(? AS TEXT)) LIKE \'%balde%\' AND LOWER(d.nombre_producto) LIKE \'%balde%\'))';
+      sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ?)';
       paramsVentas.push(String(producto_id));
       paramsVentas.push('%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%');
-      paramsVentas.push(String(producto_id));
     }
     if (categoria_id && categoria_id !== 'todas') {
       const catNum = Number(categoria_id);
-      sqlVentas += ' AND (p.categoria_id = ? OR (LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (4, 8, 150, 158, 166, 174, 182)))';
+      sqlVentas += ' AND (p.categoria_id = ? OR (p.categoria_id IS NULL AND LOWER(d.nombre_producto) LIKE \'%balde%\' AND ? IN (4, 8, 150, 158, 166, 174, 182)))';
       paramsVentas.push(catNum);
       paramsVentas.push(catNum);
     }
@@ -8344,60 +7102,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     const todosLosInsumos = await dbAll('SELECT * FROM Inventario');
 
-    // Consolidar entradas de Balde Nacional en una sola fila representativa
-    const productosMap = new Map();
-    let baldeItemConsolidado = null;
-
     for (const fila of ventasRows) {
-      const esBalde = Boolean(
-        (fila.nombre_producto && fila.nombre_producto.toLowerCase().includes('balde')) ||
-        (fila.producto_id && String(fila.producto_id).toLowerCase().includes('balde'))
-      );
-
-      if (esBalde) {
-        if (!baldeItemConsolidado) {
-          baldeItemConsolidado = {
-            producto_id: 'balde_nacional',
-            producto_nombre: 'Balde Nacional',
-            categoria_id: 4,
-            categoria_nombre: 'Cervezas',
-            categoria_icono: '🍺',
-            imagen_url: fila.imagen_url || '',
-            precio_actual: Number(fila.precio_actual) || 7500,
-            precio_promedio: Number(fila.precio_promedio) || 7500,
-            cantidad_vendida: 0,
-            total_ingresos: 0,
-            total_ordenes: 0,
-            es_balde: true
-          };
-        }
-        baldeItemConsolidado.cantidad_vendida += Number(fila.cantidad_vendida) || 0;
-        baldeItemConsolidado.total_ingresos += Number(fila.total_ingresos) || 0;
-        baldeItemConsolidado.total_ordenes += Number(fila.total_ordenes) || 1;
-        if (fila.imagen_url) baldeItemConsolidado.imagen_url = fila.imagen_url;
-      } else {
-        productosMap.set(fila.producto_id + '_' + fila.nombre_producto, {
-          producto_id: fila.producto_id,
-          producto_nombre: fila.nombre_producto,
-          categoria_id: fila.categoria_id,
-          categoria_nombre: fila.categoria_nombre,
-          categoria_icono: fila.categoria_icono,
-          imagen_url: fila.imagen_url,
-          precio_actual: Number(fila.precio_actual) || 0,
-          precio_promedio: Number(fila.precio_promedio) || 0,
-          cantidad_vendida: Number(fila.cantidad_vendida) || 0,
-          total_ingresos: Number(fila.total_ingresos) || 0,
-          total_ordenes: Number(fila.total_ordenes) || 1
-        });
-      }
-    }
-
-    const filasProcesar = Array.from(productosMap.values());
-    if (baldeItemConsolidado && baldeItemConsolidado.cantidad_vendida > 0) {
-      filasProcesar.unshift(baldeItemConsolidado);
-    }
-
-    for (const fila of filasProcesar) {
       const pId = fila.producto_id;
       const cantVendida = Number(fila.cantidad_vendida) || 0;
       const totalIngreso = Number(fila.total_ingresos) || 0;
@@ -8460,8 +7165,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-            AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-        `, [String(pId || ''), desde, hasta, nid, nid]);
+        `, [String(pId || ''), desde, hasta]);
 
         const desgloseCervezas = {};
         let totalCervezasContadas = 0;
@@ -8493,7 +7197,11 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         }
 
         for (const [nomCerveza, cantTotalBotellas] of Object.entries(desgloseCervezas)) {
-          let insumoMatch = resolverInsumoCerveza(todosLosInsumos, null, nomCerveza) || {
+          let insumoMatch = todosLosInsumos.find(i => 
+            i.nombre.toLowerCase() === nomCerveza.toLowerCase() ||
+            i.nombre.toLowerCase().includes(nomCerveza.toLowerCase()) ||
+            nomCerveza.toLowerCase().includes(i.nombre.toLowerCase())
+          ) || todosLosInsumos.find(i => i.nombre.toLowerCase().includes('pilsen') || i.nombre.toLowerCase().includes('imperial')) || {
             id: 'ins_balde_' + nomCerveza,
             nombre: nomCerveza,
             unidad_medida: 'botellas',
@@ -8976,13 +7684,12 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
     let totalTarjeta = 0;
     let totalSinpe = 0;
     let totalDolares = 0;
-    let totalDolaresUSD = 0;
     let totalTransferencia = 0;
     let totalPropinas = 0;
     const desgloseMetodosHoy = {};
 
     const pagosHoy = await dbAll(`
-      SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(COALESCE(p.monto_usd, 0)) AS total_usd, SUM(p.propina) AS total_propina
+      SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(p.propina) AS total_propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
@@ -9005,7 +7712,6 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         totalSinpe += mto;
       } else if (met.includes('dolar') || met.includes('dólar') || met.includes('usd')) {
         totalDolares += mto;
-        totalDolaresUSD += Number(pg.total_usd) || 0;
         totalEfectivo += mto;
       } else if (met.includes('transfer')) {
         totalTransferencia += mto;
@@ -9023,7 +7729,6 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         tarjeta: totalTarjeta,
         sinpe: totalSinpe,
         dolares: totalDolares,
-        dolares_usd: totalDolaresUSD,
         transferencia: totalTransferencia,
         por_metodo: desgloseMetodosHoy
       },
@@ -9034,7 +7739,6 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
         totalTarjeta,
         totalSinpe,
         totalDolares,
-        totalDolaresUSD,
         totalTransferencia,
         totalPropinas
       },
@@ -9255,34 +7959,23 @@ app.post('/api/impresoras/config', (req, res) => {
   };
 
   io.emit('impresoras_config_actualizada', printerService.printerConfig);
-  db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('printer_config', ?)", [JSON.stringify(printerService.printerConfig)]);
   res.json({ message: 'Configuración de impresora actualizada', config: printerService.printerConfig[destino] });
 });
 
-// Auto-configuración Plug & Play de impresora IP con calibración inmediata
+// Auto-configuración Plug & Play de impresora IP
 app.post('/api/impresoras/auto-configurar', async (req, res) => {
   try {
-    const { ip, puerto = 9100, destino = 'caja', nombre } = req.body;
-    if (!ip || typeof ip !== 'string' || !ip.trim()) {
-      return res.status(400).json({ error: 'Por favor ingresa una dirección IP válida (ej: 192.168.1.30)' });
-    }
-
+    const { ip, puerto = 9100, destino = 'caja', nombre = null } = req.body;
     const resultado = await printerService.autoConfigurarImpresora({
-      ip: ip.trim(),
-      puerto: Number(puerto) || 9100,
-      destino: (destino || 'caja').toLowerCase(),
+      ip,
+      puerto,
+      destino,
       nombre,
       io
     });
-
-    db.run(
-      "INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('printer_config', ?)",
-      [JSON.stringify(printerService.printerConfig)]
-    );
-
-    res.json(resultado);
-  } catch (err) {
-    res.status(400).json({ error: err.message || 'Error al auto-configurar la impresora' });
+    res.json({ ok: true, mensaje: 'Impresora configurada y probada exitosamente', resultado, config: printerService.printerConfig[destino] });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
   }
 });
 
@@ -9393,7 +8086,7 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         items: ticketVisual.items || [],
         fechaHora: ticketVisual.fechaHora
       });
-    } else if (ticketVisual.tipo === 'corte_x') {
+    } else if (ticketVisual.tipo === 'corte_x' || ticketVisual.tipo === 'corte_x_ciego') {
       tInfo = printerService.generarTicketCorteX({
         negocio: ticketVisual.negocio,
         caja_id: ticketVisual.caja_id,
@@ -9401,45 +8094,11 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         fecha_apertura: ticketVisual.fecha_apertura,
         fecha_corte: ticketVisual.fecha_corte,
         fondo_inicial: ticketVisual.fondo_inicial,
-        fondo_inicial_usd: ticketVisual.fondo_inicial_usd || 0,
         ventas: ticketVisual.ventas || {},
         total_entradas: ticketVisual.total_entradas || 0,
         total_salidas: ticketVisual.total_salidas || 0,
         efectivo_esperado: ticketVisual.efectivo_esperado || 0,
-        esperado_efectivo_crc: ticketVisual.esperado_efectivo_crc,
-        esperado_dolares_usd: ticketVisual.esperado_dolares_usd,
-        esperado_dolares_crc: ticketVisual.esperado_dolares_crc,
-        total_general_esperado_gaveta_crc: ticketVisual.total_general_esperado_gaveta_crc,
         movimientos_detalle: ticketVisual.movimientos_detalle || [],
-        tip_pool: ticketVisual.tip_pool || [],
-        total_propinas: ticketVisual.total_propinas || 0
-      });
-    } else if (ticketVisual.tipo === 'corte_x_ciego') {
-      tInfo = printerService.generarTicketCorteXCiego({
-        negocio: ticketVisual.negocio,
-        caja_id: ticketVisual.caja_id,
-        cajero: ticketVisual.cajero,
-        fecha_apertura: ticketVisual.fecha_apertura,
-        fecha_corte: ticketVisual.fecha_corte,
-        fondo_inicial: ticketVisual.fondo_inicial,
-        fondo_inicial_usd: ticketVisual.fondo_inicial_usd || 0,
-        ventas: ticketVisual.ventas || {},
-        total_entradas: ticketVisual.total_entradas || 0,
-        total_salidas: ticketVisual.total_salidas || 0,
-        efectivo_esperado: ticketVisual.efectivo_esperado || 0,
-        esperado_efectivo_crc: ticketVisual.esperado_efectivo_crc,
-        esperado_dolares_usd: ticketVisual.esperado_dolares_usd,
-        esperado_dolares_crc: ticketVisual.esperado_dolares_crc,
-        total_general_esperado_gaveta_crc: ticketVisual.total_general_esperado_gaveta_crc,
-        efectivo_declarado: ticketVisual.efectivo_declarado || 0,
-        diferencia_efectivo: ticketVisual.diferencia_efectivo || 0,
-        dolares_esperado_usd: ticketVisual.dolares_esperado_usd || 0,
-        dolares_declarado_usd: ticketVisual.dolares_declarado_usd || 0,
-        diferencia_dolares_usd: ticketVisual.diferencia_dolares_usd || 0,
-        tarjeta_declarada: ticketVisual.tarjeta_declarada || 0,
-        sinpe_declarado: ticketVisual.sinpe_declarado || 0,
-        estado_cuadre: ticketVisual.estado_cuadre || 'Cuadre',
-        notas: ticketVisual.notas || '',
         tip_pool: ticketVisual.tip_pool || [],
         total_propinas: ticketVisual.total_propinas || 0
       });
@@ -9451,24 +8110,18 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         fecha_apertura: ticketVisual.fecha_apertura,
         fecha_cierre: ticketVisual.fecha_cierre,
         fondo_inicial: ticketVisual.fondo_inicial,
-        fondo_inicial_usd: ticketVisual.fondo_inicial_usd || 0,
         ventas: ticketVisual.ventas || {},
         total_entradas: ticketVisual.total_entradas || 0,
         total_salidas: ticketVisual.total_salidas || 0,
         efectivo_esperado: ticketVisual.efectivo_esperado || 0,
-        esperado_efectivo_crc: ticketVisual.esperado_efectivo_crc,
-        esperado_dolares_usd: ticketVisual.esperado_dolares_usd,
-        esperado_dolares_crc: ticketVisual.esperado_dolares_crc,
-        total_general_esperado_gaveta_crc: ticketVisual.total_general_esperado_gaveta_crc,
         efectivo_real_contado: ticketVisual.efectivo_real_contado || 0,
-        dolares_real_contado_usd: ticketVisual.dolares_real_contado_usd || 0,
         diferencia: ticketVisual.diferencia || 0,
         estado_cuadre: ticketVisual.estado_cuadre || 'Cuadre',
         notas: ticketVisual.notas || '',
         tip_pool: ticketVisual.tip_pool || [],
         total_propinas: ticketVisual.total_propinas || 0
       });
-    } else if (ticketVisual.tipo === 'liquidacion' || !ticketVisual.tipo) {
+    } else if (ticketVisual.tipo === 'liquidacion') {
       tInfo = printerService.generarTicketLiquidacion({
         negocio: ticketVisual.negocio,
         ordenId: ticketVisual.ordenId,
@@ -9479,10 +8132,25 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         metodoPago: ticketVisual.metodoPago,
         subtotal: ticketVisual.subtotal,
         descuentoHH: ticketVisual.descuentoHH,
-        descuento: ticketVisual.descuento || ticketVisual.descuentoMonto || ticketVisual.descuento_monto || 0,
-        descuentoMonto: ticketVisual.descuentoMonto || ticketVisual.descuento_monto || ticketVisual.descuento || 0,
-        descuentoPorcentaje: ticketVisual.descuentoPorcentaje || ticketVisual.descuento_porcentaje || 0,
-        descuentoMotivo: ticketVisual.descuentoMotivo || ticketVisual.descuento_motivo || '',
+        servicio: ticketVisual.servicio,
+        iva: ticketVisual.iva,
+        total: ticketVisual.total,
+        recibido: ticketVisual.recibido,
+        cambio: ticketVisual.cambio,
+        items: ticketVisual.items || [],
+        fechaHora: ticketVisual.fechaHora
+      });
+    } else {
+      tInfo = printerService.generarTicketLiquidacion({
+        negocio: ticketVisual.negocio,
+        ordenId: ticketVisual.ordenId,
+        numeroOrden: ticketVisual.numeroOrden,
+        mesaNumero: ticketVisual.mesa,
+        mesero: ticketVisual.mesero,
+        cliente: ticketVisual.cliente,
+        metodoPago: ticketVisual.metodoPago,
+        subtotal: ticketVisual.subtotal,
+        descuentoHH: ticketVisual.descuentoHH,
         servicio: ticketVisual.servicio,
         iva: ticketVisual.iva,
         total: ticketVisual.total,
@@ -9493,21 +8161,14 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
       });
     }
 
-    console.log(`🖨️ [DESPACHO DIRECTO] Tipo: ${ticketVisual.tipo || 'general'} | Destino: ${destino} | Titulo: ${ticketVisual.titulo || '-'}`);
     const reg = await printerService.procesarImpresion({
       destinoImpresora: destino,
       ticketInfo: tInfo,
       io
     });
-    console.log(`🖨️ [DESPACHO RESULTADO] Estado: ${reg.estado} | Detalle: ${reg.detalleConexion}`);
 
-    if (reg.estado === 'impreso') {
-      res.json({ ok: true, mensaje: '¡Ticket impreso exitosamente en la impresora térmica!', registro: reg });
-    } else {
-      res.json({ ok: false, error: reg.detalleConexion || 'La impresora física no respondió', registro: reg });
-    }
+    res.json({ ok: true, mensaje: 'Ticket despachado directamente a impresora térmica', registro: reg });
   } catch (e) {
-    console.error('❌ [ERROR IMPRESION DIRECTA]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -9644,188 +8305,6 @@ app.post('/api/dev/personalizacion-pagina/reset', (req, res) => {
     io.emit('pagina_personalizacion_actualizada', { config: {}, negocio_id: Number(negocio_id) });
     res.json({ ok: true, message: 'Personalización restablecida a valores originales', negocio_id: Number(negocio_id) });
   });
-});
-
-// ============================================================================
-// ASISTENTE INTELIGENTE POS (CHATBOT IA CON SUPABASE/POSTGRES & GEMINI)
-// ============================================================================
-app.post('/api/ia/chat', async (req, res) => {
-  try {
-    const negocioId = obtenerNegocioIdReq(req, 1);
-    
-    // Verificar si el negocio tiene activo el módulo de Inteligencia Artificial
-    const tieneModuloIA = await negocioTieneModulo(negocioId, 'inteligencia_artificial');
-    if (!tieneModuloIA) {
-      return res.status(403).json({
-        ok: false,
-        moduloRequerido: 'inteligencia_artificial',
-        error: 'El módulo de Inteligencia Artificial no está activo en este negocio. Puedes activarlo desde la Consola Dev o consultar tu plan de suscripción.'
-      });
-    }
-
-    const mensajeRaw = req.body?.mensaje || req.body?.pregunta || req.body?.prompt || req.body?.q || req.body?.query || '';
-    if (!mensajeRaw || !String(mensajeRaw).trim()) {
-      return res.status(400).json({ error: 'El mensaje es requerido' });
-    }
-
-    const q = String(mensajeRaw).trim();
-
-    // 1. Extraer contexto fresco en tiempo real de la BD (PostgreSQL / Supabase)
-    const [negocio, inventario, productos, cajaActiva, mesasOcupadas] = await Promise.all([
-      dbGet('SELECT id, nombre, moneda, modulos_activos FROM Negocios WHERE id = ?', [negocioId])
-        .then(r => r || { nombre: 'GastroBar', moneda: 'CRC' }),
-      dbAll('SELECT id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, es_licor FROM Inventario WHERE negocio_id = ? ORDER BY nombre ASC', [negocioId])
-        .catch(() => []),
-      dbAll('SELECT p.id, p.nombre, p.precio, p.destino, p.curso, p.agotado, c.nombre as categoria FROM Productos p LEFT JOIN Categorias c ON p.categoria_id = c.id WHERE p.negocio_id = ? AND p.activo = 1 ORDER BY p.nombre ASC', [negocioId])
-        .catch(() => []),
-      dbGet('SELECT id, cajero, fecha_apertura, monto_inicial, monto_inicial_usd, total_ventas_efectivo, total_ventas_tarjeta, total_ventas_sinpe, total_ventas_dolares, total_ventas_usd FROM Cajas WHERE negocio_id = ? AND fecha_cierre IS NULL ORDER BY id DESC LIMIT 1', [negocioId])
-        .catch(() => null),
-      dbAll('SELECT m.id, m.numero, m.estado, m.total, m.nombre_cliente, z.nombre as zona FROM Mesas m LEFT JOIN Zonas z ON m.zona_id = z.id WHERE m.negocio_id = ? AND m.estado != "libre"', [negocioId])
-        .catch(() => [])
-    ]);
-
-    const simboloMoneda = (negocio.moneda === 'USD' ? '$' : '₡');
-    const invStr = inventario.slice(0, 100).map(i => `${i.nombre}: ${i.stock_actual} ${i.unidad_medida || 'uds'}${Number(i.stock_actual) <= Number(i.stock_minimo) ? ' (bajo stock)' : ''}`).join(' | ');
-    const prodStr = productos.slice(0, 100).map(p => `${p.nombre} (${simboloMoneda}${p.precio}${p.agotado ? ', AGOTADO' : ''})`).join(' | ');
-    const mesasStr = mesasOcupadas.length > 0 ? mesasOcupadas.map(m => `Mesa ${m.numero}: ${simboloMoneda}${m.total} (${m.estado})`).join(' | ') : 'Sin mesas ocupadas';
-    const dolaresCajaTxt = cajaActiva && (cajaActiva.total_ventas_usd > 0 || cajaActiva.monto_inicial_usd > 0) ? `, Dólares: $${Number(cajaActiva.total_ventas_usd || 0).toFixed(2)}` : '';
-    const cajaStr = cajaActiva ? `Cajero: ${cajaActiva.cajero || 'Activo'}, Inicial: ${simboloMoneda}${Number(cajaActiva.monto_inicial || 0).toLocaleString()}, Efectivo: ${simboloMoneda}${Number(cajaActiva.total_ventas_efectivo || 0).toLocaleString()}, Tarjeta: ${simboloMoneda}${Number(cajaActiva.total_ventas_tarjeta || 0).toLocaleString()}, SINPE: ${simboloMoneda}${Number(cajaActiva.total_ventas_sinpe || 0).toLocaleString()}${dolaresCajaTxt}` : 'Caja cerrada';
-
-    // 2. Intentar llamar a Google Gemini si hay API KEY
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (geminiApiKey) {
-      try {
-        const systemPrompt = `Eres el Asistente Inteligente Integral de GAMMA POS para el negocio "${negocio.nombre}".
-Tienes capacidad total para responder CUALQUIER tipo de pregunta con excelencia, amabilidad y profesionalismo en español:
-
-1. 🏪 INFORMACIÓN DEL RESTAURANTE / NEGOCIO (Usa los datos en tiempo real de la base de datos):
-   - Inventario actual: ${invStr || 'Sin insumos'}
-   - Menú y Precios: ${prodStr || 'Sin productos'}
-   - Estado de Caja: ${cajaStr}
-   - Mesas Ocupadas: ${mesasStr}
-
-2. 🧠 CONOCIMIENTO GENERAL, GASTRONÓMICO Y DE NEGOCIOS:
-   - Recetas de cocina, preparación de cócteles, técnicas de bar/cocina, maridajes.
-   - Consejos de servicio al cliente, hospitalidad, traducciones a inglés para turistas.
-   - Ideas de promociones, marketing, cálculos o cualquier pregunta general o cotidiana.
-
-PAUTAS:
-- Sé claro, conciso, útil y ameno.
-- Usa formato markdown (negritas, viñetas, emojis) fácil de leer en pantallas de restaurante.
-- Si te preguntan algo del negocio, usa los datos provistos arriba. Si preguntan cualquier otra cosa general o gastronómica, responde con todo tu conocimiento.`;
-
-        const modelList = ['gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-3.6-flash'];
-        for (const modelName of modelList) {
-          try {
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
-            const response = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              signal: AbortSignal.timeout(15000),
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: 'user',
-                    parts: [{ text: `${systemPrompt}\n\nPregunta del usuario: ${q}` }]
-                  }
-                ],
-                generationConfig: {
-                  temperature: 0.4,
-                  maxOutputTokens: 1000
-                }
-              })
-            });
-
-            if (response.ok) {
-              const geminiData = await response.json();
-              const parts = geminiData.candidates?.[0]?.content?.parts || [];
-              const textoRespuesta = parts.map(p => p.text || '').filter(Boolean).join('\n');
-              if (textoRespuesta) {
-                return res.json({
-                  ok: true,
-                  respuesta: textoRespuesta.trim(),
-                  fuente: 'gemini',
-                  modelo: modelName
-                });
-              }
-            }
-          } catch (_) {
-            // Intentar con el siguiente modelo de la lista
-          }
-        }
-      } catch (geminiErr) {
-        console.warn('⚠️ Error al consultar Gemini API, usando motor de fallback local:', geminiErr.message);
-      }
-    }
-
-    // 3. Motor Inteligente de Fallback Local (respuestas instantáneas basadas en datos reales)
-    const qLower = q.toLowerCase();
-    let respuestaLocal = '';
-
-    if (qLower.includes('caja') || qLower.includes('venta') || qLower.includes('vendido') || qLower.includes('efectivo') || qLower.includes('tarjeta') || qLower.includes('sinpe') || qLower.includes('cuanto llevamos') || qLower.includes('cierre')) {
-      if (cajaActiva) {
-        const totalVentas = Number(cajaActiva.total_ventas_efectivo || 0) + Number(cajaActiva.total_ventas_tarjeta || 0) + Number(cajaActiva.total_ventas_sinpe || 0);
-        respuestaLocal = `💰 **Resumen de Caja (Turno Actual):**\n` +
-          `• **Cajero(a):** ${cajaActiva.cajero || 'Activo'}\n` +
-          `• **Monto Inicial:** ${simboloMoneda}${Number(cajaActiva.monto_inicial || 0).toLocaleString()}\n` +
-          `• **Efectivo:** ${simboloMoneda}${Number(cajaActiva.total_ventas_efectivo || 0).toLocaleString()}\n` +
-          `• **Tarjeta:** ${simboloMoneda}${Number(cajaActiva.total_ventas_tarjeta || 0).toLocaleString()}\n` +
-          `• **SINPE Móvil:** ${simboloMoneda}${Number(cajaActiva.total_ventas_sinpe || 0).toLocaleString()}\n` +
-          `• **Total Vendido Acumulado:** **${simboloMoneda}${totalVentas.toLocaleString()}**`;
-      } else {
-        respuestaLocal = `🔒 **Caja Cerrada:** No hay un turno de caja abierto actualmente en este comercio.`;
-      }
-    } else if (qLower.includes('mesa') || qLower.includes('salon') || qLower.includes('ocupad') || qLower.includes('cuenta')) {
-      if (mesasOcupadas.length > 0) {
-        respuestaLocal = `🍽️ **Mesas Activas / Ocupadas (${mesasOcupadas.length}):**\n` +
-          mesasOcupadas.map(m => `• **Mesa ${m.numero}** (${m.zona || 'Salón'}): ${simboloMoneda}${Number(m.total || 0).toLocaleString()} • *${m.estado}*`).join('\n');
-      } else {
-        respuestaLocal = `🟢 **Salón despejado:** En este momento no hay mesas ocupadas.`;
-      }
-    } else if (qLower.includes('stock') || qLower.includes('quedan') || qLower.includes('cuant') || qLower.includes('hay ') || qLower.includes('inventario') || qLower.includes('insumo') || qLower.includes('cerveza') || qLower.includes('imperial') || qLower.includes('pilsen')) {
-      const palabras = qLower.replace(/cuant[ao]s?|quedan|hay|en|el|la|los|las|de|stock|inventario|\?|¿/gi, ' ').split(/\s+/).filter(w => w.length > 2);
-      
-      let encontrados = inventario.filter(i => {
-        const nom = (i.nombre || '').toLowerCase();
-        return palabras.some(p => nom.includes(p));
-      });
-
-      if (encontrados.length > 0) {
-        respuestaLocal = `📦 **Stock de Inventario en Tiempo Real:**\n` + encontrados.map(i => {
-          const alerta = Number(i.stock_actual) <= Number(i.stock_minimo) ? ' ⚠️ *(Poco Stock)*' : '';
-          return `• **${i.nombre}**: **${i.stock_actual} ${i.unidad_medida || 'uds'}** en stock${alerta}`;
-        }).join('\n');
-      } else {
-        const prodsEncontrados = productos.filter(p => {
-          const nom = (p.nombre || '').toLowerCase();
-          return palabras.some(w => nom.includes(w));
-        });
-        if (prodsEncontrados.length > 0) {
-          respuestaLocal = `📋 **Productos en Menú:**\n` + prodsEncontrados.map(p => `• **${p.nombre}**: ${simboloMoneda}${p.precio} (${p.agotado ? '❌ Marcado Agotado' : '✅ Disponible'})`).join('\n');
-        } else if (qLower.includes('poco') || qLower.includes('bajo') || qLower.includes('agot')) {
-          const bajos = inventario.filter(i => Number(i.stock_actual) <= Number(i.stock_minimo));
-          if (bajos.length > 0) {
-            respuestaLocal = `⚠️ **Insumos con Poco Stock (${bajos.length}):**\n` + bajos.slice(0, 8).map(i => `• **${i.nombre}**: ${i.stock_actual} ${i.unidad_medida || 'uds'} (mínimo: ${i.stock_minimo})`).join('\n');
-          } else {
-            respuestaLocal = `✅ **Inventario al día:** No hay insumos por debajo del stock mínimo.`;
-          }
-        } else {
-          respuestaLocal = `🔍 No encontré insumos que coincidan con *"${q}"*. Prueba buscando por el nombre del producto (ej: Imperial, Pilsen, Coca Cola).`;
-        }
-      }
-    } else {
-      respuestaLocal = `👋 ¡Hola! Soy el **Asistente IA de ${negocio.nombre}**.\n\nPuedes preguntarme sobre:\n• 📦 **Stock e Inventario** (*"¿Cuántas Imperial quedan?", "Insumos con poco stock"*)\n• 💰 **Ventas y Caja** (*"¿Cuánto llevamos vendido en efectivo hoy?"*)\n• 🍽️ **Mesas** (*"¿Qué mesas están ocupadas?"*)\n\n*(💡 Para respuestas conversacionales con IA en lenguaje libre, puedes añadir GEMINI_API_KEY en tu archivo .env)*`;
-    }
-
-    return res.json({
-      ok: true,
-      respuesta: respuestaLocal,
-      fuente: 'local_database'
-    });
-  } catch (error) {
-    console.error('Error en /api/ia/chat:', error);
-    res.status(500).json({ error: 'Error procesando la consulta con el asistente IA' });
-  }
 });
 
 // ============================================================================
