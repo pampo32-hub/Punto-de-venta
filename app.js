@@ -18777,6 +18777,56 @@ window.actualizarVisibilidadBotonesPurgaDev = function() {
   });
 };
 
+window.purgarNegocioCompletoDev = async function(negocioIdManual = null) {
+  if (!window.esUsuarioDeveloperOSuperAdmin()) {
+    alert('⛔ Acceso denegado: Esta función de purga total es exclusiva para el Desarrollador del sistema.');
+    return;
+  }
+
+  const nid = Number(negocioIdManual || estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1);
+  const negNombre = estado.negocioActual?.nombre || `Negocio #${nid}`;
+
+  const confirmar1 = confirm(`🚨 ATENCIÓN DESARROLLADOR - PURGA TOTAL PARA ENTREGA OFICIAL 🚨\n\n¿Deseas purgar absolutamente toda la información operativa del negocio "${negNombre}" (ID: ${nid})?\n\n• Se borrarán TODAS las ventas, facturas, comandas y cierres de caja de prueba.\n• La caja quedará cerrada en ₡0.00 lista para su primera apertura real.\n• Todas las mesas quedarán libres (en verde) con saldo ₡0.\n• El Kárdex se vaciará y las alertas/sugerencias de compra quedarán en 0.\n• Se eliminarán los empleados de prueba (dejando solo el usuario Administrador para entrega).\n• Las categorías, productos y configuraciones del sistema SE CONSERVAN INTACTAS.`);
+  if (!confirmar1) return;
+
+  const confirmar2 = confirm(`⚠️ CONFIRMACIÓN FINAL REQUERIDA:\n\n¿Estás 100% seguro de ejecutar la purga total para "${negNombre}"? Esta acción no se puede deshacer.`);
+  if (!confirmar2) return;
+
+  try {
+    const rol = window.obtenerRolUsuarioActual();
+    const res = await fetch('/api/developer/purgar-negocio-completo', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol,
+        'x-supervisor-pin': '9999'
+      },
+      body: JSON.stringify({ negocio_id: nid })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al purgar negocio');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ ${data.message}`, 'success');
+    }
+    alert(`🎉 ¡Purga Exitosa!\n\n${data.message}\n\nEl negocio está completamente limpio en ceros y listo para operar.`);
+
+    // Recargar todas las vistas
+    if (typeof window.cargarDashboardMetricas === 'function') await window.cargarDashboardMetricas();
+    if (typeof window.cargarMetricasDev === 'function') window.cargarMetricasDev();
+    if (typeof window.cargarMesasDesdeBackend === 'function') window.cargarMesasDesdeBackend();
+    if (typeof window.cargarCajaDesdeBackend === 'function') window.cargarCajaDesdeBackend();
+    if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
+    if (typeof window.cargarSugerenciaCompras === 'function') window.cargarSugerenciaCompras();
+    if (typeof window.cargarInventario === 'function') window.cargarInventario();
+    if (typeof window.cargarUsuarios === 'function') window.cargarUsuarios();
+  } catch (e) {
+    alert('❌ Error al ejecutar purga total: ' + e.message);
+  }
+};
+
 window.purgarDashboardEjecutivoDev = async function() {
   if (!window.esUsuarioDeveloperOSuperAdmin()) {
     alert('⛔ Acceso denegado: Esta función de purga es exclusiva para Developer / Super Admin.');
