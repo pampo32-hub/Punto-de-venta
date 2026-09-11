@@ -9501,7 +9501,11 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
     });
     console.log(`🖨️ [DESPACHO RESULTADO] Estado: ${reg.estado} | Detalle: ${reg.detalleConexion}`);
 
-    res.json({ ok: true, mensaje: 'Ticket despachado directamente a impresora térmica', registro: reg });
+    if (reg.estado === 'impreso') {
+      res.json({ ok: true, mensaje: '¡Ticket impreso exitosamente en la impresora térmica!', registro: reg });
+    } else {
+      res.json({ ok: false, error: reg.detalleConexion || 'La impresora física no respondió', registro: reg });
+    }
   } catch (e) {
     console.error('❌ [ERROR IMPRESION DIRECTA]', e.message);
     res.status(500).json({ error: e.message });

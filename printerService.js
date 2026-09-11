@@ -1,5 +1,6 @@
 require('dotenv').config();
 const net = require('net');
+const http = require('http');
 const { sendRawToWindowsPrinter, getInstalledPrinters } = require('./windowsPrinter');
 
 /**
@@ -1201,6 +1202,79 @@ function enviarAPuertoTCP(ip, puerto, rawData) {
   });
 }
 
+/**
+ * Enviar buffer mediante Epson ePOS-Print (HTTP XML / SOAP)
+ * Compatible con impresoras inteligentes Epson TM-T88VI, TM-T88VI-i, TM-m30, TM-T70II-i, etc.
+ */
+function enviarAePOSPrint(ip, rawData, timeoutMs = 7000) {
+  return new Promise((resolve) => {
+    try {
+      const hex = (Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1')).toString('hex');
+      const xml = `<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+      <command>${hex}</command>
+    </epos-print>
+  </s:Body>
+</s:Envelope>`;
+
+      const req = http.request({
+        hostname: ip,
+        port: 80,
+        path: '/cgi-bin/epos/service.cgi?devid=local_printer&timeout=' + timeoutMs,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'SOAPAction': '""',
+          'Content-Length': Buffer.byteLength(xml)
+        },
+        timeout: timeoutMs
+      }, (res) => {
+        let respData = '';
+        res.on('data', chunk => respData += chunk);
+        res.on('end', () => {
+          if (res.statusCode === 200 && respData.includes('success="true"')) {
+            resolve({ ok: true, metodo: 'epos', mensaje: `Impreso físicamente con éxito vía ePOS-Print en ${ip}` });
+          } else {
+            resolve({ ok: false, error: `ePOS error: ${respData.substring(0, 120)}` });
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ ok: false, error: `Timeout al conectar con ePOS-Print en ${ip}` });
+      });
+
+      req.on('error', (err) => {
+        resolve({ ok: false, error: err.message });
+      });
+
+      req.write(xml);
+      req.end();
+    } catch (e) {
+      resolve({ ok: false, error: e.message });
+    }
+  });
+}
+
+/**
+ * Despachador universal de red:
+ * 1. Intenta Epson ePOS-Print XML (ideal para TM-T88VI-i y TM inteligentes)
+ * 2. Si la impresora no es ePOS, utiliza socket TCP directo al puerto 9100 estándar
+ */
+async function enviarAImpresoraRed(ip, puerto, rawData) {
+  // 1. Intentar ePOS-Print primero (impresión inmediata de alta confiabilidad)
+  const resEPOS = await enviarAePOSPrint(ip, rawData, 4000);
+  if (resEPOS.ok) {
+    return resEPOS;
+  }
+
+  // 2. Si no responde por ePOS, enviar por puerto TCP 9100 estándar ESC/POS
+  return await enviarAPuertoTCP(ip, puerto, rawData);
+}
+
 // Cola de impresión secuencial (FIFO) para evitar colisiones cuando se envían múltiples tickets a la misma IP
 const colasImpresion = new Map();
 
@@ -1211,7 +1285,7 @@ function encolarEnvioTCP(ip, puerto, rawData) {
   const siguiente = colaActual
     .catch(() => {})
     .then(async () => {
-      const res = await enviarAPuertoTCP(ip, puerto, rawData);
+      const res = await enviarAImpresoraRed(ip, puerto, rawData);
       // Breve pausa entre tickets para permitir el corte de papel y vaciado del buffer de la impresora
       await new Promise(resolve => setTimeout(resolve, 300));
       return res;
@@ -1335,43 +1409,18 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_PARTIAL;
 
-  // 2. Conectar y despachar el ticket en una sola conexión TCP limpia con reintento si está ocupada
-  const bufferTicket = Buffer.from(raw, 'latin1');
+  // 2. Conectar y despachar el ticket en red (ePOS-Print o TCP 9100) con reintento automático
   let conexionOk = false;
   let ultimoError = '';
 
   for (let intento = 1; intento <= 2; intento++) {
-    const intentoRes = await new Promise((resolve) => {
-      const s = new net.Socket();
-      s.setTimeout(12000); // 12s de margen para permitir despertar de ahorro de energia Wi-Fi / cable
-
-      s.connect(portNum, ipLimpia, () => {
-        s.write(bufferTicket, () => {
-          setTimeout(() => {
-            s.end(() => {
-              resolve({ ok: true });
-            });
-          }, 800);
-        });
-      });
-
-      s.on('timeout', () => {
-        s.destroy();
-        resolve({ ok: false, error: `Tiempo de espera agotado al conectar con ${ipLimpia}:${portNum}` });
-      });
-
-      s.on('error', (err) => {
-        s.destroy();
-        resolve({ ok: false, error: err.message || 'Error de socket de red' });
-      });
-    });
-
+    const intentoRes = await enviarAImpresoraRed(ipLimpia, portNum, raw);
     if (intentoRes.ok) {
       conexionOk = true;
       break;
     }
 
-    ultimoError = intentoRes.error;
+    ultimoError = intentoRes.error || intentoRes.mensaje || 'Error de conexión';
     if (intento < 2) {
       // Breve pausa para dar tiempo al microcontrolador de la impresora a liberar el socket
       await new Promise(r => setTimeout(r, 1200));

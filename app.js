@@ -19479,14 +19479,21 @@ window.cerrarModalVisorTicket = function() {
 
 window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso = false) {
   const tData = ticketData || window.ticketTermicoActual || window.ticketActivoParaImprimir;
-  if (!tData) return { ok: false, error: 'No hay datos de ticket para imprimir' };
+  if (!tData) {
+    mostrarNotificacionCentro('⚠️ No hay datos de ticket para imprimir.', 'warning');
+    return { ok: false, error: 'No hay datos de ticket para imprimir' };
+  }
 
   window.ticketTermicoActual = tData;
   window.ticketActivoParaImprimir = tData;
 
   const destino = tData.destino || (tData.tipo === 'comanda' ? 'cocina' : 'caja');
+  const tituloTicket = tData.titulo || (tData.tipo === 'prefactura' ? 'Pre-cuenta' : (tData.tipo === 'cierre_z' ? 'Cierre Z' : (tData.tipo === 'corte_x' || tData.tipo === 'corte_x_ciego' ? 'Corte X' : 'Factura')));
+  const nombreDestino = (tData.destino || destino || 'CAJA').toUpperCase();
 
   try {
+    mostrarNotificacionCentro(`⏳ Enviando ${tituloTicket} despachado a impresora térmica (${nombreDestino})...`, 'info');
+
     const res = await fetch('/api/impresoras/imprimir-directo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -19497,24 +19504,21 @@ window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso =
     });
     const data = await res.json().catch(() => null);
 
-    if (res.ok && data?.ok) {
-      const reg = data.registro || {};
-      const tituloTicket = tData.titulo || (tData.tipo === 'prefactura' ? 'Pre-cuenta' : (tData.tipo === 'cierre_z' ? 'Cierre Z' : (tData.tipo === 'corte_x' || tData.tipo === 'corte_x_ciego' ? 'Corte X' : 'Factura')));
-      const nombreDestino = (reg.destinoImpresora || destino || 'CAJA').toUpperCase();
-      const detalle = reg.estado === 'impreso'
-        ? `🖨️ ${tituloTicket} despachado a impresora térmica (${nombreDestino})`
-        : `🖨️ ${tituloTicket} registrado (${reg.detalleConexion || 'simulado'})`;
-      mostrarNotificacionCentro(detalle, 'success');
+    if (res.ok && data?.ok && data?.registro?.estado === 'impreso') {
+      const msgExito = `✅ 🖨️ ¡${tituloTicket} impreso con éxito en impresora térmica (${nombreDestino})!`;
+      mostrarNotificacionCentro(msgExito, 'success');
       return { ok: true, data };
     } else {
-      const errMsg = data?.error || 'No se pudo conectar con la impresora térmica';
-      console.warn('Advertencia en impresora térmica:', errMsg);
-      mostrarNotificacionCentro(`⚠️ Impresora: ${errMsg}. La operación continuó con éxito.`, 'warning');
+      const errMsg = data?.error || data?.registro?.detalleConexion || 'No se pudo imprimir físicamente en el equipo';
+      const msgFallo = `❌ ⚠️ Error al imprimir ${tituloTicket} (${nombreDestino}): ${errMsg}. La operación continuó con éxito.`;
+      console.warn(msgFallo);
+      mostrarNotificacionCentro(msgFallo, 'error');
       return { ok: false, error: errMsg };
     }
   } catch (e) {
-    console.warn('Error al despachar a impresora térmica:', e);
-    mostrarNotificacionCentro(`⚠️ No se pudo enviar a la impresora (${e.message}). La operación continuó con éxito.`, 'warning');
+    const msgError = `❌ ⚠️ Error de comunicación con impresora térmica: ${e.message}. La operación continuó con éxito.`;
+    console.warn(msgError);
+    mostrarNotificacionCentro(msgError, 'error');
     return { ok: false, error: e.message };
   }
 };
