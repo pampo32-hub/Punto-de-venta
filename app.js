@@ -19667,10 +19667,6 @@ window.ejecutarAutoConfiguracionImpresora = async function() {
 
     mostrarNotificacionCentro(`🖨️ ${data.mensaje}`, 'success');
     await cargarEstadoImpresorasConfig();
-
-    if (data.registro && data.registro.ticketVisual) {
-      mostrarVisorTicketTermico(data.registro.ticketVisual);
-    }
   } catch (err) {
     if (statusBox) {
       statusBox.style.display = 'block';
@@ -19736,9 +19732,6 @@ window.probarImpresoraBackend = async function(destino) {
       throw new Error(data.error || 'Error al conectar con la impresora');
     }
     mostrarNotificacionCentro(`🖨️ ${data.message || 'Ticket de prueba enviado con éxito'}`, 'success');
-    if (data.registro && data.registro.ticketVisual) {
-      mostrarVisorTicketTermico(data.registro.ticketVisual);
-    }
     await cargarEstadoImpresorasConfig();
   } catch (e) {
     mostrarNotificacionCentro(`❌ Error en impresora ${destino}: ${e.message}`, 'error');
