@@ -231,6 +231,8 @@ function initDb() {
     db.run("ALTER TABLE Negocios ADD COLUMN caracteristicas_activas TEXT DEFAULT 'all'", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN restringir_ip_operativos INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN ips_permitidas TEXT DEFAULT ''", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN restringir_dispositivos INTEGER DEFAULT 0", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN sesion_unica_activa INTEGER DEFAULT 1", () => {});
 
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (
@@ -464,10 +466,31 @@ function initDb() {
       permisos TEXT DEFAULT '{"salon":true,"kds":true,"caja":true,"facturacion":true}',
       activo INTEGER DEFAULT 1,
       debe_cambiar_password INTEGER DEFAULT 0,
+      ultimo_token_sesion TEXT,
+      ultima_conexion TEXT,
+      ultimo_dispositivo_id TEXT,
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
       UNIQUE(negocio_id, usuario)
     )`);
     db.run("ALTER TABLE Usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 0", () => {});
+    db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_token_sesion TEXT", () => {});
+    db.run("ALTER TABLE Usuarios ADD COLUMN ultima_conexion TEXT", () => {});
+    db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_dispositivo_id TEXT", () => {});
+
+    // 12b. Terminales y Dispositivos Autorizados (Device Whitelisting)
+    db.run(`CREATE TABLE IF NOT EXISTS DispositivosAutorizados (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      device_token TEXT NOT NULL UNIQUE,
+      nombre_dispositivo TEXT NOT NULL,
+      tipo_dispositivo TEXT DEFAULT 'desktop', -- 'pc', 'tablet', 'movil'
+      navegador_info TEXT,
+      ip_registro TEXT,
+      autorizado_por TEXT DEFAULT 'Administrador',
+      creado_en TEXT NOT NULL,
+      activo INTEGER DEFAULT 1,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
+    )`);
 
     // 13. Historial de Uniones de Mesas (Snapshots para Separación Exacta)
     db.run(`CREATE TABLE IF NOT EXISTS TableMerges (

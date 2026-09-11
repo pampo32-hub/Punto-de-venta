@@ -1923,6 +1923,44 @@ try {
         }
       }
     });
+    socket.on('usuario_sesion_iniciada', (d) => {
+      const u = estado.usuarioActual;
+      if (u && Number(u.id) === Number(d.usuarioId)) {
+        const localSess = estado.sessionId || sessionStorage.getItem('pos_session_id') || u.session_id;
+        if (localSess && d.sessionId && localSess !== d.sessionId) {
+          if (typeof mostrarNotificacionCentro === 'function') {
+            mostrarNotificacionCentro('⚠️ Se ha iniciado sesión con tu usuario en otro dispositivo. Tu sesión en este equipo ha sido cerrada por seguridad.', 'warning');
+          } else {
+            alert('⚠️ Se ha iniciado sesión con tu usuario en otro dispositivo. Tu sesión en este equipo ha sido cerrada por seguridad.');
+          }
+          if (typeof cerrarSesion === 'function') {
+            cerrarSesion(false);
+          }
+        }
+      }
+    });
+    socket.on('dispositivo_revocado', (d) => {
+      if (typeof obtenerDeviceToken === 'function' && d.device_token === obtenerDeviceToken()) {
+        const u = estado.usuarioActual;
+        if (u && !['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'].includes((u.rol || '').toLowerCase())) {
+          if (typeof mostrarNotificacionCentro === 'function') {
+            mostrarNotificacionCentro('🚫 Esta terminal ha sido revocada por el Administrador.', 'error');
+          } else {
+            alert('🚫 Esta terminal ha sido revocada por el Administrador.');
+          }
+          if (typeof cerrarSesion === 'function') {
+            cerrarSesion(false);
+          }
+        }
+      }
+    });
+    socket.on('dispositivo_autorizado', (d) => {
+      if (document.getElementById('modalAdminSeguridadRed')?.classList.contains('active')) {
+        if (typeof cargarListaDispositivosAutorizados === 'function') {
+          cargarListaDispositivosAutorizados();
+        }
+      }
+    });
     socket.on('negocio_eliminado', (d) => {
       if (document.getElementById('developerPortalView')?.classList.contains('active')) {
         if (typeof cargarNegociosDev === 'function') cargarNegociosDev();
@@ -2493,18 +2531,39 @@ window.ejecutarLogin = async function() {
   }
 
   try {
+    const devToken = typeof window.obtenerDeviceToken === 'function' ? window.obtenerDeviceToken() : (localStorage.getItem('pos_device_token') || '');
     const res = await fetch('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario, password })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-device-token': devToken
+      },
+      body: JSON.stringify({ usuario, password, deviceToken: devToken })
     });
     const data = await res.json();
     if (!res.ok) {
+      if (data.dispositivo_no_autorizado) {
+        window._ultimoDeviceTokenBloqueado = data.device_token || devToken;
+        const modalBloqueo = document.getElementById('modalAlertaDispositivoNoRegistrado');
+        if (modalBloqueo) {
+          modalBloqueo.classList.add('active');
+          modalBloqueo.style.display = 'flex';
+          window._modalActivoId = 'modalAlertaDispositivoNoRegistrado';
+        } else {
+          alert('🚫 Dispositivo no autorizado: Esta terminal no está registrada por la administración del bar.');
+        }
+        return;
+      }
       if (data.comercio_desactivado || (data.error && data.error.toLowerCase().includes('comercio desactivado'))) {
         alert('⛔ Comercio desactivado, contacte con su proveedor!');
         return;
       }
       throw new Error(data.error || 'Error de autenticación');
+    }
+
+    if (data.session_id) {
+      estado.sessionId = data.session_id;
+      sessionStorage.setItem('pos_session_id', data.session_id);
     }
 
     if (data.debe_cambiar_password) {
@@ -4967,8 +5026,19 @@ window.guardarCaracteristicasAdmin = async function() {
 };
 
 // ============================================================================
-// GESTIÓN DE SEGURIDAD Y RESTRICCIÓN DE ACCESO POR RED WIFI / IP
+// GESTIÓN DE SEGURIDAD: RED WIFI, DISPOSITIVOS AUTORIZADOS & SESIÓN ÚNICA
 // ============================================================================
+window.obtenerDeviceToken = function() {
+  let token = localStorage.getItem('pos_device_token');
+  if (!token) {
+    token = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `dev_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    localStorage.setItem('pos_device_token', token);
+  }
+  return token;
+};
+
 window.abrirModalSeguridadRed = async function() {
   const modal = document.getElementById('modalAdminSeguridadRed');
   if (!modal) return;
@@ -4980,20 +5050,26 @@ window.abrirModalSeguridadRed = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de red'));
+      alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de seguridad'));
       return;
     }
 
     const subtitulo = document.getElementById('adminSeguridadRedSubtitulo');
     if (subtitulo && data.nombre) {
-      subtitulo.textContent = `Control perimetral de acceso por red WiFi para: ${data.nombre}`;
+      subtitulo.textContent = `Control de IP, terminales y sesión única para: ${data.nombre}`;
     }
 
-    const chk = document.getElementById('chkAdminRestringirIP');
-    if (chk) chk.checked = !!data.restringir_ip_operativos;
+    const chkIp = document.getElementById('chkAdminRestringirIP');
+    if (chkIp) chkIp.checked = !!data.restringir_ip_operativos;
 
     const txtIps = document.getElementById('txtAdminIpsPermitidas');
     if (txtIps) txtIps.value = data.ips_permitidas || '';
+
+    const chkDisp = document.getElementById('chkAdminRestringirDispositivos');
+    if (chkDisp) chkDisp.checked = !!data.restringir_dispositivos;
+
+    const chkSesion = document.getElementById('chkAdminSesionUnica');
+    if (chkSesion) chkSesion.checked = (data.sesion_unica_activa !== false);
 
     const lblIp = document.getElementById('lblAdminIpActual');
     if (lblIp) lblIp.textContent = data.clientIp || '127.0.0.1';
@@ -5001,9 +5077,11 @@ window.abrirModalSeguridadRed = async function() {
     if (typeof window.actualizarEstadoVisualSeguridadRed === 'function') {
       window.actualizarEstadoVisualSeguridadRed();
     }
+
+    await cargarListaDispositivosAutorizados();
     modal.classList.add('active');
   } catch (e) {
-    alert('❌ Error al abrir seguridad de red: ' + e.message);
+    alert('❌ Error al abrir seguridad: ' + e.message);
   }
 };
 
@@ -5013,14 +5091,22 @@ window.cerrarModalSeguridadRed = function() {
 };
 
 window.actualizarEstadoVisualSeguridadRed = function() {
-  const chk = document.getElementById('chkAdminRestringirIP');
-  if (!chk) return;
-  const slider = chk.nextElementSibling;
-  if (slider) {
-    slider.style.backgroundColor = chk.checked ? '#0284c7' : '#334155';
-    const knob = slider.querySelector('span');
-    if (knob) knob.style.left = chk.checked ? '26px' : '3px';
-  }
+  const switches = [
+    { id: 'chkAdminRestringirIP', color: '#0284c7' },
+    { id: 'chkAdminRestringirDispositivos', color: '#10b981' },
+    { id: 'chkAdminSesionUnica', color: '#6366f1' }
+  ];
+
+  switches.forEach(sw => {
+    const el = document.getElementById(sw.id);
+    if (!el) return;
+    const slider = el.nextElementSibling;
+    if (slider) {
+      slider.style.backgroundColor = el.checked ? sw.color : '#334155';
+      const knob = slider.querySelector('span');
+      if (knob) knob.style.left = el.checked ? '26px' : '3px';
+    }
+  });
 };
 
 window.consultarIpDetectadaEnVivo = async function() {
@@ -5061,16 +5147,254 @@ window.capturarIpActual = async function() {
   }
 };
 
+window.cargarListaDispositivosAutorizados = async function() {
+  const cont = document.getElementById('contenedorListaDispositivos');
+  if (!cont) return;
+
+  try {
+    const nid = estado.negocioActual?.id || 1;
+    const res = await fetch('/api/admin/dispositivos', {
+      headers: { 'x-negocio-id': String(nid) }
+    });
+    const data = await res.json();
+    const dispositivos = (data && data.dispositivos) ? data.dispositivos : [];
+    renderListaDispositivosAutorizados(dispositivos);
+  } catch (e) {
+    cont.innerHTML = `<div style="color:#ef4444; font-size:0.8rem; padding:10px; text-align:center;">Error cargando dispositivos: ${e.message}</div>`;
+  }
+};
+
+window.renderListaDispositivosAutorizados = function(dispositivos = []) {
+  const cont = document.getElementById('contenedorListaDispositivos');
+  if (!cont) return;
+
+  if (!dispositivos.length) {
+    cont.innerHTML = `
+      <div style="text-align: center; padding: 16px; color: #94a3b8; font-size: 0.85rem;">
+        <span>📱</span> No hay dispositivos registrados aún.<br>
+        <small style="color: #64748b;">Haz clic en "Autorizar este Dispositivo" para vincular esta pantalla.</small>
+      </div>
+    `;
+    return;
+  }
+
+  const currentToken = obtenerDeviceToken();
+  const iconMap = {
+    tablet: '📱',
+    pc: '💻',
+    movil: '📲',
+    kds: '🍳',
+    desktop: '💻'
+  };
+
+  cont.innerHTML = dispositivos.map(d => {
+    const esActual = d.device_token === currentToken;
+    const icono = iconMap[d.tipo_dispositivo] || '📱';
+    const fecha = d.creado_en ? new Date(d.creado_en).toLocaleDateString() : '';
+    const tokenShort = String(d.device_token || '').substring(0, 8);
+
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; background: ${esActual ? 'rgba(16, 185, 129, 0.12)' : '#1e293b'}; border: 1px solid ${esActual ? '#10b981' : '#334155'}; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.25rem;">${icono}</span>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <strong style="color: #f8fafc; font-size: 0.88rem;">${d.nombre_dispositivo}</strong>
+              ${esActual ? '<span style="background: #10b981; color: #022c22; font-size: 0.68rem; font-weight: 800; padding: 1px 6px; border-radius: 4px;">ESTE EQUIPO</span>' : ''}
+            </div>
+            <small style="color: #94a3b8; font-size: 0.72rem; display: block;">
+              Token: <code>${tokenShort}...</code> • IP: ${d.ip_registro || 'Local'} • ${fecha}
+            </small>
+          </div>
+        </div>
+        <button type="button" onclick="eliminarDispositivoAutorizado(${d.id}, '${d.nombre_dispositivo.replace(/'/g, "\\'")}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; font-weight: 700;" title="Revocar terminal">
+          🗑️ Revocar
+        </button>
+      </div>
+    `;
+  }).join('');
+};
+
+window.abrirModalAutorizarDispositivoActual = function() {
+  const modal = document.getElementById('modalAutorizarDispositivoNuevo');
+  if (!modal) return;
+
+  const token = obtenerDeviceToken();
+  const tokenPreview = document.getElementById('lblNuevoDispTokenPreview');
+  if (tokenPreview) tokenPreview.textContent = `${token.substring(0, 16)}...`;
+
+  const inputNombre = document.getElementById('txtNuevoDispNombre');
+  if (inputNombre) {
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    const isTablet = /iPad|Tablet/i.test(navigator.userAgent) || (isMobile && window.innerWidth >= 768);
+    if (isTablet) {
+      inputNombre.value = 'Tablet Salón';
+      const sel = document.getElementById('selNuevoDispTipo');
+      if (sel) sel.value = 'tablet';
+    } else if (isMobile) {
+      inputNombre.value = 'Celular Mesero';
+      const sel = document.getElementById('selNuevoDispTipo');
+      if (sel) sel.value = 'movil';
+    } else {
+      inputNombre.value = 'PC Principal Caja';
+      const sel = document.getElementById('selNuevoDispTipo');
+      if (sel) sel.value = 'pc';
+    }
+  }
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalAutorizarDispositivoNuevo = function() {
+  const modal = document.getElementById('modalAutorizarDispositivoNuevo');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+window.confirmarAutorizarDispositivoNuevo = async function() {
+  const inputNombre = document.getElementById('txtNuevoDispNombre');
+  const selTipo = document.getElementById('selNuevoDispTipo');
+  const nombre = inputNombre ? inputNombre.value.trim() : '';
+  const tipo = selTipo ? selTipo.value : 'tablet';
+
+  if (!nombre) {
+    alert('Por favor ingresa un nombre para el dispositivo.');
+    return;
+  }
+
+  const token = window._ultimoDeviceTokenBloqueado || obtenerDeviceToken();
+  const nid = estado.negocioActual?.id || 1;
+
+  // Si no es admin autenticado, pedir PIN admin
+  let pinAdmin = '';
+  const u = estado.usuarioActual;
+  const esAdmin = u && ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'].includes((u.rol || '').toLowerCase());
+  
+  if (!esAdmin) {
+    pinAdmin = await window.solicitarPinAdmin({
+      icono: '🔑',
+      titulo: 'Autorizar Terminal',
+      subtitulo: 'Permiso de Administrador',
+      mensaje: `Ingresa el PIN de Administrador para autorizar "${nombre}":`
+    });
+    if (!pinAdmin) return;
+  }
+
+  try {
+    const res = await fetch('/api/admin/dispositivos/autorizar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
+        'x-device-token': token
+      },
+      body: JSON.stringify({
+        device_token: token,
+        nombre_dispositivo: nombre,
+        tipo_dispositivo: tipo,
+        navegador_info: navigator.userAgent,
+        pinAdmin: pinAdmin || undefined,
+        usuarioNombre: u?.nombre || 'Administrador'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error al autorizar dispositivo: ' + (data.error || 'Error del servidor'));
+      return;
+    }
+
+    cerrarModalAutorizarDispositivoNuevo();
+    cerrarAlertaDispositivoBloqueado();
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ Terminal "${nombre}" autorizada correctamente.`, 'success');
+    } else {
+      alert(`✅ Terminal "${nombre}" autorizada correctamente.`);
+    }
+
+    await cargarListaDispositivosAutorizados();
+  } catch (e) {
+    alert('❌ Error de conexión: ' + e.message);
+  }
+};
+
+window.eliminarDispositivoAutorizado = async function(id, nombre) {
+  if (!confirm(`¿Estás seguro de que deseas revocar el acceso a "${nombre}"?\nEsta terminal ya no podrá operar el sistema.`)) {
+    return;
+  }
+
+  const nid = estado.negocioActual?.id || 1;
+  const u = estado.usuarioActual;
+  const esAdmin = u && ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'].includes((u.rol || '').toLowerCase());
+  
+  let pinAdmin = '';
+  if (!esAdmin) {
+    pinAdmin = await window.solicitarPinAdmin({
+      icono: '🗑️',
+      titulo: 'Revocar Dispositivo',
+      subtitulo: 'PIN Requerido',
+      mensaje: 'Ingresa el PIN de Administrador para confirmar la revocación:'
+    });
+    if (!pinAdmin) return;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/dispositivos/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ pinAdmin, usuarioNombre: u?.nombre || 'Administrador' })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error: ' + (data.error || 'No se pudo revocar'));
+      return;
+    }
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`🗑️ Terminal "${nombre}" revocada.`, 'info');
+    }
+    await cargarListaDispositivosAutorizados();
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.iniciarAutorizacionDesdeBloqueo = function() {
+  cerrarAlertaDispositivoBloqueado();
+  abrirModalAutorizarDispositivoActual();
+};
+
+window.cerrarAlertaDispositivoBloqueado = function() {
+  const modal = document.getElementById('modalAlertaDispositivoNoRegistrado');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
 window.guardarConfiguracionSeguridadRed = async function() {
   const btn = document.getElementById('btnGuardarSeguridadRed');
   const txtOriginal = btn ? btn.innerHTML : '';
   try {
-    const chk = document.getElementById('chkAdminRestringirIP');
+    const chkIp = document.getElementById('chkAdminRestringirIP');
     const txtIps = document.getElementById('txtAdminIpsPermitidas');
-    const restringir = chk ? chk.checked : false;
-    const ips = txtIps ? txtIps.value.trim() : '';
+    const chkDisp = document.getElementById('chkAdminRestringirDispositivos');
+    const chkSesion = document.getElementById('chkAdminSesionUnica');
 
-    if (restringir && !ips) {
+    const restringirIp = chkIp ? chkIp.checked : false;
+    const ips = txtIps ? txtIps.value.trim() : '';
+    const restringirDisp = chkDisp ? chkDisp.checked : false;
+    const sesionUnica = chkSesion ? chkSesion.checked : true;
+
+    if (restringirIp && !ips) {
       alert('⚠️ Si activas la restricción de red, debes ingresar al menos una IP pública autorizada.');
       return;
     }
@@ -5088,26 +5412,23 @@ window.guardarConfiguracionSeguridadRed = async function() {
         'x-negocio-id': String(nid)
       },
       body: JSON.stringify({
-        restringir_ip_operativos: restringir,
+        restringir_ip_operativos: restringirIp,
         ips_permitidas: ips,
+        restringir_dispositivos: restringirDisp,
+        sesion_unica_activa: sesionUnica,
         usuarioNombre: estado.usuarioActual?.nombre || 'Administrador'
       })
     });
 
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ Error al guardar seguridad de red: ' + (data.error || 'Error del servidor'));
+      alert('❌ Error al guardar seguridad: ' + (data.error || 'Error del servidor'));
       return;
     }
 
     cerrarModalSeguridadRed();
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(
-        restringir
-          ? '🔒 Seguridad de Red activada: Saloneros y cajeros solo pueden acceder desde el WiFi del local'
-          : '🌐 Restricción de red desactivada: Personal operativo puede acceder desde cualquier red',
-        'success'
-      );
+      mostrarNotificacionCentro('🛡️ Configuración de seguridad, red y terminales guardada exitosamente.', 'success');
     } else {
       alert('✅ ' + data.message);
     }

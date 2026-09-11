@@ -3952,18 +3952,18 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL: SEGURIDAD Y RESTRICCIÓN DE ACCESO POR RED WIFI / IP (ADMIN & DEV) -->
+  <!-- MODAL: SEGURIDAD, RED WIFI, DISPOSITIVOS & SESIÓN ÚNICA (ADMIN & DEV) -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalAdminSeguridadRed" style="z-index: 100050;">
-    <div class="modal-dialog" style="max-width: 620px; width: 95vw; max-height: 92vh; border-radius: 18px; background: #0b1120; border: 1px solid #38bdf8; box-shadow: 0 25px 60px rgba(0,0,0,0.85); overflow: hidden; display: flex; flex-direction: column;">
+    <div class="modal-dialog" style="max-width: 720px; width: 95vw; max-height: 92vh; border-radius: 18px; background: #0b1120; border: 1px solid #38bdf8; box-shadow: 0 25px 60px rgba(0,0,0,0.85); overflow: hidden; display: flex; flex-direction: column;">
       <div class="dialog-header" style="background: linear-gradient(135deg, #0c4a6e, #0f172a); border-bottom: 1px solid rgba(56, 189, 248, 0.3); padding: 18px 24px; display: flex; align-items: center; justify-content: space-between;">
         <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="font-size: 1.8rem; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">🌐</div>
+          <div style="font-size: 1.8rem; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">🛡️</div>
           <div>
             <h3 style="margin: 0; color: #fff; font-size: 1.25rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-              Seguridad & Red del Local
+              Seguridad, Red WiFi & Dispositivos
             </h3>
-            <small id="adminSeguridadRedSubtitulo" style="color: #7dd3fc; font-size: 0.82rem;">Control perimetral de acceso por IP pública / red WiFi del bar</small>
+            <small id="adminSeguridadRedSubtitulo" style="color: #7dd3fc; font-size: 0.82rem;">Control de IP pública, terminales autorizadas y sesión única</small>
           </div>
         </div>
         <button class="btn-icon-close" onclick="cerrarModalSeguridadRed()" style="background: rgba(255,255,255,0.08); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;">✕</button>
@@ -3971,84 +3971,126 @@
 
       <div class="dialog-body" style="padding: 20px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 18px;">
         
-        <!-- INTERRUPTOR PRINCIPAL -->
+        <!-- SECCIÓN 1: RESTRICCIÓN POR IP DEL BAR -->
+        <div style="background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 16px 18px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+            <div style="flex: 1; min-width: 240px;">
+              <strong style="color: #f8fafc; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
+                <span>🌐</span> 1. Restringir acceso operativo a la red WiFi / IP del Bar
+              </strong>
+              <small style="color: #94a3b8; font-size: 0.8rem; line-height: 1.4; display: block; margin-top: 4px;">
+                Saloneros, cajeros y cocineros solo podrán iniciar sesión conectados a la conexión de Internet del negocio.
+              </small>
+            </div>
+            <label class="switch-toggle" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; cursor: pointer;">
+              <input type="checkbox" id="chkAdminRestringirIP" style="opacity: 0; width: 0; height: 0;" onchange="actualizarEstadoVisualSeguridadRed()" />
+              <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1);">
+                <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- IP Detectada y Textarea -->
+          <div id="seccionDetalleIpBar" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.25); border-radius: 10px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.95rem;">📍</span>
+                <span style="color: #94a3b8; font-size: 0.8rem; font-weight: 700;">IP Pública Actual:</span>
+                <code id="lblAdminIpActual" style="font-size: 0.95rem; color: #38bdf8; font-family: monospace; font-weight: 800;">Consultando...</code>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" onclick="capturarIpActual()" style="padding: 4px 10px; font-size: 0.78rem; background: #0284c7; color: #fff; font-weight: 700; border-radius: 6px; border: none; cursor: pointer;">
+                  ➕ Usar como IP del Bar
+                </button>
+                <button type="button" onclick="consultarIpDetectadaEnVivo()" style="padding: 4px 8px; font-size: 0.75rem; background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; cursor: pointer;">
+                  🔄
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style="display: block; color: #cbd5e1; font-size: 0.82rem; font-weight: 700; margin-bottom: 4px;">
+                🏢 IPs Públicas Autorizadas (separadas por coma o línea):
+              </label>
+              <textarea id="txtAdminIpsPermitidas" rows="2" placeholder="Ejemplo: 190.113.45.12, 186.15.20.10" style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: #38bdf8; font-family: monospace; font-size: 0.9rem; font-weight: 700; padding: 8px 12px; border-radius: 8px; outline: none; resize: vertical;"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 2: DISPOSITIVOS & TERMINALES AUTORIZADAS (DEVICE WHITELIST) -->
+        <div style="background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 16px 18px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+            <div style="flex: 1; min-width: 240px;">
+              <strong style="color: #f8fafc; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
+                <span>📱</span> 2. Exigir Dispositivos Autorizados (Device Whitelisting)
+              </strong>
+              <small style="color: #94a3b8; font-size: 0.8rem; line-height: 1.4; display: block; margin-top: 4px;">
+                Bloquea el acceso a clientes y celulares ajenos. Solo las tablets y computadoras vinculadas por el Administrador pueden operar.
+              </small>
+            </div>
+            <label class="switch-toggle" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; cursor: pointer;">
+              <input type="checkbox" id="chkAdminRestringirDispositivos" style="opacity: 0; width: 0; height: 0;" />
+              <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1);">
+                <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Botón Vincular Este Dispositivo + Lista -->
+          <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+              <span style="font-size: 0.82rem; font-weight: 700; color: #cbd5e1;">📋 Terminales y Tablets Registradas:</span>
+              <button type="button" onclick="abrirModalAutorizarDispositivoActual()" style="padding: 6px 14px; font-size: 0.82rem; background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 800; border-radius: 8px; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(16,185,129,0.3); display: flex; align-items: center; gap: 6px;">
+                <span>➕</span> Autorizar este Dispositivo
+              </button>
+            </div>
+
+            <!-- Contenedor Lista de Dispositivos -->
+            <div id="contenedorListaDispositivos" style="max-height: 180px; overflow-y: auto; background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 8px;">
+              <div style="text-align: center; padding: 14px; color: #64748b; font-size: 0.82rem;">
+                Cargando dispositivos autorizados...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 3: SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN) -->
         <div style="background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div style="flex: 1; min-width: 240px;">
-            <strong style="color: #f8fafc; font-size: 0.98rem; display: block; margin-bottom: 4px;">
-              🔒 Exigir conexión a la red del Bar para personal operativo
+            <strong style="color: #f8fafc; font-size: 0.98rem; display: flex; align-items: center; gap: 6px;">
+              <span>👤</span> 3. Sesión Única Concurrente (Anti-Clonación)
             </strong>
-            <small style="color: #94a3b8; font-size: 0.8rem; line-height: 1.4; display: block;">
-              Si está activo, saloneros, cajeros y cocineros solo podrán abrir turno o iniciar sesión estando conectados al WiFi del local.
+            <small style="color: #94a3b8; font-size: 0.8rem; line-height: 1.4; display: block; margin-top: 4px;">
+              Permite solo una sesión activa a la vez por usuario. Si un salonero abre su cuenta en otro equipo, la sesión previa se cierra automáticamente en caliente.
             </small>
           </div>
           <label class="switch-toggle" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; cursor: pointer;">
-            <input type="checkbox" id="chkAdminRestringirIP" style="opacity: 0; width: 0; height: 0;" onchange="actualizarEstadoVisualSeguridadRed()" />
+            <input type="checkbox" id="chkAdminSesionUnica" checked style="opacity: 0; width: 0; height: 0;" />
             <span class="slider-round" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1);">
               <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; display: block; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
             </span>
           </label>
         </div>
 
-        <!-- IP DETECTADA EN VIVO -->
-        <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 14px; padding: 16px 18px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 1.1rem;">📍</span>
-              <span style="color: #94a3b8; font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">Tu IP Pública Actual Detectada:</span>
-            </div>
-            <button type="button" class="btn-tool" onclick="capturarIpActual()" style="padding: 5px 12px; font-size: 0.8rem; background: #0284c7; color: #fff; font-weight: 700; border-radius: 8px; border: none; cursor: pointer;">
-              ➕ Usar mi IP actual como IP del Bar
-            </button>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <code id="lblAdminIpActual" style="font-size: 1.15rem; color: #38bdf8; font-family: monospace; font-weight: 800; background: #0f172a; padding: 6px 14px; border-radius: 8px; border: 1px solid #1e293b;">
-              Consultando IP...
-            </code>
-            <button type="button" class="btn-tool" onclick="consultarIpDetectadaEnVivo()" style="padding: 6px 10px; font-size: 0.78rem; background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; cursor: pointer;" title="Refrescar IP">
-              🔄 Refrescar
-            </button>
-          </div>
-        </div>
-
-        <!-- CONFIGURACIÓN DE IPS PERMITIDAS -->
-        <div style="background: #111827; border: 1px solid #334155; border-radius: 14px; padding: 16px 18px;">
-          <label style="display: block; color: #f8fafc; font-size: 0.92rem; font-weight: 700; margin-bottom: 6px;">
-            🏢 IPs Públicas Autorizadas del Bar / Restaurante:
-          </label>
-          <p style="margin: 0 0 10px 0; color: #94a3b8; font-size: 0.8rem; line-height: 1.4;">
-            Ingresa la(s) IP(s) pública(s) de la conexión de Internet del local. Si tienes más de un router (por ejemplo fibra principal y enlace de respaldo 4G), puedes ingresar varias IPs separadas por coma.
-          </p>
-          <textarea id="txtAdminIpsPermitidas" rows="3" placeholder="Ejemplo: 190.113.45.12, 186.15.20.10" style="width: 100%; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: #38bdf8; font-family: monospace; font-size: 0.95rem; font-weight: 700; padding: 10px 14px; border-radius: 10px; outline: none; resize: vertical;"></textarea>
-        </div>
-
         <!-- GUÍA Y EXPLICACIÓN DE ROLES -->
-        <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 16px 18px;">
-          <h4 style="margin: 0 0 10px 0; font-size: 0.88rem; color: #e2e8f0; font-weight: 700;">
-            🛡️ Políticas de Seguridad por Perfil:
-          </h4>
+        <div style="background: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 14px 16px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 10px 12px;">
-              <div style="color: #6ee7b7; font-weight: 700; font-size: 0.85rem; margin-bottom: 4px;">
-                👑 Acceso Remoto Global (24/7):
+              <div style="color: #6ee7b7; font-weight: 700; font-size: 0.82rem; margin-bottom: 4px;">
+                👑 Bypass Administradores (24/7):
               </div>
-              <ul style="margin: 0; padding-left: 18px; color: #cbd5e1; font-size: 0.78rem; line-height: 1.4;">
-                <li><strong>Administrador / Super Admin</strong></li>
-                <li><strong>Desarrollador (Developer)</strong></li>
-                <li><strong>Supervisor</strong></li>
-              </ul>
-              <small style="color: #6ee7b7; font-size: 0.72rem; display: block; margin-top: 4px;">Acceden desde casa o celular sin restricción de IP.</small>
+              <small style="color: #cbd5e1; font-size: 0.75rem; line-height: 1.4; display: block;">
+                Admin y Developer pueden acceder desde cualquier navegador o red sin bloqueo.
+              </small>
             </div>
 
             <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 10px 12px;">
-              <div style="color: #fca5a5; font-weight: 700; font-size: 0.85rem; margin-bottom: 4px;">
-                🛑 Acceso Restringido a la Red:
+              <div style="color: #fca5a5; font-weight: 700; font-size: 0.82rem; margin-bottom: 4px;">
+                🛑 Personal Operativo Protegido:
               </div>
-              <ul style="margin: 0; padding-left: 18px; color: #cbd5e1; font-size: 0.78rem; line-height: 1.4;">
-                <li><strong>Saloneros / Meseros</strong></li>
-                <li><strong>Cajeros</strong></li>
-                <li><strong>Cocineros / Barra</strong></li>
-              </ul>
-              <small style="color: #fca5a5; font-size: 0.72rem; display: block; margin-top: 4px;">Bloqueados fuera de la IP autorizada del local.</small>
+              <small style="color: #cbd5e1; font-size: 0.75rem; line-height: 1.4; display: block;">
+                Saloneros, cajeros y cocina requieren IP y dispositivo autorizado según las reglas activas.
+              </small>
             </div>
           </div>
         </div>
@@ -4058,7 +4100,90 @@
       <div class="dialog-footer" style="padding: 16px 24px; background: #080d18; border-top: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
         <button class="btn-sec" onclick="cerrarModalSeguridadRed()">Cancelar</button>
         <button class="btn-pri" id="btnGuardarSeguridadRed" onclick="guardarConfiguracionSeguridadRed()" style="background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; color: #fff; font-weight: 800; padding: 10px 24px; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 14px rgba(2,132,199,0.4);">
-          💾 Guardar Seguridad de Red
+          💾 Guardar Configuración de Seguridad
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: AUTORIZAR DISPOSITIVO / TERMINAL (ADMIN) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalAutorizarDispositivoNuevo" style="display:none; z-index: 100060; backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.85);">
+    <div class="modal-dialog" style="max-width: 440px; width: 92vw; border-radius: 18px; background: #0f172a; border: 1px solid #10b981; box-shadow: 0 25px 60px rgba(0,0,0,0.85); overflow: hidden;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #064e3b, #0f172a); border-bottom: 1px solid rgba(16, 185, 129, 0.3); padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.5rem;">📱</span>
+          <div>
+            <h3 style="margin: 0; color: #fff; font-size: 1.1rem; font-weight: 800;">Autorizar esta Pantalla / Terminal</h3>
+            <small style="color: #6ee7b7; font-size: 0.78rem;">Registra este equipo como dispositivo oficial del bar</small>
+          </div>
+        </div>
+        <button onclick="cerrarModalAutorizarDispositivoNuevo()" style="background: transparent; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+
+      <form id="formAutorizarDispositivoNuevo" onsubmit="event.preventDefault(); confirmarAutorizarDispositivoNuevo();" style="padding: 18px 20px;">
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px;">
+            Nombre Descriptivo del Dispositivo:
+          </label>
+          <input type="text" id="txtNuevoDispNombre" placeholder="Ej: Tablet Barra 1, PC Caja Principal..." required style="width: 100%; box-sizing: border-box; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.95rem;" />
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px;">
+            Tipo de Equipo:
+          </label>
+          <select id="selNuevoDispTipo" style="width: 100%; box-sizing: border-box; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 0.9rem;">
+            <option value="tablet">📱 Tablet de Salón / Meseros</option>
+            <option value="pc">💻 Computadora de Caja / Barra</option>
+            <option value="movil">📲 Teléfono Móvil Operativo</option>
+            <option value="kds">🍳 Pantalla KDS Cocina</option>
+          </select>
+        </div>
+
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 10px; margin-bottom: 16px;">
+          <small style="color: #94a3b8; font-size: 0.75rem; display: block;">
+            🔑 <strong>Token de Dispositivo:</strong> <span id="lblNuevoDispTokenPreview" style="font-family: monospace; color: #38bdf8;">--</span>
+          </small>
+        </div>
+
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button type="button" class="btn-sec" onclick="cerrarModalAutorizarDispositivoNuevo()" style="padding: 10px 16px;">Cancelar</button>
+          <button type="submit" style="padding: 10px 20px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; border-radius: 8px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(16,185,129,0.35);">
+            ✅ Autorizar Terminal
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: ALERTA BLOQUEO DE DISPOSITIVO NO AUTORIZADO (LOGIN OPERATIVO) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalAlertaDispositivoNoRegistrado" style="display:none; z-index: 100070; backdrop-filter: blur(10px); background: rgba(15, 23, 42, 0.9);">
+    <div class="modal-dialog" style="max-width: 440px; width: 92vw; border-radius: 20px; background: #0f172a; border: 1px solid #ef4444; box-shadow: 0 25px 65px rgba(239, 68, 68, 0.3); overflow: hidden; text-align: center; padding: 26px 22px;">
+      <div style="font-size: 3.2rem; margin-bottom: 10px;">🛑</div>
+      <h3 style="margin: 0 0 8px; color: #f8fafc; font-size: 1.3rem; font-weight: 800;">Dispositivo No Autorizado</h3>
+      <p style="margin: 0 0 16px; color: #cbd5e1; font-size: 0.88rem; line-height: 1.5;">
+        Esta terminal o teléfono móvil no está registrado por la administración del bar para operar el punto de venta.
+      </p>
+
+      <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 12px; margin-bottom: 18px; text-align: left;">
+        <small style="color: #fca5a5; font-size: 0.78rem; display: block; margin-bottom: 4px;">
+          🔒 <strong>Seguridad Perimetral Activa:</strong>
+        </small>
+        <p style="margin: 0; color: #94a3b8; font-size: 0.75rem; line-height: 1.4;">
+          Si eres el Administrador y estás configurando un nuevo equipo de trabajo para el local, puedes autorizar esta terminal ahora mismo con tu PIN.
+        </p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" onclick="iniciarAutorizacionDesdeBloqueo()" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; border-radius: 10px; font-weight: 800; font-size: 0.95rem; cursor: pointer; box-shadow: 0 4px 14px rgba(16,185,129,0.35);">
+          🔑 Autorizar este Dispositivo (Admin)
+        </button>
+        <button type="button" onclick="cerrarAlertaDispositivoBloqueado()" class="btn-sec" style="width: 100%; padding: 10px; font-size: 0.88rem;">
+          Entendido / Volver
         </button>
       </div>
     </div>

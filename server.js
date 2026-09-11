@@ -660,6 +660,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
     }
 
+
     const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
 
     // Bloquear acceso a comercios desactivados para cualquier usuario (excepto Developer)
@@ -693,6 +694,51 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
+    // ── SEGURIDAD DE TERMINALES: DISPOSITIVOS AUTORIZADOS (DEVICE WHITELISTING) ──
+    const deviceToken = String(req.headers['x-device-token'] || req.body.deviceToken || req.body.device_token || '').trim();
+
+    if (!esRolExento && negocio && Number(negocio.restringir_dispositivos) === 1) {
+      if (!deviceToken) {
+        return res.status(403).json({
+          error: '🚫 Dispositivo no autorizado: Esta terminal no cuenta con un token de dispositivo registrado. Solicite a un Administrador que autorice este equipo.',
+          dispositivo_no_autorizado: true,
+          device_token: deviceToken
+        });
+      }
+
+      const disp = await dbGet(
+        'SELECT * FROM DispositivosAutorizados WHERE negocio_id = ? AND device_token = ? AND activo = 1',
+        [negocio.id, deviceToken]
+      );
+
+      if (!disp) {
+        return res.status(403).json({
+          error: '🚫 Dispositivo no autorizado: Esta terminal no está autorizada para operar en el sistema. Solicite a un Administrador que autorice este equipo.',
+          dispositivo_no_autorizado: true,
+          device_token: deviceToken
+        });
+      }
+    }
+
+    // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN) ──
+    const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const ahoraIso = new Date().toISOString();
+
+    await dbRun(
+      'UPDATE Usuarios SET ultimo_token_sesion = ?, ultima_conexion = ?, ultimo_dispositivo_id = ? WHERE id = ?',
+      [sessionId, ahoraIso, deviceToken || null, u.id]
+    );
+
+    if (negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined)) {
+      // Notificar a otras terminales para invalidar sesiones concurrentes del mismo usuario
+      io.emit('usuario_sesion_iniciada', {
+        usuarioId: u.id,
+        sessionId,
+        usuarioNombre: u.nombre_completo,
+        deviceToken: deviceToken || null,
+        fechaHora: ahoraIso
+      });
+    }
 
     // Adaptación dinámica de género para el rol
     let rolEtiqueta = u.rol.toUpperCase();
@@ -720,6 +766,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       ok: true,
       token,
+      session_id: sessionId,
       debe_cambiar_password: debeCambiarPwd,
       usuario: {
         id: u.id,
@@ -732,7 +779,8 @@ app.post('/api/auth/login', async (req, res) => {
         pin: u.pin,
         debe_cambiar_password: debeCambiarPwd,
         permisos: JSON.parse(u.permisos || '{}'),
-        negocio_id: u.negocio_id
+        negocio_id: u.negocio_id,
+        session_id: sessionId
       },
       negocio: negocioObj
     });
@@ -1522,11 +1570,11 @@ app.get('/api/ip-actual', (req, res) => {
   res.json({ ip });
 });
 
-// Endpoint: Obtener configuración de seguridad de red del local
+// Endpoint: Obtener configuración de seguridad de red y terminales del local
 app.get('/api/admin/seguridad-red', async (req, res) => {
   try {
     const negocioId = req.headers['x-negocio-id'] || req.query.negocioId || 1;
-    const neg = await dbGet('SELECT id, nombre, restringir_ip_operativos, ips_permitidas FROM Negocios WHERE id = ?', [negocioId]);
+    const neg = await dbGet('SELECT id, nombre, restringir_ip_operativos, ips_permitidas, restringir_dispositivos, sesion_unica_activa FROM Negocios WHERE id = ?', [negocioId]);
     if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
 
     const clientIp = obtenerIpCliente(req);
@@ -1536,6 +1584,8 @@ app.get('/api/admin/seguridad-red', async (req, res) => {
       nombre: neg.nombre,
       restringir_ip_operativos: Number(neg.restringir_ip_operativos) === 1,
       ips_permitidas: neg.ips_permitidas || '',
+      restringir_dispositivos: Number(neg.restringir_dispositivos) === 1,
+      sesion_unica_activa: neg.sesion_unica_activa === null || neg.sesion_unica_activa === undefined ? true : (Number(neg.sesion_unica_activa) === 1),
       clientIp
     });
   } catch (e) {
@@ -1543,11 +1593,11 @@ app.get('/api/admin/seguridad-red', async (req, res) => {
   }
 });
 
-// Endpoint: Guardar configuración de seguridad de red del local (IP Whitelisting)
+// Endpoint: Guardar configuración de seguridad de red y dispositivos del local
 app.put('/api/admin/seguridad-red', async (req, res) => {
   try {
     const negocioId = req.headers['x-negocio-id'] || req.body.negocioId || 1;
-    const { restringir_ip_operativos, ips_permitidas, pinAdmin, usuarioNombre = 'Administrador' } = req.body;
+    const { restringir_ip_operativos, ips_permitidas, restringir_dispositivos, sesion_unica_activa, pinAdmin, usuarioNombre = 'Administrador' } = req.body;
 
     // Validar autorización: JWT de rol admin/developer, o header x-user-rol, o PIN de admin/developer
     let autorizado = false;
@@ -1585,12 +1635,14 @@ app.put('/api/admin/seguridad-red', async (req, res) => {
       return res.status(403).json({ error: 'No autorizado. Se requiere PIN o credenciales de Administrador.' });
     }
 
-    const flagVal = (restringir_ip_operativos === true || Number(restringir_ip_operativos) === 1 || String(restringir_ip_operativos) === 'true') ? 1 : 0;
+    const flagIpVal = (restringir_ip_operativos === true || Number(restringir_ip_operativos) === 1 || String(restringir_ip_operativos) === 'true') ? 1 : 0;
     const ipsVal = (ips_permitidas || '').trim();
+    const flagDispVal = (restringir_dispositivos === true || Number(restringir_dispositivos) === 1 || String(restringir_dispositivos) === 'true') ? 1 : 0;
+    const flagSesionVal = (sesion_unica_activa === false || Number(sesion_unica_activa) === 0 || String(sesion_unica_activa) === 'false') ? 0 : 1;
 
     await dbRun(
-      'UPDATE Negocios SET restringir_ip_operativos = ?, ips_permitidas = ? WHERE id = ?',
-      [flagVal, ipsVal, negocioId]
+      'UPDATE Negocios SET restringir_ip_operativos = ?, ips_permitidas = ?, restringir_dispositivos = ?, sesion_unica_activa = ? WHERE id = ?',
+      [flagIpVal, ipsVal, flagDispVal, flagSesionVal, negocioId]
     );
 
     await registrarAuditoria({
@@ -1599,21 +1651,199 @@ app.put('/api/admin/seguridad-red', async (req, res) => {
       accion: 'configurar_seguridad_red',
       tipoEvento: 'seguridad',
       modulo: 'admin',
-      detalle: `Seguridad de Red WiFi: ${flagVal ? 'Activada restricción de IP para saloneros/cajeros' : 'Desactivada restricción de IP'}. IPs autorizadas: [${ipsVal || 'Ninguna'}]`
+      detalle: `Seguridad de Red & Dispositivos actualizada: [Restricción IP: ${flagIpVal ? 'ON' : 'OFF'}], [Dispositivos Autorizados: ${flagDispVal ? 'ON' : 'OFF'}], [Sesión Única: ${flagSesionVal ? 'ON' : 'OFF'}]`
     });
 
     io.emit('negocio_seguridad_red_actualizada', {
       negocioId: Number(negocioId),
-      restringir_ip_operativos: flagVal === 1,
-      ips_permitidas: ipsVal
+      restringir_ip_operativos: flagIpVal === 1,
+      ips_permitidas: ipsVal,
+      restringir_dispositivos: flagDispVal === 1,
+      sesion_unica_activa: flagSesionVal === 1
     });
 
     res.json({
       ok: true,
-      message: 'Configuración de red WiFi y seguridad guardada exitosamente',
-      restringir_ip_operativos: flagVal === 1,
-      ips_permitidas: ipsVal
+      message: 'Configuración de seguridad y terminales guardada exitosamente',
+      restringir_ip_operativos: flagIpVal === 1,
+      ips_permitidas: ipsVal,
+      restringir_dispositivos: flagDispVal === 1,
+      sesion_unica_activa: flagSesionVal === 1
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Listar dispositivos autorizados del negocio
+app.get('/api/admin/dispositivos', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.query.negocioId || 1;
+    const dispositivos = await dbAll(
+      `SELECT id, negocio_id, device_token, nombre_dispositivo, tipo_dispositivo, navegador_info, ip_registro, autorizado_por, creado_en, activo 
+       FROM DispositivosAutorizados 
+       WHERE negocio_id = ? AND activo = 1 
+       ORDER BY id DESC`,
+      [negocioId]
+    );
+    res.json({ ok: true, dispositivos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Registrar y autorizar una terminal o dispositivo
+app.post('/api/admin/dispositivos/autorizar', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.body.negocioId || 1;
+    const { device_token, nombre_dispositivo, tipo_dispositivo = 'desktop', navegador_info = '', pinAdmin, usuarioNombre = 'Administrador' } = req.body;
+
+    if (!device_token || !nombre_dispositivo) {
+      return res.status(400).json({ error: 'Token de dispositivo y nombre descriptivo son requeridos.' });
+    }
+
+    let autorizado = false;
+    const rolesAdmin = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'];
+
+    if (req.usuario && rolesAdmin.includes((req.usuario.rol || '').toLowerCase())) {
+      autorizado = true;
+    } else if (rolesAdmin.includes((req.headers['x-user-rol'] || '').toLowerCase())) {
+      autorizado = true;
+    } else if (pinAdmin) {
+      const pinStr = String(pinAdmin).trim();
+      const adminUsers = await dbAll(
+        `SELECT * FROM Usuarios WHERE negocio_id = ? AND rol IN ('admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer') AND activo = 1`,
+        [negocioId]
+      );
+      for (const u of adminUsers) {
+        if (await verificarCredencialUsuario(u, pinStr)) {
+          autorizado = true;
+          break;
+        }
+      }
+      if (!autorizado) {
+        const devs = await dbAll(`SELECT * FROM Usuarios WHERE rol = 'developer' AND activo = 1`);
+        for (const d of devs) {
+          if (await verificarCredencialUsuario(d, pinStr)) {
+            autorizado = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!autorizado) {
+      return res.status(403).json({ error: 'No autorizado. Se requiere PIN o credenciales de Administrador.' });
+    }
+
+    const clientIp = obtenerIpCliente(req);
+    const ahoraIso = new Date().toISOString();
+
+    const existente = await dbGet(
+      'SELECT id FROM DispositivosAutorizados WHERE negocio_id = ? AND device_token = ?',
+      [negocioId, device_token.trim()]
+    );
+
+    if (existente) {
+      await dbRun(
+        `UPDATE DispositivosAutorizados 
+         SET nombre_dispositivo = ?, tipo_dispositivo = ?, navegador_info = ?, ip_registro = ?, autorizado_por = ?, activo = 1 
+         WHERE id = ?`,
+        [nombre_dispositivo.trim(), tipo_dispositivo, navegador_info, clientIp, usuarioNombre, existente.id]
+      );
+    } else {
+      await dbRun(
+        `INSERT INTO DispositivosAutorizados (negocio_id, device_token, nombre_dispositivo, tipo_dispositivo, navegador_info, ip_registro, autorizado_por, creado_en, activo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [negocioId, device_token.trim(), nombre_dispositivo.trim(), tipo_dispositivo, navegador_info, clientIp, usuarioNombre, ahoraIso]
+      );
+    }
+
+    await registrarAuditoria({
+      negocioId: Number(negocioId),
+      usuarioNombre,
+      accion: 'autorizar_dispositivo',
+      tipoEvento: 'seguridad',
+      modulo: 'admin',
+      detalle: `Terminal Autorizada: "${nombre_dispositivo}" (${tipo_dispositivo}) desde IP ${clientIp}`
+    });
+
+    io.emit('dispositivo_autorizado', {
+      negocioId: Number(negocioId),
+      device_token: device_token.trim(),
+      nombre_dispositivo: nombre_dispositivo.trim()
+    });
+
+    res.json({
+      ok: true,
+      message: `Dispositivo "${nombre_dispositivo}" autorizado con éxito.`,
+      device_token: device_token.trim()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Revocar / Eliminar dispositivo autorizado
+app.delete('/api/admin/dispositivos/:id', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.query.negocioId || 1;
+    const { pinAdmin, usuarioNombre = 'Administrador' } = req.body || {};
+
+    let autorizado = false;
+    const rolesAdmin = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'];
+
+    if (req.usuario && rolesAdmin.includes((req.usuario.rol || '').toLowerCase())) {
+      autorizado = true;
+    } else if (rolesAdmin.includes((req.headers['x-user-rol'] || '').toLowerCase())) {
+      autorizado = true;
+    } else if (pinAdmin) {
+      const pinStr = String(pinAdmin).trim();
+      const adminUsers = await dbAll(
+        `SELECT * FROM Usuarios WHERE negocio_id = ? AND rol IN ('admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer') AND activo = 1`,
+        [negocioId]
+      );
+      for (const u of adminUsers) {
+        if (await verificarCredencialUsuario(u, pinStr)) {
+          autorizado = true;
+          break;
+        }
+      }
+      if (!autorizado) {
+        const devs = await dbAll(`SELECT * FROM Usuarios WHERE rol = 'developer' AND activo = 1`);
+        for (const d of devs) {
+          if (await verificarCredencialUsuario(d, pinStr)) {
+            autorizado = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!autorizado) {
+      return res.status(403).json({ error: 'No autorizado. Se requiere PIN o credenciales de Administrador.' });
+    }
+
+    const disp = await dbGet('SELECT * FROM DispositivosAutorizados WHERE id = ? AND negocio_id = ?', [req.params.id, negocioId]);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo no encontrado' });
+
+    await dbRun('UPDATE DispositivosAutorizados SET activo = 0 WHERE id = ?', [req.params.id]);
+
+    await registrarAuditoria({
+      negocioId: Number(negocioId),
+      usuarioNombre,
+      accion: 'revocar_dispositivo',
+      tipoEvento: 'seguridad',
+      modulo: 'admin',
+      detalle: `Dispositivo Revocado: "${disp.nombre_dispositivo}" (Token: ${disp.device_token.substring(0, 8)}...)`
+    });
+
+    io.emit('dispositivo_revocado', {
+      negocioId: Number(negocioId),
+      device_token: disp.device_token
+    });
+
+    res.json({ ok: true, message: 'Dispositivo revocado exitosamente' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

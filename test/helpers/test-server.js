@@ -202,6 +202,8 @@ async function startTestServer() {
         await dbRun(db, "UPDATE Productos SET happy_hour = 1 WHERE codigo IN ('BEB01', 'BEB02', 'BEB03', 'COC01', 'COC02')");
         await dbRun(db, "UPDATE Productos SET happy_hour = 0 WHERE destino = 'cocina' OR codigo IN ('BEB04', 'BEB05')");
         await dbRun(db, "UPDATE Usuarios SET pin = '1234' WHERE usuario = 'admin'");
+        await dbRun(db, "UPDATE Negocios SET restringir_ip_operativos = 0, restringir_dispositivos = 0, sesion_unica_activa = 1");
+        await dbRun(db, "DELETE FROM DispositivosAutorizados");
       } catch (_) {}
     } finally {
       await new Promise((r) => db.close(r));
