@@ -9148,6 +9148,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
   };
 
   const itemsCocinaNuevos = estado.mesaActiva.items.filter(it => !it.enviado && it.destino === 'cocina');
+  const itemsTodosNuevos = estado.mesaActiva.items.filter(it => !it.enviado);
 
   const aplicarExitoLocal = () => {
     if (tieneNuevosCocina) {
@@ -9192,21 +9193,26 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     cargarMesasDesdeBackend();
     cargarKDSDesdeBackend();
 
-    // Disparar impresión térmica de Comanda a Cocina si hay alimentos nuevos
-    if (itemsCocinaNuevos && itemsCocinaNuevos.length > 0) {
+    // Disparar impresión térmica directa de Comanda para los productos nuevos
+    const itemsParaComanda = (itemsTodosNuevos && itemsTodosNuevos.length > 0)
+      ? itemsTodosNuevos
+      : (itemsCocinaNuevos && itemsCocinaNuevos.length > 0 ? itemsCocinaNuevos : estado.mesaActiva.items);
+
+    if (itemsParaComanda && itemsParaComanda.length > 0) {
       const ticketComanda = {
         tipo: 'comanda',
-        titulo: 'COMANDA COCINA',
+        titulo: 'COMANDA DE PEDIDO',
         destino: 'cocina',
         mesa: estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id),
         ordenId: estado.mesaActiva.orden_id || 1,
         comandaNumero: 1,
         mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
         fechaHora: formatearFechaHoraCR(new Date()),
-        items: itemsCocinaNuevos.map(it => ({
+        items: itemsParaComanda.map(it => ({
           cantidad: it.cantidad,
           nombre: it.nombre,
           curso: it.curso || 2,
+          destino: it.destino || 'cocina',
           notas: it.notas || '',
           origenMesa: it.origen_mesa_numero || null
         }))
@@ -9217,8 +9223,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     }
 
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina con éxito!' : '💾 ¡Comanda guardada con éxito!', 'success');
-      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina e impresa!' : '💾 ¡Comanda guardada con éxito!', 'success');
+      mostrarNotificacionCentro(tieneNuevosCocina ? '🔔 ¡Comanda enviada a cocina con éxito!' : '💾 ¡Comanda enviada con éxito!', 'success');
     }
   };
 
@@ -11023,6 +11028,50 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
   } catch (err) {
     console.error('Error al solicitar pre-factura:', err);
     alert('Error al generar pre-factura: ' + err.message);
+  }
+};
+
+window.reimprimirComandaMesa = async function(mesaId = null) {
+  try {
+    const mesaActiva = estado.mesaActiva;
+    const mId = mesaId || (mesaActiva && mesaActiva.id);
+    if (!mId) {
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('⚠️ Selecciona una mesa activa para reimprimir su comanda.', 'warning');
+      }
+      return;
+    }
+    const mesa = (estado.mesas || []).find(m => m.id === Number(mId)) || mesaActiva;
+    const items = (mesa && mesa.items && mesa.items.length) ? mesa.items : (mesaActiva && mesaActiva.items);
+    if (!items || !items.length) {
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('⚠️ La mesa no tiene productos para imprimir comanda.', 'warning');
+      }
+      return;
+    }
+    const ticketComanda = {
+      tipo: 'comanda',
+      titulo: 'REIMPRESION COMANDA',
+      destino: 'cocina',
+      mesa: (mesa && mesa.numero) ? (mesa.numero.startsWith('Mesa') ? mesa.numero : 'Mesa ' + mesa.numero) : ('Mesa ' + mId),
+      ordenId: (mesa && (mesa.orden_id || mesa.ordenId)) || 1,
+      comandaNumero: 1,
+      mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (mesa && mesa.mesero) || 'Personal de Turno',
+      fechaHora: formatearFechaHoraCR(new Date()),
+      items: items.map(it => ({
+        cantidad: it.cantidad || 1,
+        nombre: it.nombre || it.nombre_producto || 'Producto',
+        curso: it.curso || 2,
+        destino: it.destino || 'cocina',
+        notas: it.notas || '',
+        origenMesa: it.origen_mesa_numero || null
+      }))
+    };
+    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      return await window.ejecutarImpresionDirectaTermica(ticketComanda, false);
+    }
+  } catch (e) {
+    console.error('Error al reimprimir comanda:', e);
   }
 };
 
