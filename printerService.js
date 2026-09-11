@@ -1173,31 +1173,36 @@ function generarTicketCierreZ({
  * Enviar buffer RAW a puerto TCP (impresora física o simulador local en red)
  */
 function enviarAPuertoTCP(ip, puerto, rawData) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const socket = new net.Socket();
+    let resuelto = false;
+
+    const finalizar = (res) => {
+      if (resuelto) return;
+      resuelto = true;
+      try { socket.destroy(); } catch (_) {}
+      resolve(res);
+    };
+
     socket.setTimeout(12000); // 12s para permitir despertar de reposo Wi-Fi/cable
 
     const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
     socket.connect(puerto, ip, () => {
+      // Desactivar el timeout de inactividad una vez establecida la conexión TCP
+      socket.setTimeout(0);
       socket.write(buf, () => {
-        setTimeout(() => {
-          socket.end(() => {
-            resolve({ ok: true, mensaje: `Enviados ${buf.length} bytes a ${ip}:${puerto}` });
-          });
-        }, 800);
+        try { socket.end(); } catch (_) {}
+        finalizar({ ok: true, mensaje: `Enviados ${buf.length} bytes a ${ip}:${puerto}` });
       });
     });
 
     socket.on('timeout', () => {
-      socket.destroy();
-      resolve({ ok: false, simulado: true, mensaje: `Timeout al conectar con ${ip}:${puerto} (Modo Simulación Activo)` });
+      finalizar({ ok: false, simulado: true, mensaje: `Timeout al conectar con ${ip}:${puerto} (Modo Simulación Activo)` });
     });
 
     socket.on('error', (err) => {
-      socket.destroy();
-      // Si no hay impresora física respondiendo en esa IP/puerto, no rompemos el sistema: lo registramos como simulación
-      resolve({ ok: false, simulado: true, error: err.message, mensaje: `Simulación completada en buffer (Impresora física no detectada en ${ip}:${puerto})` });
+      finalizar({ ok: false, simulado: true, error: err.message, mensaje: `Error de conexión con ${ip}:${puerto}: ${err.message}` });
     });
   });
 }
@@ -1234,10 +1239,10 @@ function enviarAePOSPrint(ip, rawData, timeoutMs = 7000) {
         let respData = '';
         res.on('data', chunk => respData += chunk);
         res.on('end', () => {
-          if (res.statusCode === 200 && respData.includes('success="true"')) {
+          if (res.statusCode === 200 && (respData.includes('success="true"') || respData.includes('response success="true"'))) {
             resolve({ ok: true, metodo: 'epos', mensaje: `Impreso físicamente con éxito vía ePOS-Print en ${ip}` });
           } else {
-            resolve({ ok: false, error: `ePOS error: ${respData.substring(0, 120)}` });
+            resolve({ ok: false, error: `ePOS status ${res.statusCode}: ${respData.substring(0, 120)}` });
           }
         });
       });
