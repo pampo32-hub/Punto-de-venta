@@ -9,6 +9,7 @@
  * milisegundos y lo imprime automáticamente en la impresora física (192.168.1.30).
  */
 
+require('dotenv').config();
 const { io } = require('socket.io-client');
 const net = require('net');
 const http = require('http');

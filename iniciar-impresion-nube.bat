@@ -1,9 +1,10 @@
 @echo off
-title Agente de Impresion Termica POS (Cloud Bridge)
+title Agente de Impresion Termica POS (Render Cloud Bridge)
 echo ================================================================
-echo ??? INICIANDO AGENTE DE IMPRESION EN TIEMPO REAL
+echo ??? AGENTE DE IMPRESION EN TIEMPO REAL (RENDER CLOUD BRIDGE)
 echo ================================================================
-set /p CLOUD_URL="Ingresa la URL de tu POS en Internet (ej. https://mi-pos.com) o presiona ENTER para usar localhost: " 
-if "%CLOUD_URL%"=="" set CLOUD_URL=http://localhost:4000
-node agente-impresion-local.js %CLOUD_URL%
+echo Conectando con: https://punto-de-venta-d2sa.onrender.com
+echo Impresora fisica: 192.168.1.30:9100
+echo ================================================================
+node agente-impresion-local.js https://punto-de-venta-d2sa.onrender.com
 pause
