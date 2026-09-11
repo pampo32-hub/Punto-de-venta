@@ -1174,7 +1174,7 @@ function generarTicketCierreZ({
 function enviarAPuertoTCP(ip, puerto, rawData) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
-    socket.setTimeout(5000);
+    socket.setTimeout(12000); // 12s para permitir despertar de reposo Wi-Fi/cable
 
     const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
@@ -1343,7 +1343,7 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
   for (let intento = 1; intento <= 2; intento++) {
     const intentoRes = await new Promise((resolve) => {
       const s = new net.Socket();
-      s.setTimeout(6500); // 6.5s de margen para redes Wi-Fi o cable
+      s.setTimeout(12000); // 12s de margen para permitir despertar de ahorro de energia Wi-Fi / cable
 
       s.connect(portNum, ipLimpia, () => {
         s.write(bufferTicket, () => {
