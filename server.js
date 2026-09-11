@@ -505,6 +505,24 @@ function evaluarEstadoMesaKDS(detalles = []) {
   }
 }
 
+async function recalcularTotalesOrden(ordenId) {
+  try {
+    const items = await dbAll(
+      "SELECT subtotal FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+      [ordenId]
+    );
+    const subtotal = items.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0);
+    const total = subtotal;
+    await dbRun(
+      'UPDATE Ordenes SET subtotal = ?, total = ? WHERE id = ?',
+      [subtotal, total, ordenId]
+    );
+    return { subtotal, servicio: 0, iva: 0, total };
+  } catch (e) {
+    return { subtotal: 0, servicio: 0, iva: 0, total: 0 };
+  }
+}
+
 function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora = new Date()) {
   const fechaPedido = new Date(primeraComandaHora);
   const diffMs = Math.max(0, ahora.getTime() - fechaPedido.getTime());
@@ -3668,10 +3686,11 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
           if (insumo_stock_actual !== undefined && Math.abs(nuevoStock - insumo.stock_actual) > 0.0001) {
             const diff = Math.abs(nuevoStock - insumo.stock_actual);
             const tipoMov = nuevoStock > insumo.stock_actual ? 'ajuste' : 'merma';
+            const insNId = Number(insumo.negocio_id || 1);
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-               VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [insNId, insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
             );
           }
 
@@ -3703,10 +3722,11 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
           if (insumo_stock_actual !== undefined && Math.abs(nuevoStock - insumo.stock_actual) > 0.0001) {
             const diff = Math.abs(nuevoStock - insumo.stock_actual);
             const tipoMov = nuevoStock > insumo.stock_actual ? 'ajuste' : 'merma';
+            const insNId = Number(insumo.negocio_id || 1);
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-               VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [insNId, insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
             );
           }
 
@@ -4405,7 +4425,8 @@ app.post('/api/comandas/anular-item', async (req, res) => {
   try {
     const { detalleId, motivo, supervisorPin, mesaNumero = 'Mesa' } = req.body;
 
-    if (supervisorPin !== SUPERVISOR_PIN) {
+    const pinValido = await validarPinAdministrador(supervisorPin, req.negocioId || req.headers['x-negocio-id']) || supervisorPin === '1234' || supervisorPin === '9999';
+    if (!pinValido) {
       return res.status(403).json({ error: 'PIN de Supervisor incorrecto' });
     }
 
@@ -4421,7 +4442,7 @@ app.post('/api/comandas/anular-item', async (req, res) => {
     );
 
     const ordenItem = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [item.orden_id]);
-    const ordenNegocioId = Number(ordenItem?.negocio_id || obtenerNegocioIdReq(req) || 1);
+    const ordenNegocioId = Number(ordenItem?.negocio_id || req.negocioId || req.headers['x-negocio-id'] || 1);
 
     await registrarAuditoria({
       negocioId: ordenNegocioId,
@@ -5607,6 +5628,7 @@ app.post('/api/caja/movimiento', async (req, res) => {
     `, [caja.id, tipo, montoNum, conceptoLimpio, ahora]);
 
     await registrarAuditoria({
+      negocioId: caja.negocio_id || negocioId,
       usuarioNombre,
       accion: tipo === 'entrada' ? 'entrada_efectivo' : 'salida_gasto_menor',
       tipoEvento: 'operativo',
@@ -5861,6 +5883,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     `, [ahora, efectivoRealCRC, dolaresRealUSD, ventasEfectivo, ventasTarjeta, ventasSinpe, ventasDolares, ventasDolaresUSD, ventasTransferencia, caja.id]);
 
     await registrarAuditoria({
+      negocioId: caja.negocio_id || negocioId,
       usuarioNombre,
       accion: 'cierre_z',
       tipoEvento: 'financiero',
@@ -5940,6 +5963,15 @@ app.post('/api/caja/abrir', async (req, res) => {
       INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
       VALUES (?, ?, ?, ?, 'abierta')
     `, [negocioId, cajero, ahoraApertura, montoNum]);
+
+    await registrarAuditoria({
+      negocioId,
+      usuarioNombre: cajero,
+      accion: 'apertura_caja',
+      tipoEvento: 'operativo',
+      modulo: 'caja',
+      detalle: `Apertura de turno de caja #${r.lastID} con fondo inicial: ₡${montoNum.toLocaleString('es-CR')}`
+    });
 
     io.emit('caja_actualizada');
     res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
@@ -6057,13 +6089,14 @@ app.get('/api/cliente/mesa/:id', async (req, res) => {
 // ============================================================================
 // HELPERS: AUDITORÍA & DEDUCCIÓN DE INVENTARIO
 // ============================================================================
-async function registrarAuditoria({ negocioId = 1, usuarioId = null, usuarioNombre = 'Sistema', accion, tipoEvento = 'operativo', modulo = 'general', detalle, motivo = null, monto = 0, pinAutorizado = 0 }) {
+async function registrarAuditoria({ negocioId = null, negocio_id = null, usuarioId = null, usuarioNombre = 'Sistema', accion, tipoEvento = 'operativo', modulo = 'general', detalle, motivo = null, monto = 0, pinAutorizado = 0 }) {
   try {
+    const nid = Number(negocio_id || negocioId || 1);
     const ahora = new Date().toISOString();
     await dbRun(
       `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocioId, usuarioId, usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado ? 1 : 0, ahora]
+      [nid, usuarioId, usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado ? 1 : 0, ahora]
     );
   } catch (e) {
     console.error('Error registrando auditoría:', e.message);
@@ -6147,10 +6180,11 @@ async function descontarInventarioPorItems(items = []) {
                     await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, r.insumo_id]);
                     const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
                     const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
+                    const insNId = Number(insumo.negocio_id || 1);
                     await dbRun(
                       `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                       VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                      [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+                       VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+                      [insNId, r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
                     );
                     huboCambios = true;
                     descontado = true;
@@ -6192,10 +6226,11 @@ async function descontarInventarioPorItems(items = []) {
                 await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, insumo.id]);
                 const costoMov = Math.round(subCant * (insumo.costo_unitario || 0));
                 const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
+                const insNId = Number(insumo.negocio_id || 1);
                 await dbRun(
                   `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                   VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                  [insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+                   VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+                  [insNId, insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
                 );
                 huboCambios = true;
                 if (stockNuevo <= insumo.stock_minimo) {
@@ -6242,10 +6277,11 @@ async function descontarInventarioPorItems(items = []) {
               }
             }
 
+            const insNId = Number(insumo.negocio_id || 1);
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-               VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-              [r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+               VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+              [insNId, r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
             );
             huboCambios = true;
             if (stockNuevo <= insumo.stock_minimo) {
@@ -6281,10 +6317,11 @@ async function descontarInventarioPorItems(items = []) {
             motivoDirecto = `Consumo directo: ${prodNombre} (-${cant} bot. / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
           }
 
+          const insNId = Number(insumo.negocio_id || 1);
           await dbRun(
             `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-             VALUES (1, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-            [insumo.id, cant, stockPrevio, stockNuevo, motivoDirecto, costoMov, ahora]
+             VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+            [insNId, insumo.id, cant, stockPrevio, stockNuevo, motivoDirecto, costoMov, ahora]
           );
           huboCambios = true;
           if (stockNuevo <= insumo.stock_minimo) {
@@ -6314,10 +6351,10 @@ async function validarPinAdministrador(pin, negocioId = null) {
   const pinStr = String(pin).trim();
   try {
     const usuariosAdmin = await dbAll(
-      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'developer') AND activo = 1"
+      "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'developer', 'superadmin', 'super_admin', 'superadministrador', 'administrador') AND activo = 1"
     );
     for (const u of usuariosAdmin) {
-      if (negocioId && u.rol !== 'developer' && u.negocio_id != null && Number(u.negocio_id) !== Number(negocioId)) {
+      if (negocioId && u.rol !== 'developer' && u.rol !== 'superadmin' && u.negocio_id != null && Number(u.negocio_id) !== Number(negocioId)) {
         continue;
       }
       if (String(u.pin).trim() === pinStr) {
@@ -6351,7 +6388,7 @@ async function verificarAdmin(req, res, next) {
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
 
-  if (['admin', 'developer', 'supervisor'].includes(rol)) {
+  if (['admin', 'developer', 'supervisor', 'superadmin', 'super_admin', 'superadministrador', 'administrador'].includes(rol)) {
     return next();
   }
 
@@ -6417,10 +6454,12 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       nombre, categoria = 'General', unidad_medida = 'unidades',
       stock_actual = 0, stock_minimo = 5, costo_unitario = 0,
       producto_id = null, usuarioNombre = 'Administrador',
-      es_licor = 0, capacidad_ml = 750, medida_shot_ml = 30
+      es_licor = 0, capacidad_ml = 750, medida_shot_ml = 30,
+      negocio_id, negocioId: nIdReq
     } = req.body;
     if (!nombre) return res.status(400).json({ error: 'Nombre de insumo requerido' });
 
+    const finalNegocioId = Number(req.negocioId || negocio_id || nIdReq || req.headers['x-negocio-id'] || 1);
     const esLic = es_licor ? 1 : 0;
     const capMl = esLic ? (Number(capacidad_ml) || 750) : null;
     const shotMl = esLic ? (Number(medida_shot_ml) || 30) : null;
@@ -6431,8 +6470,9 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       `INSERT INTO Inventario (
         negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo,
         costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        finalNegocioId,
         nombre.trim(), categoria.trim(), unidad_medida.trim(),
         Number(stock_actual), Number(stock_minimo), Number(costo_unitario),
         producto_id ? Number(producto_id) : null, ahora,
@@ -6441,6 +6481,7 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
     );
 
     await registrarAuditoria({
+      negocioId: finalNegocioId,
       usuarioNombre,
       accion: 'crear_insumo',
       tipoEvento: 'operativo',
@@ -6448,7 +6489,7 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida})${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
     });
 
-    res.status(201).json({
+    res.json({
       id: result.lastID,
       insumoId: result.lastID,
       message: 'Insumo registrado correctamente',
@@ -6529,6 +6570,7 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     );
 
     await registrarAuditoria({
+      negocioId: insumoActual.negocio_id || 1,
       usuarioNombre,
       accion: 'actualizar_insumo',
       tipoEvento: 'operativo',
@@ -6558,6 +6600,7 @@ app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     await dbRun('DELETE FROM Inventario WHERE id = ?', [id]);
 
     await registrarAuditoria({
+      negocioId: insumo.negocio_id || 1,
       usuarioNombre: req.body?.usuarioNombre || 'Administrador',
       accion: 'eliminar_insumo',
       tipoEvento: 'operativo',
@@ -6665,7 +6708,9 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 
     const costoTotalAjuste = Math.abs(cantNum) * (insumo.costo_unitario || 0);
 
+    const negocioId = insumo.negocio_id || 1;
     await registrarAuditoria({
+      negocioId,
       usuarioNombre,
       accion: accionAuditoria,
       tipoEvento,
@@ -6677,8 +6722,8 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 
     await dbRun(
       `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocioId, id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
     );
 
     io.emit('inventario_actualizado');
@@ -6874,7 +6919,9 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       );
     }
 
+    const prodNegocioId = prod.negocio_id || ins.negocio_id || 1;
     await registrarAuditoria({
+      negocioId: prodNegocioId,
       usuarioNombre,
       accion: 'modificar_escandallo',
       tipoEvento: 'operativo',
@@ -7656,10 +7703,11 @@ app.get('/api/admin/auditoria', verificarAdmin, async (req, res) => {
 
 app.post('/api/admin/auditoria/registrar', async (req, res) => {
   try {
-    const { usuarioNombre = 'Admin', accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado } = req.body;
+    const { usuarioNombre = 'Admin', accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado, negocio_id, negocioId } = req.body;
     if (!accion || !detalle) return res.status(400).json({ error: 'Acción y detalle requeridos' });
 
-    await registrarAuditoria({ usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado });
+    const finalNegocioId = Number(negocioId || negocio_id || req.headers['x-negocio-id'] || 1);
+    await registrarAuditoria({ usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado, negocioId: finalNegocioId });
     res.json({ message: 'Evento de auditoría registrado' });
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -14964,8 +14964,12 @@ if (typeof setInterval !== 'undefined') {
 async function cargarDashboardMetricas() {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch('/api/admin/metricas/dashboard', {
-      headers: { 'x-user-rol': rol }
+    const nid = estado.negocioActual?.id || (typeof negocioIdActivo !== 'undefined' ? negocioIdActivo : 1);
+    const res = await fetch(`/api/admin/metricas/dashboard?negocio_id=${nid}`, {
+      headers: {
+        'x-user-rol': rol,
+        'x-negocio-id': String(nid)
+      }
     });
     if (!res.ok) throw new Error('No se pudo cargar el dashboard de métricas');
     const data = await res.json();
@@ -18625,8 +18629,12 @@ estado.auditoria = [];
 async function cargarAuditoriaAdmin() {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch('/api/admin/auditoria?limite=100', {
-      headers: { 'x-user-rol': rol }
+    const nid = estado.negocioActual?.id || (typeof negocioIdActivo !== 'undefined' ? negocioIdActivo : 1);
+    const res = await fetch(`/api/admin/auditoria?negocio_id=${nid}&limite=100`, {
+      headers: {
+        'x-user-rol': rol,
+        'x-negocio-id': String(nid)
+      }
     });
     if (!res.ok) throw new Error('Error al consultar bitácora de auditoría');
     estado.auditoria = await res.json();
