@@ -10989,16 +10989,26 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
     const oId = ordenId || (mesaActiva && (mesaActiva.orden_id || mesaActiva.ordenId));
 
     if (!mId && !oId) {
-      alert('Por favor selecciona una mesa u orden activa para generar la pre-factura.');
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('⚠️ Por favor selecciona una mesa u orden activa para generar la pre-factura.', 'warning');
+      } else {
+        alert('Por favor selecciona una mesa u orden activa para generar la pre-factura.');
+      }
       return;
     }
 
-    if (mesaActiva && (!mesaActiva.items || mesaActiva.items.length === 0)) {
-      alert('La mesa no tiene consumos registrados para generar pre-factura.');
+    const itemsMesa = (mesaActiva && mesaActiva.items && mesaActiva.items.length > 0)
+      ? mesaActiva.items
+      : ((estado.mesas || []).find(m => m.id === Number(mId))?.items || []);
+
+    if (itemsMesa.length === 0 && !oId) {
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('⚠️ La mesa no tiene consumos registrados para generar pre-factura.', 'warning');
+      } else {
+        alert('La mesa no tiene consumos registrados para generar pre-factura.');
+      }
       return;
     }
-
-    
 
     const endpoint = oId ? `/api/ordenes/${oId}/prefactura` : `/api/mesas/${mId}/prefactura`;
     const meseroActual = (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno';
@@ -11006,12 +11016,53 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
     const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mesero: meseroActual })
+      body: JSON.stringify({
+        mesero: meseroActual,
+        items: itemsMesa
+      })
     });
 
-    const data = await resp.json();
-    if (!resp.ok || !data.ok) {
-      throw new Error(data.error || 'Error al generar la pre-factura.');
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok || !data?.ok) {
+      // Fallback local si el backend falló o estamos offline
+      if (itemsMesa.length > 0) {
+        const subtotal = itemsMesa.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
+        const iva = Math.round(subtotal * 0.13);
+        const servicio = Math.round(subtotal * 0.10);
+        const total = subtotal + iva + servicio;
+        const fallbackTicket = {
+          tipo: 'prefactura',
+          titulo: 'PRE-CUENTA / PRE-FACTURA',
+          negocio: {
+            nombre: estado.configuracion?.nombreComercio || 'GastroBar Fuego & Brasas',
+            slogan: estado.configuracion?.slogan || 'Restaurante, Bar & Lounge',
+            tel: estado.configuracion?.telefono || '2222-3344',
+            dir: estado.configuracion?.direccion || 'San José, Costa Rica',
+            cedula: estado.configuracion?.cedula || '3-101-789458'
+          },
+          ordenId: oId || mId || 1,
+          numeroOrden: oId || mId || 1,
+          mesa: (mesaActiva && mesaActiva.numero) ? (mesaActiva.numero.startsWith('Mesa') ? mesaActiva.numero : 'Mesa ' + mesaActiva.numero) : ('Mesa ' + mId),
+          mesero: meseroActual,
+          cliente: (mesaActiva && (mesaActiva.cliente || mesaActiva.mesa_cliente)) || 'Cliente General',
+          fechaHora: formatearFechaHoraCR(new Date()),
+          items: itemsMesa.map(it => ({
+            cantidad: Number(it.cantidad) || 1,
+            nombre: it.nombre || it.nombre_producto || 'Producto',
+            precioUnitario: Number(it.precio || it.precio_unitario || 0),
+            totalLinea: Number(it.subtotal || it.totalLinea || ((it.precio || it.precio_unitario || 0) * (it.cantidad || 1))),
+            notas: it.notas || ''
+          })),
+          subtotal,
+          servicio,
+          iva,
+          total
+        };
+        if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+          return await window.ejecutarImpresionDirectaTermica(fallbackTicket, false);
+        }
+      }
+      throw new Error(data?.error || 'Error al generar la pre-factura.');
     }
 
     if (data.ticket) {
@@ -11020,14 +11071,14 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       }
     }
 
-    
-
     if (mId && typeof cargarMesasDesdeBackend === 'function') {
       cargarMesasDesdeBackend();
     }
-  } catch (err) {
-    console.error('Error al solicitar pre-factura:', err);
-    alert('Error al generar pre-factura: ' + err.message);
+  } catch (e) {
+    console.error('Error al solicitar pre-factura:', e);
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('❌ Error al generar pre-factura: ' + e.message, 'error');
+    }
   }
 };
 
@@ -11880,8 +11931,12 @@ window.ejecutarCobroFinal = async function() {
       personaCobrada.ticket = ticketPersona;
 
       // Disparar despacho a impresora térmica ESC/POS
-      if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-        window.ejecutarImpresionDirectaTermica(ticketPersona);
+      if (cobroResData?.ok && cobroResData?.ticket) {
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro(`✅ 🖨️ ¡Comprobante de ${personaCobrada.nombre} impreso en impresora térmica (CAJA)!`, 'success');
+        }
+      } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+        window.ejecutarImpresionDirectaTermica(ticketPersona, false);
       }
 
       // Cerrar modal de cobro de inmediato
@@ -12152,7 +12207,11 @@ window.ejecutarCobroFinal = async function() {
         ticketFinal.esDolares = true;
       }
 
-      if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      if (cobroResData?.ok && cobroResData?.ticket) {
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro(`✅ 🖨️ ¡Factura / Comprobante impreso con éxito en impresora térmica (CAJA)!`, 'success');
+        }
+      } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
         window.ejecutarImpresionDirectaTermica(ticketFinal, false);
       }
 

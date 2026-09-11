@@ -5164,10 +5164,14 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       }
     }
 
-    const itemsOrden = await dbAll(
+    let itemsOrden = await dbAll(
       "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
       [ordenId]
     );
+
+    if ((!itemsOrden || itemsOrden.length === 0) && Array.isArray(req.body.items) && req.body.items.length > 0) {
+      itemsOrden = req.body.items;
+    }
 
     if (!itemsOrden || itemsOrden.length === 0) {
       return res.status(400).json({ error: 'La orden no tiene consumos activos para generar pre-factura.' });
@@ -5194,12 +5198,6 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       items: itemsOrden,
       fechaHora: ahora
     });
-
-    printerService.procesarImpresion({
-      destinoImpresora: 'caja',
-      ticketInfo: tInfoPreFactura,
-      io
-    }).catch(err => console.error('Error al despachar prefactura orden:', err.message));
 
     // Actualizar estado de mesa a 'cuenta' si está abierta
     if (orden.mesa_id) {
@@ -5237,66 +5235,92 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       [mesaId]
     );
 
-    if (!orden) {
-      return res.status(404).json({ error: 'No hay una orden activa en esta mesa para generar pre-factura.' });
+    const itemsFromBody = Array.isArray(req.body.items) && req.body.items.length > 0 ? req.body.items : null;
+
+    if (!orden && !itemsFromBody) {
+      return res.status(404).json({ error: 'No hay consumos registrados en esta mesa para generar pre-factura.' });
     }
 
-    // Recalcular totales para asegurar que Happy Hour, IVA y servicio estén 100% al día
-    if (typeof recalcularTotalesOrden === 'function') {
-      try {
-        await recalcularTotalesOrden(orden.id);
-        orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [orden.id]);
-      } catch (errRecalc) {
-        console.warn('Advertencia al recalcular totales en prefactura mesa:', errRecalc.message);
+    let itemsOrden = [];
+    let subtotal = 0;
+    let iva = 0;
+    let servicio = 0;
+    let total = 0;
+    let descuentoHH = 0;
+    let clienteNombre = (mesa && mesa.cliente) || 'Cliente General';
+    let mesero = req.body.mesero || (req.user && req.user.nombre) || (mesa && mesa.mesero) || 'General';
+    let numeroOrden = mesaId;
+
+    if (orden) {
+      // Recalcular totales para asegurar que Happy Hour, IVA y servicio estén 100% al día
+      if (typeof recalcularTotalesOrden === 'function') {
+        try {
+          await recalcularTotalesOrden(orden.id);
+          orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [orden.id]);
+        } catch (errRecalc) {
+          console.warn('Advertencia al recalcular totales en prefactura mesa:', errRecalc.message);
+        }
       }
-    }
 
-    const itemsOrden = await dbAll(
-      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
-      [orden.id]
-    );
+      itemsOrden = await dbAll(
+        "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+        [orden.id]
+      );
+      if ((!itemsOrden || itemsOrden.length === 0) && itemsFromBody) {
+        itemsOrden = itemsFromBody;
+      }
+      subtotal = orden.subtotal || 0;
+      iva = orden.iva_13 || 0;
+      servicio = orden.servicio_10 || 0;
+      total = orden.total || 0;
+      descuentoHH = orden.descuento_happy_hour || 0;
+      clienteNombre = orden.cliente || clienteNombre;
+      mesero = orden.mesero || mesero;
+      numeroOrden = orden.numero_orden || orden.id;
+    } else if (itemsFromBody) {
+      itemsOrden = itemsFromBody;
+      subtotal = itemsOrden.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
+      iva = Math.round(subtotal * 0.13);
+      servicio = Math.round(subtotal * 0.10);
+      total = subtotal + iva + servicio;
+    }
 
     if (!itemsOrden || itemsOrden.length === 0) {
       return res.status(400).json({ error: 'La mesa no tiene consumos activos para generar pre-factura.' });
     }
 
-    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || mesa.negocio_id || 1]);
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden?.negocio_id || mesa.negocio_id || 1]);
     const mesaNumero = mesa.numero || ('Mesa ' + mesa.id);
-    const mesero = req.body.mesero || (req.user && req.user.nombre) || orden.mesero || mesa.mesero || 'General';
     const ahora = new Date().toISOString();
 
     const tInfoPreFactura = printerService.generarTicketPreFactura({
       negocio,
-      ordenId: orden.id,
-      numeroOrden: orden.numero_orden || orden.id,
+      ordenId: orden ? orden.id : mesaId,
+      numeroOrden,
       mesaNumero,
       mesero,
-      cliente: orden.cliente || 'Cliente General',
-      subtotal: orden.subtotal || 0,
-      descuentoHH: orden.descuento_happy_hour || 0,
-      servicio: orden.servicio_10 || 0,
-      iva: orden.iva_13 || 0,
-      total: orden.total || 0,
+      cliente: clienteNombre,
+      subtotal,
+      descuentoHH,
+      servicio,
+      iva,
+      total,
       items: itemsOrden,
       fechaHora: ahora
     });
 
-    printerService.procesarImpresion({
-      destinoImpresora: 'caja',
-      ticketInfo: tInfoPreFactura,
-      io
-    }).catch(err => console.error('Error al despachar prefactura mesa:', err.message));
-
     await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = COALESCE(hora_pidio_cuenta, ?) WHERE id = ?", [ahora, mesaId]);
-    await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [orden.id]);
+    if (orden) {
+      await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [orden.id]);
+    }
     io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
 
     res.json({
       ok: true,
       success: true,
-      message: 'Pre-Factura de mesa generada e impresa con éxito',
+      message: 'Pre-Factura de mesa generada con éxito',
       mesaId: Number(mesaId),
-      ordenId: orden.id,
+      ordenId: orden ? orden.id : null,
       ticket: tInfoPreFactura.ticketVisual
     });
   } catch (e) {
