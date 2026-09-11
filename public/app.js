@@ -4416,6 +4416,7 @@ window.aplicarRestriccionesModulos = function() {
   const tieneSplit = tieneModulo('split_bill') && negocioTieneCaracteristica('division_cuentas');
   const tieneMesasPromos = tieneModulo('mesas_promos');
   const tieneUnionMesas = tieneMesasPromos && negocioTieneCaracteristica('union_mesas');
+  const tieneMoverMesas = true;
   const tieneHappyHour = tieneMesasPromos && negocioTieneCaracteristica('happy_hour_auto');
   const tieneInventario = tieneModulo('inventario_recetas');
   const tieneKardex = tieneInventario && negocioTieneCaracteristica('kardex_tiempo_real');
@@ -4554,8 +4555,10 @@ window.aplicarRestriccionesModulos = function() {
   document.querySelectorAll('.admin-panel-card.card-happyhour, #btnAdminHappyHour, #btnToggleHappyHour, .hh-status-bar, #btnHappyHourTop, .btn-happyhour-top').forEach(el => {
     el.style.display = tieneHappyHour ? '' : 'none';
   });
-  if (!tieneUnionMesas) {
+  if (!tieneUnionMesas && !tieneMoverMesas) {
     document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
+  }
+  if (!tieneUnionMesas) {
     document.getElementById('modalConfirmarUnir')?.classList.remove('active');
     document.getElementById('modalConfirmarSeparar')?.classList.remove('active');
   }
@@ -10935,6 +10938,7 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
   window._modalActivoId = 'modalMovimientoCaja';
 
   setTimeout(() => {
+    if (txtMonto) txtMonto.focus();
     if (txtMonto) {
       txtMonto.focus();
       txtMonto.select?.();
@@ -10944,6 +10948,7 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
 
 window.cerrarModalMovimientoCaja = function() {
   const modal = document.getElementById('modalMovimientoCaja');
+  if (modal) modal.classList.remove('active');
   if (modal) {
     modal.style.display = 'none';
     modal.classList.remove('active');
@@ -11039,6 +11044,62 @@ window.guardarMovimientoCaja = async function() {
   } catch (e) {
     mostrarNotificacionCentro('❌ Error de conexión: ' + e.message, 'error');
   }
+};
+
+window.generarCorteX = async function() {
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const targetCajaId = window._cajaActivaData?.caja?.id || '';
+    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}&caja_id=${targetCajaId}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error generando Corte X: ' + (data.error || 'No se pudo generar el reporte'));
+      return;
+    }
+
+    const ticketData = {
+      tipo: 'CORTE_X',
+      fecha: new Date().toISOString(),
+      negocio: estado.negocioActual || { nombre: 'GastroBar POS' },
+      corte: data
+    };
+
+    if (typeof window.abrirModalVisorTicket === 'function') {
+      window.abrirModalVisorTicket(ticketData);
+    } else {
+      alert(`📑 CORTE X GENERADO\n\nCaja: ${data.caja_nombre || 'Principal'}\nCajero: ${data.cajero}\nVentas Totales: ${formatCRC(data.ventas.total)}\nEfectivo Esperado: ${formatCRC(data.efectivo_esperado)}`);
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.abrirModalCierreZ = function(esCiego = false) {
+  const modal = document.getElementById('modalCierreZ');
+  if (!modal) return;
+  window._cierreZEsCiego = !!esCiego;
+
+  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
+  const txtNotas = document.getElementById('txtCierreZNotas');
+  if (txtRealCRC) txtRealCRC.value = '';
+  if (txtRealUSD) txtRealUSD.value = '';
+  if (txtNotas) txtNotas.value = '';
+
+  modal.classList.add('active');
+  if (typeof window.calcularDiferenciaCierreZ === 'function') {
+    window.calcularDiferenciaCierreZ();
+  }
+  setTimeout(() => {
+    if (txtRealCRC) txtRealCRC.focus();
+  }, 100);
+};
+
+window.cerrarModalCierreZ = function() {
+  const modal = document.getElementById('modalCierreZ');
+  if (modal) modal.classList.remove('active');
 };
 
 // -------------------------------------------------------------
@@ -11137,6 +11198,7 @@ window.abrirModalAperturaCaja = async function() {
   window._modalActivoId = 'modalAperturaCaja';
 
   setTimeout(() => {
+    if (txtMonto) txtMonto.focus();
     if (txtMonto) {
       txtMonto.focus();
       txtMonto.select?.();
@@ -11162,6 +11224,7 @@ window.seleccionarCajaFisicaApertura = function(cajaId) {
 
 window.cerrarModalAperturaCaja = function() {
   const modal = document.getElementById('modalAperturaCaja');
+  if (modal) modal.classList.remove('active');
   if (modal) {
     modal.style.display = 'none';
     modal.classList.remove('active');
@@ -11325,6 +11388,7 @@ window.actualizarValoresFormularioReasignacion = function(turnoId) {
 
 window.cerrarModalReasignarCajaTurno = function() {
   const modal = document.getElementById('modalReasignarCajaTurno');
+  if (modal) modal.classList.remove('active');
   if (modal) {
     modal.style.display = 'none';
     modal.classList.remove('active');
@@ -11850,6 +11914,8 @@ window.generarCorteX = async function() {
 
   try {
     mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const targetCajaId = window._cajaActivaData?.caja?.id || window._cajaVisualFiltroId || '';
     const urlCorte = targetCajaId 
       ? `/api/caja/corte-x?negocio_id=${nid}&caja_id=${targetCajaId}` 
       : `/api/caja/corte-x?negocio_id=${nid}`;

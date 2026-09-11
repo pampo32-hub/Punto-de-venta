@@ -179,6 +179,7 @@ describe('Tier 50: Selección Dinámica de Cajas Físicas, Pre-asignación & Rea
 
     // 2. Listar empleados y verificar que caja_defecto_id persiste
     const listRes = await server.request('/api/admin/empleados');
+    assert.strictEqual(listRes.status, 200);
     const empleados = Array.isArray(listRes.data) ? listRes.data : (listRes.data.empleados || []);
     const empCreado = empleados.find(e => e.usuario === 'mesero_barra');
     assert.ok(empCreado);
