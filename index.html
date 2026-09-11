@@ -1253,7 +1253,16 @@
       <section id="view-caja" class="pos-view">
         <div class="caja-grid-layout">
           <div class="caja-card">
-            <h3>💰 Turno Actual de Operación</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+              <h3 style="margin:0;">💰 Turno Actual de Operación</h3>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="badgeCajaFisicaActiva" style="background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; padding:4px 10px; border-radius:8px; font-size:0.85rem; font-weight:700; display:flex; align-items:center; gap:6px;">
+                  💳 Caja Principal
+                </span>
+                <select id="selCambiarVistaCajaTurno" onchange="cambiarTurnoCajaVisual(this.value)" style="display:none; background:#1e293b; color:#fff; border:1px solid #475569; border-radius:6px; padding:4px 8px; font-size:0.8rem;">
+                </select>
+              </div>
+            </div>
             <div class="caja-stat-rows">
               <div class="stat-row"><span id="lblCajeroTurno">Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
               <div class="stat-row"><span id="lblCajaFondoInicial">Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000</strong></div>
@@ -1277,6 +1286,9 @@
               <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
               <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)">📑 Corte X (Parcial) <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
               <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ()" title="Abrir Cierre Z final (Ctrl + Z)">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
+              <button class="btn-caja-op btn-reasignar-caja" id="btnReasignarTurnoCaja" onclick="abrirModalReasignarCajaTurno()" style="grid-column: span 2; background: linear-gradient(135deg, rgba(79,70,229,0.18), rgba(67,56,202,0.18)); border: 1px solid #6366f1; color: #a5b4fc; font-weight: 700; padding: 10px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span>🔁</span> <strong>Reasignar Turno Activo (Admin)</strong>
+              </button>
               <button class="btn-caja-op corte-x-ciego" id="btnCorteXCiego" onclick="abrirModalCorteXCiego()" title="Arqueo / Corte X a Ciegas (Conteo físico sin ver totales)" style="display:none; grid-column: span 2; background: linear-gradient(135deg, rgba(139,92,246,0.18), rgba(109,40,217,0.18)); border: 1px solid #8b5cf6; color: #c4b5fd; font-weight: 700;">🙈 Cierre X a Ciegas</button>
               <button class="btn-caja-op corte-z-ciego" id="btnCorteZCiego" onclick="abrirModalCierreZ(true)" title="Arqueo Ciego en Cierre Z (Liquidación definitiva con conteo físico sin ver totales)" style="display:none; grid-column: span 2; background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(185,28,28,0.18)); border: 1px solid #ef4444; color: #fca5a5; font-weight: 700;">🙈 Cierre Z a Ciegas</button>
               <button class="btn-caja-op btn-purgar-caja dev-purge-action" id="btnResetCajaPruebas" onclick="purgarHistorialCajaDev()" style="display:none; grid-column: span 2; background: rgba(239, 68, 68, 0.12); border: 1px dashed #ef4444; color: #f87171; font-size: 0.82rem; padding: 8px; margin-top: 4px;" title="Resetear historial financiero y dejar caja en blanco para entrega al cliente">
@@ -2379,6 +2391,12 @@
                 <option value="cajero">Cajero de Turno</option>
                 <option value="admin" id="optStaffRolAdmin">🛡️ Administrador</option>
                 <option value="superadmin" id="optStaffRolSuperadmin">👑 Super Admin</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label>Caja Pre-asignada (Opcional):</label>
+              <select id="staffCajaDefecto">
+                <option value="">-- Sin pre-asignación (Elegir al abrir) --</option>
               </select>
             </div>
             <div class="field-group">
@@ -5485,20 +5503,33 @@
     </div>
   </div>
 
-  <!-- MODAL APERTURA DE NUEVO TURNO DE CAJA -->
+  <!-- MODAL APERTURA DE NUEVO TURNO DE CAJA (SELECCIÓN DINÁMICA DE CAJA FÍSICA) -->
   <div class="modal-backdrop" id="modalAperturaCaja" style="z-index: 100025;">
-    <div class="modal-dialog" style="max-width: 460px; width: 92vw;">
+    <div class="modal-dialog" style="max-width: 520px; width: 94vw;">
       <div class="dialog-header" style="background: linear-gradient(135deg, #064e3b, #0f172a); border-bottom: 1px solid #047857;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.5rem;">🔓</span>
           <div>
             <h3 style="margin:0; font-size:1.2rem; color:#fff;">Apertura de Nuevo Turno</h3>
-            <small style="color:#a7f3d0;">Abrir gaveta e ingresar fondo inicial de caja</small>
+            <small style="color:#a7f3d0;">Selecciona tu punto de cobro e ingresa el fondo inicial</small>
           </div>
         </div>
         <button class="btn-icon-close" onclick="cerrarModalAperturaCaja()">✕</button>
       </div>
       <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+        
+        <!-- SELECCIÓN DINÁMICA DE PUNTO DE COBRO FÍSICO -->
+        <div class="field-row" style="margin-bottom: 16px;">
+          <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:700; font-size:0.88rem; color:#f8fafc;">
+            <span>📍 Seleccionar Caja Física / Punto de Cobro: <span style="color:#ef4444;">*</span></span>
+            <small id="lblPreasignacionUsuario" style="color:#38bdf8; font-weight:600;"></small>
+          </label>
+          <div id="gridPuntosCobroApertura" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:6px;">
+            <!-- Renderizado dinámicamente con estado de ocupación -->
+          </div>
+          <input type="hidden" id="txtAperturaCajaFisicaId" value="" />
+        </div>
+
         <div class="field-row" style="margin-bottom: 14px;">
           <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
             Cajero Responsable: <span style="color:#ef4444;">*</span>
@@ -5528,8 +5559,69 @@
       </div>
       <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
         <button class="btn-sec" onclick="cerrarModalAperturaCaja()">Cancelar</button>
-        <button class="btn-pri" onclick="ejecutarAperturaCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none;">
+        <button class="btn-pri" id="btnEjecutarAperturaCaja" onclick="ejecutarAperturaCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none; cursor:pointer;">
           🔓 Abrir Turno de Caja
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: REASIGNACIÓN DE TURNO DE CAJA EN CALIENTE (ADMINISTRADOR) -->
+  <div class="modal-backdrop" id="modalReasignarCajaTurno" style="z-index: 100030;">
+    <div class="modal-dialog" style="max-width: 500px; width: 92vw;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e1b4b, #0f172a); border-bottom: 1px solid #4338ca;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">🔁</span>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#fff;">Reasignación de Turno de Caja</h3>
+            <small style="color:#c7d2fe;">Transferir cajero responsable o mover turno a otra caja física</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalReasignarCajaTurno()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Turno Activo a Modificar:
+          </label>
+          <select id="selReasignarTurnoTarget" onchange="actualizarValoresFormularioReasignacion(this.value)" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
+          </select>
+        </div>
+
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Nuevo Cajero Responsable:
+          </label>
+          <select id="selReasignarNuevoCajero" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
+          </select>
+        </div>
+
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Nueva Caja Física (Punto de Cobro):
+          </label>
+          <select id="selReasignarNuevaCajaFisica" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;">
+          </select>
+        </div>
+
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#f8fafc;">
+            Motivo de la Reasignación:
+          </label>
+          <input type="text" id="txtReasignarMotivo" placeholder="Ej: Relevo de almuerzo / cambio de turno" class="select-styled" style="width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px;" />
+        </div>
+
+        <div class="field-row" style="margin-bottom: 14px;">
+          <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.88rem; color:#fbbf24;">
+            PIN de Administrador para Autorizar: <span style="color:#ef4444;">*</span>
+          </label>
+          <input type="password" id="txtReasignarAdminPin" maxlength="6" placeholder="••••" class="select-styled" style="width:100%; padding:10px 12px; font-size:1.1rem; text-align:center; letter-spacing:4px; font-weight:700; border:1px solid #d97706; background:#111827; color:#fbbf24; border-radius:8px;" />
+        </div>
+      </div>
+      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
+        <button class="btn-sec" onclick="cerrarModalReasignarCajaTurno()">Cancelar</button>
+        <button class="btn-pri" id="btnEjecutarReasignacionTurno" onclick="ejecutarReasignacionTurnoCaja()" style="background:linear-gradient(135deg, #4f46e5, #4338ca); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none; cursor:pointer;">
+          🔁 Confirmar Reasignación
         </button>
       </div>
     </div>

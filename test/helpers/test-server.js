@@ -205,6 +205,29 @@ async function startTestServer() {
         await dbRun(db, "UPDATE Negocios SET restringir_ip_operativos = 0, restringir_dispositivos = 0, sesion_unica_activa = 1");
         await dbRun(db, "UPDATE Usuarios SET ultimo_token_sesion = NULL, ultimo_dispositivo_id = NULL");
         await dbRun(db, "DELETE FROM DispositivosAutorizados");
+        await dbRun(db, "DELETE FROM Usuarios WHERE usuario = 'mesero_barra'");
+      } catch (_) {}
+
+      try {
+        await dbRun(db, `CREATE TABLE IF NOT EXISTS PuntosDeCobro (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          negocio_id INTEGER DEFAULT 1,
+          nombre TEXT NOT NULL,
+          codigo TEXT,
+          ubicacion TEXT,
+          icono TEXT DEFAULT '💳',
+          pre_asignado_usuario_id INTEGER,
+          activo INTEGER DEFAULT 1,
+          creado_en TEXT
+        )`);
+        const ptCount = await dbGet(db, 'SELECT COUNT(*) as count FROM PuntosDeCobro WHERE negocio_id = 1');
+        if (!ptCount || Number(ptCount.count) === 0) {
+          const ahora = new Date().toISOString();
+          await dbRun(db, "INSERT INTO PuntosDeCobro (id, negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en) VALUES (1, 1, 'Caja 1 - Principal', 'CAJA-01', 'Entrada / Salón Principal', '💳', 1, ?)", [ahora]);
+          await dbRun(db, "INSERT INTO PuntosDeCobro (id, negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en) VALUES (2, 1, 'Caja 2 - Barra', 'CAJA-02', 'Barra de Bebidas', '🍸', 1, ?)", [ahora]);
+          await dbRun(db, "INSERT INTO PuntosDeCobro (id, negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en) VALUES (3, 1, 'Caja 3 - Terraza', 'CAJA-03', 'Terraza / Segundo Piso', '🌿', 1, ?)", [ahora]);
+          await dbRun(db, "INSERT INTO PuntosDeCobro (id, negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en) VALUES (4, 1, 'Caja 4 - Express', 'CAJA-04', 'Mostrador Para Llevar', '🛵', 1, ?)", [ahora]);
+        }
       } catch (_) {}
     } finally {
       await new Promise((r) => db.close(r));

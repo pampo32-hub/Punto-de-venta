@@ -310,11 +310,32 @@ function initDb() {
     db.run("ALTER TABLE Productos ADD COLUMN color_badge TEXT", () => {});
     db.run("ALTER TABLE Productos ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
+    // 4.5. Puntos de Cobro / Cajas Físicas
+    db.run(`CREATE TABLE IF NOT EXISTS PuntosDeCobro (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      nombre TEXT NOT NULL,
+      codigo TEXT,
+      ubicacion TEXT,
+      icono TEXT DEFAULT '💳',
+      pre_asignado_usuario_id INTEGER,
+      activo INTEGER DEFAULT 1,
+      creado_en TEXT,
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
+    )`);
+    db.run("ALTER TABLE PuntosDeCobro ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE PuntosDeCobro ADD COLUMN icono TEXT DEFAULT '💳'", () => {});
+    db.run("ALTER TABLE PuntosDeCobro ADD COLUMN pre_asignado_usuario_id INTEGER", () => {});
+    db.run("ALTER TABLE PuntosDeCobro ADD COLUMN activo INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE PuntosDeCobro ADD COLUMN creado_en TEXT", () => {});
+
     // 5. Cajas / Turnos
     db.run(`CREATE TABLE IF NOT EXISTS Cajas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       negocio_id INTEGER DEFAULT 1,
       cajero TEXT NOT NULL,
+      caja_fisica_id INTEGER,
+      caja_nombre TEXT,
       fecha_apertura TEXT NOT NULL,
       monto_inicial REAL DEFAULT 0,
       fecha_cierre TEXT,
@@ -328,6 +349,8 @@ function initDb() {
       estado TEXT DEFAULT 'abierta'
     )`);
     db.run("ALTER TABLE Cajas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN caja_fisica_id INTEGER", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN caja_nombre TEXT", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_dolares REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
@@ -416,6 +439,7 @@ function initDb() {
       FOREIGN KEY(caja_id) REFERENCES Cajas(id)
     )`);
     db.run("ALTER TABLE Pagos ADD COLUMN mesero TEXT", () => {});
+    db.run("ALTER TABLE Pagos ADD COLUMN caja_fisica_id INTEGER", () => {});
     db.run("ALTER TABLE Pagos ADD COLUMN monto_usd REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Pagos ADD COLUMN tipo_cambio REAL DEFAULT 1", () => {});
 
@@ -466,6 +490,7 @@ function initDb() {
       permisos TEXT DEFAULT '{"salon":true,"kds":true,"caja":true,"facturacion":true}',
       activo INTEGER DEFAULT 1,
       debe_cambiar_password INTEGER DEFAULT 0,
+      caja_defecto_id INTEGER,
       ultimo_token_sesion TEXT,
       ultima_conexion TEXT,
       ultimo_dispositivo_id TEXT,
@@ -473,6 +498,7 @@ function initDb() {
       UNIQUE(negocio_id, usuario)
     )`);
     db.run("ALTER TABLE Usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 0", () => {});
+    db.run("ALTER TABLE Usuarios ADD COLUMN caja_defecto_id INTEGER", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_token_sesion TEXT", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN ultima_conexion TEXT", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_dispositivo_id TEXT", () => {});
@@ -818,6 +844,27 @@ function initDb() {
           );
         });
         console.log('🌱 Usuarios iniciales (dev, admin, cajero, carlos [M], sofia [F]) sembrados.');
+      }
+    });
+
+    // Sembrar Puntos de Cobro / Cajas Físicas si no existen
+    db.get('SELECT COUNT(*) as count FROM PuntosDeCobro WHERE negocio_id = 1', (err, row) => {
+      if (!err && (!row || Number(row.count) === 0)) {
+        const ahora = new Date().toISOString();
+        const cajasSeed = [
+          { nombre: 'Caja 1 - Principal', codigo: 'CAJA-01', ubicacion: 'Entrada / Salón Principal', icono: '💳' },
+          { nombre: 'Caja 2 - Barra', codigo: 'CAJA-02', ubicacion: 'Barra de Bebidas', icono: '🍸' },
+          { nombre: 'Caja 3 - Terraza', codigo: 'CAJA-03', ubicacion: 'Terraza / Segundo Piso', icono: '🌿' },
+          { nombre: 'Caja 4 - Express', codigo: 'CAJA-04', ubicacion: 'Mostrador Para Llevar', icono: '🛵' }
+        ];
+        cajasSeed.forEach(c => {
+          db.run(
+            `INSERT INTO PuntosDeCobro (negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en)
+             VALUES (1, ?, ?, ?, ?, 1, ?)`,
+            [c.nombre, c.codigo, c.ubicacion, c.icono, ahora]
+          );
+        });
+        console.log('🌱 Puntos de Cobro / Cajas Físicas iniciales sembradas para Negocio 1.');
       }
     });
 

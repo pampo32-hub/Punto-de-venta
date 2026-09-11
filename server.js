@@ -2219,10 +2219,12 @@ app.get('/api/admin/empleados', async (req, res) => {
     const negocioId = obtenerNegocioIdReq(req);
     // REGLA CRÍTICA: Nunca mostrar a usuarios con rol 'developer'
     const empleados = await dbAll(`
-      SELECT id, negocio_id, usuario, nombre_completo, rol, genero, pin, activo
-      FROM Usuarios
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND rol != 'developer'
-      ORDER BY id ASC
+      SELECT u.id, u.negocio_id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.activo, u.caja_defecto_id,
+             p.nombre as caja_defecto_nombre
+      FROM Usuarios u
+      LEFT JOIN PuntosDeCobro p ON u.caja_defecto_id = p.id
+      WHERE (u.negocio_id = ? OR (u.negocio_id IS NULL AND ? = 1)) AND u.rol != 'developer'
+      ORDER BY u.id ASC
     `, [negocioId, negocioId]);
 
     // Mapear etiquetas con género
@@ -2243,11 +2245,16 @@ app.get('/api/admin/empleados', async (req, res) => {
 app.post('/api/admin/empleados', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
-    const { usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234' } = req.body;
+    const { usuario, nombre_completo, nombre, password, rol = 'salonero', genero = 'M', pin = '1234', caja_defecto_id } = req.body;
     
     // Bloqueo estricto: el admin NO puede crear roles developer
     if (rol === 'developer') {
-      return res.status(403).json({ error: 'Permiso denegado: El administrador no puede crear usuarios de desarrollador' });
+      return res.status(403).json({ ok: false, error: 'Permiso denegado: El administrador no puede crear usuarios de desarrollador' });
+    }
+
+    const nombreFinal = (nombre_completo || nombre || usuario || '').trim();
+    if (!usuario || !password) {
+      return res.status(400).json({ ok: false, error: 'Usuario y contraseña son requeridos' });
     }
 
     const permisos = rol === 'cajero' 
@@ -2255,17 +2262,17 @@ app.post('/api/admin/empleados', async (req, res) => {
       : '{"salon":true,"kds":true}';
 
     const debeCambiar = (rol !== 'admin' && rol !== 'developer') ? 1 : 0;
-    const hashedPassword = await bcrypt.hash(password.trim(), 10);
+    const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
 
     const r = await dbRun(
-      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, debe_cambiar_password)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [negocioId, usuario.trim(), nombre_completo.trim(), hashedPassword, rol, genero, pin, permisos, debeCambiar]
+      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, debe_cambiar_password, caja_defecto_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [negocioId, String(usuario).trim(), nombreFinal, hashedPassword, rol, genero, pin, permisos, debeCambiar, caja_defecto_id ? Number(caja_defecto_id) : null]
     );
 
-    res.json({ message: 'Empleado registrado con éxito', id: r.lastID });
+    res.json({ ok: true, message: 'Empleado registrado con éxito', id: r.lastID });
   } catch (e) {
-    res.status(500).json({ error: e.message.includes('UNIQUE') ? 'Ese nombre de usuario ya está en uso' : e.message });
+    res.status(500).json({ ok: false, error: e.message.includes('UNIQUE') ? 'Ese nombre de usuario ya está en uso' : e.message });
   }
 });
 
@@ -2285,20 +2292,22 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
       }
     }
 
-    const { nombre_completo, password, rol, genero, pin, debe_cambiar_password } = req.body;
+    const { nombre_completo, password, rol, genero, pin, debe_cambiar_password, caja_defecto_id } = req.body;
     if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
+
+    const cDefectoFinal = caja_defecto_id !== undefined ? (caja_defecto_id ? Number(caja_defecto_id) : null) : target.caja_defecto_id;
 
     if (password && String(password).trim()) {
       const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((rol !== 'admin' && rol !== 'developer') ? 1 : 0);
       const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
-        'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ? WHERE id = ?',
-        [nombre_completo, hashedPassword, rol, genero, pin, debeCambiar, req.params.id]
+        'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ?, caja_defecto_id = ? WHERE id = ?',
+        [nombre_completo, hashedPassword, rol, genero, pin, debeCambiar, cDefectoFinal, req.params.id]
       );
     } else {
       await dbRun(
-        'UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ? WHERE id = ?',
-        [nombre_completo, rol, genero, pin, req.params.id]
+        'UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ?, caja_defecto_id = ? WHERE id = ?',
+        [nombre_completo, rol, genero, pin, cDefectoFinal, req.params.id]
       );
     }
 
@@ -5582,8 +5591,8 @@ async function procesarCobroOrden(ordenId, {
     const usdPago = Number(p.monto_usd) || (listaPagos.length === 1 ? (Number(monto_usd) || 0) : 0);
 
     await dbRun(
-      'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, referencia, tipo_cambio, monto_usd, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [ordenId, cajaId, mesero, metPago, mtoPago, propPago, camPago, refPago, tcPago, usdPago, ahora]
+      'INSERT INTO Pagos (orden_id, caja_id, mesero, metodo, monto, propina, cambio, referencia, tipo_cambio, monto_usd, caja_fisica_id, fecha_hora) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [ordenId, cajaId, mesero, metPago, mtoPago, propPago, camPago, refPago, tcPago, usdPago, caja?.caja_fisica_id || null, ahora]
     );
   }
 
@@ -6041,14 +6050,305 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
   }
 });
 
+// ============================================================================
+// GESTIÓN DE PUNTOS DE COBRO FÍSICOS Y MULTI-CAJAS DINÁMICAS
+// ============================================================================
+
+// Listar puntos de cobro físicos y su estado de ocupación en tiempo real
+app.get('/api/cajas-fisicas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const puntos = await dbAll(`
+      SELECT p.*, u.nombre_completo as pre_asignado_usuario_nombre, u.usuario as pre_asignado_usuario_username
+      FROM PuntosDeCobro p
+      LEFT JOIN Usuarios u ON p.pre_asignado_usuario_id = u.id
+      WHERE (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1)) AND p.activo = 1
+      ORDER BY p.id ASC
+    `, [negocioId, negocioId]);
+
+    const turnosAbiertos = await dbAll(`
+      SELECT * FROM Cajas 
+      WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+      ORDER BY id DESC
+    `, [negocioId, negocioId]);
+
+    const cajasFisicas = puntos.map(punto => {
+      const turnoActivo = turnosAbiertos.find(t => Number(t.caja_fisica_id) === Number(punto.id));
+      return {
+        id: punto.id,
+        nombre: punto.nombre,
+        codigo: punto.codigo,
+        ubicacion: punto.ubicacion,
+        icono: punto.icono || '💳',
+        pre_asignado_usuario_id: punto.pre_asignado_usuario_id,
+        pre_asignado_usuario_nombre: punto.pre_asignado_usuario_nombre,
+        pre_asignado_usuario_username: punto.pre_asignado_usuario_username,
+        ocupada: !!turnoActivo,
+        turno_activo: turnoActivo ? {
+          id: turnoActivo.id,
+          cajero: turnoActivo.cajero,
+          fecha_apertura: turnoActivo.fecha_apertura,
+          monto_inicial: turnoActivo.monto_inicial
+        } : null
+      };
+    });
+
+    res.json({
+      ok: true,
+      puntos: cajasFisicas,
+      cajas_fisicas: cajasFisicas,
+      turnos_abiertos_count: turnosAbiertos.length,
+      turnos_abiertos: turnosAbiertos
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Admin CRUD Puntos de Cobro
+app.get('/api/admin/puntos-cobro', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const puntos = await dbAll(`
+      SELECT p.*, u.nombre_completo as pre_asignado_usuario_nombre, u.usuario as pre_asignado_usuario_username
+      FROM PuntosDeCobro p
+      LEFT JOIN Usuarios u ON p.pre_asignado_usuario_id = u.id
+      WHERE (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
+      ORDER BY p.id ASC
+    `, [negocioId, negocioId]);
+    res.json(puntos);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/puntos-cobro', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
+    const { nombre, codigo, ubicacion, icono = '💳', pre_asignado_usuario_id } = req.body;
+    if (!nombre || !String(nombre).trim()) {
+      return res.status(400).json({ error: 'El nombre de la caja física es obligatorio' });
+    }
+    const codFinal = (codigo || ('CAJA-' + Math.floor(10 + Math.random() * 90))).trim();
+    const ahora = new Date().toISOString();
+    const r = await dbRun(`
+      INSERT INTO PuntosDeCobro (negocio_id, nombre, codigo, ubicacion, icono, pre_asignado_usuario_id, activo, creado_en)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+    `, [negocioId, nombre.trim(), codFinal, (ubicacion || '').trim(), (icono || '💳').trim(), pre_asignado_usuario_id ? Number(pre_asignado_usuario_id) : null, ahora]);
+
+    io.emit('cajas_fisicas_actualizadas');
+    res.json({ ok: true, message: 'Punto de cobro creado con éxito', id: r.lastID });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/puntos-cobro/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { nombre, codigo, ubicacion, icono, pre_asignado_usuario_id, activo } = req.body;
+    const target = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [id]);
+    if (!target) return res.status(404).json({ error: 'Punto de cobro no encontrado' });
+
+    await dbRun(`
+      UPDATE PuntosDeCobro SET
+        nombre = COALESCE(?, nombre),
+        codigo = COALESCE(?, codigo),
+        ubicacion = COALESCE(?, ubicacion),
+        icono = COALESCE(?, icono),
+        pre_asignado_usuario_id = ?,
+        activo = COALESCE(?, activo)
+      WHERE id = ?
+    `, [
+      nombre ? nombre.trim() : null,
+      codigo ? codigo.trim() : null,
+      ubicacion !== undefined ? (ubicacion || '').trim() : target.ubicacion,
+      icono ? icono.trim() : target.icono,
+      pre_asignado_usuario_id !== undefined ? (pre_asignado_usuario_id ? Number(pre_asignado_usuario_id) : null) : target.pre_asignado_usuario_id,
+      activo !== undefined ? (activo ? 1 : 0) : target.activo,
+      id
+    ]);
+
+    io.emit('cajas_fisicas_actualizadas');
+    res.json({ ok: true, message: 'Punto de cobro actualizado con éxito' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admin/puntos-cobro/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const turnoAbierto = await dbGet("SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta'", [id]);
+    if (turnoAbierto) {
+      return res.status(400).json({ error: `No se puede eliminar la caja física porque tiene un turno abierto activo por ${turnoAbierto.cajero}` });
+    }
+    await dbRun('UPDATE PuntosDeCobro SET activo = 0 WHERE id = ?', [id]);
+    io.emit('cajas_fisicas_actualizadas');
+    res.json({ ok: true, message: 'Punto de cobro desactivado' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reasignación en caliente de un turno de caja activo (cambio de cajero o caja física)
+app.post('/api/admin/cajas/reasignar', async (req, res) => {
+  try {
+    const {
+      caja_id,
+      turno_id,
+      nuevo_cajero,
+      nuevo_usuario_id,
+      nueva_caja_fisica_id,
+      motivo = 'Reasignación operativa de turno',
+      adminPin,
+      pin,
+      pinAdmin,
+      usuario_admin
+    } = req.body;
+
+    const turnoIdTarget = Number(caja_id || turno_id);
+    if (!turnoIdTarget) {
+      return res.status(400).json({ ok: false, error: 'ID de turno / caja requerido' });
+    }
+
+    const pinVerificar = adminPin || pin || pinAdmin || req.headers['x-supervisor-pin'];
+    if (!pinVerificar) {
+      return res.status(401).json({ ok: false, error: 'PIN de Administrador requerido para reasignar turnos' });
+    }
+
+    const esValido = await validarPinAdministrador(pinVerificar);
+    if (!esValido) {
+      return res.status(401).json({ ok: false, error: 'PIN de Administrador inválido para reasignar turnos' });
+    }
+
+    const turno = await dbGet('SELECT * FROM Cajas WHERE id = ?', [turnoIdTarget]);
+    if (!turno) {
+      return res.status(404).json({ ok: false, error: 'Turno de caja no encontrado' });
+    }
+    if (turno.estado !== 'abierta') {
+      return res.status(400).json({ ok: false, error: 'Solo se pueden reasignar turnos que estén actualmente abiertos' });
+    }
+
+    let finalCajero = turno.cajero;
+    let finalCajaFisicaId = turno.caja_fisica_id;
+    let finalCajaNombre = turno.caja_nombre;
+    let nuevoUsuarioId = nuevo_usuario_id ? Number(nuevo_usuario_id) : null;
+
+    if (nuevo_usuario_id) {
+      const u = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [nuevoUsuarioId]);
+      if (u) {
+        finalCajero = u.nombre_completo || u.usuario;
+      }
+    } else if (nuevo_cajero && String(nuevo_cajero).trim()) {
+      finalCajero = String(nuevo_cajero).trim();
+    }
+
+    if (nueva_caja_fisica_id && Number(nueva_caja_fisica_id) !== Number(turno.caja_fisica_id)) {
+      const nuevoPuntoId = Number(nueva_caja_fisica_id);
+      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [nuevoPuntoId]);
+      if (!punto) {
+        return res.status(404).json({ ok: false, error: 'La nueva caja física seleccionada no existe' });
+      }
+
+      const ocupadaPorOtro = await dbGet(
+        "SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND id != ?",
+        [nuevoPuntoId, turnoIdTarget]
+      );
+      if (ocupadaPorOtro) {
+        return res.status(409).json({
+          ok: false,
+          error: `No se puede transferir: La caja física "${punto.nombre}" ya está ocupada por ${ocupadaPorOtro.cajero}`
+        });
+      }
+
+      finalCajaFisicaId = nuevoPuntoId;
+      finalCajaNombre = punto.nombre;
+    }
+
+    await dbRun(`
+      UPDATE Cajas SET
+        cajero = ?,
+        caja_fisica_id = ?,
+        caja_nombre = ?
+      WHERE id = ?
+    `, [finalCajero, finalCajaFisicaId, finalCajaNombre, turnoIdTarget]);
+
+    const detalleAudit = `Reasignación de turno #${turnoIdTarget}: Cajero anterior (${turno.cajero}) -> Nuevo (${finalCajero}), Caja anterior (${turno.caja_nombre || 'N/A'}) -> Nueva (${finalCajaNombre || 'N/A'}). Motivo: ${motivo}`;
+
+    await registrarAuditoria({
+      negocioId: turno.negocio_id || 1,
+      usuarioNombre: usuario_admin || 'Administrador',
+      accion: 'reasignacion_turno_caja',
+      tipoEvento: 'operativo',
+      modulo: 'caja',
+      detalle: detalleAudit
+    });
+
+    io.emit('caja_actualizada');
+    io.emit('cajas_fisicas_actualizadas');
+    io.emit('caja_turno_reasignado', {
+      turnoId: turnoIdTarget,
+      cajero: finalCajero,
+      caja_fisica_id: finalCajaFisicaId,
+      caja_nombre: finalCajaNombre,
+      motivo
+    });
+
+    const infoTurno = {
+      id: turnoIdTarget,
+      usuario_id: nuevoUsuarioId,
+      cajero: finalCajero,
+      caja_fisica_id: finalCajaFisicaId,
+      caja_nombre: finalCajaNombre,
+      estado: 'abierta'
+    };
+
+    res.json({
+      ok: true,
+      message: 'Turno de caja reasignado exitosamente',
+      caja: infoTurno,
+      turno: infoTurno
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.get('/api/caja/actual', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+    const { caja_id, caja_fisica_id, cajero } = req.query;
+
+    let caja = null;
+
+    if (caja_id) {
+      caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [Number(caja_id)]);
+    } else if (caja_fisica_id) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId, negocioId]
+      );
+    } else if (cajero) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE LOWER(cajero) = LOWER(?) AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [String(cajero).trim(), negocioId, negocioId]
+      );
+    }
+
+    if (!caja) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [negocioId, negocioId]
+      );
+    }
+
+    const turnosAbiertos = await dbAll(
+      "SELECT id, cajero, caja_fisica_id, caja_nombre, fecha_apertura, monto_inicial FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC",
       [negocioId, negocioId]
     );
-    if (!caja) return res.json({ caja: null });
+
+    if (!caja) return res.json({ ok: true, caja: null, cajasAbiertas: turnosAbiertos || [], turnos_abiertos: turnosAbiertos || [] });
 
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
@@ -6070,26 +6370,36 @@ app.get('/api/caja/actual', async (req, res) => {
       GROUP BY p.mesero
     `, [caja.id]);
 
-    res.json({ caja, ventas, movimientos, tipPool });
+    res.json({ ok: true, caja, cajasAbiertas: turnosAbiertos || [], turnos_abiertos: turnosAbiertos || [], ventas, movimientos, tipPool });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
 // Registrar entrada o salida menor de efectivo
 app.post('/api/caja/movimiento', async (req, res) => {
   try {
-    const { tipo, monto, concepto, usuarioNombre = 'Cajero' } = req.body;
+    const { tipo, monto, concepto, usuarioNombre = 'Cajero', caja_id, caja_fisica_id } = req.body;
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const montoNum = parseFloat(monto);
     if (!tipo || !['entrada', 'salida'].includes(tipo) || isNaN(montoNum) || montoNum <= 0) {
       return res.status(400).json({ error: 'Tipo ("entrada" o "salida") y monto válido mayor a 0 son requeridos' });
     }
 
-    let caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
-    );
+    let caja = null;
+    if (caja_id) {
+      caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+    } else if (caja_fisica_id) {
+      caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta'", [Number(caja_fisica_id)]);
+    }
+
+    if (!caja) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [negocioId, negocioId]
+      );
+    }
+
     if (!caja) {
       const ahoraApertura = new Date().toISOString();
       const r = await dbRun(`
@@ -6113,7 +6423,7 @@ app.post('/api/caja/movimiento', async (req, res) => {
       accion: tipo === 'entrada' ? 'entrada_efectivo' : 'salida_gasto_menor',
       tipoEvento: 'operativo',
       modulo: 'caja',
-      detalle: `${tipo === 'entrada' ? 'Ingreso' : 'Egreso'} de efectivo por ₡${montoNum.toLocaleString('es-CR')}: ${conceptoLimpio}`
+      detalle: `${tipo === 'entrada' ? 'Ingreso' : 'Egreso'} de efectivo por ₡${montoNum.toLocaleString('es-CR')} en ${caja.caja_nombre || 'Caja #' + caja.id}: ${conceptoLimpio}`
     });
 
     io.emit('caja_actualizada');
@@ -6135,10 +6445,25 @@ app.get('/api/caja/corte-x', async (req, res) => {
     }
 
     const negocioId = obtenerNegocioIdReq(req);
-    const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
-    );
+    const { caja_id, caja_fisica_id } = req.query;
+
+    let caja = null;
+    if (caja_id) {
+      caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [Number(caja_id)]);
+    } else if (caja_fisica_id) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId, negocioId]
+      );
+    }
+
+    if (!caja) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [negocioId, negocioId]
+      );
+    }
+
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
 
     const ventas = await dbAll(`
@@ -6204,9 +6529,11 @@ app.get('/api/caja/corte-x', async (req, res) => {
       SELECT COUNT(DISTINCT orden_id) as total_ordenes FROM Pagos WHERE caja_id = ?
     `, [caja.id]);
 
-    res.json({
+    const resultadoCorte = {
       tipo: 'Corte X (Parcial)',
       caja_id: caja.id,
+      caja_fisica_id: caja.caja_fisica_id,
+      caja_nombre: caja.caja_nombre,
       cajero: caja.cajero,
       fecha_apertura: caja.fecha_apertura,
       fecha_corte: new Date().toISOString(),
@@ -6233,9 +6560,15 @@ app.get('/api/caja/corte-x', async (req, res) => {
       total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
       tip_pool: tipPool,
       total_propinas: totalPropinas
+    };
+
+    res.json({
+      ok: true,
+      corte: resultadoCorte,
+      ...resultadoCorte
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -6243,6 +6576,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
 app.post('/api/caja/cierre-z', async (req, res) => {
   try {
     const {
+      caja_id,
+      caja_fisica_id,
       efectivo_real_contado,
       efectivo_real_contado_crc,
       dolares_real_contado,
@@ -6270,10 +6605,20 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     }
 
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
-    const caja = await dbGet(
-      "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
-    );
+
+    let caja = null;
+    if (caja_id) {
+      caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+    } else if (caja_fisica_id) {
+      caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioId, negocioId]);
+    }
+
+    if (!caja) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [negocioId, negocioId]
+      );
+    }
     if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
 
     const ventas = await dbAll(`
@@ -6368,15 +6713,17 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       accion: 'cierre_z',
       tipoEvento: 'financiero',
       modulo: 'caja',
-      detalle: `Cierre Z Turno #${caja.id}. Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Esp USD: $${dolaresEsperadoUSD} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} + $${dolaresRealUSD} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`
+      detalle: `Cierre Z Turno #${caja.id} (${caja.caja_nombre || 'Caja'}). Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Esp USD: $${dolaresEsperadoUSD} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} + $${dolaresRealUSD} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`
     });
 
     io.emit('caja_actualizada');
+    io.emit('cajas_fisicas_actualizadas');
 
-    res.json({
-      ok: true,
+    const resultadoCierre = {
       tipo: 'Cierre Z (Final)',
       caja_id: caja.id,
+      caja_fisica_id: caja.caja_fisica_id,
+      caja_nombre: caja.caja_nombre,
       cajero: caja.cajero,
       fecha_apertura: caja.fecha_apertura,
       fecha_cierre: ahora,
@@ -6414,49 +6761,140 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       tip_pool: tipPool,
       total_propinas: totalPropinas,
       notas
+    };
+
+    res.json({
+      ok: true,
+      caja: {
+        id: caja.id,
+        cajero: caja.cajero,
+        caja_fisica_id: caja.caja_fisica_id,
+        caja_nombre: caja.caja_nombre,
+        estado: 'cerrada',
+        fecha_apertura: caja.fecha_apertura,
+        fecha_cierre: ahora
+      },
+      cierre: resultadoCierre,
+      ...resultadoCierre
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// Apertura de nuevo turno de caja
+// Apertura dinámica de turno de caja (soporta selección de punto físico y validación de ocupación)
 app.post('/api/caja/abrir', async (req, res) => {
   try {
-    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id } = req.body;
+    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id, caja_fisica_id, forzar = false, usuario_id } = req.body;
     const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const montoNum = parseFloat(monto_inicial);
     if (isNaN(montoNum) || montoNum < 0) {
-      return res.status(400).json({ error: 'Monto inicial de apertura inválido' });
+      return res.status(400).json({ ok: false, error: 'Monto inicial de apertura inválido' });
     }
 
-    const activa = await dbGet(
-      "SELECT id FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-      [negocioId, negocioId]
-    );
-    if (activa) {
-      return res.json({ ok: true, message: 'Ya existe una caja abierta para este comercio', caja_id: activa.id });
+    let nombreCajero = cajero;
+    let usuarioIdFinal = usuario_id ? Number(usuario_id) : null;
+    if (usuario_id) {
+      const u = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [Number(usuario_id)]);
+      if (u) {
+        nombreCajero = u.nombre_completo || u.usuario || cajero;
+      }
+    }
+
+    let cajaFisicaIdNum = caja_fisica_id ? Number(caja_fisica_id) : null;
+    let cajaNombre = null;
+
+    if (cajaFisicaIdNum) {
+      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [cajaFisicaIdNum]);
+      if (!punto) {
+        return res.status(404).json({ ok: false, error: 'La caja física seleccionada no existe' });
+      }
+      cajaNombre = punto.nombre;
+
+      // Verificar si ESA caja física ya está abierta por otro turno
+      const cajaOcupada = await dbGet(
+        "SELECT id, cajero, caja_nombre FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+        [cajaFisicaIdNum, negocioId, negocioId]
+      );
+      if (cajaOcupada) {
+        return res.status(409).json({
+          ok: false,
+          error: `La caja física "${cajaNombre}" ya se encuentra en uso y abierta por ${cajaOcupada.cajero}`,
+          caja_ocupada_por: cajaOcupada.cajero,
+          turno_id: cajaOcupada.id
+        });
+      }
+    } else {
+      // Si no especificó caja física, intentar asignar la primera disponible o pre-asignada
+      const puntos = await dbAll('SELECT * FROM PuntosDeCobro WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND activo = 1 ORDER BY id ASC', [negocioId, negocioId]);
+      if (puntos && puntos.length > 0) {
+        const turnosAbiertos = await dbAll("SELECT caja_fisica_id FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))", [negocioId, negocioId]);
+        const ocupadosIds = new Set(turnosAbiertos.map(t => Number(t.caja_fisica_id)));
+        const disponible = puntos.find(p => !ocupadosIds.has(Number(p.id)));
+        if (disponible) {
+          cajaFisicaIdNum = disponible.id;
+          cajaNombre = disponible.nombre;
+        } else {
+          cajaFisicaIdNum = puntos[0].id;
+          cajaNombre = puntos[0].nombre;
+        }
+      } else {
+        cajaNombre = 'Caja Principal';
+      }
+    }
+
+    // Verificar si este mismo cajero ya tiene un turno abierto en este negocio
+    if (!forzar) {
+      const turnoPrevioCajero = await dbGet(
+        "SELECT id, caja_nombre, caja_fisica_id FROM Cajas WHERE LOWER(cajero) = LOWER(?) AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+        [nombreCajero.trim(), negocioId, negocioId]
+      );
+      if (turnoPrevioCajero) {
+        return res.status(409).json({
+          ok: false,
+          error: `El cajero "${nombreCajero}" ya tiene un turno activo en "${turnoPrevioCajero.caja_nombre || 'Caja #' + turnoPrevioCajero.id}"`,
+          caja_id: turnoPrevioCajero.id,
+          caja_fisica_id: turnoPrevioCajero.caja_fisica_id
+        });
+      }
     }
 
     const ahoraApertura = new Date().toISOString();
     const r = await dbRun(`
-      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
-      VALUES (?, ?, ?, ?, 'abierta')
-    `, [negocioId, cajero, ahoraApertura, montoNum]);
+      INSERT INTO Cajas (negocio_id, cajero, caja_fisica_id, caja_nombre, fecha_apertura, monto_inicial, estado)
+      VALUES (?, ?, ?, ?, ?, ?, 'abierta')
+    `, [negocioId, nombreCajero, cajaFisicaIdNum, cajaNombre, ahoraApertura, montoNum]);
 
     await registrarAuditoria({
       negocioId,
-      usuarioNombre: cajero,
+      usuarioNombre: nombreCajero,
       accion: 'apertura_caja',
       tipoEvento: 'operativo',
       modulo: 'caja',
-      detalle: `Apertura de turno de caja #${r.lastID} con fondo inicial: ₡${montoNum.toLocaleString('es-CR')}`
+      detalle: `Apertura de turno #${r.lastID} en ${cajaNombre || 'Caja'} (Cajero: ${nombreCajero}) con fondo inicial: ₡${montoNum.toLocaleString('es-CR')}`
     });
 
     io.emit('caja_actualizada');
-    res.json({ ok: true, message: 'Nuevo turno de caja abierto con éxito', caja_id: r.lastID });
+    io.emit('cajas_fisicas_actualizadas');
+    res.json({
+      ok: true,
+      message: `Nuevo turno abierto con éxito en ${cajaNombre || 'Caja'}`,
+      caja_id: r.lastID,
+      caja_fisica_id: cajaFisicaIdNum,
+      caja_nombre: cajaNombre,
+      caja: {
+        id: r.lastID,
+        usuario_id: usuarioIdFinal,
+        cajero: nombreCajero,
+        caja_fisica_id: cajaFisicaIdNum,
+        caja_nombre: cajaNombre,
+        estado: 'abierta',
+        fecha_apertura: ahoraApertura,
+        monto_inicial: montoNum
+      }
+    });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 

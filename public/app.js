@@ -4513,6 +4513,10 @@ window.aplicarRestriccionesModulos = function() {
   }
 
   // 5. Mesas Avanzadas & Promociones (Mover / Unir / Separar y Happy Hour)
+  document.querySelectorAll('#btnAbrirMoverUnirModal, .btn-mover-unir, .btn-unir-mesas, .btn-mover-mesa').forEach(el => {
+    el.style.display = (tieneUnionMesas || tieneMoverMesas) ? '' : 'none';
+  });
+
   // Pestañas y paneles de Unir / Separar dentro del modal de Mover/Unir
   document.querySelectorAll('.transfer-tab[data-tab="unir"], .transfer-tab[data-tab="separar"], .btn-unir-mesas').forEach(el => {
     el.style.display = tieneUnionMesas ? '' : 'none';
@@ -5097,15 +5101,19 @@ window.abrirModalSeguridadRed = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
+      alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de red'));
       alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de seguridad'));
       return;
     }
 
     const subtitulo = document.getElementById('adminSeguridadRedSubtitulo');
     if (subtitulo && data.nombre) {
+      subtitulo.textContent = `Control perimetral de acceso por red WiFi para: ${data.nombre}`;
       subtitulo.textContent = `Control de IP, terminales y sesión única para: ${data.nombre}`;
     }
 
+    const chk = document.getElementById('chkAdminRestringirIP');
+    if (chk) chk.checked = !!data.restringir_ip_operativos;
     const chkIp = document.getElementById('chkAdminRestringirIP');
     if (chkIp) chkIp.checked = !!data.restringir_ip_operativos;
 
@@ -5128,6 +5136,7 @@ window.abrirModalSeguridadRed = async function() {
     await cargarListaDispositivosAutorizados();
     modal.classList.add('active');
   } catch (e) {
+    alert('❌ Error al abrir seguridad de red: ' + e.message);
     alert('❌ Error al abrir seguridad: ' + e.message);
   }
 };
@@ -5138,6 +5147,14 @@ window.cerrarModalSeguridadRed = function() {
 };
 
 window.actualizarEstadoVisualSeguridadRed = function() {
+  const chk = document.getElementById('chkAdminRestringirIP');
+  if (!chk) return;
+  const slider = chk.nextElementSibling;
+  if (slider) {
+    slider.style.backgroundColor = chk.checked ? '#0284c7' : '#334155';
+    const knob = slider.querySelector('span');
+    if (knob) knob.style.left = chk.checked ? '26px' : '3px';
+  }
   const switches = [
     { id: 'chkAdminRestringirIP', color: '#0284c7' },
     { id: 'chkAdminRestringirDispositivos', color: '#10b981' },
@@ -5151,6 +5168,11 @@ window.actualizarEstadoVisualSeguridadRed = function() {
     if (slider) {
       slider.style.backgroundColor = el.checked ? sw.color : '#334155';
       slider.style.borderColor = el.checked ? sw.color : 'rgba(255,255,255,0.15)';
+      const knob = slider.querySelector('span');
+      if (knob) knob.style.left = el.checked ? '26px' : '3px';
+      if (knob) {
+        knob.style.transform = el.checked ? 'translateX(24px)' : 'translateX(0px)';
+      }
     }
   });
 
@@ -5259,7 +5281,7 @@ window.renderListaDispositivosAutorizados = function(dispositivos = []) {
             </small>
           </div>
         </div>
-        <button type="button" onclick="eliminarDispositivoAutorizado(${d.id}, '${d.nombre_dispositivo.replace(/'/g, "\\'")}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; font-weight: 700;" title="Revocar terminal">
+        <button type="button" data-disp-id="${d.id}" data-disp-name="${escapeHtml(d.nombre_dispositivo)}" onclick="eliminarDispositivoAutorizado(this.dataset.dispId, this.dataset.dispName)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; font-weight: 700;" title="Revocar terminal">
           🗑️ Revocar
         </button>
       </div>
@@ -5538,7 +5560,12 @@ window.guardarConfiguracionSeguridadRed = async function() {
 
     cerrarModalSeguridadRed();
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro('🛡️ Configuración de seguridad, red y terminales guardada exitosamente.', 'success');
+      mostrarNotificacionCentro(
+        restringirIp
+          ? '🔒 Seguridad de Red activada: Saloneros y cajeros solo pueden acceder desde el WiFi del local'
+          : '🌐 Restricción de red desactivada: Personal operativo puede acceder desde cualquier red',
+        'success'
+      );
     } else {
       alert('✅ ' + (data.message || 'Configuración guardada exitosamente'));
     }
@@ -6112,15 +6139,30 @@ document.getElementById('btnCloseAdminPersonal')?.addEventListener('click', () =
 
 async function cargarEmpleadosAdmin() {
   try {
-    const res = await fetch('/api/admin/empleados?negocio_id=' + (estado.negocioActual ? estado.negocioActual.id : 1));
+    const nid = estado.negocioActual ? estado.negocioActual.id : 1;
+    const [resEmp, resCajas] = await Promise.all([
+      fetch('/api/admin/empleados?negocio_id=' + nid),
+      fetch('/api/cajas-fisicas?negocio_id=' + nid).catch(() => ({ ok: false }))
+    ]);
+
+    // Poblar selector de caja pre-asignada
+    const selCajaDefecto = document.getElementById('staffCajaDefecto');
+    if (selCajaDefecto && resCajas.ok) {
+      const dataCajas = await resCajas.json();
+      if (dataCajas && dataCajas.cajas_fisicas) {
+        selCajaDefecto.innerHTML = '<option value="">-- Sin pre-asignación (Elegir al abrir) --</option>' +
+          dataCajas.cajas_fisicas.map(c => `<option value="${c.id}">${c.icono || '💳'} ${escapeHtml(c.nombre)} (${escapeHtml(c.codigo || 'CAJA')})</option>`).join('');
+      }
+    }
+
     const tbody = document.getElementById('adminStaffTableBody');
     if (!tbody) return;
 
-    if (!res.ok) {
+    if (!resEmp.ok) {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444; padding:20px;">Error al cargar lista de personal</td></tr>';
       return;
     }
-    const empleados = await res.json();
+    const empleados = await resEmp.json();
     if (!Array.isArray(empleados)) {
       tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#ef4444; padding:20px;">${escapeHtml(empleados.error || 'Respuesta inválida')}</td></tr>`;
       return;
@@ -6150,11 +6192,15 @@ async function cargarEmpleadosAdmin() {
         rolBadge = '🛡️ Administrador';
       }
 
+      const cajaBadge = e.caja_defecto_nombre 
+        ? `<span class="badge-tag" style="background:rgba(16,185,129,0.15); color:#34d399; font-size:0.75rem; margin-left:4px;">💳 ${escapeHtml(e.caja_defecto_nombre)}</span>`
+        : '';
+
       return `
       <tr>
         <td><strong>${escapeHtml(e.nombre_completo)}</strong></td>
         <td><code>${escapeHtml(e.usuario)}</code></td>
-        <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span></td>
+        <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span>${cajaBadge}</td>
         <td><code>${escapeHtml(e.pin || '1234')}</code></td>
         <td>
           ${e.rol === 'superadmin' && userRolActual !== 'developer' ? '<small style="color:#f59e0b; font-weight:700;">👑 Dueño</small>' : `
@@ -6176,6 +6222,7 @@ document.getElementById('btnGuardarEmpleado').addEventListener('click', async ()
   const rol = document.getElementById('staffRol').value;
   const genero = document.getElementById('staffGenero').value;
   const pin = document.getElementById('staffPin').value.trim() || '1234';
+  const caja_defecto_id = document.getElementById('staffCajaDefecto')?.value || null;
 
   if (!nombre_completo || !usuario || !password) {
     alert('Por favor completa todos los campos del empleado.');
@@ -6193,7 +6240,8 @@ document.getElementById('btnGuardarEmpleado').addEventListener('click', async ()
         password,
         rol,
         genero,
-        pin
+        pin,
+        caja_defecto_id: caja_defecto_id ? Number(caja_defecto_id) : null
       })
     });
     const data = await res.json();
@@ -6203,6 +6251,7 @@ document.getElementById('btnGuardarEmpleado').addEventListener('click', async ()
     document.getElementById('staffNombre').value = '';
     document.getElementById('staffUsuario').value = '';
     document.getElementById('staffPassword').value = '';
+    if (document.getElementById('staffCajaDefecto')) document.getElementById('staffCajaDefecto').value = '';
     cargarEmpleadosAdmin();
   } catch (e) {
     alert('❌ ' + e.message);
@@ -10363,13 +10412,34 @@ window.resetearEstadoFinancieroCero = function() {
   if (rowTotalUSD) rowTotalUSD.style.display = aceptaUSD ? 'flex' : 'none';
 };
 
-async function cargarCajaDesdeBackend() {
+async function cargarCajaDesdeBackend(cajaIdFiltro = null) {
   try {
     const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/caja/actual?negocio_id=${nid}`, {
+    const urlCaja = cajaIdFiltro 
+      ? `/api/caja/actual?negocio_id=${nid}&caja_id=${cajaIdFiltro}`
+      : (window._cajaVisualFiltroId ? `/api/caja/actual?negocio_id=${nid}&caja_id=${window._cajaVisualFiltroId}` : `/api/caja/actual?negocio_id=${nid}`);
+
+    const res = await fetch(urlCaja, {
       headers: { 'x-negocio-id': String(nid) }
     });
     const data = await res.json();
+
+    // Actualizar selector de turnos activos múltiples si existen
+    const selTurnos = document.getElementById('selCambiarVistaCajaTurno');
+    const badgeCaja = document.getElementById('badgeCajaFisicaActiva');
+    if (data && data.turnos_abiertos && data.turnos_abiertos.length > 0) {
+      if (selTurnos) {
+        selTurnos.style.display = data.turnos_abiertos.length > 1 ? 'inline-block' : 'none';
+        selTurnos.innerHTML = data.turnos_abiertos.map(t => `
+          <option value="${t.id}" ${(data.caja && Number(data.caja.id) === Number(t.id)) ? 'selected' : ''}>
+            ${escapeHtml(t.caja_nombre || 'Caja #' + t.id)} (${escapeHtml(t.cajero)})
+          </option>
+        `).join('');
+      }
+    } else {
+      if (selTurnos) selTurnos.style.display = 'none';
+    }
+
     if (data && data.caja) {
       let efect = 0, tarj = 0, sinpe = 0, dolaresCRC = 0, dolaresUSD = 0;
       (data.ventas || []).forEach(v => {
@@ -10469,6 +10539,10 @@ async function cargarCajaDesdeBackend() {
       const elCajero = document.getElementById('cajeroTurnoNombre');
       if (elCajero) elCajero.textContent = data.caja.cajero || (estado.usuarioActual ? estado.usuarioActual.nombre : 'Juan Jival');
 
+      if (badgeCaja) {
+        badgeCaja.innerHTML = `💳 ${escapeHtml(data.caja.caja_nombre || 'Caja Principal')} (Turno #${data.caja.id})`;
+      }
+
       window._cajaActivaData = {
         caja: data.caja,
         fondo,
@@ -10488,6 +10562,9 @@ async function cargarCajaDesdeBackend() {
         movimientos: data.movimientos || []
       };
     } else {
+      if (badgeCaja) {
+        badgeCaja.innerHTML = `🔒 Caja Cerrada`;
+      }
       if (typeof window.resetearEstadoFinancieroCero === 'function') {
         window.resetearEstadoFinancieroCero();
       } else {
@@ -10522,6 +10599,11 @@ async function cargarCajaDesdeBackend() {
   }
 }
 
+window.cambiarTurnoCajaVisual = function(cajaId) {
+  window._cajaVisualFiltroId = cajaId ? Number(cajaId) : null;
+  cargarCajaDesdeBackend(window._cajaVisualFiltroId);
+};
+
 // -------------------------------------------------------------
 // OPERACIONES DE CAJA (ENTRADAS, SALIDAS, CORTE X, CIERRE Z)
 // -------------------------------------------------------------
@@ -10534,34 +10616,36 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
   const iconHeader = document.getElementById('iconModalMovimientoCaja');
   const titleHeader = document.getElementById('titleModalMovimientoCaja');
   const subHeader = document.getElementById('subModalMovimientoCaja');
-  const btnGuardar = document.getElementById('btnGuardarMovimientoCaja');
+  const badgeInfo = document.getElementById('badgeInfoMovimientoCaja');
 
   if (txtTipo) txtTipo.value = tipo;
-  if (txtMonto) txtMonto.value = '';
+  if (txtMonto) { txtMonto.value = ''; txtMonto.focus(); }
   if (txtConcepto) txtConcepto.value = '';
 
   if (tipo === 'entrada') {
     if (iconHeader) iconHeader.textContent = '📥';
     if (titleHeader) titleHeader.textContent = 'Entrada de Efectivo';
-    if (subHeader) subHeader.textContent = 'Registrar ingreso de dinero a la gaveta de caja';
-    if (btnGuardar) {
-      btnGuardar.textContent = '📥 Registrar Entrada';
-      btnGuardar.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    if (subHeader) subHeader.textContent = 'Registrar ingreso adicional de dinero a la gaveta de caja';
+    if (badgeInfo) {
+      badgeInfo.style.background = 'rgba(16, 185, 129, 0.1)';
+      badgeInfo.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+      badgeInfo.style.color = '#6ee7b7';
+      badgeInfo.innerHTML = 'ℹ️ Las <strong>Entradas</strong> incrementan el efectivo esperado en el arqueo del Cierre Z.';
     }
   } else {
     if (iconHeader) iconHeader.textContent = '📤';
     if (titleHeader) titleHeader.textContent = 'Salida / Gasto Menor';
-    if (subHeader) subHeader.textContent = 'Registrar salida o desembolso menor de caja';
-    if (btnGuardar) {
-      btnGuardar.textContent = '📤 Registrar Salida';
-      btnGuardar.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+    if (subHeader) subHeader.textContent = 'Registrar salida o egreso de dinero de la gaveta de caja';
+    if (badgeInfo) {
+      badgeInfo.style.background = 'rgba(239, 68, 68, 0.1)';
+      badgeInfo.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+      badgeInfo.style.color = '#fca5a5';
+      badgeInfo.innerHTML = '⚠️ Las <strong>Salidas</strong> disminuyen el efectivo esperado en el arqueo del Cierre Z.';
     }
   }
 
   modal.classList.add('active');
-  setTimeout(() => {
-    if (txtMonto) txtMonto.focus();
-  }, 100);
+  setTimeout(() => { if (txtMonto) txtMonto.focus(); }, 100);
 };
 
 window.cerrarModalMovimientoCaja = function() {
@@ -10576,45 +10660,448 @@ window.guardarMovimientoCaja = async function() {
 
   const tipo = txtTipo ? txtTipo.value : 'entrada';
   const monto = parseFloat(txtMonto ? txtMonto.value : 0);
-  const concepto = (txtConcepto ? txtConcepto.value : '').trim();
+  const concepto = txtConcepto ? txtConcepto.value.trim() : '';
 
   if (isNaN(monto) || monto <= 0) {
     alert('Por favor ingresa un monto válido mayor a 0');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa un monto válido mayor a 0', 'warning');
     if (txtMonto) txtMonto.focus();
     return;
   }
-  if (!concepto) {
-    alert('Por favor ingresa el motivo o concepto del movimiento');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa el motivo o concepto del movimiento', 'warning');
-    if (txtConcepto) txtConcepto.focus();
-    return;
-  }
-
-  const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
   try {
+    const usuarioNombre = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Cajero';
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const activeCajaId = window._cajaActivaData?.caja?.id || null;
+    const activeCajaFisicaId = window._cajaActivaData?.caja?.caja_fisica_id || null;
+
     const res = await fetch('/api/caja/movimiento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-      body: JSON.stringify({ tipo, monto, concepto, usuarioNombre, negocio_id: nid })
+      body: JSON.stringify({
+        tipo,
+        monto,
+        concepto,
+        usuarioNombre,
+        caja_id: activeCajaId,
+        caja_fisica_id: activeCajaFisicaId,
+        negocio_id: nid
+      })
     });
+
     const data = await res.json();
     if (!res.ok) {
-      alert('❌ ' + (data.error || 'No se pudo registrar el movimiento'));
-      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo registrar el movimiento'), 'error');
+      alert('Error registrando movimiento: ' + (data.error || 'Error desconocido'));
       return;
     }
 
     cerrarModalMovimientoCaja();
-    mostrarNotificacionCentro(`✅ ${tipo === 'entrada' ? 'Entrada' : 'Salida'} de ${formatCRC(monto)} registrada con éxito`, 'success');
+    mostrarNotificacionCentro(`✅ ${tipo === 'entrada' ? 'Entrada' : 'Salida'} de ${formatCRC(monto)} registrada correctamente`, 'success');
     await cargarCajaDesdeBackend();
   } catch (e) {
-    alert('❌ Error de conexión: ' + e.message);
-    mostrarNotificacionCentro('❌ Error de conexión: ' + e.message, 'error');
+    alert('Error al conectar con el servidor: ' + e.message);
   }
 };
+
+window.generarCorteX = async function() {
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const targetCajaId = window._cajaActivaData?.caja?.id || '';
+    const res = await fetch(`/api/caja/corte-x?negocio_id=${nid}&caja_id=${targetCajaId}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error generando Corte X: ' + (data.error || 'No se pudo generar el reporte'));
+      return;
+    }
+
+    const ticketData = {
+      tipo: 'CORTE_X',
+      fecha: new Date().toISOString(),
+      negocio: estado.negocioActual || { nombre: 'GastroBar POS' },
+      corte: data
+    };
+
+    if (typeof window.abrirModalVisorTicket === 'function') {
+      window.abrirModalVisorTicket(ticketData);
+    } else {
+      alert(`📑 CORTE X GENERADO\n\nCaja: ${data.caja_nombre || 'Principal'}\nCajero: ${data.cajero}\nVentas Totales: ${formatCRC(data.ventas.total)}\nEfectivo Esperado: ${formatCRC(data.efectivo_esperado)}`);
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.abrirModalCierreZ = function(esCiego = false) {
+  const modal = document.getElementById('modalCierreZ');
+  if (!modal) return;
+  window._cierreZEsCiego = !!esCiego;
+
+  const txtRealCRC = document.getElementById('txtCierreZEfectivoReal');
+  const txtRealUSD = document.getElementById('txtCierreZDolaresReal');
+  const txtNotas = document.getElementById('txtCierreZNotas');
+  if (txtRealCRC) txtRealCRC.value = '';
+  if (txtRealUSD) txtRealUSD.value = '';
+  if (txtNotas) txtNotas.value = '';
+
+  modal.classList.add('active');
+  if (typeof window.calcularDiferenciaCierreZ === 'function') {
+    window.calcularDiferenciaCierreZ();
+  }
+  setTimeout(() => {
+    if (txtRealCRC) txtRealCRC.focus();
+  }, 100);
+};
+
+window.cerrarModalCierreZ = function() {
+  const modal = document.getElementById('modalCierreZ');
+  if (modal) modal.classList.remove('active');
+};
+
+// -------------------------------------------------------------
+// APERTURA DINÁMICA DE CAJA CON SELECCIÓN DE PUNTOS FÍSICOS
+// -------------------------------------------------------------
+window.abrirModalAperturaCaja = async function() {
+  const modal = document.getElementById('modalAperturaCaja');
+  if (!modal) return;
+
+  if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
+    window.aplicarConfiguracionMonedaNegocio();
+  }
+
+  const txtCajero = document.getElementById('txtAperturaCajero');
+  const txtMonto = document.getElementById('txtAperturaMontoInicial');
+  const txtMontoUSD = document.getElementById('txtAperturaMontoInicialUSD') || document.getElementById('txtAperturaMontoUSD');
+  const gridPuntos = document.getElementById('gridPuntosCobroApertura');
+  const hiddenCajaId = document.getElementById('txtAperturaCajaFisicaId');
+  const lblPreasignacion = document.getElementById('lblPreasignacionUsuario');
+
+  const usuarioActual = estado.usuarioActual || estado.usuario || {};
+  const nombreUsuario = usuarioActual.nombre || usuarioActual.nombre_completo || 'Cajero de Turno';
+  const usuarioId = usuarioActual.id || null;
+
+  if (txtCajero) txtCajero.value = nombreUsuario;
+  if (txtMonto) txtMonto.value = '50000';
+  if (txtMontoUSD) txtMontoUSD.value = '0';
+  if (lblPreasignacion) lblPreasignacion.textContent = '';
+
+  // Cargar Puntos de Cobro y su disponibilidad en tiempo real
+  if (gridPuntos) {
+    gridPuntos.innerHTML = '<div style="color:#94a3b8; font-size:0.85rem; padding:10px;">Cargando cajas disponibles...</div>';
+    try {
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const res = await fetch(`/api/cajas-fisicas?negocio_id=${nid}`);
+      const data = await res.json();
+      const puntos = data.cajas_fisicas || [];
+
+      let puntoSeleccionadoId = null;
+
+      // Buscar si el usuario tiene una caja pre-asignada
+      const preAsignada = puntos.find(p => p.pre_asignado_usuario_id && Number(p.pre_asignado_usuario_id) === Number(usuarioId));
+      if (preAsignada && lblPreasignacion) {
+        lblPreasignacion.innerHTML = `📌 Tu caja habitual: <strong>${escapeHtml(preAsignada.nombre)}</strong>`;
+      }
+
+      if (preAsignada && !preAsignada.ocupada) {
+        puntoSeleccionadoId = preAsignada.id;
+      } else {
+        const primeraLibre = puntos.find(p => !p.ocupada);
+        if (primeraLibre) puntoSeleccionadoId = primeraLibre.id;
+        else if (puntos.length > 0) puntoSeleccionadoId = puntos[0].id;
+      }
+
+      if (hiddenCajaId) hiddenCajaId.value = puntoSeleccionadoId || '';
+
+      gridPuntos.innerHTML = puntos.map(p => {
+        const estaOcupada = !!p.ocupada;
+        const esPreasignada = p.pre_asignado_usuario_id && Number(p.pre_asignado_usuario_id) === Number(usuarioId);
+        const estaSeleccionada = Number(p.id) === Number(puntoSeleccionadoId);
+
+        let borderStyle = estaSeleccionada ? 'border: 2px solid #10b981; background: rgba(16,185,129,0.15);' : 'border: 1px solid #334155; background: #111827;';
+        if (estaOcupada) {
+          borderStyle = 'border: 1px solid #7f1d1d; background: rgba(239,68,68,0.08); opacity: 0.7;';
+        }
+
+        return `
+          <div class="caja-fisica-card ${estaSeleccionada ? 'selected' : ''} ${estaOcupada ? 'occupied' : 'available'}"
+               data-caja-id="${p.id}"
+               onclick="${estaOcupada ? `alert('⚠️ Esta caja ya está abierta por ${escapeHtml(p.turno_activo?.cajero || 'otro cajero')}')` : `seleccionarCajaFisicaApertura(${p.id})`}"
+               style="border-radius:10px; padding:12px; cursor:${estaOcupada ? 'not-allowed' : 'pointer'}; transition:all 0.2s; ${borderStyle}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+              <span style="font-size:1.25rem;">${p.icono || '💳'}</span>
+              ${estaOcupada 
+                ? `<span style="font-size:0.7rem; font-weight:800; background:#ef4444; color:#fff; padding:2px 6px; border-radius:4px;">🔴 OCUPADA</span>` 
+                : `<span style="font-size:0.7rem; font-weight:800; background:#10b981; color:#fff; padding:2px 6px; border-radius:4px;">🟢 DISPONIBLE</span>`}
+            </div>
+            <strong style="display:block; font-size:0.95rem; color:#f8fafc; margin-bottom:2px;">${escapeHtml(p.nombre)}</strong>
+            <small style="display:block; color:#94a3b8; font-size:0.75rem;">${escapeHtml(p.ubicacion || p.codigo || '')}</small>
+            ${estaOcupada ? `<div style="font-size:0.72rem; color:#fca5a5; margin-top:4px; font-weight:600;">👤 ${escapeHtml(p.turno_activo?.cajero || 'Cajero')}</div>` : ''}
+            ${esPreasignada ? `<div style="font-size:0.72rem; color:#38bdf8; margin-top:4px; font-weight:700;">📌 Tu Caja Habitual</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+    } catch (e) {
+      gridPuntos.innerHTML = '<div style="color:#ef4444; font-size:0.85rem;">No se pudieron cargar los puntos de cobro. Se abrirá la caja principal por defecto.</div>';
+    }
+  }
+
+  modal.classList.add('active');
+  setTimeout(() => {
+    if (txtMonto) txtMonto.focus();
+  }, 100);
+};
+
+window.seleccionarCajaFisicaApertura = function(cajaId) {
+  const hiddenCajaId = document.getElementById('txtAperturaCajaFisicaId');
+  if (hiddenCajaId) hiddenCajaId.value = cajaId;
+
+  document.querySelectorAll('#gridPuntosCobroApertura .caja-fisica-card').forEach(card => {
+    const isThis = Number(card.getAttribute('data-caja-id')) === Number(cajaId);
+    if (isThis) {
+      card.style.border = '2px solid #10b981';
+      card.style.background = 'rgba(16,185,129,0.15)';
+    } else if (!card.classList.contains('occupied')) {
+      card.style.border = '1px solid #334155';
+      card.style.background = '#111827';
+    }
+  });
+};
+
+window.cerrarModalAperturaCaja = function() {
+  const modal = document.getElementById('modalAperturaCaja');
+  if (modal) modal.classList.remove('active');
+};
+
+window.ejecutarAperturaCaja = async function() {
+  const txtCajero = document.getElementById('txtAperturaCajero');
+  const txtMonto = document.getElementById('txtAperturaMontoInicial');
+  const txtMontoUSD = document.getElementById('txtAperturaMontoInicialUSD') || document.getElementById('txtAperturaMontoUSD');
+  const txtCajaFisicaId = document.getElementById('txtAperturaCajaFisicaId');
+
+  const cajero = (txtCajero ? txtCajero.value : '').trim() || 'Cajero de Turno';
+  const monto_inicial = parseFloat(txtMonto ? txtMonto.value : 0);
+  const monto_inicial_usd = parseFloat(txtMontoUSD ? txtMontoUSD.value : 0) || 0;
+  const caja_fisica_id = txtCajaFisicaId && txtCajaFisicaId.value ? Number(txtCajaFisicaId.value) : null;
+
+  if (isNaN(monto_inicial) || monto_inicial < 0) {
+    alert('Por favor ingresa un fondo inicial válido.');
+    mostrarNotificacionCentro('⚠️ Por favor ingresa un fondo inicial válido.', 'warning');
+    if (txtMonto) txtMonto.focus();
+    return;
+  }
+
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch('/api/caja/abrir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+      body: JSON.stringify({
+        cajero,
+        monto_inicial,
+        monto_inicial_usd,
+        caja_fisica_id,
+        negocio_id: nid
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo abrir la caja'));
+      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo abrir la caja'), 'error');
+      return;
+    }
+
+    cerrarModalAperturaCaja();
+    const txtFondoNotif = monto_inicial_usd > 0
+      ? `Fondo: ${formatCRC(monto_inicial)} + $${monto_inicial_usd.toFixed(2)} USD`
+      : `Fondo: ${formatCRC(monto_inicial)}`;
+    mostrarNotificacionCentro(`🔓 Turno de caja abierto con éxito en ${data.caja_nombre || 'Caja'} (${txtFondoNotif})`, 'success');
+    window._cajaVisualFiltroId = data.caja_id || null;
+    await cargarCajaDesdeBackend(data.caja_id);
+  } catch (e) {
+    alert('❌ Error abriendo caja: ' + e.message);
+    mostrarNotificacionCentro('❌ Error abriendo caja: ' + e.message, 'error');
+  }
+};
+
+// -------------------------------------------------------------
+// REASIGNACIÓN EN CALIENTE DE TURNOS DE CAJA (ADMIN)
+// -------------------------------------------------------------
+window.abrirModalReasignarCajaTurno = async function() {
+  const modal = document.getElementById('modalReasignarCajaTurno');
+  if (!modal) return;
+
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+  const [resTurnos, resEmp, resCajas] = await Promise.all([
+    fetch(`/api/caja/actual?negocio_id=${nid}`),
+    fetch(`/api/admin/empleados?negocio_id=${nid}`).catch(() => ({ ok: false })),
+    fetch(`/api/cajas-fisicas?negocio_id=${nid}`).catch(() => ({ ok: false }))
+  ]);
+
+  const dataTurno = await resTurnos.json();
+  const turnosAbiertos = dataTurno.turnos_abiertos || (dataTurno.caja ? [dataTurno.caja] : []);
+
+  if (turnosAbiertos.length === 0) {
+    alert('⚠️ No hay turnos de caja actualmente abiertos para reasignar.');
+    mostrarNotificacionCentro('⚠️ No hay turnos de caja abiertos para reasignar.', 'warning');
+    return;
+  }
+
+  window._turnosAbiertosReasignar = turnosAbiertos;
+
+  const selTarget = document.getElementById('selReasignarTurnoTarget');
+  const selNuevoCajero = document.getElementById('selReasignarNuevoCajero');
+  const selNuevaCaja = document.getElementById('selReasignarNuevaCajaFisica');
+  const txtPin = document.getElementById('txtReasignarAdminPin');
+  const txtMotivo = document.getElementById('txtReasignarMotivo');
+
+  if (txtPin) txtPin.value = '';
+  if (txtMotivo) txtMotivo.value = 'Relevo de turno / cambio operativo';
+
+  if (selTarget) {
+    selTarget.innerHTML = turnosAbiertos.map(t => `
+      <option value="${t.id}">
+        Turno #${t.id} - ${escapeHtml(t.caja_nombre || 'Caja')} (Cajero: ${escapeHtml(t.cajero)})
+      </option>
+    `).join('');
+  }
+
+  if (selNuevoCajero && resEmp.ok) {
+    const empleados = await resEmp.json();
+    if (Array.isArray(empleados)) {
+      selNuevoCajero.innerHTML = empleados.map(e => `
+        <option value="${escapeHtml(e.nombre_completo)}">
+          ${escapeHtml(e.nombre_completo)} (${escapeHtml(e.rolDisplay || e.rol)})
+        </option>
+      `).join('');
+    }
+  }
+
+  if (selNuevaCaja && resCajas.ok) {
+    const dataCajas = await resCajas.json();
+    const puntos = dataCajas.cajas_fisicas || [];
+    window._puntosCobroReasignar = puntos;
+    selNuevaCaja.innerHTML = puntos.map(p => `
+      <option value="${p.id}" ${p.ocupada ? 'style="color:#f87171;"' : ''}>
+        ${p.icono || '💳'} ${escapeHtml(p.nombre)} ${p.ocupada ? '(🔴 Ocupada por ' + escapeHtml(p.turno_activo?.cajero || '') + ')' : '(🟢 Disponible)'}
+      </option>
+    `).join('');
+  }
+
+  if (selTarget && selTarget.value) {
+    window.actualizarValoresFormularioReasignacion(selTarget.value);
+  }
+
+  modal.classList.add('active');
+  setTimeout(() => {
+    if (txtPin) txtPin.focus();
+  }, 100);
+};
+
+window.actualizarValoresFormularioReasignacion = function(turnoId) {
+  const turnos = window._turnosAbiertosReasignar || [];
+  const target = turnos.find(t => Number(t.id) === Number(turnoId));
+  if (!target) return;
+
+  const selNuevoCajero = document.getElementById('selReasignarNuevoCajero');
+  const selNuevaCaja = document.getElementById('selReasignarNuevaCajaFisica');
+
+  if (selNuevoCajero && target.cajero) {
+    Array.from(selNuevoCajero.options).forEach(opt => {
+      if (opt.value.trim().toLowerCase() === target.cajero.trim().toLowerCase()) {
+        opt.selected = true;
+      }
+    });
+  }
+
+  if (selNuevaCaja && target.caja_fisica_id) {
+    selNuevaCaja.value = target.caja_fisica_id;
+  }
+};
+
+window.cerrarModalReasignarCajaTurno = function() {
+  const modal = document.getElementById('modalReasignarCajaTurno');
+  if (modal) modal.classList.remove('active');
+};
+
+window.ejecutarReasignacionTurnoCaja = async function() {
+  const selTarget = document.getElementById('selReasignarTurnoTarget');
+  const selNuevoCajero = document.getElementById('selReasignarNuevoCajero');
+  const selNuevaCaja = document.getElementById('selReasignarNuevaCajaFisica');
+  const txtPin = document.getElementById('txtReasignarAdminPin');
+  const txtMotivo = document.getElementById('txtReasignarMotivo');
+
+  const turnoId = selTarget ? Number(selTarget.value) : null;
+  const nuevoCajero = selNuevoCajero ? selNuevoCajero.value.trim() : '';
+  const nuevaCajaFisicaId = selNuevaCaja ? Number(selNuevaCaja.value) : null;
+  const motivo = txtMotivo ? txtMotivo.value.trim() : '';
+  const adminPin = txtPin ? txtPin.value.trim() : '';
+
+  if (!turnoId) {
+    alert('⚠️ Por favor selecciona el turno que deseas reasignar.');
+    return;
+  }
+
+  if (!adminPin) {
+    alert('⚠️ Por favor ingresa el PIN de Administrador para autorizar la reasignación.');
+    if (txtPin) txtPin.focus();
+    return;
+  }
+
+  try {
+    const nid = estado.negocioActual?.id || 1;
+    const res = await fetch('/api/admin/cajas/reasignar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
+        'x-supervisor-pin': adminPin
+      },
+      body: JSON.stringify({
+        turno_id: turnoId,
+        nuevo_cajero: nuevoCajero,
+        nueva_caja_fisica_id: nuevaCajaFisicaId,
+        motivo,
+        adminPin,
+        usuario_admin: estado.usuarioActual?.nombre || 'Administrador'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo reasignar el turno de caja'));
+      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo reasignar el turno'), 'error');
+      if (txtPin) txtPin.focus();
+      return;
+    }
+
+    cerrarModalReasignarCajaTurno();
+    mostrarNotificacionCentro(`🔁 Turno reasignado con éxito a ${data.turno?.cajero || nuevoCajero} en ${data.turno?.caja_nombre || 'Caja'}`, 'success');
+    await cargarCajaDesdeBackend(turnoId);
+  } catch (e) {
+    alert('❌ Error al procesar reasignación: ' + e.message);
+  }
+};
+
+// Listeners para botones de caja
+document.getElementById('btnAbrirCaja')?.addEventListener('click', () => window.abrirModalAperturaCaja());
+document.getElementById('btnEntradaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('entrada'));
+document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('salida'));
+document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());
+document.getElementById('btnCorteZ')?.addEventListener('click', () => window.abrirModalCierreZ());
+document.getElementById('btnCorteZCiego')?.addEventListener('click', () => window.abrirModalCierreZ(true));
+
+if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
+  socket.on('caja_actualizada', () => {
+    cargarCajaDesdeBackend();
+  });
+  socket.on('cajas_fisicas_actualizadas', () => {
+    cargarCajaDesdeBackend();
+  });
+  socket.on('caja_turno_reasignado', (info) => {
+    cargarCajaDesdeBackend();
+  });
+}
 
 // AUTORIZACIÓN PIN DE ADMINISTRADOR (Corte X y Cierre Z)
 let _pinAdminBuffer = '';
@@ -11567,93 +12054,7 @@ window.ejecutarCierreZ = async function() {
   }
 };
 
-window.abrirModalAperturaCaja = function() {
-  const modal = document.getElementById('modalAperturaCaja');
-  if (!modal) return;
 
-  if (typeof window.aplicarConfiguracionMonedaNegocio === 'function') {
-    window.aplicarConfiguracionMonedaNegocio();
-  }
-
-  const txtCajero = document.getElementById('txtAperturaCajero');
-  const txtMonto = document.getElementById('txtAperturaMontoInicial');
-  const txtMontoUSD = document.getElementById('txtAperturaMontoInicialUSD') || document.getElementById('txtAperturaMontoUSD');
-
-  if (txtCajero) {
-    txtCajero.value = estado.usuarioActual?.nombre || estado.usuario?.nombre || 'Juan Jival';
-  }
-  if (txtMonto) {
-    txtMonto.value = '50000';
-  }
-  if (txtMontoUSD) {
-    txtMontoUSD.value = '0';
-  }
-  modal.classList.add('active');
-  setTimeout(() => {
-    if (txtMonto) txtMonto.focus();
-  }, 100);
-};
-
-window.cerrarModalAperturaCaja = function() {
-  const modal = document.getElementById('modalAperturaCaja');
-  if (modal) modal.classList.remove('active');
-};
-
-window.ejecutarAperturaCaja = async function() {
-  const txtCajero = document.getElementById('txtAperturaCajero');
-  const txtMonto = document.getElementById('txtAperturaMontoInicial');
-  const txtMontoUSD = document.getElementById('txtAperturaMontoInicialUSD') || document.getElementById('txtAperturaMontoUSD');
-
-  const cajero = (txtCajero ? txtCajero.value : '').trim() || 'Cajero de Turno';
-  const monto_inicial = parseFloat(txtMonto ? txtMonto.value : 0);
-  const monto_inicial_usd = parseFloat(txtMontoUSD ? txtMontoUSD.value : 0) || 0;
-
-  if (isNaN(monto_inicial) || monto_inicial < 0) {
-    alert('Por favor ingresa un fondo inicial válido.');
-    mostrarNotificacionCentro('⚠️ Por favor ingresa un fondo inicial válido.', 'warning');
-    if (txtMonto) txtMonto.focus();
-    return;
-  }
-
-  try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch('/api/caja/abrir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
-      body: JSON.stringify({ cajero, monto_inicial, monto_inicial_usd, negocio_id: nid })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert('❌ ' + (data.error || 'No se pudo abrir la caja'));
-      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo abrir la caja'), 'error');
-      return;
-    }
-
-    cerrarModalAperturaCaja();
-    const txtFondoNotif = monto_inicial_usd > 0
-      ? `Fondo: ${formatCRC(monto_inicial)} + $${monto_inicial_usd.toFixed(2)} USD`
-      : `Fondo: ${formatCRC(monto_inicial)}`;
-    mostrarNotificacionCentro(`🔓 Turno de caja abierto con éxito (${txtFondoNotif})`, 'success');
-    await cargarCajaDesdeBackend();
-  } catch (e) {
-    alert('❌ Error abriendo caja: ' + e.message);
-    mostrarNotificacionCentro('❌ Error abriendo caja: ' + e.message, 'error');
-  }
-};
-
-// Listeners para botones de caja
-document.getElementById('btnAbrirCaja')?.addEventListener('click', () => window.abrirModalAperturaCaja());
-document.getElementById('btnEntradaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('entrada'));
-document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => window.abrirModalMovimientoCaja('salida'));
-document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());
-document.getElementById('btnCorteZ')?.addEventListener('click', () => window.abrirModalCierreZ());
-document.getElementById('btnCorteZCiego')?.addEventListener('click', () => window.abrirModalCierreZ(true));
-
-if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
-  socket.on('caja_actualizada', () => {
-    cargarCajaDesdeBackend();
-  });
-}
 
 function renderTipPoolTable() {
   const tbody = document.getElementById('tipPoolTableBody');
