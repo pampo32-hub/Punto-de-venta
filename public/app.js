@@ -5532,7 +5532,7 @@ window.guardarConfiguracionSeguridadRed = async function() {
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('🛡️ Configuración de seguridad, red y terminales guardada exitosamente.', 'success');
     } else {
-      alert('✅ ' + data.message);
+      alert('✅ ' + (data.message || 'Configuración guardada exitosamente'));
     }
   } catch (e) {
     alert('❌ Error al comunicar con el servidor: ' + e.message);

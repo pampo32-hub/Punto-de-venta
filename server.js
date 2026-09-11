@@ -754,8 +754,8 @@ app.post('/api/auth/login', async (req, res) => {
       [sessionId, ahoraIso, deviceToken || null, u.id]
     );
 
-    if (forzarCierrePrevio && sesionUnicaActiva) {
-      // Notificar a la terminal previa que su sesión fue forzada a cerrar
+    if (negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined)) {
+      // Notificar a otras terminales para invalidar sesiones concurrentes del mismo usuario
       io.emit('usuario_sesion_iniciada', {
         usuarioId: u.id,
         sessionId,
