@@ -6517,16 +6517,19 @@ window.agregarAlTicketOneTap = async function(prodId) {
     existente.cantidad++;
   } else {
     let itemDest = (prod.destino || '').trim().toLowerCase();
-    let itemCurso = Number(prod.curso) || 2;
+    let itemCurso = Number(prod.curso) || (itemDest === 'barra' ? 1 : 2);
 
-    // Si el producto no tiene destino asignado, inferirlo por palabras clave de bebidas
-    if (!itemDest) {
-      if (/\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|rock ice|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|café|cafe|cafes|cafés|agua|aguas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|licor|licores)\b/i.test(prod.nombre || '')) {
-        itemDest = 'barra';
-        itemCurso = 1;
-      } else {
-        itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
-      }
+    const prodCatId = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
+    const catObj = (estado.categorias || []).find(c => Number(c.id) === prodCatId);
+    const catEsBarra = catObj && (catObj.destino === 'barra' || /cerveza|licor|coctel|shot|trago|bebida|cafe|café|natural|barra/i.test(catObj.nombre || ''));
+
+    const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro|cacique|pacha|cuarta|centenario|chivas|johnny|buchanans|jagermeister|baileys|kahlua|malibu|amaretto|campari|aperol|fernet|anis|absolut|bacardi|morgan|havana|cuervo|don\s*julio|herradura|patron|tanqueray|bombay|beefeater|red\s*bull|monster|gatorade|tropical|chelada|michelada|mojito|margarita|daiquiri|caipiriña|piña\s*colada|cuba\s*libre)\b/i.test(prod.nombre || '') || /rock\s*ice/i.test(prod.nombre || '');
+
+    if (catEsBarra || esBebidaKeyword || itemDest === 'barra' || prod.es_licor) {
+      itemDest = 'barra';
+      itemCurso = 1;
+    } else if (!itemDest) {
+      itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
     }
 
     if (!itemCurso) {

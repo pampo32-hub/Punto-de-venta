@@ -4040,19 +4040,33 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = prodDb.id;
       if (!nombre) nombre = prodDb.nombre;
       if (precio == null) precio = prodDb.precio;
-      if (!destino) destino = prodDb.destino;
+      if (!destino || destino === 'cocina') {
+        if (prodDb.destino) destino = prodDb.destino;
+      }
       if (!curso) curso = prodDb.curso;
     } else if (!prodId) {
       prodId = 1;
     }
 
-    const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(nombre || '') || /rock ice/i.test(nombre || '');
-    const esBebidaCat = (prodDb && (prodDb.categoria_id === 4 || prodDb.categoria_id === 5 || prodDb.categoria_id === 6 || prodDb.categoria_id === 7 || prodDb.es_licor || prodDb.destino === 'barra')) ||
-      (it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7);
+    let catDb = null;
+    const catIdToCheck = prodDb?.categoria_id || it.categoria_id || it.catId;
+    if (catIdToCheck) {
+      catDb = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catIdToCheck]);
+    }
+
+    const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro|cacique|pacha|cuarta|centenario|chivas|johnny|buchanans|jagermeister|baileys|kahlua|malibu|amaretto|campari|aperol|fernet|anis|absolut|bacardi|morgan|havana|cuervo|don\s*julio|herradura|patron|tanqueray|bombay|beefeater|red\s*bull|monster|gatorade|tropical|chelada|michelada|mojito|margarita|daiquiri|caipiriña|piña\s*colada|cuba\s*libre)\b/i.test(nombre || '') || /rock\s*ice/i.test(nombre || '');
+
+    const esBebidaCat = Boolean(
+      (prodDb && (prodDb.destino === 'barra' || prodDb.es_licor || [4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 25, 26, 30, 31, 32, 104, 105, 106].includes(Number(prodDb.categoria_id)))) ||
+      (it && it.destino === 'barra') ||
+      (catDb && (catDb.destino === 'barra' || /cerveza|licor|coctel|shot|trago|bebida|cafe|café|natural|barra/i.test(catDb.nombre || '')))
+    );
 
     if (esBebidaCat || esBebidaKeyword) {
       destino = 'barra';
-      curso = curso || 1;
+      curso = 1;
+    } else if (prodDb && prodDb.destino) {
+      destino = prodDb.destino;
     } else if (!destino) {
       if (curso === 1 || curso === 5 || curso === 6) {
         destino = 'barra';

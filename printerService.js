@@ -1260,6 +1260,18 @@ function encolarEnvioTCP(ip, puerto, rawData) {
  * Función principal para despachar impresión a la impresora configurada
  */
 async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = null }) {
+  if (!ticketInfo || !ticketInfo.ticketVisual || !ticketInfo.raw) {
+    return { ok: false, error: 'Información de ticket no válida' };
+  }
+
+  // Si es comanda, verificar que contenga al menos 1 producto para este destino
+  if (ticketInfo.ticketVisual.tipo === 'comanda') {
+    const itemsComanda = ticketInfo.ticketVisual.items;
+    if (!Array.isArray(itemsComanda) || itemsComanda.length === 0) {
+      return { ok: false, error: `Comanda para ${destinoImpresora} no tiene productos, emisión omitida.` };
+    }
+  }
+
   const cfg = printerConfig[destinoImpresora] || printerConfig.caja;
   const ahora = new Date().toISOString();
 
