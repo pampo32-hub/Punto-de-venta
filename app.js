@@ -19602,17 +19602,58 @@ window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso =
   try {
     mostrarNotificacionCentro(`⏳ Enviando ${tituloTicket} despachado a impresora térmica (${nombreDestino})...`, 'info');
 
-    const res = await fetch('/api/impresoras/imprimir-directo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ticketVisual: tData,
-        destino
-      })
+    const payload = JSON.stringify({
+      ticketVisual: tData,
+      destino
     });
-    const data = await res.json().catch(() => null);
 
-    if (res.ok && data?.ok && data?.registro?.estado === 'impreso') {
+    let data = null;
+    let exitoImpresion = false;
+
+    // 1. Intentar endpoint relativo (servidor actual)
+    try {
+      const res = await fetch('/api/impresoras/imprimir-directo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+      if (res.ok) {
+        data = await res.json().catch(() => null);
+        if (data?.ok && data?.registro?.estado === 'impreso') {
+          exitoImpresion = true;
+        }
+      }
+    } catch (errRel) {
+      console.warn('Intento de impresión relativo falló:', errRel.message);
+    }
+
+    // 2. Si estamos en la nube o el servidor relativo no imprimió físicamente, respaldar e intentar vía daemon local (localhost:4000)
+    if (!exitoImpresion) {
+      const endpointsLocal = [
+        'http://localhost:4000/api/impresoras/imprimir-directo',
+        'http://127.0.0.1:4000/api/impresoras/imprimir-directo'
+      ];
+
+      for (const ep of endpointsLocal) {
+        try {
+          const resLocal = await fetch(ep, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload
+          });
+          if (resLocal.ok) {
+            const dataLocal = await resLocal.json().catch(() => null);
+            if (dataLocal?.ok && dataLocal?.registro?.estado === 'impreso') {
+              data = dataLocal;
+              exitoImpresion = true;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (exitoImpresion) {
       const msgExito = `✅ 🖨️ ¡${tituloTicket} impreso con éxito en impresora térmica (${nombreDestino})!`;
       mostrarNotificacionCentro(msgExito, 'success');
       return { ok: true, data };

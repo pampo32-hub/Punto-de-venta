@@ -1,6 +1,5 @@
 require('dotenv').config();
 const net = require('net');
-const http = require('http');
 const { sendRawToWindowsPrinter, getInstalledPrinters } = require('./windowsPrinter');
 
 /**
@@ -12,24 +11,24 @@ const { sendRawToWindowsPrinter, getInstalledPrinters } = require('./windowsPrin
 // Estado en memoria de configuración de impresoras
 let printerConfig = {
   caja: {
-    nombre: process.env.PRINTER_CAJA_NAME || 'Impresora Caja',
-    tipo: process.env.PRINTER_CAJA_TYPE || (process.env.PRINTER_CAJA_IP || '192.168.1.30' ? 'red' : 'usb'),
+    nombre: process.env.PRINTER_CAJA_NAME || 'POS-80-Series',
+    tipo: process.env.PRINTER_CAJA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
     ip: process.env.PRINTER_CAJA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_CAJA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_CAJA_WIN || 'POS-80-Series',
     activa: true
   },
   cocina: {
-    nombre: process.env.PRINTER_COCINA_NAME || 'Impresora Cocina',
-    tipo: process.env.PRINTER_COCINA_TYPE || (process.env.PRINTER_COCINA_IP || '192.168.1.30' ? 'red' : 'usb'),
+    nombre: process.env.PRINTER_COCINA_NAME || 'POS-80-Series',
+    tipo: process.env.PRINTER_COCINA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
     ip: process.env.PRINTER_COCINA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_COCINA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_COCINA_WIN || 'POS-80-Series',
     activa: true
   },
   barra: {
-    nombre: process.env.PRINTER_BARRA_NAME || 'Impresora Barra',
-    tipo: process.env.PRINTER_BARRA_TYPE || (process.env.PRINTER_BARRA_IP || '192.168.1.30' ? 'red' : 'usb'),
+    nombre: process.env.PRINTER_BARRA_NAME || 'POS-80-Series',
+    tipo: process.env.PRINTER_BARRA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
     ip: process.env.PRINTER_BARRA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_BARRA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_BARRA_WIN || 'POS-80-Series',
@@ -46,7 +45,7 @@ const ESC = '\x1B';
 const GS = '\x1D';
 
 const ESCPOS = {
-  INIT: `${ESC}@${ESC}c4\x00${ESC}t\x00`,
+  INIT: `${ESC}@`,
   FONT_A: `${ESC}M\x00`,
   DOUBLE_STRIKE_ON: `${ESC}G\x01`,
   DOUBLE_STRIKE_OFF: `${ESC}G\x00`,
@@ -61,8 +60,8 @@ const ESCPOS = {
   NORMAL: `${GS}!\x00`,
   UNDERLINE_ON: `${ESC}-\x01`,
   UNDERLINE_OFF: `${ESC}-\x00`,
-  CUT_FULL: `${GS}V\x41\x00`,
-  CUT_PARTIAL: `${GS}V\x42\x00`,
+  CUT_FULL: `${GS}V\x00`,
+  CUT_PARTIAL: `${GS}V\x01`,
   FEED_LINES: (n = 4) => `${ESC}d${String.fromCharCode(n)}`,
   BEEP: `${ESC}B\x03\x02` // 3 beeps
 };
@@ -282,14 +281,12 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
 
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
-  const descEspecialNum = Math.round(Number(datos.descuento || datos.descuentoMonto || datos.descuento_monto) || 0);
-  const descMotivoStr = datos.descuentoMotivo || datos.descuento_motivo || '';
-  const descPorcNum = Number(datos.descuentoPorcentaje || datos.descuento_porcentaje) || 0;
-  const baseImponible = Math.max(0, subNum - descHHNum - descEspecialNum);
+  const baseImponible = Math.max(0, subNum - descHHNum);
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
-    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar')))
+    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
+    (servicio !== undefined && servicio !== null && Number(servicio) === 0)
   );
   let servNum;
   if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
@@ -331,54 +328,25 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     }
   });
 
-  const preciosConImpuestos = (datos.preciosConImpuestos !== false && datos.precios_con_impuestos !== false);
-  const montoProductos = subCalculado > 0 ? subCalculado : (subNum > 0 ? subNum : totNum);
-
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal Productos:', formatMontoTermica(montoProductos)) + '\n';
+  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  if (descEspecialNum > 0) {
-    const etiquetaDesc = descMotivoStr ? `Descuento (${limpiarTextoTermica(descMotivoStr)}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
-    raw += ESCPOS.BOLD_ON + formatearLinea2Col(etiquetaDesc, `-${formatMontoTermica(descEspecialNum)}`) + '\n' + ESCPOS.BOLD_OFF;
+  if (servNum > 0) {
+    raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  } else if (esParaLlevarTicket) {
+    raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
   }
-
-  if (preciosConImpuestos) {
-    raw += '='.repeat(48) + '\n';
-    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.ALIGN_LEFT;
-    raw += '='.repeat(48) + '\n';
-
-    if (servNum > 0 || ivaNum > 0) {
-      const baseInformativa = Math.max(0, totNum - servNum - ivaNum);
-      raw += ESCPOS.ALIGN_CENTER + '[ IMPUESTOS INCLUIDOS EN EL PRECIO ]\n';
-      raw += ESCPOS.ALIGN_RIGHT;
-      raw += formatearLinea2Col('  Base Imponible:', formatMontoTermica(baseInformativa)) + '\n';
-      if (servNum > 0) {
-        raw += formatearLinea2Col('  10% Servicio Salon:', formatMontoTermica(servNum)) + '\n';
-      }
-      if (ivaNum > 0) {
-        raw += formatearLinea2Col('  13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
-      }
-      raw += '-'.repeat(48) + '\n';
-      raw += ESCPOS.ALIGN_LEFT;
-    }
-  } else {
-    if (servNum > 0) {
-      raw += formatearLinea2Col('10% Servicio (Ley):', `+${formatMontoTermica(servNum)}`) + '\n';
-    }
-    if (ivaNum > 0) {
-      raw += formatearLinea2Col('13% I.V.A.:', `+${formatMontoTermica(ivaNum)}`) + '\n';
-    }
-    raw += '='.repeat(48) + '\n';
-    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.ALIGN_LEFT;
-    raw += '='.repeat(48) + '\n';
+  if (ivaNum > 0) {
+    raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   }
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL A PAGAR:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += '='.repeat(48) + '\n';
 
   const esDolaresPago = Boolean(
     metodoPago === 'Dolares' ||
@@ -391,42 +359,43 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
 
   if (Array.isArray(pagos) && pagos.length > 1) {
     raw += `Metodo de Pago: PAGO MIXTO / COMBINADO\n`;
-    pagos.forEach((p, idx) => {
-      const metNom = p.metodo || 'Efectivo';
-      const mCRC = Number(p.monto) || 0;
-      const mUSD = Number(p.monto_usd) || 0;
-      if (mUSD > 0 || metNom.toLowerCase().includes('dolar') || metNom.toLowerCase().includes('dólar')) {
-        raw += ` ${idx + 1}. ${metNom}: $ ${mUSD.toFixed(2)} (${formatMontoTermica(mCRC)})\n`;
-      } else {
-        raw += ` ${idx + 1}. ${metNom}: ${formatMontoTermica(mCRC)}\n`;
-      }
+    pagos.forEach(p => {
+      const nomP = limpiarTextoTermica(p.metodo || 'Pago');
+      const mtoP = formatMontoTermica(p.monto);
+      const usdDetalle = (p.metodo === 'Dolares' || p.metodo === 'Dólares' || Number(p.monto_usd) > 0)
+        ? ` ($ ${(Number(p.monto_usd) || (Number(p.monto) / (Number(p.tipo_cambio) || 520))).toFixed(2)} USD)`
+        : '';
+      raw += `  * ${nomP}: ${mtoP}${usdDetalle}${p.referencia ? ` (Ref: ${limpiarTextoTermica(p.referencia)})` : ''}\n`;
     });
     if (vuelto > 0) {
-      raw += formatearLinea2Col('Vuelto / Cambio:', formatMontoTermica(vuelto)) + '\n';
+      raw += `  * Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
     }
   } else if (esDolaresPago) {
-    raw += `Metodo de Pago: DOLARES (USD)\n`;
-    raw += `Tipo de Cambio: ₡${tcUsado} / USD\n`;
-    if (montoUSDTotal > 0) {
-      raw += `Monto Cobrado (USD): $ ${montoUSDTotal.toFixed(2)}\n`;
+    const finalUSD = montoUSDTotal > 0 ? montoUSDTotal : (montoRecibido > 0 && tcUsado > 0 ? Number((montoRecibido / tcUsado).toFixed(2)) : 0);
+    raw += `Metodo de Pago: DOLARES ($ USD)\n`;
+    raw += `Dolares Recibidos: $ ${finalUSD.toFixed(2)} (T.C: ${formatMontoTermica(tcUsado)})\n`;
+    raw += `Equivalente en Colones: ${formatMontoTermica(montoRecibido)}\n`;
+    if (vuelto > 0) {
+      raw += `Vuelto / Cambio en Colones: ${formatMontoTermica(vuelto)}\n`;
     }
-    raw += formatearLinea2Col('Monto Recibido:', formatMontoTermica(montoRecibido)) + '\n';
-    raw += formatearLinea2Col('Vuelto / Cambio:', formatMontoTermica(vuelto)) + '\n';
   } else {
     raw += `Metodo de Pago: ${limpiarTextoTermica(metodoPago || 'Efectivo')}\n`;
-    raw += formatearLinea2Col('Monto Recibido:', formatMontoTermica(montoRecibido)) + '\n';
-    raw += formatearLinea2Col('Vuelto / Cambio:', formatMontoTermica(vuelto)) + '\n';
+    if ((metodoPago === 'Efectivo' || !metodoPago) && montoRecibido > 0) {
+      raw += `Monto Recibido: ${formatMontoTermica(montoRecibido)}\n`;
+      raw += `Vuelto / Cambio: ${formatMontoTermica(vuelto)}\n`;
+    }
   }
 
-  raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_CENTER;
-  raw += 'Gracias por su visita!\n';
-  raw += 'Favor conservar este comprobante.\n';
+  raw += '\n';
+  raw += 'Muchas gracias por su preferencia!\n';
+  raw += 'Esperamos servirle de nuevo muy pronto.\n';
+  raw += 'Autorizado mediante resolucion DGT-R-033-2019\n';
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_FULL;
 
   const ticketVisual = {
-    tipo: 'factura',
+    tipo: 'cuenta_total',
     titulo: 'COMPROBANTE DE PAGO / FACTURA',
     negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
     ordenId,
@@ -437,17 +406,7 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     fechaHora: fechaStr,
     items: itemsNormalizados,
     subtotal: subNum,
-    subtotalProductos: montoProductos,
-    preciosConImpuestos: preciosConImpuestos,
-    baseInformativa: (servNum > 0 || ivaNum > 0) ? Math.max(0, totNum - servNum - ivaNum) : totNum,
     descuentoHH: descHHNum,
-    descuento: descEspecialNum,
-    descuentoMonto: descEspecialNum,
-    descuento_monto: descEspecialNum,
-    descuentoMotivo: descMotivoStr,
-    descuento_motivo: descMotivoStr,
-    descuentoPorcentaje: descPorcNum,
-    descuento_porcentaje: descPorcNum,
     servicio: servNum,
     iva: ivaNum,
     total: totNum,
@@ -523,14 +482,12 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
 
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
-  const descEspecialNum = Math.round(Number(datos.descuento || datos.descuentoMonto || datos.descuento_monto) || 0);
-  const descMotivoStr = datos.descuentoMotivo || datos.descuento_motivo || '';
-  const descPorcNum = Number(datos.descuentoPorcentaje || datos.descuento_porcentaje) || 0;
-  const baseImponible = Math.max(0, subNum - descHHNum - descEspecialNum);
+  const baseImponible = Math.max(0, subNum - descHHNum);
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
-    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar')))
+    (typeof mesaNumero === 'string' && (mesaNumero.toLowerCase().includes('para llevar') || mesaNumero.toLowerCase().includes('llevar'))) ||
+    (servicio !== undefined && servicio !== null && Number(servicio) === 0)
   );
   let servNum;
   if (servicio !== undefined && servicio !== null && !isNaN(Number(servicio))) {
@@ -574,54 +531,25 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     }
   });
 
-  const preciosConImpuestos = (datos.preciosConImpuestos !== false && datos.precios_con_impuestos !== false);
-  const montoProductos = subCalculado > 0 ? subCalculado : (subNum > 0 ? subNum : totNum);
-
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal Productos:', formatMontoTermica(montoProductos)) + '\n';
+  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
-  if (descEspecialNum > 0) {
-    const etiquetaDesc = descMotivoStr ? `Descuento (${limpiarTextoTermica(descMotivoStr)}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
-    raw += ESCPOS.BOLD_ON + formatearLinea2Col(etiquetaDesc, `-${formatMontoTermica(descEspecialNum)}`) + '\n' + ESCPOS.BOLD_OFF;
+  if (servNum > 0) {
+    raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
+  } else if (esParaLlevarTicket) {
+    raw += formatearLinea2Col('Servicio (0% Para Llevar):', 'EXENTO') + '\n';
   }
-
-  if (preciosConImpuestos) {
-    raw += '='.repeat(48) + '\n';
-    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.ALIGN_LEFT;
-    raw += '='.repeat(48) + '\n';
-
-    if (servNum > 0 || ivaNum > 0) {
-      const baseInformativa = Math.max(0, totNum - servNum - ivaNum);
-      raw += ESCPOS.ALIGN_CENTER + '[ IMPUESTOS INCLUIDOS EN EL PRECIO ]\n';
-      raw += ESCPOS.ALIGN_RIGHT;
-      raw += formatearLinea2Col('  Base Imponible:', formatMontoTermica(baseInformativa)) + '\n';
-      if (servNum > 0) {
-        raw += formatearLinea2Col('  10% Servicio Salon:', formatMontoTermica(servNum)) + '\n';
-      }
-      if (ivaNum > 0) {
-        raw += formatearLinea2Col('  13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
-      }
-      raw += '-'.repeat(48) + '\n';
-      raw += ESCPOS.ALIGN_LEFT;
-    }
-  } else {
-    if (servNum > 0) {
-      raw += formatearLinea2Col('10% Servicio (Ley):', `+${formatMontoTermica(servNum)}`) + '\n';
-    }
-    if (ivaNum > 0) {
-      raw += formatearLinea2Col('13% I.V.A.:', `+${formatMontoTermica(ivaNum)}`) + '\n';
-    }
-    raw += '='.repeat(48) + '\n';
-    raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-    raw += ESCPOS.ALIGN_LEFT;
-    raw += '='.repeat(48) + '\n';
+  if (ivaNum > 0) {
+    raw += formatearLinea2Col('13% I.V.A.:', formatMontoTermica(ivaNum)) + '\n';
   }
+  raw += '='.repeat(48) + '\n';
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL ESTIMADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  raw += ESCPOS.ALIGN_LEFT;
+  raw += '='.repeat(48) + '\n';
 
   raw += ESCPOS.ALIGN_CENTER;
   raw += ESCPOS.BOLD_ON + 'PROPINA VOLUNTARIA SUGERIDA\n' + ESCPOS.BOLD_OFF;
@@ -647,17 +575,7 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     fechaHora: fechaStr,
     items: itemsNormalizados,
     subtotal: subNum,
-    subtotalProductos: montoProductos,
-    preciosConImpuestos: preciosConImpuestos,
-    baseInformativa: (servNum > 0 || ivaNum > 0) ? Math.max(0, totNum - servNum - ivaNum) : totNum,
     descuentoHH: descHHNum,
-    descuento: descEspecialNum,
-    descuentoMonto: descEspecialNum,
-    descuento_monto: descEspecialNum,
-    descuentoMotivo: descMotivoStr,
-    descuento_motivo: descMotivoStr,
-    descuentoPorcentaje: descPorcNum,
-    descuento_porcentaje: descPorcNum,
     servicio: servNum,
     iva: ivaNum,
     total: totNum,
@@ -1189,7 +1107,6 @@ function enviarAPuertoTCP(ip, puerto, rawData) {
     const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData, 'latin1');
 
     socket.connect(puerto, ip, () => {
-      // Desactivar el timeout de inactividad una vez establecida la conexión TCP
       socket.setTimeout(0);
       socket.write(buf, () => {
         try { socket.end(); } catch (_) {}
@@ -1427,7 +1344,6 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
 
     ultimoError = intentoRes.error || intentoRes.mensaje || 'Error de conexión';
     if (intento < 2) {
-      // Breve pausa para dar tiempo al microcontrolador de la impresora a liberar el socket
       await new Promise(r => setTimeout(r, 1200));
     }
   }
@@ -1510,5 +1426,4 @@ module.exports = {
   procesarImpresion,
   autoConfigurarImpresora
 };
-
 
