@@ -5026,6 +5026,7 @@ window.guardarCaracteristicasAdmin = async function() {
 };
 
 // ============================================================================
+// GESTIÓN DE SEGURIDAD Y RESTRICCIÓN DE ACCESO POR RED WIFI / IP
 // GESTIÓN DE SEGURIDAD: RED WIFI, DISPOSITIVOS AUTORIZADOS & SESIÓN ÚNICA
 // ============================================================================
 window.obtenerDeviceToken = function() {
@@ -5050,15 +5051,19 @@ window.abrirModalSeguridadRed = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
+      alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de red'));
       alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de seguridad'));
       return;
     }
 
     const subtitulo = document.getElementById('adminSeguridadRedSubtitulo');
     if (subtitulo && data.nombre) {
+      subtitulo.textContent = `Control perimetral de acceso por red WiFi para: ${data.nombre}`;
       subtitulo.textContent = `Control de IP, terminales y sesión única para: ${data.nombre}`;
     }
 
+    const chk = document.getElementById('chkAdminRestringirIP');
+    if (chk) chk.checked = !!data.restringir_ip_operativos;
     const chkIp = document.getElementById('chkAdminRestringirIP');
     if (chkIp) chkIp.checked = !!data.restringir_ip_operativos;
 
@@ -5081,6 +5086,7 @@ window.abrirModalSeguridadRed = async function() {
     await cargarListaDispositivosAutorizados();
     modal.classList.add('active');
   } catch (e) {
+    alert('❌ Error al abrir seguridad de red: ' + e.message);
     alert('❌ Error al abrir seguridad: ' + e.message);
   }
 };
@@ -5091,6 +5097,14 @@ window.cerrarModalSeguridadRed = function() {
 };
 
 window.actualizarEstadoVisualSeguridadRed = function() {
+  const chk = document.getElementById('chkAdminRestringirIP');
+  if (!chk) return;
+  const slider = chk.nextElementSibling;
+  if (slider) {
+    slider.style.backgroundColor = chk.checked ? '#0284c7' : '#334155';
+    const knob = slider.querySelector('span');
+    if (knob) knob.style.left = chk.checked ? '26px' : '3px';
+  }
   const switches = [
     { id: 'chkAdminRestringirIP', color: '#0284c7' },
     { id: 'chkAdminRestringirDispositivos', color: '#10b981' },
