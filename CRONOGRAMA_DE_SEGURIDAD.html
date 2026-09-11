@@ -218,6 +218,8 @@
   <div class="flow-step">
     <div class="flow-num">5</div>
     <div class="flow-content">
+      <div class="flow-title">⚡ Capa 3: Sesión Única Activa (Anti-Clonación)</div>
+      <div class="flow-desc">Genera un nuevo <code>sessionId</code>. Si el usuario ya estaba conectado en otro equipo, el servidor emite un evento por WebSockets que <strong>expulsa en tiempo real</strong> la sesión previa.</div>
       <div class="flow-title">⚠️ Capa 3: Sesión Única Activa (Bloqueo de Segundo Login)</div>
       <div class="flow-desc">Si el usuario ya tiene sesión abierta en otro dispositivo, el servidor <strong>rechaza el nuevo acceso con HTTP 409 Conflict</strong> y muestra la terminal previa. El administrador puede liberar la sesión con su PIN.</div>
     </div>
@@ -248,9 +250,12 @@
     </div>
   </div>
   <div class="card">
+    <div class="card-icon">⚡</div>
+    <div class="card-title">3. Sesión Única Activa</div>
     <div class="card-icon">⚠️</div>
     <div class="card-title">3. Sesión Única (Bloqueo)</div>
     <div class="card-body">
+      Impide que dos personas compartan una misma cuenta. Si se abre la cuenta en otro equipo, la sesión anterior se cierra al instante.
       Impide que dos personas compartan una misma cuenta. Si se intenta abrir la cuenta en otro equipo, se bloquea el acceso hasta que se cierre en el anterior o se libere con PIN de Admin.
     </div>
   </div>
@@ -264,6 +269,7 @@
       <th>Restricción por IP</th>
       <th>Dispositivos Autorizados</th>
       <th>Sesión Única</th>
+      <th>Permiso de Autorizar</th>
       <th>Permiso de Desbloquear / Autorizar</th>
     </tr>
   </thead>
@@ -272,6 +278,7 @@
       <td><strong>Developer / Soporte</strong></td>
       <td><span class="tag-ok">Exento (Cualquier red)</span></td>
       <td><span class="tag-ok">Exento (Cualquier equipo)</span></td>
+      <td>Desactivado</td>
       <td>Exento</td>
       <td><span class="tag-ok">Sí</span></td>
     </tr>
@@ -279,6 +286,7 @@
       <td><strong>Super Admin / Admin</strong></td>
       <td><span class="tag-ok">Exento (Cualquier red)</span></td>
       <td><span class="tag-ok">Exento (Cualquier equipo)</span></td>
+      <td>Desactivado</td>
       <td>Exento</td>
       <td><span class="tag-ok">Sí</span></td>
     </tr>
@@ -286,6 +294,7 @@
       <td><strong>Cajero</strong></td>
       <td><span class="tag-warn">Obligatorio</span></td>
       <td><span class="tag-warn">Obligatorio</span></td>
+      <td><span class="tag-warn">Activo</span></td>
       <td><span class="tag-warn">Bloqueo Concurrente</span></td>
       <td>No</td>
     </tr>
@@ -293,6 +302,7 @@
       <td><strong>Salonero / Mesero / Bartender</strong></td>
       <td><span class="tag-warn">Obligatorio</span></td>
       <td><span class="tag-warn">Obligatorio</span></td>
+      <td><span class="tag-warn">Activo</span></td>
       <td><span class="tag-warn">Bloqueo Concurrente</span></td>
       <td>No</td>
     </tr>
@@ -300,6 +310,7 @@
       <td><strong>Cocinero / Cocina</strong></td>
       <td><span class="tag-warn">Obligatorio</span></td>
       <td><span class="tag-warn">Obligatorio</span></td>
+      <td><span class="tag-warn">Activo</span></td>
       <td><span class="tag-warn">Bloqueo Concurrente</span></td>
       <td>No</td>
     </tr>

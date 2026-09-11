@@ -720,6 +720,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
+    // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN) ──
     // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN: BLOQUEO DE SEGUNDO LOGIN) ──
     const sesionUnicaActiva = negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined);
     const forzarCierrePrevio = req.body.forzar_cierre_previo === true;
