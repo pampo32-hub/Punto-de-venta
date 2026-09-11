@@ -125,6 +125,7 @@ describe('Tier 50: Selección Dinámica de Cajas Físicas, Pre-asignación & Rea
       body: {
         caja_id: cajaId,
         nuevo_usuario_id: 2,
+        pinAdmin: '9999',
         pinAdmin: '0000',
         motivo: 'Cambio de turno'
       }
@@ -155,6 +156,7 @@ describe('Tier 50: Selección Dinámica de Cajas Físicas, Pre-asignación & Rea
     const p3 = resPuntos.data.puntos.find(p => p.id === 3);
     assert.strictEqual(p1.ocupada, false);
     assert.strictEqual(p3.ocupada, true);
+    assert.strictEqual(p3.turno_activo.usuario_id, 2);
     assert.ok(p3.turno_activo);
   });
 

@@ -333,6 +333,7 @@ function initDb() {
     db.run(`CREATE TABLE IF NOT EXISTS Cajas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       negocio_id INTEGER DEFAULT 1,
+      usuario_id INTEGER,
       cajero TEXT NOT NULL,
       caja_fisica_id INTEGER,
       caja_nombre TEXT,
@@ -356,6 +357,7 @@ function initDb() {
     db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN monto_final_dolares REAL DEFAULT 0", () => {});
     db.run("ALTER TABLE Cajas ADD COLUMN monto_inicial_usd REAL DEFAULT 0", () => {});
+    db.run("ALTER TABLE Cajas ADD COLUMN usuario_id INTEGER", () => {});
 
     // 6. Movimientos de Caja
     db.run(`CREATE TABLE IF NOT EXISTS MovimientosCaja (

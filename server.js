@@ -6086,6 +6086,7 @@ app.get('/api/cajas-fisicas', async (req, res) => {
         ocupada: !!turnoActivo,
         turno_activo: turnoActivo ? {
           id: turnoActivo.id,
+          usuario_id: turnoActivo.usuario_id,
           cajero: turnoActivo.cajero,
           fecha_apertura: turnoActivo.fecha_apertura,
           monto_inicial: turnoActivo.monto_inicial
@@ -6148,31 +6149,35 @@ app.put('/api/admin/puntos-cobro/:id', async (req, res) => {
     const id = req.params.id;
     const { nombre, codigo, ubicacion, icono, pre_asignado_usuario_id, activo } = req.body;
     const target = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [id]);
-    if (!target) return res.status(404).json({ error: 'Punto de cobro no encontrado' });
+    if (!target) return res.status(404).json({ ok: false, error: 'Punto de cobro no encontrado' });
+
+    const nombreFinal = nombre !== undefined ? (String(nombre).trim() || target.nombre) : target.nombre;
+    const codigoFinal = codigo !== undefined ? (String(codigo).trim() || target.codigo) : target.codigo;
+    const ubicacionFinal = ubicacion !== undefined ? (String(ubicacion).trim()) : target.ubicacion;
+    const iconoFinal = icono !== undefined ? (String(icono).trim() || target.icono) : target.icono;
+    const preAsigFinal = pre_asignado_usuario_id !== undefined ? (pre_asignado_usuario_id ? Number(pre_asignado_usuario_id) : null) : target.pre_asignado_usuario_id;
+    const activoFinal = activo !== undefined ? (activo ? 1 : 0) : target.activo;
 
     await dbRun(`
       UPDATE PuntosDeCobro SET
-        nombre = COALESCE(?, nombre),
-        codigo = COALESCE(?, codigo),
-        ubicacion = COALESCE(?, ubicacion),
-        icono = COALESCE(?, icono),
+        nombre = ?,
+        codigo = ?,
+        ubicacion = ?,
+        icono = ?,
         pre_asignado_usuario_id = ?,
-        activo = COALESCE(?, activo)
+        activo = ?
       WHERE id = ?
-    `, [
-      nombre ? nombre.trim() : null,
-      codigo ? codigo.trim() : null,
-      ubicacion !== undefined ? (ubicacion || '').trim() : target.ubicacion,
-      icono ? icono.trim() : target.icono,
-      pre_asignado_usuario_id !== undefined ? (pre_asignado_usuario_id ? Number(pre_asignado_usuario_id) : null) : target.pre_asignado_usuario_id,
-      activo !== undefined ? (activo ? 1 : 0) : target.activo,
-      id
-    ]);
+    `, [nombreFinal, codigoFinal, ubicacionFinal, iconoFinal, preAsigFinal, activoFinal, id]);
 
+    if (nombreFinal) {
+      await dbRun("UPDATE Cajas SET caja_nombre = ? WHERE caja_fisica_id = ? AND estado = 'abierta'", [nombreFinal, id]);
+    }
+
+    io.emit('caja_actualizada');
     io.emit('cajas_fisicas_actualizadas');
     res.json({ ok: true, message: 'Punto de cobro actualizado con éxito' });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -6269,10 +6274,11 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
     await dbRun(`
       UPDATE Cajas SET
         cajero = ?,
+        usuario_id = COALESCE(?, usuario_id),
         caja_fisica_id = ?,
         caja_nombre = ?
       WHERE id = ?
-    `, [finalCajero, finalCajaFisicaId, finalCajaNombre, turnoIdTarget]);
+    `, [finalCajero, nuevoUsuarioId, finalCajaFisicaId, finalCajaNombre, turnoIdTarget]);
 
     const detalleAudit = `Reasignación de turno #${turnoIdTarget}: Cajero anterior (${turno.cajero}) -> Nuevo (${finalCajero}), Caja anterior (${turno.caja_nombre || 'N/A'}) -> Nueva (${finalCajaNombre || 'N/A'}). Motivo: ${motivo}`;
 
@@ -6297,7 +6303,7 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
 
     const infoTurno = {
       id: turnoIdTarget,
-      usuario_id: nuevoUsuarioId,
+      usuario_id: nuevoUsuarioId !== null ? nuevoUsuarioId : turno.usuario_id,
       cajero: finalCajero,
       caja_fisica_id: finalCajaFisicaId,
       caja_nombre: finalCajaNombre,
@@ -6383,7 +6389,7 @@ app.post('/api/caja/movimiento', async (req, res) => {
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const montoNum = parseFloat(monto);
     if (!tipo || !['entrada', 'salida'].includes(tipo) || isNaN(montoNum) || montoNum <= 0) {
-      return res.status(400).json({ error: 'Tipo ("entrada" o "salida") y monto válido mayor a 0 son requeridos' });
+      return res.status(400).json({ ok: false, error: 'Tipo ("entrada" o "salida") y monto válido mayor a 0 son requeridos' });
     }
 
     let caja = null;
@@ -6429,7 +6435,7 @@ app.post('/api/caja/movimiento', async (req, res) => {
     io.emit('caja_actualizada');
     res.json({ ok: true, message: `Movimiento de ${tipo} registrado correctamente`, caja_id: caja.id });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -6464,7 +6470,7 @@ app.get('/api/caja/corte-x', async (req, res) => {
       );
     }
 
-    if (!caja) return res.status(404).json({ error: 'No hay ninguna caja o turno abierto actualmente' });
+    if (!caja) return res.status(404).json({ ok: false, error: 'No hay ninguna caja o turno abierto actualmente' });
 
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
@@ -6593,7 +6599,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     if (pinVerificar) {
       const esValido = await validarPinAdministrador(pinVerificar);
       if (!esValido) {
-        return res.status(401).json({ error: 'PIN de Administrador inválido. Cierre Z no autorizado.' });
+        return res.status(401).json({ ok: false, error: 'PIN de Administrador inválido. Cierre Z no autorizado.' });
       }
     }
 
@@ -6601,7 +6607,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     const dolaresRealUSD = parseFloat(dolares_real_contado_usd != null ? dolares_real_contado_usd : (dolares_real_contado || 0)) || 0;
 
     if (efectivoRealCRC < 0 || dolaresRealUSD < 0 || isNaN(efectivoRealCRC) || isNaN(dolaresRealUSD)) {
-      return res.status(400).json({ error: 'Por favor ingresa montos válidos de efectivo en gaveta' });
+      return res.status(400).json({ ok: false, error: 'Por favor ingresa montos válidos de efectivo en gaveta' });
     }
 
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
@@ -6619,7 +6625,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         [negocioId, negocioId]
       );
     }
-    if (!caja) return res.status(404).json({ error: 'No hay ninguna caja abierta para cerrar' });
+    if (!caja) return res.status(404).json({ ok: false, error: 'No hay ninguna caja abierta para cerrar' });
 
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
@@ -6861,9 +6867,9 @@ app.post('/api/caja/abrir', async (req, res) => {
 
     const ahoraApertura = new Date().toISOString();
     const r = await dbRun(`
-      INSERT INTO Cajas (negocio_id, cajero, caja_fisica_id, caja_nombre, fecha_apertura, monto_inicial, estado)
-      VALUES (?, ?, ?, ?, ?, ?, 'abierta')
-    `, [negocioId, nombreCajero, cajaFisicaIdNum, cajaNombre, ahoraApertura, montoNum]);
+      INSERT INTO Cajas (negocio_id, usuario_id, cajero, caja_fisica_id, caja_nombre, fecha_apertura, monto_inicial, estado)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'abierta')
+    `, [negocioId, usuarioIdFinal, nombreCajero, cajaFisicaIdNum, cajaNombre, ahoraApertura, montoNum]);
 
     await registrarAuditoria({
       negocioId,

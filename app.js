@@ -3126,6 +3126,8 @@ window.ejecutarAccionAdmin = function(tipo) {
     if (typeof abrirModalAdminCaracteristicas === 'function') abrirModalAdminCaracteristicas();
   } else if (tipo === 'seguridad-red') {
     if (typeof abrirModalSeguridadRed === 'function') abrirModalSeguridadRed();
+  } else if (tipo === 'cajas-fisicas') {
+    abrirModalAdminPuntosCobro();
   }
 };
 
@@ -5281,6 +5283,7 @@ window.renderListaDispositivosAutorizados = function(dispositivos = []) {
             </small>
           </div>
         </div>
+        <button type="button" onclick="eliminarDispositivoAutorizado(${d.id}, '${d.nombre_dispositivo.replace(/'/g, "\\'")}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; font-weight: 700;" title="Revocar terminal">
         <button type="button" data-disp-id="${d.id}" data-disp-name="${escapeHtml(d.nombre_dispositivo)}" onclick="eliminarDispositivoAutorizado(this.dataset.dispId, this.dataset.dispName)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; font-weight: 700;" title="Revocar terminal">
           🗑️ Revocar
         </button>
@@ -5560,12 +5563,7 @@ window.guardarConfiguracionSeguridadRed = async function() {
 
     cerrarModalSeguridadRed();
     if (typeof mostrarNotificacionCentro === 'function') {
-      mostrarNotificacionCentro(
-        restringirIp
-          ? '🔒 Seguridad de Red activada: Saloneros y cajeros solo pueden acceder desde el WiFi del local'
-          : '🌐 Restricción de red desactivada: Personal operativo puede acceder desde cualquier red',
-        'success'
-      );
+      mostrarNotificacionCentro('🛡️ Configuración de seguridad, red y terminales guardada exitosamente.', 'success');
     } else {
       alert('✅ ' + (data.message || 'Configuración guardada exitosamente'));
     }
@@ -5576,6 +5574,281 @@ window.guardarConfiguracionSeguridadRed = async function() {
       btn.disabled = false;
       btn.innerHTML = txtOriginal;
     }
+  }
+};
+
+// ============================================================================
+// ADMINISTRACIÓN DE CAJAS FÍSICAS Y PUNTOS DE COBRO (ADMIN & SUPERADMIN)
+// ============================================================================
+window._puntosCobroCache = [];
+
+window.abrirModalAdminPuntosCobro = async function() {
+  const modal = document.getElementById('modalAdminPuntosCobro');
+  if (!modal) return;
+
+  cancelarEdicionPuntoCobroAdmin();
+  await cargarSelectCajerosHabitualesAdmin();
+  await cargarPuntosCobroAdmin();
+  modal.classList.add('active');
+};
+
+window.cerrarModalAdminPuntosCobro = function() {
+  const modal = document.getElementById('modalAdminPuntosCobro');
+  if (modal) modal.classList.remove('active');
+};
+
+async function cargarSelectCajerosHabitualesAdmin() {
+  const select = document.getElementById('selectAdminPuntoCajero');
+  if (!select) return;
+  try {
+    const nid = estado.negocioActual?.id || (sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')).id : 1);
+    const res = await fetch(`/api/admin/empleados?negocio_id=${nid}`);
+    const empleados = await res.json();
+    if (Array.isArray(empleados)) {
+      select.innerHTML = '<option value="">-- Ninguno (Cualquier cajero) --</option>' +
+        empleados.map(e => `<option value="${e.id}">${escapeHtml(e.nombre_completo || e.usuario)} (${escapeHtml(e.rolDisplay || e.rol)})</option>`).join('');
+    }
+  } catch (e) {
+    console.warn('Error cargando empleados para selector de caja:', e);
+  }
+}
+
+window.cargarPuntosCobroAdmin = async function() {
+  const contenedor = document.getElementById('listaAdminPuntosCobro');
+  if (!contenedor) return;
+
+  contenedor.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">Cargando cajas físicas...</div>';
+  try {
+    const nid = estado.negocioActual?.id || (sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')).id : 1);
+    const res = await fetch(`/api/admin/puntos-cobro?negocio_id=${nid}`);
+    const data = await res.json();
+    const puntos = Array.isArray(data) ? data : (data.puntos || []);
+    window._puntosCobroCache = puntos;
+
+    if (!puntos || puntos.length === 0) {
+      contenedor.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px; background: #0f172a; border-radius: 8px;">No hay cajas físicas registradas. Agrega una arriba.</div>';
+      return;
+    }
+
+    contenedor.innerHTML = puntos.map(p => {
+      const estaActivo = p.activo !== 0;
+      const statusBadge = estaActivo
+        ? '<span style="background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700;">🟢 ACTIVA</span>'
+        : '<span style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700;">⚪ INACTIVA</span>';
+
+      const cajeroHabitual = p.pre_asignado_usuario_nombre || p.pre_asignado_usuario_username
+        ? `👤 Cajero Habitual: <strong>${escapeHtml(p.pre_asignado_usuario_nombre || p.pre_asignado_usuario_username)}</strong>`
+        : '👤 Cajero Habitual: <span style="color:#64748b;">Sin asignar</span>';
+
+      const safeObj = encodeURIComponent(JSON.stringify(p));
+
+      return `
+        <div style="background: #0f172a; border: 1px solid ${estaActivo ? '#1e293b' : '#450a0a'}; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 1.8rem; background: #1e293b; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">${p.icono || '💳'}</span>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong style="color: #f8fafc; font-size: 0.98rem;">${escapeHtml(p.nombre)}</strong>
+                <code style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: 700;">${escapeHtml(p.codigo || '')}</code>
+                ${statusBadge}
+              </div>
+              <div style="color: #94a3b8; font-size: 0.78rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap;">
+                <span>📍 ${escapeHtml(p.ubicacion || 'Sin ubicación específica')}</span>
+                <span>•</span>
+                <span>${cajeroHabitual}</span>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" onclick="editarPuntoCobroAdmin('${safeObj}')" style="padding: 5px 10px; font-size: 0.78rem; background: #1e293b; color: #38bdf8; border: 1px solid #0284c7; border-radius: 6px; cursor: pointer; font-weight: 700;">
+              ✏️ Modificar
+            </button>
+            <button type="button" onclick="toggleActivoPuntoCobroAdmin(${p.id}, ${estaActivo ? 1 : 0})" style="padding: 5px 10px; font-size: 0.78rem; background: #1e293b; color: ${estaActivo ? '#fca5a5' : '#6ee7b7'}; border: 1px solid ${estaActivo ? '#ef4444' : '#10b981'}; border-radius: 6px; cursor: pointer; font-weight: 700;">
+              ${estaActivo ? 'Desactivar' : 'Activar'}
+            </button>
+            <button type="button" onclick="eliminarPuntoCobroAdmin(${p.id}, '${escapeHtml(p.nombre).replace(/'/g, "\\'")}')" style="padding: 5px 8px; font-size: 0.78rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; cursor: pointer; font-weight: 700;" title="Eliminar / Desactivar">
+              🗑️
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    contenedor.innerHTML = `<div style="color: #ef4444; padding: 14px;">Error al cargar cajas: ${e.message}</div>`;
+  }
+};
+
+window.guardarPuntoCobroAdmin = async function() {
+  const txtId = document.getElementById('txtAdminPuntoId');
+  const txtNombre = document.getElementById('txtAdminPuntoNombre');
+  const txtCodigo = document.getElementById('txtAdminPuntoCodigo');
+  const txtUbicacion = document.getElementById('txtAdminPuntoUbicacion');
+  const selIcono = document.getElementById('selectAdminPuntoIcono');
+  const selCajero = document.getElementById('selectAdminPuntoCajero');
+  const btnGuardar = document.getElementById('btnGuardarPuntoCobro');
+
+  const id = txtId ? txtId.value.trim() : '';
+  const nombre = txtNombre ? txtNombre.value.trim() : '';
+  const codigo = txtCodigo ? txtCodigo.value.trim() : '';
+  const ubicacion = txtUbicacion ? txtUbicacion.value.trim() : '';
+  const icono = selIcono ? selIcono.value : '💳';
+  const pre_asignado_usuario_id = selCajero && selCajero.value ? Number(selCajero.value) : null;
+
+  if (!nombre) {
+    alert('Por favor ingresa el nombre de la caja física.');
+    if (txtNombre) txtNombre.focus();
+    return;
+  }
+
+  const nid = estado.negocioActual?.id || (sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')).id : 1);
+  const esEdicion = !!id;
+  const endpoint = esEdicion ? `/api/admin/puntos-cobro/${id}` : '/api/admin/puntos-cobro';
+  const method = esEdicion ? 'PUT' : 'POST';
+
+  try {
+    if (btnGuardar) {
+      btnGuardar.disabled = true;
+      btnGuardar.textContent = 'Guardando...';
+    }
+
+    const res = await fetch(endpoint, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({
+        nombre,
+        codigo,
+        ubicacion,
+        icono,
+        pre_asignado_usuario_id,
+        negocio_id: nid
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo guardar la caja física'));
+      return;
+    }
+
+    mostrarNotificacionCentro(`✅ Caja física "${nombre}" ${esEdicion ? 'modificada' : 'creada'} con éxito`, 'success');
+    cancelarEdicionPuntoCobroAdmin();
+    await cargarPuntosCobroAdmin();
+    await cargarCajaDesdeBackend();
+  } catch (e) {
+    alert('❌ Error al guardar caja física: ' + e.message);
+  } finally {
+    if (btnGuardar) {
+      btnGuardar.disabled = false;
+      btnGuardar.textContent = '💾 Guardar Caja';
+    }
+  }
+};
+
+window.editarPuntoCobroAdmin = function(puntoJsonStr) {
+  try {
+    const p = JSON.parse(decodeURIComponent(puntoJsonStr));
+    const txtId = document.getElementById('txtAdminPuntoId');
+    const txtNombre = document.getElementById('txtAdminPuntoNombre');
+    const txtCodigo = document.getElementById('txtAdminPuntoCodigo');
+    const txtUbicacion = document.getElementById('txtAdminPuntoUbicacion');
+    const selIcono = document.getElementById('selectAdminPuntoIcono');
+    const selCajero = document.getElementById('selectAdminPuntoCajero');
+    const lblTitulo = document.getElementById('lblTituloFormPuntoCobro');
+    const btnCancelar = document.getElementById('btnCancelarEdicionPuntoCobro');
+    const btnGuardar = document.getElementById('btnGuardarPuntoCobro');
+
+    if (txtId) txtId.value = p.id;
+    if (txtNombre) txtNombre.value = p.nombre || '';
+    if (txtCodigo) txtCodigo.value = p.codigo || '';
+    if (txtUbicacion) txtUbicacion.value = p.ubicacion || '';
+    if (selIcono) selIcono.value = p.icono || '💳';
+    if (selCajero) selCajero.value = p.pre_asignado_usuario_id || '';
+
+    if (lblTitulo) lblTitulo.innerHTML = `<span>✏️</span> <strong>Modificar Nombre / Configuración de: ${escapeHtml(p.nombre)}</strong>`;
+    if (btnCancelar) btnCancelar.style.display = 'inline-block';
+    if (btnGuardar) btnGuardar.textContent = '💾 Actualizar Caja';
+
+    if (txtNombre) {
+      txtNombre.focus();
+      txtNombre.select();
+    }
+  } catch (e) {
+    console.error('Error al preparar edición de punto de cobro:', e);
+  }
+};
+
+window.cancelarEdicionPuntoCobroAdmin = function() {
+  const txtId = document.getElementById('txtAdminPuntoId');
+  const txtNombre = document.getElementById('txtAdminPuntoNombre');
+  const txtCodigo = document.getElementById('txtAdminPuntoCodigo');
+  const txtUbicacion = document.getElementById('txtAdminPuntoUbicacion');
+  const selIcono = document.getElementById('selectAdminPuntoIcono');
+  const selCajero = document.getElementById('selectAdminPuntoCajero');
+  const lblTitulo = document.getElementById('lblTituloFormPuntoCobro');
+  const btnCancelar = document.getElementById('btnCancelarEdicionPuntoCobro');
+  const btnGuardar = document.getElementById('btnGuardarPuntoCobro');
+
+  if (txtId) txtId.value = '';
+  if (txtNombre) txtNombre.value = '';
+  if (txtCodigo) txtCodigo.value = '';
+  if (txtUbicacion) txtUbicacion.value = '';
+  if (selIcono) selIcono.value = '💳';
+  if (selCajero) selCajero.value = '';
+
+  if (lblTitulo) lblTitulo.innerHTML = '<span>➕</span> <strong>Registrar Nueva Caja Física</strong>';
+  if (btnCancelar) btnCancelar.style.display = 'none';
+  if (btnGuardar) btnGuardar.textContent = '💾 Guardar Caja';
+};
+
+window.toggleActivoPuntoCobroAdmin = async function(id, estadoActual) {
+  const nuevoActivo = estadoActual === 1 ? 0 : 1;
+  const nid = estado.negocioActual?.id || (sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')).id : 1);
+  try {
+    const res = await fetch(`/api/admin/puntos-cobro/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ activo: nuevoActivo })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo cambiar el estado de la caja'));
+      return;
+    }
+    mostrarNotificacionCentro(`✅ Estado de caja actualizado`, 'success');
+    await cargarPuntosCobroAdmin();
+    await cargarCajaDesdeBackend();
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
+  }
+};
+
+window.eliminarPuntoCobroAdmin = async function(id, nombre) {
+  if (!confirm(`¿Deseas desactivar / eliminar la caja física "${nombre}"?`)) return;
+  const nid = estado.negocioActual?.id || (sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')).id : 1);
+  try {
+    const res = await fetch(`/api/admin/puntos-cobro/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ ' + (data.error || 'No se pudo eliminar la caja'));
+      return;
+    }
+    mostrarNotificacionCentro(`🗑️ Caja "${nombre}" desactivada con éxito`, 'success');
+    await cargarPuntosCobroAdmin();
+    await cargarCajaDesdeBackend();
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
   }
 };
 
@@ -6200,6 +6473,7 @@ async function cargarEmpleadosAdmin() {
       <tr>
         <td><strong>${escapeHtml(e.nombre_completo)}</strong></td>
         <td><code>${escapeHtml(e.usuario)}</code></td>
+        <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span></td>
         <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span>${cajaBadge}</td>
         <td><code>${escapeHtml(e.pin || '1234')}</code></td>
         <td>
@@ -10616,16 +10890,21 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
   const iconHeader = document.getElementById('iconModalMovimientoCaja');
   const titleHeader = document.getElementById('titleModalMovimientoCaja');
   const subHeader = document.getElementById('subModalMovimientoCaja');
+  const btnGuardar = document.getElementById('btnGuardarMovimientoCaja');
   const badgeInfo = document.getElementById('badgeInfoMovimientoCaja');
 
   if (txtTipo) txtTipo.value = tipo;
-  if (txtMonto) { txtMonto.value = ''; txtMonto.focus(); }
+  if (txtMonto) txtMonto.value = '';
   if (txtConcepto) txtConcepto.value = '';
 
   if (tipo === 'entrada') {
     if (iconHeader) iconHeader.textContent = '📥';
     if (titleHeader) titleHeader.textContent = 'Entrada de Efectivo';
     if (subHeader) subHeader.textContent = 'Registrar ingreso adicional de dinero a la gaveta de caja';
+    if (btnGuardar) {
+      btnGuardar.textContent = '📥 Registrar Entrada';
+      btnGuardar.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    }
     if (badgeInfo) {
       badgeInfo.style.background = 'rgba(16, 185, 129, 0.1)';
       badgeInfo.style.borderColor = 'rgba(16, 185, 129, 0.3)';
@@ -10636,6 +10915,10 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
     if (iconHeader) iconHeader.textContent = '📤';
     if (titleHeader) titleHeader.textContent = 'Salida / Gasto Menor';
     if (subHeader) subHeader.textContent = 'Registrar salida o egreso de dinero de la gaveta de caja';
+    if (btnGuardar) {
+      btnGuardar.textContent = '📤 Registrar Salida';
+      btnGuardar.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+    }
     if (badgeInfo) {
       badgeInfo.style.background = 'rgba(239, 68, 68, 0.1)';
       badgeInfo.style.borderColor = 'rgba(239, 68, 68, 0.3)';
@@ -10645,7 +10928,9 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
   }
 
   modal.classList.add('active');
-  setTimeout(() => { if (txtMonto) txtMonto.focus(); }, 100);
+  setTimeout(() => {
+    if (txtMonto) txtMonto.focus();
+  }, 100);
 };
 
 window.cerrarModalMovimientoCaja = function() {
@@ -10660,11 +10945,16 @@ window.guardarMovimientoCaja = async function() {
 
   const tipo = txtTipo ? txtTipo.value : 'entrada';
   const monto = parseFloat(txtMonto ? txtMonto.value : 0);
-  const concepto = txtConcepto ? txtConcepto.value.trim() : '';
+  const concepto = (txtConcepto ? txtConcepto.value : '').trim();
 
   if (isNaN(monto) || monto <= 0) {
-    alert('Por favor ingresa un monto válido mayor a 0');
+    mostrarNotificacionCentro('⚠️ Por favor ingresa un monto válido mayor a 0', 'warning');
     if (txtMonto) txtMonto.focus();
+    return;
+  }
+  if (!concepto) {
+    mostrarNotificacionCentro('⚠️ Por favor ingresa el motivo o concepto del movimiento', 'warning');
+    if (txtConcepto) txtConcepto.focus();
     return;
   }
 
@@ -10690,7 +10980,7 @@ window.guardarMovimientoCaja = async function() {
 
     const data = await res.json();
     if (!res.ok) {
-      alert('Error registrando movimiento: ' + (data.error || 'Error desconocido'));
+      mostrarNotificacionCentro('❌ ' + (data.error || 'No se pudo registrar el movimiento'), 'error');
       return;
     }
 
@@ -10698,7 +10988,7 @@ window.guardarMovimientoCaja = async function() {
     mostrarNotificacionCentro(`✅ ${tipo === 'entrada' ? 'Entrada' : 'Salida'} de ${formatCRC(monto)} registrada correctamente`, 'success');
     await cargarCajaDesdeBackend();
   } catch (e) {
-    alert('Error al conectar con el servidor: ' + e.message);
+    mostrarNotificacionCentro('❌ Error de conexión: ' + e.message, 'error');
   }
 };
 
@@ -11090,6 +11380,7 @@ document.getElementById('btnSalidaEfectivo')?.addEventListener('click', () => wi
 document.getElementById('btnCorteX')?.addEventListener('click', () => window.generarCorteX());
 document.getElementById('btnCorteZ')?.addEventListener('click', () => window.abrirModalCierreZ());
 document.getElementById('btnCorteZCiego')?.addEventListener('click', () => window.abrirModalCierreZ(true));
+document.getElementById('btnReasignarTurnoCaja')?.addEventListener('click', () => window.abrirModalReasignarCajaTurno());
 
 if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
   socket.on('caja_actualizada', () => {
@@ -12053,7 +12344,6 @@ window.ejecutarCierreZ = async function() {
     mostrarNotificacionCentro('❌ Error ejecutando Cierre Z: ' + e.message, 'error');
   }
 };
-
 
 
 function renderTipPoolTable() {
