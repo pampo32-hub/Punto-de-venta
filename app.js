@@ -11103,7 +11103,9 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
     }
 
     if (data.ticket) {
-      if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      if (typeof window.mostrarVisorTicketTermico === 'function') {
+        window.mostrarVisorTicketTermico(data.ticket, true);
+      } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
         window.ejecutarImpresionDirectaTermica(data.ticket, false);
       }
     }
@@ -12272,12 +12274,17 @@ window.ejecutarCobroFinal = async function() {
         ticketFinal.esDolares = true;
       }
 
-      if (cobroResData?.ok && cobroResData?.ticket) {
-        if (typeof mostrarNotificacionCentro === 'function') {
-          mostrarNotificacionCentro(`✅ 🖨️ ¡Factura / Comprobante impreso con éxito en impresora térmica (CAJA)!`, 'success');
+      const tVisualFinal = (cobroResData && cobroResData.ticket) ? cobroResData.ticket : ticketFinal;
+      if (tVisualFinal) {
+        if (typeof window.mostrarVisorTicketTermico === 'function') {
+          window.mostrarVisorTicketTermico(tVisualFinal, true);
+        } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+          window.ejecutarImpresionDirectaTermica(tVisualFinal, false);
         }
-      } else if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-        window.ejecutarImpresionDirectaTermica(ticketFinal, false);
+      }
+
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`✅ 🖨️ ¡Factura / Comprobante generado e impreso con éxito!`, 'success');
       }
 
       mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
@@ -18711,12 +18718,9 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
   window.ticketActivoParaImprimir = ticketData;
   window.ticketTermicoActual = ticketData;
 
-  // Si se solicita auto-imprimir (ej: al cobrar o liquidar), despachar directo a térmica sin abrir modal en pantalla
-  if (autoImprimir && !forzarVisor) {
-    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-      window.ejecutarImpresionDirectaTermica(ticketData, false);
-    }
-    return;
+  // Si se solicita auto-imprimir, despachar directo a la impresora térmica física en segundo plano
+  if (autoImprimir && typeof window.ejecutarImpresionDirectaTermica === 'function') {
+    window.ejecutarImpresionDirectaTermica(ticketData, false);
   }
 
   const modal = document.getElementById('modalVisorTicket');

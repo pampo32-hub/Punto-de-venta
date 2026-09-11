@@ -19,25 +19,23 @@ describe('Tier 46: Impresion Directa Silenciosa a Impresora Termica (192.168.1.3
     });
   });
 
-  it('T46.2: Pre-factura / Pre-cuenta despacha directamente a impresion termica sin modal', () => {
+  it('T46.2: Pre-factura / Pre-cuenta muestra ticket en pantalla y despacha a impresion termica', () => {
     [appJs, publicAppJs].forEach((code, idx) => {
       const target = idx === 0 ? 'app.js' : 'public/app.js';
       const funcMatch = code.match(/window\.solicitarPreFacturaMesa\s*=\s*async\s*function[\s\S]*?catch\s*\(e\)/);
       assert.ok(funcMatch, `${target} debe contener window.solicitarPreFacturaMesa`);
       const body = funcMatch[0];
-      assert.ok(body.includes('window.ejecutarImpresionDirectaTermica(data.ticket, false)'), `${target} solicitarPreFacturaMesa debe llamar ejecutarImpresionDirectaTermica`);
-      assert.ok(!body.includes('mostrarVisorTicketTermico(data.ticket'), `${target} solicitarPreFacturaMesa NO debe abrir visor modal de ticket`);
+      assert.ok(body.includes('mostrarVisorTicketTermico(data.ticket, true)'), `${target} solicitarPreFacturaMesa debe abrir visor modal de ticket`);
     });
   });
 
-  it('T46.3: Cobro y liquidacion final despacha directamente a termica sin modal ni window.print()', () => {
+  it('T46.3: Cobro y liquidacion final muestra factura en pantalla y despacha a termica', () => {
     [appJs, publicAppJs].forEach((code, idx) => {
       const target = idx === 0 ? 'app.js' : 'public/app.js';
       const funcMatch = code.match(/window\.ejecutarCobroFinal\s*=\s*async\s*function[\s\S]*?catch\s*\(e\)/);
       assert.ok(funcMatch, `${target} debe contener window.ejecutarCobroFinal`);
       const body = funcMatch[0];
-      assert.ok(body.includes('window.ejecutarImpresionDirectaTermica(ticketFinal, false)'), `${target} ejecutarCobroFinal debe llamar ejecutarImpresionDirectaTermica`);
-      assert.ok(!body.includes('mostrarVisorTicketTermico(ticketFinal'), `${target} ejecutarCobroFinal NO debe abrir visor modal de ticket`);
+      assert.ok(body.includes('mostrarVisorTicketTermico(tVisualFinal, true)'), `${target} ejecutarCobroFinal debe abrir visor modal de ticket`);
     });
   });
 
@@ -62,15 +60,14 @@ describe('Tier 46: Impresion Directa Silenciosa a Impresora Termica (192.168.1.3
     });
   });
 
-  it('T46.5: Intercepcion en mostrarVisorTicketTermico evita abrir modal cuando autoImprimir es true y no esta forzado', () => {
+  it('T46.5: mostrarVisorTicketTermico despacha impresion termica en segundo plano y muestra modal en pantalla', () => {
     [appJs, publicAppJs].forEach((code, idx) => {
       const target = idx === 0 ? 'app.js' : 'public/app.js';
       const funcMatch = code.match(/window\.mostrarVisorTicketTermico\s*=\s*function\s*\(([^)]*)\)\s*\{([\s\S]*?)const modal/);
       assert.ok(funcMatch, `${target} debe contener window.mostrarVisorTicketTermico`);
       const body = funcMatch[2];
-      assert.ok(body.includes('if (autoImprimir && !forzarVisor)'), `${target} debe interceptar autoImprimir`);
+      assert.ok(body.includes('if (autoImprimir && typeof window.ejecutarImpresionDirectaTermica === \'function\')'), `${target} debe despachar autoImprimir a ejecutarImpresionDirectaTermica`);
       assert.ok(body.includes('ejecutarImpresionDirectaTermica(ticketData, false)'), `${target} debe despachar a ejecutarImpresionDirectaTermica`);
-      assert.ok(body.includes('return;'), `${target} debe retornar sin renderizar modal`);
     });
   });
 
