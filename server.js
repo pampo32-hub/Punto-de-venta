@@ -2217,7 +2217,6 @@ app.get('/api/dev/db-ping', async (req, res) => {
 app.get('/api/admin/empleados', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
-    // REGLA CRÍTICA: Nunca mostrar a usuarios con rol 'developer'
     const empleados = await dbAll(`
       SELECT u.id, u.negocio_id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.activo, u.caja_defecto_id,
              p.nombre as caja_defecto_nombre
@@ -6303,6 +6302,7 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
 
     const infoTurno = {
       id: turnoIdTarget,
+      usuario_id: nuevoUsuarioId,
       usuario_id: nuevoUsuarioId !== null ? nuevoUsuarioId : turno.usuario_id,
       cajero: finalCajero,
       caja_fisica_id: finalCajaFisicaId,

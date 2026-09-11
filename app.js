@@ -4559,6 +4559,7 @@ window.aplicarRestriccionesModulos = function() {
     document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
   }
   if (!tieneUnionMesas) {
+    document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
     document.getElementById('modalConfirmarUnir')?.classList.remove('active');
     document.getElementById('modalConfirmarSeparar')?.classList.remove('active');
   }
@@ -10938,7 +10939,6 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
   window._modalActivoId = 'modalMovimientoCaja';
 
   setTimeout(() => {
-    if (txtMonto) txtMonto.focus();
     if (txtMonto) {
       txtMonto.focus();
       txtMonto.select?.();
@@ -10948,7 +10948,6 @@ window.abrirModalMovimientoCaja = function(tipo = 'entrada') {
 
 window.cerrarModalMovimientoCaja = function() {
   const modal = document.getElementById('modalMovimientoCaja');
-  if (modal) modal.classList.remove('active');
   if (modal) {
     modal.style.display = 'none';
     modal.classList.remove('active');
