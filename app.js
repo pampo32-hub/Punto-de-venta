@@ -19693,19 +19693,23 @@ function renderLogsImpresora(logs = []) {
 
 window.probarImpresoraBackend = async function(destino) {
   try {
+    mostrarNotificacionCentro(`⏳ Enviando prueba a impresora de ${destino.toUpperCase()}...`, 'info');
     const res = await fetch('/api/impresoras/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ destino })
     });
     const data = await res.json();
-    mostrarNotificacionCentro(`🖨️ ${data.message}`, 'success');
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al conectar con la impresora');
+    }
+    mostrarNotificacionCentro(`🖨️ ${data.message || 'Ticket de prueba enviado con éxito'}`, 'success');
     if (data.registro && data.registro.ticketVisual) {
       mostrarVisorTicketTermico(data.registro.ticketVisual);
     }
     await cargarEstadoImpresorasConfig();
   } catch (e) {
-    alert('Error al probar impresora: ' + e.message);
+    mostrarNotificacionCentro(`❌ Error en impresora ${destino}: ${e.message}`, 'error');
   }
 };
 

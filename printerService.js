@@ -11,24 +11,24 @@ const { sendRawToWindowsPrinter, getInstalledPrinters } = require('./windowsPrin
 // Estado en memoria de configuración de impresoras
 let printerConfig = {
   caja: {
-    nombre: process.env.PRINTER_CAJA_NAME || 'POS-80-Series',
-    tipo: process.env.PRINTER_CAJA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
+    nombre: process.env.PRINTER_CAJA_NAME || 'Impresora Caja',
+    tipo: process.env.PRINTER_CAJA_TYPE || (process.env.PRINTER_CAJA_IP || '192.168.1.30' ? 'red' : 'usb'),
     ip: process.env.PRINTER_CAJA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_CAJA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_CAJA_WIN || 'POS-80-Series',
     activa: true
   },
   cocina: {
-    nombre: process.env.PRINTER_COCINA_NAME || 'POS-80-Series',
-    tipo: process.env.PRINTER_COCINA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
+    nombre: process.env.PRINTER_COCINA_NAME || 'Impresora Cocina',
+    tipo: process.env.PRINTER_COCINA_TYPE || (process.env.PRINTER_COCINA_IP || '192.168.1.30' ? 'red' : 'usb'),
     ip: process.env.PRINTER_COCINA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_COCINA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_COCINA_WIN || 'POS-80-Series',
     activa: true
   },
   barra: {
-    nombre: process.env.PRINTER_BARRA_NAME || 'POS-80-Series',
-    tipo: process.env.PRINTER_BARRA_TYPE || (process.platform === 'win32' ? 'usb' : 'red'),
+    nombre: process.env.PRINTER_BARRA_NAME || 'Impresora Barra',
+    tipo: process.env.PRINTER_BARRA_TYPE || (process.env.PRINTER_BARRA_IP || '192.168.1.30' ? 'red' : 'usb'),
     ip: process.env.PRINTER_BARRA_IP || '192.168.1.30',
     puerto: Number(process.env.PRINTER_BARRA_PORT) || 9100,
     windowsPrinter: process.env.PRINTER_BARRA_WIN || 'POS-80-Series',
@@ -1289,8 +1289,13 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
   if (!ip || typeof ip !== 'string' || !ip.trim()) {
     throw new Error('Debes ingresar una dirección IP válida (ej: 192.168.1.30)');
   }
-  const ipLimpia = ip.trim();
-  const portNum = Number(puerto) || 9100;
+  let ipLimpia = ip.trim().replace(/^https?:\/\//i, '');
+  let portNum = Number(puerto) || 9100;
+  if (ipLimpia.includes(':')) {
+    const partes = ipLimpia.split(':');
+    ipLimpia = partes[0].trim();
+    portNum = Number(partes[1]) || portNum;
+  }
   const destinoLimpio = (destino || 'caja').toLowerCase();
 
   const regexIp = /^(\d{1,3}\.){3}\d{1,3}$/;
@@ -1298,29 +1303,7 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
     throw new Error('El formato de la dirección IP no es válido. Debe ser como: 192.168.1.30');
   }
 
-  // 1. Probar conexión TCP directa con timeout
-  const testConexion = await new Promise((resolve) => {
-    const s = new net.Socket();
-    s.setTimeout(3500);
-    s.connect(portNum, ipLimpia, () => {
-      s.destroy();
-      resolve({ ok: true });
-    });
-    s.on('timeout', () => {
-      s.destroy();
-      resolve({ ok: false, error: `Tiempo de espera agotado al conectar con ${ipLimpia}:${portNum}` });
-    });
-    s.on('error', (err) => {
-      s.destroy();
-      resolve({ ok: false, error: err.message || 'Error de red' });
-    });
-  });
-
-  if (!testConexion.ok) {
-    throw new Error(`No se pudo conectar con la impresora en ${ipLimpia}:${portNum} (${testConexion.error}). Verifica que esté encendida, con papel y conectada a la misma red local Wi-Fi o cable.`);
-  }
-
-  // 2. Construir ticket de bienvenida corto y calibración
+  // 1. Construir ticket de bienvenida corto y calibración
   const areaNombres = {
     caja: 'CAJA (Cuentas y Facturas)',
     cocina: 'COCINA (Comandas de Alimentos)',
@@ -1352,8 +1335,52 @@ async function autoConfigurarImpresora({ ip, puerto = 9100, destino = 'caja', no
   raw += ESCPOS.FEED_LINES(4);
   raw += ESCPOS.CUT_PARTIAL;
 
-  // 3. Enviar ticket de bienvenida por TCP
-  await enviarAPuertoTCP(ipLimpia, portNum, raw);
+  // 2. Conectar y despachar el ticket en una sola conexión TCP limpia con reintento si está ocupada
+  const bufferTicket = Buffer.from(raw, 'latin1');
+  let conexionOk = false;
+  let ultimoError = '';
+
+  for (let intento = 1; intento <= 2; intento++) {
+    const intentoRes = await new Promise((resolve) => {
+      const s = new net.Socket();
+      s.setTimeout(6500); // 6.5s de margen para redes Wi-Fi o cable
+
+      s.connect(portNum, ipLimpia, () => {
+        s.write(bufferTicket, () => {
+          setTimeout(() => {
+            s.end(() => {
+              resolve({ ok: true });
+            });
+          }, 200);
+        });
+      });
+
+      s.on('timeout', () => {
+        s.destroy();
+        resolve({ ok: false, error: `Tiempo de espera agotado al conectar con ${ipLimpia}:${portNum}` });
+      });
+
+      s.on('error', (err) => {
+        s.destroy();
+        resolve({ ok: false, error: err.message || 'Error de socket de red' });
+      });
+    });
+
+    if (intentoRes.ok) {
+      conexionOk = true;
+      break;
+    }
+
+    ultimoError = intentoRes.error;
+    if (intento < 2) {
+      // Breve pausa para dar tiempo al microcontrolador de la impresora a liberar el socket
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+
+  if (!conexionOk) {
+    throw new Error(`No se pudo conectar con la impresora en ${ipLimpia}:${portNum} (${ultimoError}). Verifica que la impresora esté encendida, con papel y conectada a la misma red Wi-Fi o cable.`);
+  }
 
   // 4. Actualizar configuración en memoria
   const nombreFinal = nombre || `Impresora ${destinoLimpio.charAt(0).toUpperCase() + destinoLimpio.slice(1)}`;
