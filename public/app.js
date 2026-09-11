@@ -9194,31 +9194,61 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     cargarKDSDesdeBackend();
 
     // Disparar impresión térmica directa de Comanda para los productos nuevos
-    const itemsParaComanda = (itemsTodosNuevos && itemsTodosNuevos.length > 0)
-      ? itemsTodosNuevos
-      : (itemsCocinaNuevos && itemsCocinaNuevos.length > 0 ? itemsCocinaNuevos : estado.mesaActiva.items);
+    // NOTA: Cuando el servidor está ONLINE, backend (POST /api/comandas/enviar -> ejecutarComanda) YA despacha
+    // la impresión a Cocina y/o Barra respectivamente según los productos agregados.
+    // Solo cuando estamos en modo OFFLINE (esOffline), disparamos la impresión local separando destinos.
+    if (esOffline) {
+      const itemsParaComanda = (itemsTodosNuevos && itemsTodosNuevos.length > 0)
+        ? itemsTodosNuevos
+        : (itemsCocinaNuevos && itemsCocinaNuevos.length > 0 ? itemsCocinaNuevos : estado.mesaActiva.items);
 
-    if (itemsParaComanda && itemsParaComanda.length > 0) {
-      const ticketComanda = {
-        tipo: 'comanda',
-        titulo: 'COMANDA DE PEDIDO',
-        destino: 'cocina',
-        mesa: estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id),
-        ordenId: estado.mesaActiva.orden_id || 1,
-        comandaNumero: 1,
-        mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
-        fechaHora: formatearFechaHoraCR(new Date()),
-        items: itemsParaComanda.map(it => ({
-          cantidad: it.cantidad,
-          nombre: it.nombre,
-          curso: it.curso || 2,
-          destino: it.destino || 'cocina',
-          notas: it.notas || '',
-          origenMesa: it.origen_mesa_numero || null
-        }))
-      };
-      if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-        window.ejecutarImpresionDirectaTermica(ticketComanda, false);
+      if (itemsParaComanda && itemsParaComanda.length > 0) {
+        const itemsCocinaLocal = itemsParaComanda.filter(it => it.destino === 'cocina' || (!it.destino && it.categoria_id !== 4 && it.catId !== 4));
+        const itemsBarraLocal = itemsParaComanda.filter(it => it.destino === 'barra' || it.categoria_id === 4 || it.catId === 4);
+
+        if (itemsCocinaLocal.length > 0 && typeof window.ejecutarImpresionDirectaTermica === 'function') {
+          const ticketCocina = {
+            tipo: 'comanda',
+            titulo: 'COMANDA COCINA',
+            destino: 'cocina',
+            mesa: estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id),
+            ordenId: estado.mesaActiva.orden_id || 1,
+            comandaNumero: 1,
+            mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
+            fechaHora: formatearFechaHoraCR(new Date()),
+            items: itemsCocinaLocal.map(it => ({
+              cantidad: it.cantidad,
+              nombre: it.nombre,
+              curso: it.curso || 2,
+              destino: 'cocina',
+              notas: it.notas || '',
+              origenMesa: it.origen_mesa_numero || null
+            }))
+          };
+          window.ejecutarImpresionDirectaTermica(ticketCocina, false);
+        }
+
+        if (itemsBarraLocal.length > 0 && typeof window.ejecutarImpresionDirectaTermica === 'function') {
+          const ticketBarra = {
+            tipo: 'comanda',
+            titulo: 'COMANDA BARRA',
+            destino: 'barra',
+            mesa: estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id),
+            ordenId: estado.mesaActiva.orden_id || 1,
+            comandaNumero: 1,
+            mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
+            fechaHora: formatearFechaHoraCR(new Date()),
+            items: itemsBarraLocal.map(it => ({
+              cantidad: it.cantidad,
+              nombre: it.nombre,
+              curso: it.curso || 1,
+              destino: 'barra',
+              notas: it.notas || '',
+              origenMesa: it.origen_mesa_numero || null
+            }))
+          };
+          window.ejecutarImpresionDirectaTermica(ticketBarra, false);
+        }
       }
     }
 
@@ -11100,27 +11130,55 @@ window.reimprimirComandaMesa = async function(mesaId = null) {
       }
       return;
     }
-    const ticketComanda = {
-      tipo: 'comanda',
-      titulo: 'REIMPRESION COMANDA',
-      destino: 'cocina',
-      mesa: (mesa && mesa.numero) ? (mesa.numero.startsWith('Mesa') ? mesa.numero : 'Mesa ' + mesa.numero) : ('Mesa ' + mId),
-      ordenId: (mesa && (mesa.orden_id || mesa.ordenId)) || 1,
-      comandaNumero: 1,
-      mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (mesa && mesa.mesero) || 'Personal de Turno',
-      fechaHora: formatearFechaHoraCR(new Date()),
-      items: items.map(it => ({
-        cantidad: it.cantidad || 1,
-        nombre: it.nombre || it.nombre_producto || 'Producto',
-        curso: it.curso || 2,
-        destino: it.destino || 'cocina',
-        notas: it.notas || '',
-        origenMesa: it.origen_mesa_numero || null
-      }))
-    };
-    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-      return await window.ejecutarImpresionDirectaTermica(ticketComanda, false);
+    // Separar items por destino para no imprimir comandas vacías ni mezclar barra y cocina
+    const itemsCocina = items.filter(it => it.destino === 'cocina' || (!it.destino && it.categoria_id !== 4 && it.catId !== 4));
+    const itemsBarra = items.filter(it => it.destino === 'barra' || it.categoria_id === 4 || it.catId === 4);
+
+    let resFinal = null;
+    if (itemsCocina.length > 0 && typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      const ticketCocina = {
+        tipo: 'comanda',
+        titulo: 'REIMPRESION COMANDA COCINA',
+        destino: 'cocina',
+        mesa: (mesa && mesa.numero) ? (mesa.numero.startsWith('Mesa') ? mesa.numero : 'Mesa ' + mesa.numero) : ('Mesa ' + mId),
+        ordenId: (mesa && (mesa.orden_id || mesa.ordenId)) || 1,
+        comandaNumero: 1,
+        mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (mesa && mesa.mesero) || 'Personal de Turno',
+        fechaHora: formatearFechaHoraCR(new Date()),
+        items: itemsCocina.map(it => ({
+          cantidad: it.cantidad || 1,
+          nombre: it.nombre || it.nombre_producto || 'Producto',
+          curso: it.curso || 2,
+          destino: 'cocina',
+          notas: it.notas || '',
+          origenMesa: it.origen_mesa_numero || null
+        }))
+      };
+      resFinal = await window.ejecutarImpresionDirectaTermica(ticketCocina, false);
     }
+
+    if (itemsBarra.length > 0 && typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      const ticketBarra = {
+        tipo: 'comanda',
+        titulo: 'REIMPRESION COMANDA BARRA',
+        destino: 'barra',
+        mesa: (mesa && mesa.numero) ? (mesa.numero.startsWith('Mesa') ? mesa.numero : 'Mesa ' + mesa.numero) : ('Mesa ' + mId),
+        ordenId: (mesa && (mesa.orden_id || mesa.ordenId)) || 1,
+        comandaNumero: 1,
+        mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (mesa && mesa.mesero) || 'Personal de Turno',
+        fechaHora: formatearFechaHoraCR(new Date()),
+        items: itemsBarra.map(it => ({
+          cantidad: it.cantidad || 1,
+          nombre: it.nombre || it.nombre_producto || 'Producto',
+          curso: it.curso || 1,
+          destino: 'barra',
+          notas: it.notas || '',
+          origenMesa: it.origen_mesa_numero || null
+        }))
+      };
+      resFinal = await window.ejecutarImpresionDirectaTermica(ticketBarra, false);
+    }
+    return resFinal;
   } catch (e) {
     console.error('Error al reimprimir comanda:', e);
   }
