@@ -168,17 +168,20 @@ function enviarAPuertoTCP(ip, puerto, rawData, timeoutMs = 8000) {
  * Despachador dual-stack con respaldo automático
  */
 async function despacharAImpresoraDualStack(ip, puerto, buffer, titulo) {
-  // 1. Intentar ePOS XML primero
-  const resEpos = await enviarAePOSPrint(ip, buffer, 3500);
-  if (resEpos.ok) {
-    console.log(`   ✅ [IMPRESO FÍSICAMENTE] ${titulo} despachado vía ePOS XML en ${ip}\n`);
+  const t0 = Date.now();
+  // 1. Intentar RAW TCP 9100 primero (ultra rápido: 4 milisegundos en red local)
+  const resTcp = await enviarAPuertoTCP(ip, puerto, buffer, 4000);
+  if (resTcp.ok) {
+    const elapsed = Date.now() - t0;
+    console.log(`   ✅ [IMPRESIÓN INMEDIATA] ${titulo} impreso en ${elapsed}ms vía RAW TCP en ${ip}:${puerto}\n`);
     return;
   }
 
-  // 2. Si no responde ePOS, enviar por RAW TCP 9100
-  const resTcp = await enviarAPuertoTCP(ip, puerto, buffer, 6000);
-  if (resTcp.ok) {
-    console.log(`   ✅ [IMPRESO FÍSICAMENTE] ${titulo} despachado vía RAW TCP en ${ip}:${puerto}\n`);
+  // 2. Si no responde por TCP, intentar ePOS XML
+  const resEpos = await enviarAePOSPrint(ip, buffer, 3000);
+  if (resEpos.ok) {
+    const elapsed = Date.now() - t0;
+    console.log(`   ✅ [IMPRESIÓN INMEDIATA] ${titulo} impreso en ${elapsed}ms vía ePOS XML en ${ip}\n`);
   } else {
     console.error(`   ❌ [ERROR DE IMPRESIÓN] No se pudo imprimir en ${ip}:${puerto}: ${resTcp.mensaje || resTcp.error}\n`);
   }

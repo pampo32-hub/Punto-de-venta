@@ -1183,18 +1183,23 @@ function enviarAePOSPrint(ip, rawData, timeoutMs = 7000) {
 
 /**
  * Despachador universal de red:
- * 1. Intenta Epson ePOS-Print XML (ideal para TM-T88VI-i y TM inteligentes)
- * 2. Si la impresora no es ePOS, utiliza socket TCP directo al puerto 9100 estándar
+ * 1. Utiliza socket TCP directo al puerto 9100 estándar ESC/POS (ultrarrápido, ~4ms)
+ * 2. Si la impresora requiere ePOS XML, utiliza fallback a ePOS-Print
  */
 async function enviarAImpresoraRed(ip, puerto, rawData) {
-  // 1. Intentar ePOS-Print primero (impresión inmediata de alta confiabilidad)
-  const resEPOS = await enviarAePOSPrint(ip, rawData, 4000);
+  // 1. Intentar TCP 9100 primero (tiempo de respuesta inmediato < 10ms)
+  const resTCP = await enviarAPuertoTCP(ip, puerto, rawData, 3500);
+  if (resTCP.ok) {
+    return resTCP;
+  }
+
+  // 2. Si no responde por TCP estándar, intentar Epson ePOS-Print
+  const resEPOS = await enviarAePOSPrint(ip, rawData, 3000);
   if (resEPOS.ok) {
     return resEPOS;
   }
 
-  // 2. Si no responde por ePOS, enviar por puerto TCP 9100 estándar ESC/POS
-  return await enviarAPuertoTCP(ip, puerto, rawData);
+  return resTCP;
 }
 
 // Cola de impresión secuencial (FIFO) para evitar colisiones cuando se envían múltiples tickets a la misma IP
@@ -1209,7 +1214,7 @@ function encolarEnvioTCP(ip, puerto, rawData) {
     .then(async () => {
       const res = await enviarAImpresoraRed(ip, puerto, rawData);
       // Breve pausa entre tickets para permitir el corte de papel y vaciado del buffer de la impresora
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 150));
       return res;
     });
 
@@ -1244,6 +1249,12 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   historialImpresiones.unshift(registro);
   if (historialImpresiones.length > MAX_HISTORIAL) historialImpresiones.pop();
 
+  // ⚡ EMITIR POR SOCKET.IO INMEDIATAMENTE (0ms delay)
+  // Permite que el agente de impresión en tu laptop reciba y corte el ticket en < 10ms
+  if (io) {
+    io.emit('ticket_impreso', registro);
+  }
+
   // Despacho directo: USB / Windows Spooler o TCP Red
   if (cfg.tipo === 'usb' || (!cfg.ip && process.platform === 'win32')) {
     const winPrinterName = cfg.windowsPrinter || cfg.nombre || 'POS-80-Series';
@@ -1267,11 +1278,6 @@ async function procesarImpresion({ destinoImpresora = 'caja', ticketInfo, io = n
   } else {
     registro.estado = 'simulado';
     registro.detalleConexion = 'Simulacion virtual';
-  }
-
-  // Emitir evento por Socket.IO en tiempo real a las terminales para feedback instantáneo
-  if (io) {
-    io.emit('ticket_impreso', registro);
   }
 
   return registro;
