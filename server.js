@@ -870,6 +870,7 @@ app.post('/api/admin/usuarios/:id/liberar-sesion', async (req, res) => {
 
     await dbRun('UPDATE Usuarios SET ultimo_token_sesion = NULL, ultimo_dispositivo_id = NULL WHERE id = ?', [id]);
     io.emit('usuario_sesion_liberada', { usuarioId: Number(id) });
+    io.emit('usuario_sesion_cerrada', { usuarioId: Number(id) });
 
     res.json({ ok: true, message: 'Sesión liberada exitosamente.' });
   } catch (e) {

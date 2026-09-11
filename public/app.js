@@ -1939,6 +1939,27 @@ try {
         }
       }
     });
+    socket.on('usuario_sesion_liberada', (d) => {
+      const u = estado.usuarioActual;
+      if (u && Number(u.id) === Number(d.usuarioId)) {
+        if (typeof mostrarNotificacionCentro === 'function') {
+          mostrarNotificacionCentro('🔒 Tu sesión ha sido desconectada remotamente por un Administrador.', 'warning');
+        } else {
+          alert('🔒 Tu sesión ha sido desconectada remotamente por un Administrador.');
+        }
+        if (typeof cerrarSesion === 'function') {
+          cerrarSesion(false);
+        }
+      }
+    });
+    socket.on('usuario_sesion_cerrada', (d) => {
+      const u = estado.usuarioActual;
+      if (u && Number(u.id) === Number(d.usuarioId)) {
+        if (typeof cerrarSesion === 'function') {
+          cerrarSesion(false);
+        }
+      }
+    });
     socket.on('dispositivo_revocado', (d) => {
       if (typeof obtenerDeviceToken === 'function' && d.device_token === obtenerDeviceToken()) {
         const u = estado.usuarioActual;
