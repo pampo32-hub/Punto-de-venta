@@ -9468,7 +9468,7 @@ app.post('/api/impresoras/imprimir-directo', async (req, res) => {
         tip_pool: ticketVisual.tip_pool || [],
         total_propinas: ticketVisual.total_propinas || 0
       });
-    } else {
+    } else if (ticketVisual.tipo === 'liquidacion' || !ticketVisual.tipo) {
       tInfo = printerService.generarTicketLiquidacion({
         negocio: ticketVisual.negocio,
         ordenId: ticketVisual.ordenId,

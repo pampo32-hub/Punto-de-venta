@@ -9211,8 +9211,8 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
           origenMesa: it.origen_mesa_numero || null
         }))
       };
-      if (typeof window.mostrarVisorTicketTermico === 'function') {
-        window.mostrarVisorTicketTermico(ticketComanda, true);
+      if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+        window.ejecutarImpresionDirectaTermica(ticketComanda, false);
       }
     }
 
@@ -10386,7 +10386,9 @@ window.generarCorteX = async function() {
       total_propinas: data.total_propinas || 0
     };
 
-    window.mostrarVisorTicketTermico(ticketData);
+    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      window.ejecutarImpresionDirectaTermica(ticketData, false);
+    }
   } catch (e) {
     alert('❌ Error al generar Corte X: ' + e.message);
   }
@@ -10486,7 +10488,9 @@ window.procesarCorteXCiego = async function() {
       mostrarNotificacionCentro(`✅ Arqueo a ciegas completado: ${data.estado_cuadre}`, 'success');
     }
 
-    window.mostrarVisorTicketTermico(data);
+    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      window.ejecutarImpresionDirectaTermica(data, false);
+    }
   } catch (e) {
     alert('❌ Error al procesar Corte X a ciegas: ' + e.message);
   }
@@ -10837,7 +10841,9 @@ window.ejecutarCierreZ = async function() {
       notas: data.notas
     };
 
-    window.mostrarVisorTicketTermico(ticketData);
+    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      window.ejecutarImpresionDirectaTermica(ticketData, false);
+    }
     await cargarCajaDesdeBackend();
 
     setTimeout(async () => {
@@ -11003,8 +11009,10 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       throw new Error(data.error || 'Error al generar la pre-factura.');
     }
 
-    if (data.ticket && typeof window.mostrarVisorTicketTermico === 'function') {
-      window.mostrarVisorTicketTermico(data.ticket, false);
+    if (data.ticket) {
+      if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+        window.ejecutarImpresionDirectaTermica(data.ticket, false);
+      }
     }
 
     
@@ -12096,10 +12104,7 @@ window.ejecutarCobroFinal = async function() {
       }
 
       if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-        window.ejecutarImpresionDirectaTermica(ticketFinal);
-      }
-      if (typeof window.mostrarVisorTicketTermico === 'function') {
-        window.mostrarVisorTicketTermico(ticketFinal, true);
+        window.ejecutarImpresionDirectaTermica(ticketFinal, false);
       }
 
       mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
@@ -13225,10 +13230,7 @@ window.reimprimirTicketPersonaSplit = function(idx) {
   if (!p) return;
   if (p.ticket) {
     if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
-      window.ejecutarImpresionDirectaTermica(p.ticket);
-    }
-    if (typeof window.mostrarVisorTicketTermico === 'function') {
-      window.mostrarVisorTicketTermico(p.ticket, false);
+      window.ejecutarImpresionDirectaTermica(p.ticket, false);
     }
   } else {
     mostrarNotificacionCentro(`⚠️ No se encontró comprobante guardado para ${p.nombre}`, 'warning');
@@ -18531,10 +18533,18 @@ function sonarBeepImpresora() {
 /**
  * Renderiza un ticket térmico de 80mm en el visor virtual
  */
-window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false) {
+window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, forzarVisor = false) {
   if (!ticketData) return;
   window.ticketActivoParaImprimir = ticketData;
   window.ticketTermicoActual = ticketData;
+
+  // Si se solicita auto-imprimir (ej: al cobrar o liquidar), despachar directo a térmica sin abrir modal en pantalla
+  if (autoImprimir && !forzarVisor) {
+    if (typeof window.ejecutarImpresionDirectaTermica === 'function') {
+      window.ejecutarImpresionDirectaTermica(ticketData, false);
+    }
+    return;
+  }
 
   const modal = document.getElementById('modalVisorTicket');
   const container = document.getElementById('visorTicketContenido') || document.getElementById('receiptContentHtml');
@@ -19467,9 +19477,14 @@ window.cerrarModalVisorTicket = function() {
   }
 };
 
-window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso = true) {
+window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso = false) {
   const tData = ticketData || window.ticketTermicoActual || window.ticketActivoParaImprimir;
-  if (!tData) return;
+  if (!tData) return { ok: false, error: 'No hay datos de ticket para imprimir' };
+
+  window.ticketTermicoActual = tData;
+  window.ticketActivoParaImprimir = tData;
+
+  const destino = tData.destino || (tData.tipo === 'comanda' ? 'cocina' : 'caja');
 
   try {
     const res = await fetch('/api/impresoras/imprimir-directo', {
@@ -19477,17 +19492,30 @@ window.ejecutarImpresionDirectaTermica = async function(ticketData, silencioso =
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ticketVisual: tData,
-        destino: tData.destino || (tData.tipo === 'comanda' ? 'cocina' : 'caja')
+        destino
       })
     });
     const data = await res.json().catch(() => null);
-    if (!silencioso && res.ok && data?.ok) {
+
+    if (res.ok && data?.ok) {
       const reg = data.registro || {};
-      const msg = reg.detalleConexion || data.mensaje || 'Ticket impreso correctamente';
-      mostrarNotificacionCentro(`🖨️ ${msg}`, 'success');
+      const tituloTicket = tData.titulo || (tData.tipo === 'prefactura' ? 'Pre-cuenta' : (tData.tipo === 'cierre_z' ? 'Cierre Z' : (tData.tipo === 'corte_x' || tData.tipo === 'corte_x_ciego' ? 'Corte X' : 'Factura')));
+      const nombreDestino = (reg.destinoImpresora || destino || 'CAJA').toUpperCase();
+      const detalle = reg.estado === 'impreso'
+        ? `🖨️ ${tituloTicket} despachado a impresora térmica (${nombreDestino})`
+        : `🖨️ ${tituloTicket} registrado (${reg.detalleConexion || 'simulado'})`;
+      mostrarNotificacionCentro(detalle, 'success');
+      return { ok: true, data };
+    } else {
+      const errMsg = data?.error || 'No se pudo conectar con la impresora térmica';
+      console.warn('Advertencia en impresora térmica:', errMsg);
+      mostrarNotificacionCentro(`⚠️ Impresora: ${errMsg}. La operación continuó con éxito.`, 'warning');
+      return { ok: false, error: errMsg };
     }
   } catch (e) {
-    console.warn('Error al imprimir directo en segundo plano:', e);
+    console.warn('Error al despachar a impresora térmica:', e);
+    mostrarNotificacionCentro(`⚠️ No se pudo enviar a la impresora (${e.message}). La operación continuó con éxito.`, 'warning');
+    return { ok: false, error: e.message };
   }
 };
 
