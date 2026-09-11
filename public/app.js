@@ -6521,14 +6521,18 @@ window.agregarAlTicketOneTap = async function(prodId) {
 
     const prodCatId = Number(prod.categoria_id !== undefined ? prod.categoria_id : prod.catId);
     const catObj = (estado.categorias || []).find(c => Number(c.id) === prodCatId);
-    const catEsBarra = catObj && (catObj.destino === 'barra' || /cerveza|licor|coctel|shot|trago|bebida|cafe|café|natural|barra/i.test(catObj.nombre || ''));
+    const catEsBarra = Boolean(catObj && (catObj.destino === 'barra' || /cerveza|licor|coctel|shot|trago|bebida|cafe|café|natural|barra/i.test(catObj.nombre || '')));
+    const catEsCocina = Boolean(catObj && (catObj.destino === 'cocina' || /comida|entrada|boca|postre|plato|fuerte|sopa|marisco|ceviche|casado|cocina/i.test(catObj.nombre || '')));
 
     const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro|cacique|pacha|cuarta|centenario|chivas|johnny|buchanans|jagermeister|baileys|kahlua|malibu|amaretto|campari|aperol|fernet|anis|absolut|bacardi|morgan|havana|cuervo|don\s*julio|herradura|patron|tanqueray|bombay|beefeater|red\s*bull|monster|gatorade|tropical|chelada|michelada|mojito|margarita|daiquiri|caipiriña|piña\s*colada|cuba\s*libre)\b/i.test(prod.nombre || '') || /rock\s*ice/i.test(prod.nombre || '');
 
-    if (catEsBarra || esBebidaKeyword || itemDest === 'barra' || prod.es_licor) {
+    if (itemDest === 'barra' || prod.es_licor || catEsBarra || esBebidaKeyword) {
       itemDest = 'barra';
       itemCurso = 1;
-    } else if (!itemDest) {
+    } else if (itemDest === 'cocina' || catEsCocina) {
+      itemDest = 'cocina';
+      itemCurso = itemCurso || 2;
+    } else {
       itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
     }
 

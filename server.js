@@ -4056,23 +4056,20 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
     const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro|cacique|pacha|cuarta|centenario|chivas|johnny|buchanans|jagermeister|baileys|kahlua|malibu|amaretto|campari|aperol|fernet|anis|absolut|bacardi|morgan|havana|cuervo|don\s*julio|herradura|patron|tanqueray|bombay|beefeater|red\s*bull|monster|gatorade|tropical|chelada|michelada|mojito|margarita|daiquiri|caipiriña|piña\s*colada|cuba\s*libre)\b/i.test(nombre || '') || /rock\s*ice/i.test(nombre || '');
 
-    const esBebidaCat = Boolean(
-      (prodDb && (prodDb.destino === 'barra' || prodDb.es_licor || [4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 25, 26, 30, 31, 32, 104, 105, 106].includes(Number(prodDb.categoria_id)))) ||
-      (it && it.destino === 'barra') ||
-      (catDb && (catDb.destino === 'barra' || /cerveza|licor|coctel|shot|trago|bebida|cafe|café|natural|barra/i.test(catDb.nombre || '')))
-    );
+    const catEsBarra = Boolean(catDb && (catDb.destino === 'barra' || /cerveza|licor|coctel|shot|trago|bebida|cafe|café|natural|barra/i.test(catDb.nombre || '')));
+    const catEsCocina = Boolean(catDb && (catDb.destino === 'cocina' || /comida|entrada|boca|postre|plato|fuerte|sopa|marisco|ceviche|casado|cocina/i.test(catDb.nombre || '')));
 
-    if (esBebidaCat || esBebidaKeyword) {
+    const prodEsBarra = Boolean(prodDb && (prodDb.destino === 'barra' || prodDb.es_licor));
+    const prodEsCocina = Boolean(prodDb && prodDb.destino === 'cocina');
+
+    if (prodEsBarra || catEsBarra || esBebidaKeyword || it.destino === 'barra') {
       destino = 'barra';
       curso = 1;
-    } else if (prodDb && prodDb.destino) {
-      destino = prodDb.destino;
-    } else if (!destino) {
-      if (curso === 1 || curso === 5 || curso === 6) {
-        destino = 'barra';
-      } else {
-        destino = 'cocina';
-      }
+    } else if (prodEsCocina || catEsCocina || it.destino === 'cocina') {
+      destino = 'cocina';
+      curso = curso || 2;
+    } else {
+      destino = (curso === 1 || curso === 5 || curso === 6) ? 'barra' : 'cocina';
     }
 
     if (!curso) {
