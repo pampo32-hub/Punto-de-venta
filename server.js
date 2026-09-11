@@ -8141,11 +8141,13 @@ app.get('/api/admin/inventario/:id/kardex', verificarAdmin, async (req, res) => 
 // --- SUGERENCIA DE REABASTECIMIENTO / COMPRAS ---
 app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, res) => {
   try {
+    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
-      WHERE stock_actual <= stock_minimo 
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+        AND stock_actual <= stock_minimo 
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
-    `);
+    `, [negocioId, negocioId]);
 
     let totalPresupuesto = 0;
     const items = insumosCriticos.map(ins => {

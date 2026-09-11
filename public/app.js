@@ -18637,8 +18637,9 @@ window.cerrarModalKardex = function() {
 window.cargarSugerenciaComprasBadge = async function() {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch('/api/admin/inventario/sugerencia-compras', {
-      headers: { 'x-user-rol': rol }
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/admin/inventario/sugerencia-compras?negocio_id=${nid}`, {
+      headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) }
     });
     if (res.ok) {
       const data = await res.json();
@@ -18658,8 +18659,9 @@ window.cargarSugerenciaComprasBadge = async function() {
 window.cargarSugerenciaCompras = async function() {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const res = await fetch('/api/admin/inventario/sugerencia-compras', {
-      headers: { 'x-user-rol': rol }
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/admin/inventario/sugerencia-compras?negocio_id=${nid}`, {
+      headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) }
     });
     if (!res.ok) throw new Error('Error al consultar sugerencia de compras');
     const data = await res.json();
