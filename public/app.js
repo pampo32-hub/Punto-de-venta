@@ -12004,7 +12004,6 @@ function calcularCobroDolares() {
   const txtTC = document.getElementById('txtTipoCambioUSD');
   const tc = txtTC ? (parseFloat(txtTC.value) || 520) : 520;
   const totalUSD = totalCRC > 0 ? (totalCRC / tc) : 0;
-  
   const elTotUSD = document.getElementById('cobroTotalUSDDisplay');
   if (elTotUSD) elTotUSD.textContent = `$ ${totalUSD.toFixed(2)}`;
 
