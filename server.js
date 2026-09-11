@@ -1349,6 +1349,122 @@ app.get('/api/negocio/actual/modulos', async (req, res) => {
   }
 });
 
+// ============================================================================
+// CARACTERÍSTICAS DEL LOCAL (FEATURE FLAGS POR NEGOCIO)
+// ============================================================================
+const CATALOGO_CARACTERISTICAS = [
+  { id: 'servicio_10', nombre: 'Cobro de 10% Servicio de Salón', categoria: 'cobro', icono: '🍽️', descripcion: 'Recargo automático del 10% legal de servicio/propinas en mesas.' },
+  { id: 'desglose_iva_13', nombre: 'Desglose de IVA (13%)', categoria: 'cobro', icono: '🧾', descripcion: 'Calcula y desglosa el 13% de impuesto de valor agregado en cuentas.' },
+  { id: 'descuentos_cortesias', nombre: 'Descuentos y Cortesías Manuales', categoria: 'cobro', icono: '🎟️', descripcion: 'Permite aplicar descuentos y cortesías con control de permisos.' },
+  { id: 'union_mesas', nombre: 'Unión y Fusión de Mesas', categoria: 'salon', icono: '🔗', descripcion: 'Permite unir múltiples mesas para grupos grandes y cuentas unificadas.' },
+  { id: 'division_cuentas', nombre: 'División de Cuentas (Split Bill)', categoria: 'salon', icono: '👥', descripcion: 'Permite pagar por partes iguales, por comensal o por ítems.' },
+  { id: 'liberar_mesas_pin', nombre: 'Liberación de Mesas con PIN', categoria: 'salon', icono: '🔒', descripcion: 'Exige PIN de administrador para liberar mesas con saldo pendiente.' },
+  { id: 'impresion_auto_cobro', nombre: 'Impresión Automática al Cobrar', categoria: 'impresion', icono: '🖨️', descripcion: 'Dispara la impresión del ticket fiscal o comprobante tras liquidar.' },
+  { id: 'impresion_precuenta', nombre: 'Impresión de Pre-Cuenta / Pre-Factura', categoria: 'impresion', icono: '📄', descripcion: 'Permite imprimir el estado de cuenta previo para revisión del cliente.' },
+  { id: 'despacho_cocina_barra', nombre: 'Comandas a Cocina & Barra (KDS)', categoria: 'cocina', icono: '🍳', descripcion: 'Envía los ítems ordenados a las pantallas o impresoras de cocina y bar.' },
+  { id: 'apertura_cajon_gaveta', nombre: 'Apertura Automática de Cajón', categoria: 'caja', icono: '💵', descripcion: 'Envía pulso eléctrico al cajón de dinero al registrar cobros en efectivo.' },
+  { id: 'happy_hour_auto', nombre: 'Happy Hour Automático Programado', categoria: 'ventas', icono: '🍸', descripcion: 'Aplica 2x1 o tarifas especiales automáticamente según horario.' },
+  { id: 'menu_digital_qr', nombre: 'Menú Digital Interactivo con QR', categoria: 'ventas', icono: '📱', descripcion: 'Permite a los clientes ver el menú y ordenar desde su móvil vía código QR.' },
+  { id: 'kardex_tiempo_real', nombre: 'Descuento de Kárdex en Tiempo Real', categoria: 'inventario', icono: '📦', descripcion: 'Rebaja inventario e insumos de recetas automáticamente al vender.' },
+  { id: 'alertas_stock_critico', nombre: 'Alertas de Stock Crítico / Mínimo', categoria: 'inventario', icono: '⚠️', descripcion: 'Avisa visualmente cuando un producto o insumo alcanza stock mínimo.' },
+  { id: 'cierre_x_ciegas', nombre: 'Corte / Cierre X a Ciegas (Arqueo Parcial)', categoria: 'seguridad', icono: '🙈', descripcion: 'Habilita el arqueo ciego parcial donde el cajero cuenta y declara el dinero físico sin ver los montos esperados del sistema.' },
+  { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🔒', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real en el cierre final Z.' }
+];
+
+app.get('/api/dev/caracteristicas/catalogo', (req, res) => {
+  res.json(CATALOGO_CARACTERISTICAS);
+});
+
+app.get('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
+  try {
+    const neg = await dbGet('SELECT id, nombre, moneda, caracteristicas_activas FROM Negocios WHERE id = ?', [req.params.id]);
+    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
+    let activas = neg.caracteristicas_activas || 'all';
+    if (activas !== 'all') {
+      try { activas = JSON.parse(activas); } catch (_) {}
+    }
+    res.json({
+      ok: true,
+      negocio: neg,
+      caracteristicasActivas: activas,
+      catalogo: CATALOGO_CARACTERISTICAS
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/dev/negocios/:id/caracteristicas', async (req, res) => {
+  try {
+    const { caracteristicas_activas } = req.body;
+    const valorFinal = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
+    await dbRun('UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?', [valorFinal, req.params.id]);
+    
+    let parsed = valorFinal;
+    try { parsed = JSON.parse(valorFinal); } catch (_) {}
+
+    io.emit('negocio_caracteristicas_actualizadas', {
+      negocioId: Number(req.params.id),
+      caracteristicas_activas: parsed
+    });
+
+    res.json({ ok: true, message: 'Características actualizadas correctamente', caracteristicas_activas: parsed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/caracteristicas', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.query.negocioId || 1;
+    const neg = await dbGet('SELECT id, nombre, moneda, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId]);
+    if (!neg) {
+      return res.json({
+        ok: true,
+        nombre: 'Mi Restaurante',
+        moneda: 'CRC',
+        catalogo: CATALOGO_CARACTERISTICAS,
+        caracteristicasActivas: 'all'
+      });
+    }
+    let activas = neg.caracteristicas_activas || 'all';
+    if (activas !== 'all') {
+      try { activas = JSON.parse(activas); } catch (_) {}
+    }
+    res.json({
+      ok: true,
+      nombre: neg.nombre,
+      moneda: neg.moneda,
+      catalogo: CATALOGO_CARACTERISTICAS,
+      caracteristicasActivas: activas
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/caracteristicas', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.body.negocioId || 1;
+    const { caracteristicas_activas } = req.body;
+    const valorFinal = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
+    await dbRun('UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?', [valorFinal, negocioId]);
+
+    let parsed = valorFinal;
+    try { parsed = JSON.parse(valorFinal); } catch (_) {}
+
+    io.emit('negocio_caracteristicas_actualizadas', {
+      negocioId: Number(negocioId),
+      caracteristicas_activas: parsed
+    });
+
+    res.json({ ok: true, message: 'Características actualizadas correctamente', caracteristicas_activas: parsed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
 // Usuarios Globales (Developer ve todos los usuarios del sistema)
 app.get('/api/dev/usuarios', async (req, res) => {
   try {
