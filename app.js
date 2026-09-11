@@ -11077,11 +11077,11 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       const descHH = Number(mesaActiva?.descuento_happy_hour || 0);
       const descEsp = Number(mesaActiva?.descuento_monto || 0);
       const baseImp = Math.max(0, subtotal - descHH - descEsp);
-      const iva = Math.round(baseImp * 0.13);
-      const servicio = Math.round(baseImp * 0.10);
+      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+      const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+      const iva = tieneIva13 ? Math.round(baseImp * 0.13) : 0;
+      const servicio = tieneServ10 ? Math.round(baseImp * 0.10) : 0;
       const total = baseImp + iva + servicio;
-      const prop10 = Math.round(subtotal * 0.10);
-      const prop15 = Math.round(subtotal * 0.15);
 
       ticketGenerado = {
         tipo: 'prefactura',
@@ -11111,9 +11111,7 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
         descuentoMonto: descEsp,
         servicio,
         iva,
-        total,
-        propina10: prop10,
-        propina15: prop15
+        total
       };
     }
 
@@ -18862,9 +18860,9 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       }
     }
 
-    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
-    const prop10 = Math.round(subNum * 0.10);
-    const prop15 = Math.round(subNum * 0.15);
+    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0 && (!tieneServ10 || servNum > 0) && (!tieneIva13 || ivaNum > 0))
+      ? Math.round(Number(ticketData.total))
+      : (baseImp + servNum + ivaNum);
 
     const preciosConImp = (ticketData.preciosConImpuestos !== false && ticketData.precios_con_impuestos !== false);
     const montoProds = ticketData.subtotalProductos || (subCalculado > 0 ? subCalculado : subNum);
@@ -18927,13 +18925,13 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
           </div>
         ` : ''}
         ${!preciosConImp ? `
-          ${servNum > 0 ? `
+          ${(servNum > 0 && tieneServ10) ? `
             <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
               <span>10% Servicio (Ley):</span>
               <span style="font-weight:900;">+${formatCRCSinDecimales(servNum)}</span>
             </div>
           ` : ''}
-          ${ivaNum > 0 ? `
+          ${(ivaNum > 0 && tieneIva13) ? `
             <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
               <span>13% I.V.A.:</span>
               <span style="font-weight:900;">+${formatCRCSinDecimales(ivaNum)}</span>
@@ -18947,19 +18945,19 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
         <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      ${(preciosConImp && (servNum > 0 || ivaNum > 0)) ? `
+      ${(preciosConImp && ((servNum > 0 && tieneServ10) || (ivaNum > 0 && tieneIva13))) ? `
       <div style="margin:8px 0; padding:6px 8px; border:1px dashed #4b5563; border-radius:4px; font-size:11px; background:#f9fafb; color:#111827;">
         <div style="text-align:center; font-weight:900; margin-bottom:4px; letter-spacing:0.3px;">[ IMPUESTOS INCLUIDOS EN EL PRECIO ]</div>
         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Base Imponible:</span>
           <span style="font-weight:800;">${formatCRCSinDecimales(ticketData.baseInformativa !== undefined ? ticketData.baseInformativa : Math.max(0, totalNum - servNum - ivaNum))}</span>
         </div>
-        ${servNum > 0 ? `
+        ${(servNum > 0 && tieneServ10) ? `
         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>10% Servicio Salón:</span>
           <span style="font-weight:800;">${formatCRCSinDecimales(servNum)}</span>
         </div>` : ''}
-        ${ivaNum > 0 ? `
+        ${(ivaNum > 0 && tieneIva13) ? `
         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
           <span style="font-weight:800;">${formatCRCSinDecimales(ivaNum)}</span>
@@ -18967,19 +18965,11 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       </div>
       ` : ''}
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      <div style="margin:10px 0 6px 0; text-align:center; color:#000000;">
-        <div style="font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">PROPINA VOLUNTARIA SUGERIDA</div>
-        <div style="border:1px dashed #000000; padding:5px 8px; border-radius:4px; display:flex; justify-content:space-around; font-size:12px; font-weight:900;">
-          <span>10%: ${formatCRCSinDecimales(prop10)}</span>
-          <span>15%: ${formatCRCSinDecimales(prop15)}</span>
-        </div>
-      </div>
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:8px 0 2px 0;">------------------------------------------------</div>
       <div style="text-align:center; font-size:11px; font-weight:800; color:#000000; margin:2px 0;">Firma / Aprobación de Cuenta</div>
       <div class="receipt-dashed-line" style="color:#000000; font-weight:900; margin:2px 0 8px 0;">------------------------------------------------</div>
       <div class="receipt-footer" style="text-align:center; font-size:11px; font-weight:800; color:#000000; line-height:1.35; margin-top:6px;">
         <div>Comprobante preliminar para revisión del cliente.</div>
-        <div>Solicite su Factura Electrónica al pagar.</div>
         <div style="margin-top:3px; font-weight:900;">¡Muchas gracias por su preferencia!</div>
       </div>
     `;
@@ -19515,7 +19505,9 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       }
     }
 
-    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0) ? Math.round(Number(ticketData.total)) : (baseImp + servNum + ivaNum);
+    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0 && (!tieneServ10 || servNum > 0) && (!tieneIva13 || ivaNum > 0))
+      ? Math.round(Number(ticketData.total))
+      : (baseImp + servNum + ivaNum);
     const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;
     const montoCambio = Number(ticketData.cambio) >= 0 ? Math.round(Number(ticketData.cambio)) : Math.max(0, montoRec - totalNum);
 
@@ -19578,13 +19570,13 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
           </div>
         ` : ''}
         ${!preciosConImp ? `
-          ${servNum > 0 ? `
+          ${(servNum > 0 && tieneServ10) ? `
             <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
               <span>10% Servicio (Ley):</span>
               <span style="font-weight:900;">+${formatCRCSinDecimales(servNum)}</span>
             </div>
           ` : ''}
-          ${ivaNum > 0 ? `
+          ${(ivaNum > 0 && tieneIva13) ? `
             <div class="receipt-calc-line" style="display:flex; justify-content:space-between; margin-bottom:2px;">
               <span>13% I.V.A.:</span>
               <span style="font-weight:900;">+${formatCRCSinDecimales(ivaNum)}</span>
@@ -19598,19 +19590,19 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
         <span style="font-size:22px; font-weight:900; letter-spacing:0.5px;">${formatCRCSinDecimales(totalNum)}</span>
       </div>
       <div class="receipt-double-line" style="color:#000000; font-weight:900; margin:4px 0;">================================================</div>
-      ${(preciosConImp && (servNum > 0 || ivaNum > 0)) ? `
+      ${(preciosConImp && ((servNum > 0 && tieneServ10) || (ivaNum > 0 && tieneIva13))) ? `
       <div style="margin:8px 0; padding:6px 8px; border:1px dashed #4b5563; border-radius:4px; font-size:11px; background:#f9fafb; color:#111827;">
         <div style="text-align:center; font-weight:900; margin-bottom:4px; letter-spacing:0.3px;">[ IMPUESTOS INCLUIDOS EN EL PRECIO ]</div>
         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>Base Imponible:</span>
           <span style="font-weight:800;">${formatCRCSinDecimales(ticketData.baseInformativa !== undefined ? ticketData.baseInformativa : Math.max(0, totalNum - servNum - ivaNum))}</span>
         </div>
-        ${servNum > 0 ? `
+        ${(servNum > 0 && tieneServ10) ? `
         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>10% Servicio Salón:</span>
           <span style="font-weight:800;">${formatCRCSinDecimales(servNum)}</span>
         </div>` : ''}
-        ${ivaNum > 0 ? `
+        ${(ivaNum > 0 && tieneIva13) ? `
         <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
           <span>13% I.V.A.:</span>
           <span style="font-weight:800;">${formatCRCSinDecimales(ivaNum)}</span>

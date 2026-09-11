@@ -5406,6 +5406,18 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
     let mesero = req.body.mesero || (req.user && req.user.nombre) || (mesa && mesa.mesero) || 'General';
     let numeroOrden = mesaId;
 
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden?.negocio_id || mesa.negocio_id || 1]);
+    const tieneServicio10 = negocio ? (
+      !negocio.caracteristicas_activas ||
+      negocio.caracteristicas_activas === 'all' ||
+      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
+    ) : true;
+    const tieneIVA13 = negocio ? (
+      !negocio.caracteristicas_activas ||
+      negocio.caracteristicas_activas === 'all' ||
+      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
+    ) : true;
+
     if (orden) {
       // Recalcular totales para asegurar que Happy Hour, IVA y servicio estén 100% al día
       if (typeof recalcularTotalesOrden === 'function') {
@@ -5425,8 +5437,8 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
         itemsOrden = itemsFromBody;
       }
       subtotal = orden.subtotal || 0;
-      iva = orden.iva_13 || 0;
-      servicio = orden.servicio_10 || 0;
+      iva = tieneIVA13 ? (orden.iva_13 || 0) : 0;
+      servicio = tieneServicio10 ? (orden.servicio_10 || 0) : 0;
       total = orden.total || 0;
       descuentoHH = orden.descuento_happy_hour || 0;
       clienteNombre = orden.cliente || clienteNombre;
@@ -5435,8 +5447,8 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
     } else if (itemsFromBody) {
       itemsOrden = itemsFromBody;
       subtotal = itemsOrden.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
-      iva = Math.round(subtotal * 0.13);
-      servicio = Math.round(subtotal * 0.10);
+      iva = tieneIVA13 ? Math.round(subtotal * 0.13) : 0;
+      servicio = tieneServicio10 ? Math.round(subtotal * 0.10) : 0;
       total = subtotal + iva + servicio;
     }
 
@@ -5444,7 +5456,6 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       return res.status(400).json({ error: 'La mesa no tiene consumos activos para generar pre-factura.' });
     }
 
-    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden?.negocio_id || mesa.negocio_id || 1]);
     const mesaNumero = mesa.numero || ('Mesa ' + mesa.id);
     const ahora = new Date().toISOString();
 
