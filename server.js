@@ -720,7 +720,31 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN) ──
+    // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN: BLOQUEO DE SEGUNDO LOGIN) ──
+    const sesionUnicaActiva = negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined);
+    const forzarCierrePrevio = req.body.forzar_cierre_previo === true;
+
+    if (!esRolExento && sesionUnicaActiva && u.ultimo_token_sesion && !forzarCierrePrevio) {
+      // Si el login es en el mismo dispositivo, permitimos reingreso (ej: refresh de página o reautenticación)
+      const mismoDispositivo = deviceToken && u.ultimo_dispositivo_id && (deviceToken === u.ultimo_dispositivo_id);
+      if (!mismoDispositivo) {
+        let nombreDispPrevio = 'otro dispositivo';
+        if (u.ultimo_dispositivo_id && negocio) {
+          const dispPrev = await dbGet('SELECT nombre_dispositivo FROM DispositivosAutorizados WHERE negocio_id = ? AND device_token = ?', [negocio.id, u.ultimo_dispositivo_id]);
+          if (dispPrev && dispPrev.nombre_dispositivo) {
+            nombreDispPrevio = `"${dispPrev.nombre_dispositivo}"`;
+          }
+        }
+        return res.status(409).json({
+          error: `⚠️ Ya existe una sesión activa con esta cuenta en ${nombreDispPrevio}. Cierra la sesión en el otro equipo antes de ingresar aquí.`,
+          sesion_ya_activa: true,
+          usuario_id: u.id,
+          usuario_nombre: u.nombre_completo,
+          dispositivo_previo: nombreDispPrevio
+        });
+      }
+    }
+
     const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const ahoraIso = new Date().toISOString();
 
@@ -729,8 +753,8 @@ app.post('/api/auth/login', async (req, res) => {
       [sessionId, ahoraIso, deviceToken || null, u.id]
     );
 
-    if (negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined)) {
-      // Notificar a otras terminales para invalidar sesiones concurrentes del mismo usuario
+    if (forzarCierrePrevio && sesionUnicaActiva) {
+      // Notificar a la terminal previa que su sesión fue forzada a cerrar
       io.emit('usuario_sesion_iniciada', {
         usuarioId: u.id,
         sessionId,
@@ -784,6 +808,69 @@ app.post('/api/auth/login', async (req, res) => {
       },
       negocio: negocioObj
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Cierre de Sesión Oficial (Logout)
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const usuarioId = req.usuario?.id || req.body.usuarioId || req.body.usuario_id;
+    if (usuarioId) {
+      await dbRun('UPDATE Usuarios SET ultimo_token_sesion = NULL, ultimo_dispositivo_id = NULL WHERE id = ?', [usuarioId]);
+      io.emit('usuario_sesion_cerrada', { usuarioId: Number(usuarioId) });
+    }
+    res.json({ ok: true, message: 'Sesión cerrada exitosamente.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Liberar / Desconectar Sesión de Usuario (Admin)
+app.post('/api/admin/usuarios/:id/liberar-sesion', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pinAdmin } = req.body;
+    const negocioId = req.headers['x-negocio-id'] || req.body.negocioId || 1;
+
+    let autorizado = false;
+    const rolesAdmin = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'];
+    if (req.usuario && rolesAdmin.includes((req.usuario.rol || '').toLowerCase())) {
+      autorizado = true;
+    } else if (rolesAdmin.includes((req.headers['x-user-rol'] || '').toLowerCase())) {
+      autorizado = true;
+    } else if (pinAdmin) {
+      const pinStr = String(pinAdmin).trim();
+      const adminUsers = await dbAll(
+        `SELECT * FROM Usuarios WHERE negocio_id = ? AND rol IN ('admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer') AND activo = 1`,
+        [negocioId]
+      );
+      for (const u of adminUsers) {
+        if (await verificarCredencialUsuario(u, pinStr)) {
+          autorizado = true;
+          break;
+        }
+      }
+      if (!autorizado) {
+        const devs = await dbAll(`SELECT * FROM Usuarios WHERE rol = 'developer' AND activo = 1`);
+        for (const d of devs) {
+          if (await verificarCredencialUsuario(d, pinStr)) {
+            autorizado = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!autorizado) {
+      return res.status(403).json({ error: 'No autorizado. Se requiere PIN de Administrador para liberar la sesión.' });
+    }
+
+    await dbRun('UPDATE Usuarios SET ultimo_token_sesion = NULL, ultimo_dispositivo_id = NULL WHERE id = ?', [id]);
+    io.emit('usuario_sesion_liberada', { usuarioId: Number(id) });
+
+    res.json({ ok: true, message: 'Sesión liberada exitosamente.' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

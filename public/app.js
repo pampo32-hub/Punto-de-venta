@@ -2542,6 +2542,23 @@ window.ejecutarLogin = async function() {
     });
     const data = await res.json();
     if (!res.ok) {
+      if (data.sesion_ya_activa) {
+        window._ultimoUsuarioIdBloqueado = data.usuario_id;
+        window._ultimoUsuarioNombreBloqueado = data.usuario_nombre;
+        const modalSesion = document.getElementById('modalAlertaSesionYaActiva');
+        if (modalSesion) {
+          const lblMsg = document.getElementById('lblAlertaSesionYaActivaTexto');
+          if (lblMsg) {
+            lblMsg.textContent = `Ya hay una sesión activa con la cuenta de "${data.usuario_nombre || usuario}" en ${data.dispositivo_previo || 'otro dispositivo'}. Debes cerrar la sesión en el otro equipo antes de ingresar aquí.`;
+          }
+          modalSesion.classList.add('active');
+          modalSesion.style.display = 'flex';
+          window._modalActivoId = 'modalAlertaSesionYaActiva';
+        } else {
+          alert(`⚠️ Sesión ya activa: ${data.error || 'Ya existe una sesión abierta con esta cuenta en otro equipo.'}`);
+        }
+        return;
+      }
       if (data.dispositivo_no_autorizado) {
         window._ultimoDeviceTokenBloqueado = data.device_token || devToken;
         const modalBloqueo = document.getElementById('modalAlertaDispositivoNoRegistrado');
@@ -2735,7 +2752,15 @@ window.guardarNuevoPinAutoservicio = async function() {
   }
 };
 
-window.cerrarSesion = function() {
+window.cerrarSesion = function(notificarServidor = true) {
+  const uId = estado.usuarioActual?.id;
+  if (notificarServidor && uId) {
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuarioId: uId })
+    }).catch(() => {});
+  }
   document.body.classList.remove('beta-tester-gold');
   try { localStorage.removeItem('pos_beta_theme_gold'); } catch(e) {}
   if (typeof toggleModoEdicionGlobal === 'function') toggleModoEdicionGlobal(false);
@@ -5097,6 +5122,14 @@ window.cerrarModalSeguridadRed = function() {
 };
 
 window.actualizarEstadoVisualSeguridadRed = function() {
+  const chk = document.getElementById('chkAdminRestringirIP');
+  if (!chk) return;
+  const slider = chk.nextElementSibling;
+  if (slider) {
+    slider.style.backgroundColor = chk.checked ? '#0284c7' : '#334155';
+    const knob = slider.querySelector('span');
+    if (knob) knob.style.left = chk.checked ? '26px' : '3px';
+  }
   const switches = [
     { id: 'chkAdminRestringirIP', color: '#0284c7' },
     { id: 'chkAdminRestringirDispositivos', color: '#10b981' },
@@ -5111,6 +5144,7 @@ window.actualizarEstadoVisualSeguridadRed = function() {
       slider.style.backgroundColor = el.checked ? sw.color : '#334155';
       slider.style.borderColor = el.checked ? sw.color : 'rgba(255,255,255,0.15)';
       const knob = slider.querySelector('span');
+      if (knob) knob.style.left = el.checked ? '26px' : '3px';
       if (knob) {
         knob.style.transform = el.checked ? 'translateX(24px)' : 'translateX(0px)';
       }
@@ -5392,6 +5426,64 @@ window.cerrarAlertaDispositivoBloqueado = function() {
   if (modal) {
     modal.classList.remove('active');
     modal.style.display = 'none';
+  }
+};
+
+window.cerrarAlertaSesionYaActiva = function() {
+  const modal = document.getElementById('modalAlertaSesionYaActiva');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+window.forzarDesconectarSesionPrevia = async function() {
+  const usuarioId = window._ultimoUsuarioIdBloqueado;
+  const usuarioNombre = window._ultimoUsuarioNombreBloqueado || 'el usuario';
+  if (!usuarioId) {
+    alert('⚠️ No se identificó el usuario bloqueado.');
+    return;
+  }
+
+  const pinAdmin = await window.solicitarPinAdmin({
+    icono: '🔓',
+    titulo: 'Liberar Sesión Activa',
+    subtitulo: 'Autorización de Administrador',
+    mensaje: `Ingresa el PIN de Administrador para cerrar la sesión previa de "${usuarioNombre}" en el otro dispositivo:`
+  });
+  if (!pinAdmin) return;
+
+  try {
+    const nid = estado.negocioActual?.id || (sessionStorage.getItem('pos_negocio') ? JSON.parse(sessionStorage.getItem('pos_negocio')).id : 1);
+    const res = await fetch(`/api/admin/usuarios/${usuarioId}/liberar-sesion`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({ pinAdmin })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error: ' + (data.error || 'No se pudo liberar la sesión'));
+      return;
+    }
+
+    cerrarAlertaSesionYaActiva();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ Sesión previa de "${usuarioNombre}" liberada. Ingresando...`, 'success');
+    }
+
+    // Reintentar login inmediatamente
+    const btnLogin = document.getElementById('btnSubmitLogin') || document.getElementById('btnLogin');
+    if (btnLogin) {
+      btnLogin.click();
+    } else if (typeof window.ejecutarLogin === 'function') {
+      window.ejecutarLogin();
+    }
+  } catch (e) {
+    alert('❌ Error: ' + e.message);
   }
 };
 

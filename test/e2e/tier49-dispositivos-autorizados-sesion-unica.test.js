@@ -1,4 +1,4 @@
-﻿const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { startTestServer } = require('../helpers/test-server');
 
@@ -180,13 +180,15 @@ describe('Tier 49: Dispositivos Autorizados (Device Whitelisting) & Sesión Úni
     assert.strictEqual(loginDev.data.usuario.rol, 'developer');
   });
 
-  it('T49.5: Sesión Única Activa genera y actualiza session_id único en cada login', async () => {
-    // 1. Primer login de salonero
+  it('T49.5: Sesión Única Activa bloquea segundo login concurrente en otro dispositivo (409 Conflict)', async () => {
+    // 1. Primer login de salonero desde Terminal A
     const login1 = await server.request('/api/auth/login', {
       method: 'POST',
+      headers: { 'x-device-token': 'terminal_salon_a' },
       body: {
         usuario: 'carlos',
-        password: 'mesero123'
+        password: 'mesero123',
+        deviceToken: 'terminal_salon_a'
       }
     });
 
@@ -194,26 +196,93 @@ describe('Tier 49: Dispositivos Autorizados (Device Whitelisting) & Sesión Úni
     const session1 = login1.data.session_id;
     assert.ok(session1);
 
-    // 2. Verificar en BD que el usuario tiene session1
-    const userDb1 = await server.dbGet('SELECT ultimo_token_sesion FROM Usuarios WHERE usuario = "carlos"');
+    // 2. Verificar en BD que el usuario tiene session1 y terminal_salon_a
+    const userDb1 = await server.dbGet('SELECT id, ultimo_token_sesion, ultimo_dispositivo_id FROM Usuarios WHERE usuario = "carlos"');
     assert.strictEqual(userDb1.ultimo_token_sesion, session1);
+    assert.strictEqual(userDb1.ultimo_dispositivo_id, 'terminal_salon_a');
 
-    // 3. Segundo login de salonero (en otro dispositivo)
+    // 3. Segundo login de salonero desde Terminal B (diferente dispositivo) -> Debe dar 409 Conflict
     const login2 = await server.request('/api/auth/login', {
       method: 'POST',
+      headers: { 'x-device-token': 'terminal_salon_b' },
       body: {
         usuario: 'carlos',
-        password: 'mesero123'
+        password: 'mesero123',
+        deviceToken: 'terminal_salon_b'
       }
     });
 
-    assert.strictEqual(login2.status, 200);
-    const session2 = login2.data.session_id;
-    assert.ok(session2);
-    assert.notStrictEqual(session1, session2);
+    assert.strictEqual(login2.status, 409);
+    assert.strictEqual(login2.data.sesion_ya_activa, true);
+    assert.strictEqual(login2.data.usuario_id, userDb1.id);
+    assert.ok(login2.data.error.includes('activa') || login2.data.error.includes('abierta'));
 
-    // 4. Verificar en BD que la sesión se actualizó a session2
-    const userDb2 = await server.dbGet('SELECT ultimo_token_sesion FROM Usuarios WHERE usuario = "carlos"');
-    assert.strictEqual(userDb2.ultimo_token_sesion, session2);
+    // 4. Mismo dispositivo Terminal A reingresando -> Debe permitir 200 OK
+    const loginReingresoA = await server.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'x-device-token': 'terminal_salon_a' },
+      body: {
+        usuario: 'carlos',
+        password: 'mesero123',
+        deviceToken: 'terminal_salon_a'
+      }
+    });
+    assert.strictEqual(loginReingresoA.status, 200);
+
+    // 5. Cerrar sesión explícita en Terminal A
+    const logoutRes = await server.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'x-user-id': String(userDb1.id) },
+      body: { usuarioId: userDb1.id }
+    });
+    assert.strictEqual(logoutRes.status, 200);
+
+    // 6. Ahora Terminal B puede iniciar sesión normalmente
+    const login3 = await server.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'x-device-token': 'terminal_salon_b' },
+      body: {
+        usuario: 'carlos',
+        password: 'mesero123',
+        deviceToken: 'terminal_salon_b'
+      }
+    });
+    assert.strictEqual(login3.status, 200);
+  });
+
+  it('T49.6: Administrador puede liberar sesión bloqueada mediante endpoint con PIN de Admin', async () => {
+    // 1. Iniciar sesión de salonero en Terminal A
+    const login1 = await server.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'x-device-token': 'tablet_a' },
+      body: { usuario: 'carlos', password: 'mesero123', deviceToken: 'tablet_a' }
+    });
+    assert.strictEqual(login1.status, 200);
+
+    const userDb = await server.dbGet('SELECT id FROM Usuarios WHERE usuario = "carlos"');
+
+    // 2. Terminal B intenta entrar y es bloqueado
+    const login2 = await server.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'x-device-token': 'tablet_b' },
+      body: { usuario: 'carlos', password: 'mesero123', deviceToken: 'tablet_b' }
+    });
+    assert.strictEqual(login2.status, 409);
+
+    // 3. Admin libera la sesión con su PIN
+    const liberarRes = await server.request(`/api/admin/usuarios/${userDb.id}/liberar-sesion`, {
+      method: 'POST',
+      body: { pinAdmin: '1234' }
+    });
+    assert.strictEqual(liberarRes.status, 200);
+    assert.strictEqual(liberarRes.data.ok, true);
+
+    // 4. Terminal B ahora puede ingresar
+    const login3 = await server.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'x-device-token': 'tablet_b' },
+      body: { usuario: 'carlos', password: 'mesero123', deviceToken: 'tablet_b' }
+    });
+    assert.strictEqual(login3.status, 200);
   });
 });
