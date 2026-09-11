@@ -607,6 +607,18 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
   }
 });
 
+function obtenerIpCliente(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const ips = String(forwarded).split(',').map(s => s.trim());
+    if (ips.length > 0 && ips[0]) {
+      return ips[0].replace(/^::ffff:/, '');
+    }
+  }
+  const rawIp = req.socket?.remoteAddress || req.ip || '';
+  return String(rawIp).replace(/^::ffff:/, '');
+}
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { usuario, password, pin } = req.body;
@@ -648,7 +660,6 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
     }
 
-
     const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
 
     // Bloquear acceso a comercios desactivados para cualquier usuario (excepto Developer)
@@ -657,6 +668,29 @@ app.post('/api/auth/login', async (req, res) => {
         error: 'Comercio desactivado, contacte con su proveedor!',
         comercio_desactivado: true
       });
+    }
+
+    // ── SEGURIDAD PERIMETRAL: RESTRICCIÓN DE ACCESO POR RED WIFI / IP PÚBLICA ──
+    // Administradores, Super Administradores y Developers acceden remotamente desde cualquier red.
+    // Saloneros, Cajeros y Cocineros solo pueden iniciar sesión si están conectados a la red del Bar.
+    const rolesExentosIp = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer', 'supervisor'];
+    const esRolExento = rolesExentosIp.includes((u.rol || '').toLowerCase().trim());
+
+    if (!esRolExento && negocio && Number(negocio.restringir_ip_operativos) === 1) {
+      const clientIp = obtenerIpCliente(req);
+      const rawIps = (negocio.ips_permitidas || '').trim();
+      const permitidas = rawIps ? rawIps.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean) : [];
+
+      const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(clientIp);
+      const ipCoincide = permitidas.includes(clientIp) || (isLoopback && (permitidas.includes('127.0.0.1') || permitidas.includes('localhost') || permitidas.length === 0));
+
+      if (!ipCoincide && permitidas.length > 0) {
+        return res.status(403).json({
+          error: `🚫 Acceso denegado: El personal operativo solo puede acceder conectado a la red WiFi oficial de ${negocio.nombre || 'el bar'}. (IP detectada: ${clientIp})`,
+          ip_bloqueada: true,
+          client_ip: clientIp
+        });
+      }
     }
 
 
@@ -1477,6 +1511,109 @@ app.put('/api/admin/caracteristicas', async (req, res) => {
     });
 
     res.json({ ok: true, message: 'Características actualizadas correctamente', caracteristicas_activas: parsed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Consultar IP pública actual del cliente
+app.get('/api/ip-actual', (req, res) => {
+  const ip = obtenerIpCliente(req);
+  res.json({ ip });
+});
+
+// Endpoint: Obtener configuración de seguridad de red del local
+app.get('/api/admin/seguridad-red', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.query.negocioId || 1;
+    const neg = await dbGet('SELECT id, nombre, restringir_ip_operativos, ips_permitidas FROM Negocios WHERE id = ?', [negocioId]);
+    if (!neg) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    const clientIp = obtenerIpCliente(req);
+    res.json({
+      ok: true,
+      negocioId: neg.id,
+      nombre: neg.nombre,
+      restringir_ip_operativos: Number(neg.restringir_ip_operativos) === 1,
+      ips_permitidas: neg.ips_permitidas || '',
+      clientIp
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Endpoint: Guardar configuración de seguridad de red del local (IP Whitelisting)
+app.put('/api/admin/seguridad-red', async (req, res) => {
+  try {
+    const negocioId = req.headers['x-negocio-id'] || req.body.negocioId || 1;
+    const { restringir_ip_operativos, ips_permitidas, pinAdmin, usuarioNombre = 'Administrador' } = req.body;
+
+    // Validar autorización: JWT de rol admin/developer, o header x-user-rol, o PIN de admin/developer
+    let autorizado = false;
+    const rolesAdmin = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer'];
+
+    if (req.usuario && rolesAdmin.includes((req.usuario.rol || '').toLowerCase())) {
+      autorizado = true;
+    } else if (rolesAdmin.includes((req.headers['x-user-rol'] || '').toLowerCase())) {
+      autorizado = true;
+    } else if (pinAdmin) {
+      const pinStr = String(pinAdmin).trim();
+      const adminUsers = await dbAll(
+        `SELECT * FROM Usuarios WHERE negocio_id = ? AND rol IN ('admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer') AND activo = 1`,
+        [negocioId]
+      );
+      for (const u of adminUsers) {
+        if (await verificarCredencialUsuario(u, pinStr)) {
+          autorizado = true;
+          break;
+        }
+      }
+      if (!autorizado) {
+        // Verificar también desarrolladores globales
+        const devs = await dbAll(`SELECT * FROM Usuarios WHERE rol = 'developer' AND activo = 1`);
+        for (const d of devs) {
+          if (await verificarCredencialUsuario(d, pinStr)) {
+            autorizado = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!autorizado) {
+      return res.status(403).json({ error: 'No autorizado. Se requiere PIN o credenciales de Administrador.' });
+    }
+
+    const flagVal = (restringir_ip_operativos === true || Number(restringir_ip_operativos) === 1 || String(restringir_ip_operativos) === 'true') ? 1 : 0;
+    const ipsVal = (ips_permitidas || '').trim();
+
+    await dbRun(
+      'UPDATE Negocios SET restringir_ip_operativos = ?, ips_permitidas = ? WHERE id = ?',
+      [flagVal, ipsVal, negocioId]
+    );
+
+    await registrarAuditoria({
+      negocioId: Number(negocioId),
+      usuarioNombre,
+      accion: 'configurar_seguridad_red',
+      tipoEvento: 'seguridad',
+      modulo: 'admin',
+      detalle: `Seguridad de Red WiFi: ${flagVal ? 'Activada restricción de IP para saloneros/cajeros' : 'Desactivada restricción de IP'}. IPs autorizadas: [${ipsVal || 'Ninguna'}]`
+    });
+
+    io.emit('negocio_seguridad_red_actualizada', {
+      negocioId: Number(negocioId),
+      restringir_ip_operativos: flagVal === 1,
+      ips_permitidas: ipsVal
+    });
+
+    res.json({
+      ok: true,
+      message: 'Configuración de red WiFi y seguridad guardada exitosamente',
+      restringir_ip_operativos: flagVal === 1,
+      ips_permitidas: ipsVal
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

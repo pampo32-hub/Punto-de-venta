@@ -123,3 +123,4 @@ describe('Tier 47: Toggle Característica Unión de Mesas (Activar / Desactivar)
     assert.ok(unirRes.data.message.includes('unidas') || unirRes.data.message.includes('Unidas') || unirRes.data.message.includes('éxito'));
   });
 });
+

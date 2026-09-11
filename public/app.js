@@ -3019,6 +3019,8 @@ window.ejecutarAccionAdmin = function(tipo) {
     abrirModalAgotados();
   } else if (tipo === 'caracteristicas') {
     if (typeof abrirModalAdminCaracteristicas === 'function') abrirModalAdminCaracteristicas();
+  } else if (tipo === 'seguridad-red') {
+    if (typeof abrirModalSeguridadRed === 'function') abrirModalSeguridadRed();
   }
 };
 
@@ -4442,6 +4444,7 @@ window.aplicarRestriccionesModulos = function() {
     el.style.display = tieneHappyHour ? '' : 'none';
   });
   if (!tieneUnionMesas) {
+    document.getElementById('modalMoverUnirMesas')?.classList.remove('active');
     document.getElementById('modalConfirmarUnir')?.classList.remove('active');
     document.getElementById('modalConfirmarSeparar')?.classList.remove('active');
   }
@@ -4960,6 +4963,161 @@ window.guardarCaracteristicasAdmin = async function() {
     }
   } catch (e) {
     alert('❌ Error guardando características: ' + e.message);
+  }
+};
+
+// ============================================================================
+// GESTIÓN DE SEGURIDAD Y RESTRICCIÓN DE ACCESO POR RED WIFI / IP
+// ============================================================================
+window.abrirModalSeguridadRed = async function() {
+  const modal = document.getElementById('modalAdminSeguridadRed');
+  if (!modal) return;
+
+  try {
+    const nid = estado.negocioActual?.id || 1;
+    const res = await fetch('/api/admin/seguridad-red', {
+      headers: { 'x-negocio-id': String(nid) }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('⚠️ ' + (data.error || 'No se pudo cargar la configuración de red'));
+      return;
+    }
+
+    const subtitulo = document.getElementById('adminSeguridadRedSubtitulo');
+    if (subtitulo && data.nombre) {
+      subtitulo.textContent = `Control perimetral de acceso por red WiFi para: ${data.nombre}`;
+    }
+
+    const chk = document.getElementById('chkAdminRestringirIP');
+    if (chk) chk.checked = !!data.restringir_ip_operativos;
+
+    const txtIps = document.getElementById('txtAdminIpsPermitidas');
+    if (txtIps) txtIps.value = data.ips_permitidas || '';
+
+    const lblIp = document.getElementById('lblAdminIpActual');
+    if (lblIp) lblIp.textContent = data.clientIp || '127.0.0.1';
+
+    if (typeof window.actualizarEstadoVisualSeguridadRed === 'function') {
+      window.actualizarEstadoVisualSeguridadRed();
+    }
+    modal.classList.add('active');
+  } catch (e) {
+    alert('❌ Error al abrir seguridad de red: ' + e.message);
+  }
+};
+
+window.cerrarModalSeguridadRed = function() {
+  const modal = document.getElementById('modalAdminSeguridadRed');
+  if (modal) modal.classList.remove('active');
+};
+
+window.actualizarEstadoVisualSeguridadRed = function() {
+  const chk = document.getElementById('chkAdminRestringirIP');
+  if (!chk) return;
+  const slider = chk.nextElementSibling;
+  if (slider) {
+    slider.style.backgroundColor = chk.checked ? '#0284c7' : '#334155';
+    const knob = slider.querySelector('span');
+    if (knob) knob.style.left = chk.checked ? '26px' : '3px';
+  }
+};
+
+window.consultarIpDetectadaEnVivo = async function() {
+  const lblIp = document.getElementById('lblAdminIpActual');
+  if (lblIp) lblIp.textContent = 'Consultando...';
+  try {
+    const res = await fetch('/api/ip-actual');
+    const data = await res.json();
+    if (lblIp) lblIp.textContent = data.ip || '127.0.0.1';
+  } catch (_) {
+    if (lblIp) lblIp.textContent = 'No detectada';
+  }
+};
+
+window.capturarIpActual = async function() {
+  try {
+    const res = await fetch('/api/ip-actual');
+    const data = await res.json();
+    const currentIp = data.ip;
+    if (!currentIp) {
+      alert('⚠️ No se pudo detectar la IP actual');
+      return;
+    }
+    const txtIps = document.getElementById('txtAdminIpsPermitidas');
+    if (txtIps) {
+      const prev = txtIps.value.trim();
+      const ipsArr = prev ? prev.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean) : [];
+      if (!ipsArr.includes(currentIp)) {
+        ipsArr.push(currentIp);
+      }
+      txtIps.value = ipsArr.join(', ');
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`📍 IP agregada: ${currentIp}`, 'info');
+      }
+    }
+  } catch (e) {
+    alert('❌ Error al capturar IP: ' + e.message);
+  }
+};
+
+window.guardarConfiguracionSeguridadRed = async function() {
+  const btn = document.getElementById('btnGuardarSeguridadRed');
+  const txtOriginal = btn ? btn.innerHTML : '';
+  try {
+    const chk = document.getElementById('chkAdminRestringirIP');
+    const txtIps = document.getElementById('txtAdminIpsPermitidas');
+    const restringir = chk ? chk.checked : false;
+    const ips = txtIps ? txtIps.value.trim() : '';
+
+    if (restringir && !ips) {
+      alert('⚠️ Si activas la restricción de red, debes ingresar al menos una IP pública autorizada.');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Guardando...';
+    }
+
+    const nid = estado.negocioActual?.id || 1;
+    const res = await fetch('/api/admin/seguridad-red', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({
+        restringir_ip_operativos: restringir,
+        ips_permitidas: ips,
+        usuarioNombre: estado.usuarioActual?.nombre || 'Administrador'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert('❌ Error al guardar seguridad de red: ' + (data.error || 'Error del servidor'));
+      return;
+    }
+
+    cerrarModalSeguridadRed();
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(
+        restringir
+          ? '🔒 Seguridad de Red activada: Saloneros y cajeros solo pueden acceder desde el WiFi del local'
+          : '🌐 Restricción de red desactivada: Personal operativo puede acceder desde cualquier red',
+        'success'
+      );
+    } else {
+      alert('✅ ' + data.message);
+    }
+  } catch (e) {
+    alert('❌ Error al comunicar con el servidor: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = txtOriginal;
+    }
   }
 };
 
@@ -7428,6 +7586,7 @@ function updateDragPosition(clientX, clientY) {
       if (targetMesa) {
         dragState.hoverTargetMesa = targetMesa;
         const isTargetLibre = targetMesa.estado === 'libre';
+        foundCard.classList.add(isTargetLibre ? 'mesa-drop-target-move' : 'mesa-drop-target-merge');
         const puedeUnir = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('union_mesas') : true;
 
         if (isTargetLibre) {
@@ -7438,6 +7597,9 @@ function updateDragPosition(clientX, clientY) {
         
         const badge = dragState.ghost.querySelector('.drag-badge-indicator');
         if (badge) {
+          badge.textContent = isTargetLibre 
+            ? `🔁 Soltar para Mover a ${targetMesa.numero}` 
+            : `🔗 Soltar para Unir con ${targetMesa.numero}`;
           if (isTargetLibre) {
             badge.textContent = `🔁 Soltar para Mover a ${targetMesa.numero}`;
           } else if (puedeUnir) {
@@ -7476,6 +7638,7 @@ function finalizarDrop(clientX, clientY) {
   } else if (puedeUnir) {
     mostrarModalConfirmarUnir(sourceMesa, targetMesa);
   } else {
+    mostrarModalConfirmarUnir(sourceMesa, targetMesa);
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro(`🚫 La función de Unión de Mesas está desactivada en las características del local (${targetMesa.numero} ocupada)`, 'warning');
     } else {
