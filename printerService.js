@@ -188,6 +188,9 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
     const prodNombre = limpiarTextoTermica(it.nombre_producto || it.nombre || 'Producto');
     raw += ESCPOS.BOLD_ON + ESCPOS.DOUBLE_HEIGHT + `${cant}x  ${prodNombre}\n` + ESCPOS.NORMAL;
     raw += `   ${curLabel}\n`;
+    if (it.comensal && it.comensal !== 'General') {
+      raw += ESCPOS.BOLD_ON + `   [👤 Comensal: ${limpiarTextoTermica(it.comensal)}]\n` + ESCPOS.BOLD_OFF;
+    }
     if (it.notas) {
       raw += ESCPOS.BOLD_ON + `   >> NOTA: ${limpiarTextoTermica(it.notas)}\n` + ESCPOS.BOLD_OFF;
     }
@@ -225,6 +228,7 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
       nombre: it.nombre_producto || it.nombre || 'Producto',
       notas: it.notas || '',
       curso: it.curso || 2,
+      comensal: it.comensal || 'General',
       origenMesa: it.origen_mesa_numero || null
     })),
     totalItems: totalItems

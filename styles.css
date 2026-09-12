@@ -12327,4 +12327,244 @@ body.theme-capsula-elegance .btn-prefactura-split {
   color: #f8fafc;
 }
 
+/* ============================================================================
+ * COMANDA MULTI-COMENSAL Y CUENTAS SEPARADAS POR PERSONA
+ * ============================================================================ */
+.comensales-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin-bottom: 10px;
+  backdrop-filter: blur(8px);
+}
+.comensales-tabs-bar::-webkit-scrollbar {
+  height: 4px;
+}
+.comensales-tabs-bar::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+.chip-comensal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.chip-comensal:hover {
+  background: rgba(51, 65, 85, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #f8fafc;
+  transform: translateY(-1px);
+}
+.chip-comensal.active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(5, 150, 105, 0.5) 100%);
+  border-color: #10b981;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+.chip-comensal .comensal-badge-count {
+  background: #10b981;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  line-height: 1.2;
+}
+.chip-comensal.active .comensal-badge-count {
+  background: #ffffff;
+  color: #065f46;
+}
+.chip-comensal .comensal-subtotal {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.chip-comensal.active .comensal-subtotal {
+  color: #a7f3d0;
+}
+.chip-comensal-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1.5px dashed rgba(59, 130, 246, 0.6);
+  border-radius: 20px;
+  color: #60a5fa;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.chip-comensal-add:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Banner Asistente Paso a Paso */
+.banner-asistente-comensal {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
+  border: 1.5px solid #818cf8;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeInAsistente 0.3s ease-out;
+}
+@keyframes fadeInAsistente {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.asistente-comensal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.asistente-comensal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #e0e7ff;
+}
+.asistente-comensal-title input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 4px 10px;
+  max-width: 160px;
+}
+.asistente-comensal-title input:focus {
+  outline: none;
+  border-color: #a5b4fc;
+  box-shadow: 0 0 8px rgba(165, 180, 252, 0.5);
+}
+.asistente-comensal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-asistente-siguiente {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4);
+  transition: all 0.2s ease;
+}
+.btn-asistente-siguiente:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+}
+.btn-asistente-finalizar {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-asistente-finalizar:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+/* Agrupación en Lista de Items del Ticket */
+.ticket-comensal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  background: rgba(30, 41, 59, 0.7);
+  border-left: 3px solid #10b981;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+.ticket-comensal-header.compartido {
+  border-left-color: #3b82f6;
+}
+.ticket-comensal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ticket-comensal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #10b981;
+}
+.badge-comensal-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+.btn-subcuenta-cobrar {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #34d399;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-subcuenta-cobrar:hover {
+  background: #10b981;
+  color: white;
+}
+
 

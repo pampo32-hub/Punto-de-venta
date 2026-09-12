@@ -451,6 +451,7 @@ function initDb() {
     db.run("ALTER TABLE DetalleOrden ADD COLUMN creado_en TEXT", () => {});
     db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero INTEGER", () => {});
     db.run("ALTER TABLE DetalleOrden ADD COLUMN comanda_numero INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE DetalleOrden ADD COLUMN comensal TEXT DEFAULT 'General'", () => {});
 
     // 9. Pagos
     db.run(`CREATE TABLE IF NOT EXISTS Pagos (

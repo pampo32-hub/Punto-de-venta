@@ -2943,6 +2943,7 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
+      } else if (m.estado === 'ocupada' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
@@ -3746,6 +3747,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
       await dbRun("UPDATE Reservas SET estado = 'cancelada' WHERE id = ?", [mesa.reserva_id]);
     }
     await dbRun(
+      "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [mesaId]
     );
@@ -5229,7 +5231,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       origen_mesa_numero: it.origen_mesa_numero || null,
       en_happy_hour: itemEnHH,
       es_balde: Boolean(it.es_balde),
-      desglose_balde: it.desglose_balde || null
+      desglose_balde: it.desglose_balde || null,
+      comensal: it.comensal ? String(it.comensal).trim() : 'General'
     });
   }
 
@@ -5291,9 +5294,9 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   for (const it of itemsProcesados) {
     const subtotal = it.precio * it.cantidad;
     const rItem = await dbRun(
-      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, origen_mesa_numero, comanda_numero, en_happy_hour)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)`,
-      [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero, it.en_happy_hour]
+      `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, origen_mesa_numero, comanda_numero, en_happy_hour, comensal)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?, ?)`,
+      [ordenId, it.id, it.nombre, it.precio, it.cantidad, subtotal, it.notas, it.curso, it.destino, ahora, ahora, it.origen_mesa_numero, comandaNumero, it.en_happy_hour, it.comensal || 'General']
     );
     nuevasComandas.push({
       id: rItem.lastID,
@@ -5307,7 +5310,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       curso: it.curso,
       destino: it.destino,
       hora_pedido: ahora,
-      en_happy_hour: it.en_happy_hour
+      en_happy_hour: it.en_happy_hour,
+      comensal: it.comensal || 'General'
     });
   }
 
@@ -6001,9 +6005,9 @@ async function procesarCobroOrden(ordenId, {
       const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
       const estadoComanda = (debeEnviarCocina && esParaCocinaOBarra) ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
       await dbRun(
-        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id || it.producto_id, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0]
+        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour, comensal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenId, it.id || it.producto_id, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
       );
     }
 

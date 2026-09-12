@@ -1751,6 +1751,9 @@ var estado = {
   usuarioActual: null, // Usuario autenticado
   negocioActual: null, // Negocio / Restaurante activo
   mesaActiva: null,
+  comensalActivo: 'General',
+  comensalesMesa: [],
+  asistenteComensal: { activo: false, indice: 1, nombres: [] },
   itemModificando: null,
   splitPersonas: 4,
   splitColumnas: [],
@@ -7833,11 +7836,14 @@ window.agregarAlTicketOneTap = async function(prodId) {
   );
   const esHH = Boolean(estado.happyHourActivo && esCervezaOEligible);
 
-  // Buscar si ya existe una línea NO ENVIADA con el MISMO estado de Happy Hour
+  const comensalActual = estado.comensalActivo || 'General';
+
+  // Buscar si ya existe una línea NO ENVIADA con el MISMO estado de Happy Hour y MISMO comensal
   const existente = estado.mesaActiva.items.find(it => 
     it.id === prodId && 
     !it.enviado && 
-    Boolean(it.en_happy_hour) === esHH
+    Boolean(it.en_happy_hour) === esHH &&
+    (it.comensal || 'General') === comensalActual
   );
 
   if (existente) {
@@ -7877,7 +7883,8 @@ window.agregarAlTicketOneTap = async function(prodId) {
       curso: itemCurso,
       happyHour: esCervezaOEligible,
       en_happy_hour: esHH,
-      enviado: false
+      enviado: false,
+      comensal: comensalActual
     });
   }
 
@@ -7886,6 +7893,9 @@ window.agregarAlTicketOneTap = async function(prodId) {
   }
 
   renderTicketItems();
+  if (typeof renderComensalesTabs === 'function') {
+    renderComensalesTabs();
+  }
   await window.verificarOfertaBaldeCerveza(prodId, 1);
 };
 
@@ -8162,6 +8172,7 @@ function renderGrillaOrdenada(filtroZona = null) {
         const estaEsperandoCocina = Boolean((m.estado === 'esperando' || m.estado === 'esperando_parcial') || (platosPendientes && platosPendientes.length > 0));
 
         let estadoEfectivo = m.estado;
+        if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
         if (m.estado === 'reservada') {
           estadoEfectivo = 'reservada';
         } else if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
@@ -8177,10 +8188,14 @@ function renderGrillaOrdenada(filtroZona = null) {
           esperando_parcial: 'Esperando Parcial',
           activa: 'Ocupada',
           cuenta: 'Cuenta Pedida',
+          unida: 'Unida'
           unida: 'Unida',
           reservada: 'Reservada'
         }[estadoEfectivo] || (estaEsperandoCocina ? 'Esperando' : 'Libre');
 
+        const badgeClass = (estadoEfectivo === 'libre' && !estaEsperandoCocina)
+          ? 'badge-libre'
+          : (esCuenta ? 'badge-cuenta' : (estadoEfectivo === 'esperando' || estaEsperandoCocina ? 'badge-esperando' : (estadoEfectivo === 'esperando_parcial' ? 'badge-esperando_parcial' : 'badge-ocupada')));
         const badgeClass = (estadoEfectivo === 'reservada')
           ? 'badge-reservada'
           : ((estadoEfectivo === 'libre' && !estaEsperandoCocina)
@@ -9914,6 +9929,7 @@ async function abrirComanderoMesa(mesaId) {
         notas: it.notas || '',
         curso: it.curso || 2,
         destino: it.destino || 'cocina',
+        comensal: it.comensal || 'General',
         origen_mesa_numero: it.origen_mesa_numero || null,
         enviado: it.enviado !== false,
         offlinePendiente: Boolean(it.offlinePendiente),
@@ -9977,6 +9993,21 @@ async function abrirComanderoMesa(mesaId) {
     elClienteNom.textContent = nomCliente;
   }
 
+  // Sincronizar comensales de la mesa
+  const comensalesExistentes = new Set(mesa.items.map(it => it.comensal).filter(c => c && c !== 'General'));
+  if (comensalesExistentes.size > 0) {
+    estado.comensalesMesa = Array.from(comensalesExistentes);
+    if (!estado.comensalActivo || !comensalesExistentes.has(estado.comensalActivo)) {
+      estado.comensalActivo = 'General';
+    }
+  } else {
+    if (!estado.asistenteComensal || !estado.asistenteComensal.activo) {
+      estado.comensalesMesa = [];
+      estado.comensalActivo = 'General';
+    }
+  }
+
+  renderComensalesTabs();
   renderTicketItems();
   actualizarBotonEnviarComanda();
   renderCatalogoComandero();
@@ -10198,6 +10229,349 @@ window.resetearMesaActualComandero = async function() {
   return window.liberarMesaId(estado.mesaActiva.id);
 };
 
+// ============================================================================
+// FUNCIONES DE COMANDA MULTI-COMENSAL & CUENTAS SEPARADAS POR PERSONA
+// ============================================================================
+
+window.iniciarPedidoPorPersonas = function(mesaId) {
+  const modalCli = document.getElementById('modalPreguntaCliente');
+  if (modalCli) {
+    modalCli.classList.remove('active');
+    modalCli.style.display = 'none';
+  }
+  
+  estado.asistenteComensal = {
+    activo: true,
+    paso: 1,
+    comensalActual: 'Persona 1'
+  };
+  estado.comensalActivo = 'Persona 1';
+  estado.comensalesMesa = ['Persona 1'];
+  
+  if (!estado.mesaActiva || Number(estado.mesaActiva.id) !== Number(mesaId)) {
+    window.abrirComanderoMesa(mesaId);
+  } else {
+    window.renderComensalesTabs();
+    renderTicketItems();
+  }
+  
+  const banner = document.getElementById('bannerAsistenteComensal');
+  if (banner) {
+    banner.style.display = 'block';
+    const pasoEl = document.getElementById('asistentePasoNum');
+    if (pasoEl) pasoEl.textContent = '1';
+    const inpEl = document.getElementById('asistenteInputNombre');
+    if (inpEl) {
+      inpEl.value = 'Persona 1';
+      setTimeout(() => { inpEl.focus(); inpEl.select(); }, 150);
+    }
+  }
+  
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro('👥 Modo Cuentas por Persona activado: Selecciona platillos para Persona 1', 'info');
+  }
+};
+
+window.actualizarNombreComensalAsistente = function(val) {
+  const nuevoNom = (val && val.trim()) ? val.trim() : `Persona ${estado.asistenteComensal?.paso || 1}`;
+  const viejoNom = estado.asistenteComensal?.comensalActual || 'Persona 1';
+  
+  if (estado.asistenteComensal) {
+    estado.asistenteComensal.comensalActual = nuevoNom;
+  }
+  estado.comensalActivo = nuevoNom;
+  
+  if (!estado.comensalesMesa) estado.comensalesMesa = [];
+  const idx = estado.comensalesMesa.indexOf(viejoNom);
+  if (idx !== -1) {
+    estado.comensalesMesa[idx] = nuevoNom;
+  } else if (!estado.comensalesMesa.includes(nuevoNom)) {
+    estado.comensalesMesa.push(nuevoNom);
+  }
+  
+  // Re-etiquetar items no guardados que tenían el nombre viejo
+  if (estado.mesaActiva && estado.mesaActiva.items) {
+    estado.mesaActiva.items.forEach(it => {
+      if (it.comensal === viejoNom && !it.enviado) {
+        it.comensal = nuevoNom;
+      }
+    });
+  }
+  
+  window.renderComensalesTabs();
+  renderTicketItems();
+};
+
+window.guardarYSiguienteComensal = function() {
+  const inp = document.getElementById('asistenteInputNombre');
+  const nomActual = (inp && inp.value.trim()) ? inp.value.trim() : (estado.asistenteComensal?.comensalActual || `Persona ${estado.asistenteComensal?.paso || 1}`);
+  
+  if (!estado.comensalesMesa) estado.comensalesMesa = [];
+  if (!estado.comensalesMesa.includes(nomActual)) {
+    estado.comensalesMesa.push(nomActual);
+  }
+  
+  const sigPaso = (estado.asistenteComensal?.paso || 1) + 1;
+  const sigNombre = `Persona ${sigPaso}`;
+  
+  if (!estado.asistenteComensal) estado.asistenteComensal = { activo: true };
+  estado.asistenteComensal.paso = sigPaso;
+  estado.asistenteComensal.comensalActual = sigNombre;
+  estado.comensalActivo = sigNombre;
+  
+  if (!estado.comensalesMesa.includes(sigNombre)) {
+    estado.comensalesMesa.push(sigNombre);
+  }
+  
+  const pasoEl = document.getElementById('asistentePasoNum');
+  if (pasoEl) pasoEl.textContent = String(sigPaso);
+  if (inp) {
+    inp.value = sigNombre;
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+  }
+  
+  window.renderComensalesTabs();
+  renderTicketItems();
+  
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro(`✅ Guardado para ${nomActual}. Ahora agregando para ${sigNombre}`, 'success');
+  }
+};
+
+window.finalizarAsistenteComensales = function() {
+  if (estado.asistenteComensal) {
+    estado.asistenteComensal.activo = false;
+  }
+  const banner = document.getElementById('bannerAsistenteComensal');
+  if (banner) banner.style.display = 'none';
+  
+  window.renderComensalesTabs();
+  renderTicketItems();
+  
+  if (typeof mostrarNotificacionCentro === 'function') {
+    mostrarNotificacionCentro('✅ Pedido por comensales listo. Puedes revisar el ticket o enviar a cocina.', 'success');
+  }
+};
+
+window.agregarNuevoComensal = async function() {
+  if (!estado.comensalesMesa) estado.comensalesMesa = [];
+  const num = estado.comensalesMesa.length + 1;
+  const nombreDefault = `Persona ${num}`;
+  const nombre = prompt('Ingresa el nombre de la persona / comensal:', nombreDefault);
+  if (!nombre || !nombre.trim()) return;
+  const nomLimpio = nombre.trim();
+  if (!estado.comensalesMesa.includes(nomLimpio)) {
+    estado.comensalesMesa.push(nomLimpio);
+  }
+  window.cambiarComensalActivo(nomLimpio);
+};
+
+window.cambiarComensalActivo = function(nombre) {
+  estado.comensalActivo = nombre || 'General';
+  window.renderComensalesTabs();
+  if (estado.asistenteComensal && estado.asistenteComensal.activo) {
+    const inp = document.getElementById('asistenteInputNombre');
+    if (inp && nombre !== 'General') {
+      inp.value = nombre;
+      estado.asistenteComensal.comensalActual = nombre;
+    }
+  }
+};
+
+window.renderComensalesTabs = function() {
+  const container = document.getElementById('comensalesTabsContainer');
+  const banner = document.getElementById('bannerAsistenteComensal');
+  if (!container) return;
+
+  if (banner) {
+    banner.style.display = (estado.asistenteComensal && estado.asistenteComensal.activo) ? 'block' : 'none';
+  }
+
+  // Recolectar todos los comensales presentes
+  const comensalesSet = new Set();
+  (estado.comensalesMesa || []).forEach(c => { if (c) comensalesSet.add(c); });
+  if (estado.mesaActiva && estado.mesaActiva.items) {
+    estado.mesaActiva.items.forEach(it => {
+      if (it.comensal && it.comensal !== 'General') comensalesSet.add(it.comensal);
+    });
+  }
+  if (estado.comensalActivo && estado.comensalActivo !== 'General') {
+    comensalesSet.add(estado.comensalActivo);
+  }
+
+  const comensalesLista = Array.from(comensalesSet);
+  const esMultiComensal = comensalesLista.length > 0 || (estado.asistenteComensal && estado.asistenteComensal.activo);
+
+  if (!esMultiComensal) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  container.style.display = 'block';
+
+  // Calcular subtotales por comensal
+  const subtotales = {};
+  if (estado.mesaActiva && estado.mesaActiva.items) {
+    estado.mesaActiva.items.forEach(it => {
+      const c = it.comensal || 'General';
+      const tot = (it.precio || 0) * (it.cantidad || 1);
+      subtotales[c] = (subtotales[c] || 0) + tot;
+    });
+  }
+
+  const chipsHtml = [];
+
+  // Chip General / Compartido
+  const actGen = (estado.comensalActivo === 'General' || !estado.comensalActivo) ? 'active' : '';
+  const subGenTxt = subtotales['General'] ? ` (${formatCRC(subtotales['General'])})` : '';
+  chipsHtml.push(`
+    <button class="chip-comensal chip-general ${actGen}" onclick="cambiarComensalActivo('General')">
+      👥 Compartido${subGenTxt}
+    </button>
+  `);
+
+  // Chips individuales
+  comensalesLista.forEach(nom => {
+    const act = (estado.comensalActivo === nom) ? 'active' : '';
+    const subTxt = subtotales[nom] ? ` (${formatCRC(subtotales[nom])})` : '';
+    const safeNom = nom.replace(/'/g, "\\'");
+    chipsHtml.push(`
+      <button class="chip-comensal ${act}" onclick="cambiarComensalActivo('${safeNom}')">
+        👤 ${nom}${subTxt}
+      </button>
+    `);
+  });
+
+  // Botón + Agregar Persona
+  chipsHtml.push(`
+    <button class="chip-comensal chip-add" onclick="agregarNuevoComensal()">
+      ➕ Agregar Persona
+    </button>
+  `);
+
+  container.innerHTML = `
+    <div class="comensales-tabs-bar">
+      <div class="comensales-tabs-label">👤 Pedir para:</div>
+      <div class="comensales-tabs-list">
+        ${chipsHtml.join('')}
+      </div>
+    </div>
+  `;
+};
+
+window.imprimirSubcuentaComensal = function(comensalNombre) {
+  if (!estado.mesaActiva || !estado.mesaActiva.items) return;
+  const mesa = estado.mesaActiva;
+  const itemsComensal = mesa.items.filter(it => (it.comensal || 'General') === comensalNombre);
+  
+  if (itemsComensal.length === 0) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`No hay productos asignados a "${comensalNombre}"`, 'warning');
+    } else {
+      alert(`No hay productos asignados a "${comensalNombre}"`);
+    }
+    return;
+  }
+
+  const subtotal = itemsComensal.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+  const esParaLlevar = Boolean(mesa.es_para_llevar);
+  const aplicaServicio = tieneServicio10 && !esParaLlevar;
+
+  let base = subtotal, serv = 0, iva = 0, tot = subtotal;
+  if (aplicaServicio && tieneIVA13) {
+    base = Math.round(subtotal / 1.23);
+    serv = Math.round(base * 0.10);
+    iva = subtotal - base - serv;
+  } else if (!aplicaServicio && tieneIVA13) {
+    base = Math.round(subtotal / 1.13);
+    serv = 0;
+    iva = subtotal - base;
+  } else if (aplicaServicio && !tieneIVA13) {
+    base = Math.round(subtotal / 1.10);
+    serv = subtotal - base;
+    iva = 0;
+  }
+
+  const w = window.open('', '_blank', 'width=420,height=600');
+  if (!w) {
+    alert('Por favor habilita las ventanas emergentes (pop-ups) para imprimir la subcuenta.');
+    return;
+  }
+  const negNom = estado.negocioActual?.nombre || 'GastroBar';
+  const fecha = new Date().toLocaleString('es-CR');
+
+  const itemsRows = itemsComensal.map(it => `
+    <tr>
+      <td style="text-align:left; padding:4px 0;">${it.cantidad}x ${it.nombre}</td>
+      <td style="text-align:right; padding:4px 0;">${formatCRC(it.precio * it.cantidad)}</td>
+    </tr>
+  `).join('');
+
+  w.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Sub-cuenta - ${comensalNombre} - Mesa ${mesa.numero || mesa.id}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; font-size: 13px; margin: 15px; color: #111; }
+        .center { text-align: center; }
+        .bold { font-weight: bold; }
+        .divider { border-top: 1px dashed #444; margin: 10px 0; }
+        .double-divider { border-top: 2px solid #000; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="center bold" style="font-size: 16px;">${negNom}</div>
+      <div class="center" style="font-size:12px; color:#555;">*** PREFACTURA / SUB-CUENTA INDIVIDUAL ***</div>
+      <div class="divider"></div>
+      <div><strong>Mesa:</strong> ${mesa.numero || mesa.id}</div>
+      <div><strong>Persona / Comensal:</strong> <span class="badge">👤 ${comensalNombre}</span></div>
+      <div><strong>Fecha:</strong> ${fecha}</div>
+      <div class="divider"></div>
+      <table>
+        <thead>
+          <tr style="border-bottom: 1px solid #444;">
+            <th style="text-align:left; padding-bottom:4px;">Cant / Platillo</th>
+            <th style="text-align:right; padding-bottom:4px;">Monto</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <table>
+        <tr><td>Subtotal Base:</td><td style="text-align:right;">${formatCRC(base)}</td></tr>
+        ${serv > 0 ? `<tr><td>Servicio (10%):</td><td style="text-align:right;">${formatCRC(serv)}</td></tr>` : ''}
+        ${iva > 0 ? `<tr><td>I.V.A (13%):</td><td style="text-align:right;">${formatCRC(iva)}</td></tr>` : ''}
+      </table>
+      <div class="double-divider"></div>
+      <div style="font-size: 16px; font-weight: bold; display: flex; justify-content: space-between;">
+        <span>TOTAL PERSONA:</span>
+        <span>${formatCRC(tot)}</span>
+      </div>
+      <div class="divider"></div>
+      <div class="center" style="font-size: 11px; color: #666;">
+        Sub-cuenta individual de Mesa ${mesa.numero || mesa.id}<br>
+        ¡Muchas gracias por su visita!
+      </div>
+      <script>
+        window.onload = function() {
+          window.print();
+        };
+      </script>
+    </body>
+    </html>
+  `);
+  w.document.close();
+};
+
 function renderTicketItems() {
   const list = document.getElementById('comTicketItemsList');
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
@@ -10209,31 +10583,41 @@ function renderTicketItems() {
     return;
   }
 
-  list.innerHTML = estado.mesaActiva.items.map((it, idx) => {
-    const cursoLabels = { 1: 'Bebida', 2: 'Entrada', 3: 'Plato Fuerte', 4: 'Postre', 5: 'Café', 6: 'Otros' };
-    const cursoClasses = { 1: 'c-bebida', 2: 'c-entrada', 3: 'c-fuerte', 4: 'c-postre', 5: 'c-cafe', 6: 'c-otros' };
-    const cursoBadge = `<span class="course-badge ${cursoClasses[it.curso] || 'c-fuerte'}">${cursoLabels[it.curso] || 'Fuerte'}</span>`;
+  // Detectar si hay comensales definidos o múltiples personas
+  const comensalesSet = new Set();
+  (estado.mesaActiva.items || []).forEach(it => {
+    if (it.comensal) comensalesSet.add(it.comensal);
+  });
+  (estado.comensalesMesa || []).forEach(c => { if (c) comensalesSet.add(c); });
 
-    // Trazabilidad de mesa de origen para mesas unidas
+  const hayMultiplesComensales = comensalesSet.size > 1 || (comensalesSet.size === 1 && !comensalesSet.has('General')) || Boolean(estado.asistenteComensal && estado.asistenteComensal.activo);
+
+  const cursoLabels = { 1: 'Bebida', 2: 'Entrada', 3: 'Plato Fuerte', 4: 'Postre', 5: 'Café', 6: 'Otros' };
+  const cursoClasses = { 1: 'c-bebida', 2: 'c-entrada', 3: 'c-fuerte', 4: 'c-postre', 5: 'c-cafe', 6: 'c-otros' };
+
+  const renderItemRow = (it, idx) => {
+    const cursoBadge = `<span class="course-badge ${cursoClasses[it.curso] || 'c-fuerte'}">${cursoLabels[it.curso] || 'Fuerte'}</span>`;
     const origenBadge = (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(estado.mesaActiva.numero))
       ? `<span class="mesa-origin-badge" title="Producto originario de ${it.origen_mesa_numero}">[${it.origen_mesa_numero.toString().toLowerCase().includes('mesa') ? it.origen_mesa_numero : 'Mesa ' + it.origen_mesa_numero}]</span>`
       : '';
-
     const esCervezaPromo = Boolean(it.happyHour || it.categoria_id === 4 || it.catId === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(it.nombre || ''));
     const promoBadge = (Boolean(it.en_happy_hour) && esCervezaPromo)
       ? `<span class="hh-promo-badge">🍸 2x1</span>`
       : '';
-
     const estadoEnvioBadge = it.enviado 
       ? (it.offlinePendiente 
           ? '<small style="color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.15); padding:1px 6px; border-radius:4px;">🟡 Guardado offline</small>' 
           : '<small style="color:#10b981;">✓ Enviado</small>')
       : '';
 
+    const comensalTag = (it.comensal && it.comensal !== 'General' && !hayMultiplesComensales)
+      ? `<span class="badge-comensal-tag">👤 ${it.comensal}</span>`
+      : '';
+
     return `
       <div class="ticket-item-row">
         <div class="ticket-item-top">
-          <span class="t-name">${origenBadge}${it.nombre} ${promoBadge} ${cursoBadge} ${estadoEnvioBadge}</span>
+          <span class="t-name">${origenBadge}${it.nombre} ${comensalTag} ${promoBadge} ${cursoBadge} ${estadoEnvioBadge}</span>
           <span class="t-price">${formatCRC(it.precio * it.cantidad)}</span>
         </div>
         ${it.notas ? `<div class="ticket-item-notes">⚠️ ${it.notas}</div>` : ''}
@@ -10250,7 +10634,53 @@ function renderTicketItems() {
         </div>
       </div>
     `;
-  }).join('');
+  };
+
+  if (!hayMultiplesComensales) {
+    list.innerHTML = estado.mesaActiva.items.map((it, idx) => renderItemRow(it, idx)).join('');
+  } else {
+    // Agrupar items por comensal manteniendo indices reales en mesaActiva.items
+    const grupos = {};
+    estado.mesaActiva.items.forEach((it, idx) => {
+      const c = it.comensal || 'General';
+      if (!grupos[c]) grupos[c] = [];
+      grupos[c].push({ it, idx });
+    });
+
+    const ordenComensales = [];
+    (estado.comensalesMesa || []).forEach(c => {
+      if (!ordenComensales.includes(c)) ordenComensales.push(c);
+    });
+    Object.keys(grupos).forEach(c => {
+      if (!ordenComensales.includes(c)) ordenComensales.push(c);
+    });
+
+    let html = '';
+    ordenComensales.forEach(comNom => {
+      const itemsGrupo = grupos[comNom] || [];
+      const subtotalGrupo = itemsGrupo.reduce((acc, obj) => acc + (obj.it.precio * obj.it.cantidad), 0);
+      const tituloCom = (comNom === 'General') ? '👥 Compartido / General' : `👤 ${comNom}`;
+      const comNomEscapado = comNom.replace(/'/g, "\\'");
+
+      html += `
+        <div class="ticket-comensal-grupo">
+          <div class="ticket-comensal-header">
+            <div class="ticket-comensal-title">
+              <span>${tituloCom}</span>
+              <span class="badge-comensal-subtotal">${formatCRC(subtotalGrupo)}</span>
+            </div>
+            <div class="ticket-comensal-actions">
+              <button class="btn-subcuenta-cobrar" onclick="imprimirSubcuentaComensal('${comNomEscapado}')" title="Prefactura / Sub-cuenta individual">🧾 Sub-cuenta</button>
+            </div>
+          </div>
+          <div class="ticket-comensal-items">
+            ${itemsGrupo.length > 0 ? itemsGrupo.map(obj => renderItemRow(obj.it, obj.idx)).join('') : '<div style="font-size:12px; color:#9ca3af; padding:6px 10px;">Sin platillos aún para esta persona</div>'}
+          </div>
+        </div>
+      `;
+    });
+    list.innerHTML = html;
+  }
 
   recalcularTotalesTicket();
   actualizarBotonEnviarComanda();
@@ -12158,6 +12588,8 @@ window.ejecutarReasignacionTurnoCaja = async function() {
       })
     });
 
+    const data = await
+... [truncated for diff preview]
     const data = await res.json();
     if (!res.ok) {
       alert('❌ ' + (data.error || 'No se pudo reasignar el turno de caja'));
