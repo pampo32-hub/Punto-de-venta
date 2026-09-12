@@ -664,8 +664,9 @@ app.post('/api/auth/login', async (req, res) => {
             OR LOWER(TRIM(nombre_completo)) = LOWER(TRIM(?)) 
             OR pin = ? 
             OR TRIM(pin) = TRIM(?)) 
-           AND (COALESCE(activo, 1) = 1)`,
-        [uInput, uInput, uInput, uInput]
+           AND (COALESCE(activo, 1) = 1)
+         ORDER BY (CASE WHEN LOWER(TRIM(usuario)) = LOWER(TRIM(?)) THEN 1 WHEN rol IN ('developer','admin','superadmin') THEN 2 ELSE 3 END)`,
+        [uInput, uInput, uInput, uInput, uInput]
       );
       for (const cand of candidatos) {
         const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
@@ -678,7 +679,8 @@ app.post('/api/auth/login', async (req, res) => {
       // Fallback: si no hubo match directo, buscar entre todos los usuarios activos
       if (!u) {
         const todos = await dbAll(
-          `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)`
+          `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
+           ORDER BY (CASE WHEN rol IN ('developer','admin','superadmin') THEN 1 ELSE 2 END)`
         );
         for (const cand of todos) {
           const candUser = (cand.usuario || '').toLowerCase().trim();
@@ -695,8 +697,8 @@ app.post('/api/auth/login', async (req, res) => {
       }
     } else if (pInput) {
       const candidatos = await dbAll(
-        `SELECT * FROM Usuarios WHERE (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`
-        `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)`
+        `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
+         ORDER BY (CASE WHEN rol IN ('developer','admin','superadmin') THEN 1 ELSE 2 END)`
       );
       for (const cand of candidatos) {
         const passOk = await verificarCredencialUsuario(cand, pInput);
@@ -711,7 +713,6 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
     }
 
-
     const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
 
     // Bloquear acceso a comercios desactivados para cualquier usuario (excepto Developer)
@@ -723,17 +724,14 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // ── SEGURIDAD PERIMETRAL: RESTRICCIÓN DE ACCESO POR RED WIFI / IP PÚBLICA ──
-    // Administradores, Super Administradores y Developers acceden remotamente desde cualquier red.
-    // Saloneros, Cajeros y Cocineros solo pueden iniciar sesión si están conectados a la red del Bar.
+    const clientIp = obtenerIpCliente(req);
+    const isLoopback = ['127.0.0.1', '::1', 'localhost', '::ffff:127.0.0.1'].includes(clientIp) || !clientIp;
     const rolesExentosIp = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer', 'supervisor'];
     const esRolExento = rolesExentosIp.includes((u.rol || '').toLowerCase().trim());
 
     if (!esRolExento && negocio && Number(negocio.restringir_ip_operativos) === 1) {
-      const clientIp = obtenerIpCliente(req);
       const rawIps = (negocio.ips_permitidas || '').trim();
       const permitidas = rawIps ? rawIps.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean) : [];
-
-      const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(clientIp);
       const ipCoincide = permitidas.includes(clientIp) || (isLoopback && (permitidas.includes('127.0.0.1') || permitidas.includes('localhost') || permitidas.length === 0));
 
       if (!ipCoincide && permitidas.length > 0) {
@@ -748,7 +746,7 @@ app.post('/api/auth/login', async (req, res) => {
     // ── SEGURIDAD DE TERMINALES: DISPOSITIVOS AUTORIZADOS (DEVICE WHITELISTING) ──
     const deviceToken = String(req.headers['x-device-token'] || req.body.deviceToken || req.body.device_token || '').trim();
 
-    if (!esRolExento && negocio && Number(negocio.restringir_dispositivos) === 1) {
+    if (!esRolExento && !isLoopback && negocio && Number(negocio.restringir_dispositivos) === 1) {
       if (!deviceToken) {
         return res.status(403).json({
           error: '🚫 Dispositivo no autorizado: Esta terminal no cuenta con un token de dispositivo registrado. Solicite a un Administrador que autorice este equipo.',
