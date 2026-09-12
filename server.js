@@ -566,12 +566,11 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
   try {
     const usuarios = await dbAll(`
       SELECT u.id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.negocio_id,
-             COALESCE(n.nombre, CASE WHEN u.negocio_id = 3 THEN 'Bistro & Grill La Terraza' ELSE 'GastroBar Fuego & Brasas' END) as negocio_nombre,
+             COALESCE(n.nombre, CASE WHEN u.negocio_id = 3 THEN 'Bistro & Grill La Terraza' ELSE 'La Terrazita' END) as negocio_nombre,
              n.slogan as negocio_slogan,
              n.logo_url as negocio_logo
       FROM Usuarios u
       LEFT JOIN Negocios n ON u.negocio_id = n.id
-      WHERE (u.activo = 1 OR u.activo = true OR u.activo IS NULL OR CAST(u.activo AS TEXT) = '1')
       WHERE (COALESCE(u.activo, 1) = 1)
       ORDER BY 
         COALESCE(u.negocio_id, 1) ASC,
