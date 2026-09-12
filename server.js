@@ -2898,7 +2898,7 @@ app.get('/api/mesas', async (req, res) => {
     if (activeOrderIds.length > 0) {
       const placeholders = activeOrderIds.map(() => '?').join(',');
       const allItems = await dbAll(
-        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' ORDER BY hora_pedido ASC, id ASC`,
+        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY hora_pedido ASC, id ASC`,
         activeOrderIds
       );
       for (const it of allItems) {
@@ -4387,7 +4387,7 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     const solicitanteLogin = String(req.body.usuarioLogin || req.body.usuarioNombre || req.headers['x-user-login'] || req.headers['x-user-name'] || req.usuario?.usuario || 'cajero').trim();
 
     // Obtener detalles de la orden para calcular subtotal bruto
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'", [ordenId]);
     const subtotalBruto = (items || []).reduce((acc, it) => {
       const p = Number(it.subtotal != null ? it.subtotal : (Number(it.precio_unitario || it.precio || 0) * (Number(it.cantidad) || 1))) || 0;
       return acc + p;
@@ -4914,7 +4914,7 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
     );
     if (!orden) return res.json({ orden: null, items: [] });
 
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
     res.json({ orden, items });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4931,7 +4931,7 @@ app.get('/api/ordenes/:id', async (req, res) => {
       [ordenId, negocioId, negocioId]
     );
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
     res.json({ orden, items });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4951,7 +4951,6 @@ app.post('/api/happy-hour', async (req, res) => {
   const userRol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.body && req.body.userRol) || '').toLowerCase();
   const adminPin = req.headers['x-admin-pin'] || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
-
   let esAutorizado = ['admin', 'developer', 'cajero'].includes(userRol);
   if (!esAutorizado && adminPin) {
     esAutorizado = await validarPinAdministrador(adminPin, negocioId);

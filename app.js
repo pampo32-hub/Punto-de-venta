@@ -9916,21 +9916,23 @@ async function abrirComanderoMesa(mesaId) {
       mesa.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
       mesa.descuento_motivo = data.orden.descuento_motivo || '';
       mesa.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
-      mesa.items = (data.items || []).map(it => ({
-        id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
-        id: it.producto_id || it.id,
-        nombre: it.nombre_producto || it.nombre,
-        precio: Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0,
-        cantidad: Number(it.cantidad) || 1,
-        notas: it.notas || '',
-        curso: it.curso || 2,
-        destino: it.destino || 'cocina',
-        comensal: it.comensal || 'General',
-        origen_mesa_numero: it.origen_mesa_numero || null,
-        enviado: it.enviado !== false,
-        offlinePendiente: Boolean(it.offlinePendiente),
-        en_happy_hour: Boolean(it.en_happy_hour)
-      }));
+      mesa.items = (data.items || [])
+        .filter(it => it.estado_comanda !== 'pagado' && it.estado_comanda !== 'anulado' && !it.pagado)
+        .map(it => ({
+          id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
+          id: it.producto_id || it.id,
+          nombre: it.nombre_producto || it.nombre,
+          precio: Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0,
+          cantidad: Number(it.cantidad) || 1,
+          notas: it.notas || '',
+          curso: it.curso || 2,
+          destino: it.destino || 'cocina',
+          comensal: it.comensal || 'General',
+          origen_mesa_numero: it.origen_mesa_numero || null,
+          enviado: it.enviado !== false,
+          offlinePendiente: Boolean(it.offlinePendiente),
+          en_happy_hour: Boolean(it.en_happy_hour)
+        }));
 
       // Si la mesa tenía pedidos offline, asegurar que el estado visual de la mesa refleje consumo
       if (mesa.items.length > 0 && mesa.estado === 'libre') {
@@ -11844,6 +11846,8 @@ function renderKDS() {
         }).join('')}
       </div>
 
+      <div class
+... [truncated for diff preview]
       <div class="kds-actions-bar" id="kdsActionsBar_${key}" style="display:flex; gap:8px;">
         <button class="btn-kds-ready btn-kds-despachar-sel" id="btnDespacharSel_${key}" style="flex:1.2; display:${selectedCount > 0 && selectedCount < t.items.length ? 'flex' : 'none'}; justify-content:center; align-items:center; background: linear-gradient(135deg, #10b981 0%, #059669 100%); font-weight:700; box-shadow: 0 4px 12px rgba(16,185,129,0.35);" onclick="despacharSeleccionadosKDS('${key}')">
           🍽️ Servir Seleccionadas (<span class="kds-sel-count">${selectedCount}</span>)
@@ -14709,10 +14713,11 @@ window.ejecutarCobroFinal = async function() {
       // Descontar los productos pagados de estado.mesaActiva.items
       if (personaCobrada.items && estado.mesaActiva && estado.mesaActiva.items) {
         personaCobrada.items.forEach(pItem => {
-          let restante = pItem.cantidad;
+          let restante = Number(pItem.cantidad) || 1;
           for (let i = 0; i < estado.mesaActiva.items.length; i++) {
             const mItem = estado.mesaActiva.items[i];
-            if (mItem.nombre === pItem.nombre || mItem.id === pItem.producto_id || mItem.producto_id === pItem.producto_id) {
+            const coincideComensal = !pItem.comensal || !mItem.comensal || mItem.comensal === pItem.comensal || mItem.comensal === personaCobrada.nombre;
+            if (coincideComensal && (mItem.nombre === pItem.nombre || mItem.id === pItem.producto_id || mItem.producto_id === pItem.producto_id)) {
               if (mItem.cantidad <= restante) {
                 restante -= mItem.cantidad;
                 estado.mesaActiva.items.splice(i, 1);
@@ -14726,6 +14731,12 @@ window.ejecutarCobroFinal = async function() {
             }
           }
         });
+
+        // Asegurar que ningún ítem quede asignado al comensal pagado
+        if (personaCobrada.nombre && personaCobrada.nombre !== 'General' && personaCobrada.nombre !== 'Cuenta Compartida') {
+          estado.mesaActiva.items = (estado.mesaActiva.items || []).filter(it => it.comensal !== personaCobrada.nombre);
+        }
+
         try {
           if (window.PosOfflineDB && estado.mesaActiva) {
             const remTot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
@@ -14961,33 +14972,42 @@ window.ejecutarCobroFinal = async function() {
         if (typeof cargarKDSDesdeBackend === 'function') cargarKDSDesdeBackend();
       } else {
         // Quedan personas o productos pendientes
+        const remMesaTot = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        if (estado.mesaActiva) {
+          estado.mesaActiva.total = remMesaTot;
+          estado.mesaActiva.orden_total = remMesaTot;
+          if (cobroResData?.saldo_restante !== undefined) {
+            estado.mesaActiva.total = Number(cobroResData.saldo_restante);
+            estado.mesaActiva.orden_total = Number(cobroResData.saldo_restante);
+          }
+        }
+
+        // Actualizar comensales restantes que aún tengan ítems pendientes
+        const comensalesRestantes = new Set((estado.mesaActiva?.items || []).map(it => it.comensal).filter(c => c && c !== 'General'));
+        estado.comensalesMesa = Array.from(comensalesRestantes);
+        if (estado.comensalActivo === personaCobrada.nombre || !comensalesRestantes.has(estado.comensalActivo)) {
+          estado.comensalActivo = estado.comensalesMesa.length > 0 ? estado.comensalesMesa[0] : 'General';
+        }
+
+        // Actualizar mesa en lista de mesas del salón
+        const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
+        if (mesaEnLista && estado.mesaActiva) {
+          mesaEnLista.total = estado.mesaActiva.total;
+          mesaEnLista.orden_total = estado.mesaActiva.orden_total;
+          mesaEnLista.items = [...(estado.mesaActiva.items || [])];
+        }
+
+        // Si se usaba el modal de dividir cuenta, purgar a las personas pagadas
+        if (typeof splitState !== 'undefined' && splitState && splitState.personas) {
+          splitState.personas = splitState.personas.filter(p => !p.pagada);
+          splitState.numPersonas = Math.max(1, splitState.personas.length);
+          if (splitState.personaActivaIndex >= splitState.personas.length) {
+            splitState.personaActivaIndex = Math.max(0, splitState.personas.length - 1);
+          }
+        }
+
         if (estado.vinoDeSubcuentaDirecta) {
           estado.vinoDeSubcuentaDirecta = false;
-          const remMesaTot = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-          if (estado.mesaActiva) {
-            estado.mesaActiva.total = remMesaTot;
-            estado.mesaActiva.orden_total = remMesaTot;
-            if (cobroResData?.saldo_restante !== undefined) {
-              estado.mesaActiva.total = Number(cobroResData.saldo_restante);
-              estado.mesaActiva.orden_total = Number(cobroResData.saldo_restante);
-            }
-          }
-
-          // Actualizar comensales restantes
-          const comensalesRestantes = new Set((estado.mesaActiva?.items || []).map(it => it.comensal).filter(c => c && c !== 'General'));
-          estado.comensalesMesa = Array.from(comensalesRestantes);
-          if (estado.comensalActivo === personaCobrada.nombre || !comensalesRestantes.has(estado.comensalActivo)) {
-            estado.comensalActivo = estado.comensalesMesa.length > 0 ? estado.comensalesMesa[0] : 'General';
-          }
-
-          // Actualizar mesa en lista de mesas del salón
-          const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
-          if (mesaEnLista && estado.mesaActiva) {
-            mesaEnLista.total = estado.mesaActiva.total;
-            mesaEnLista.orden_total = estado.mesaActiva.orden_total;
-            mesaEnLista.items = [...(estado.mesaActiva.items || [])];
-          }
-
           if (typeof renderTicketItems === 'function') renderTicketItems();
           if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
           if (typeof renderComensalesTabs === 'function') renderComensalesTabs();
@@ -14998,19 +15018,11 @@ window.ejecutarCobroFinal = async function() {
           const saldoTxt = estado.mesaActiva ? formatCRC(estado.mesaActiva.orden_total || estado.mesaActiva.total || 0) : '0';
           mostrarNotificacionCentro(`✅ ¡Sub-cuenta de ${personaCobrada.nombre} pagada con éxito! Mesa permanece abierta (Saldo restante: ${saldoTxt})`, 'success');
         } else {
-          // Re-abrir split modal y avanzar a la siguiente persona
-          const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
-          if (sigPersonaIdx !== -1) {
-            splitState.personaActivaIndex = sigPersonaIdx;
-          } else {
-            const sigUnpaid = splitState.personas.findIndex(p => !p.pagada);
-            if (sigUnpaid !== -1) splitState.personaActivaIndex = sigUnpaid;
-          }
-
-          renderSplitDisponibles();
-          renderSplitPersonaActiva();
-          renderSplitColaPersonas();
-          calcularSplitIgual();
+          // Re-abrir split modal y refrescar la distribución de solo las personas pendientes
+          if (typeof renderSplitDisponibles === 'function') renderSplitDisponibles();
+          if (typeof renderSplitPersonaActiva === 'function') renderSplitPersonaActiva();
+          if (typeof renderSplitColaPersonas === 'function') renderSplitColaPersonas();
+          if (typeof calcularSplitIgual === 'function') calcularSplitIgual();
 
           const mSplit = document.getElementById('modalSplitBill');
           if (mSplit) {
@@ -15613,9 +15625,13 @@ function iniciarDivisionCuentas() {
 
   // Detectar si la mesa ya tiene comensales o items por comensal
   const comensalesSet = new Set();
-  (estado.comensalesMesa || []).forEach(c => { if (c && c !== 'General') comensalesSet.add(c); });
+  (estado.comensalesMesa || []).forEach(c => {
+    if (c && c !== 'General' && (estado.mesaActiva.items || []).some(it => it.comensal === c && !it.pagado)) {
+      comensalesSet.add(c);
+    }
+  });
   (estado.mesaActiva.items || []).forEach(it => {
-    if (it.comensal && it.comensal !== 'General') comensalesSet.add(it.comensal);
+    if (it.comensal && it.comensal !== 'General' && !it.pagado) comensalesSet.add(it.comensal);
   });
   const comensalesArray = Array.from(comensalesSet);
 
@@ -15635,7 +15651,7 @@ function iniciarDivisionCuentas() {
     comensalesArray.forEach((nom, i) => {
       const pItems = [];
       (estado.mesaActiva.items || []).forEach((it, idx) => {
-        if (it.comensal === nom) {
+        if (it.comensal === nom && !it.pagado) {
           pItems.push({
             id: it.id || (idx + 1),
             producto_id: it.producto_id || it.id,
@@ -15692,7 +15708,7 @@ function iniciarDivisionCuentas() {
 
     // Los ítems sin comensal o 'General' quedan disponibles para distribuir
     (estado.mesaActiva.items || []).forEach((it, idx) => {
-      if (!it.comensal || it.comensal === 'General') {
+      if ((!it.comensal || it.comensal === 'General') && !it.pagado) {
         splitState.itemsDisponibles.push({
           id: it.id || (idx + 1),
           producto_id: it.producto_id || it.id,
@@ -15711,14 +15727,16 @@ function iniciarDivisionCuentas() {
     splitState.personaActivaIndex = 0;
 
     // Clonar ítems disponibles
-    splitState.itemsDisponibles = (estado.mesaActiva.items || []).map((it, idx) => ({
-      id: it.id || (idx + 1),
-      producto_id: it.producto_id || it.id,
-      nombre: it.nombre || it.nombre_producto || 'Platillo',
-      precio: Number(it.precio) || 0,
-      cantidad: Number(it.cantidad) || 1,
-      curso: it.curso || 2
-    }));
+    splitState.itemsDisponibles = (estado.mesaActiva.items || [])
+      .filter(it => !it.pagado)
+      .map((it, idx) => ({
+        id: it.id || (idx + 1),
+        producto_id: it.producto_id || it.id,
+        nombre: it.nombre || it.nombre_producto || 'Platillo',
+        precio: Number(it.precio) || 0,
+        cantidad: Number(it.cantidad) || 1,
+        curso: it.curso || 2
+      }));
 
     // Inicializar personas
     splitState.personas = [];
