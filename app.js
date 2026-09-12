@@ -7836,6 +7836,7 @@ window.agregarAlTicketOneTap = async function(prodId) {
   );
   const esHH = Boolean(estado.happyHourActivo && esCervezaOEligible);
 
+  // Buscar si ya existe una línea NO ENVIADA con el MISMO estado de Happy Hour
   const comensalActual = estado.comensalActivo || 'General';
 
   // Buscar si ya existe una línea NO ENVIADA con el MISMO estado de Happy Hour y MISMO comensal
@@ -8172,7 +8173,6 @@ function renderGrillaOrdenada(filtroZona = null) {
         const estaEsperandoCocina = Boolean((m.estado === 'esperando' || m.estado === 'esperando_parcial') || (platosPendientes && platosPendientes.length > 0));
 
         let estadoEfectivo = m.estado;
-        if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
         if (m.estado === 'reservada') {
           estadoEfectivo = 'reservada';
         } else if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
@@ -8188,14 +8188,10 @@ function renderGrillaOrdenada(filtroZona = null) {
           esperando_parcial: 'Esperando Parcial',
           activa: 'Ocupada',
           cuenta: 'Cuenta Pedida',
-          unida: 'Unida'
           unida: 'Unida',
           reservada: 'Reservada'
         }[estadoEfectivo] || (estaEsperandoCocina ? 'Esperando' : 'Libre');
 
-        const badgeClass = (estadoEfectivo === 'libre' && !estaEsperandoCocina)
-          ? 'badge-libre'
-          : (esCuenta ? 'badge-cuenta' : (estadoEfectivo === 'esperando' || estaEsperandoCocina ? 'badge-esperando' : (estadoEfectivo === 'esperando_parcial' ? 'badge-esperando_parcial' : 'badge-ocupada')));
         const badgeClass = (estadoEfectivo === 'reservada')
           ? 'badge-reservada'
           : ((estadoEfectivo === 'libre' && !estaEsperandoCocina)
@@ -10597,13 +10593,17 @@ function renderTicketItems() {
 
   const renderItemRow = (it, idx) => {
     const cursoBadge = `<span class="course-badge ${cursoClasses[it.curso] || 'c-fuerte'}">${cursoLabels[it.curso] || 'Fuerte'}</span>`;
+
+    // Trazabilidad de mesa de origen para mesas unidas
     const origenBadge = (it.origen_mesa_numero && String(it.origen_mesa_numero) !== String(estado.mesaActiva.numero))
       ? `<span class="mesa-origin-badge" title="Producto originario de ${it.origen_mesa_numero}">[${it.origen_mesa_numero.toString().toLowerCase().includes('mesa') ? it.origen_mesa_numero : 'Mesa ' + it.origen_mesa_numero}]</span>`
       : '';
+
     const esCervezaPromo = Boolean(it.happyHour || it.categoria_id === 4 || it.catId === 4 || /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(it.nombre || ''));
     const promoBadge = (Boolean(it.en_happy_hour) && esCervezaPromo)
       ? `<span class="hh-promo-badge">🍸 2x1</span>`
       : '';
+
     const estadoEnvioBadge = it.enviado 
       ? (it.offlinePendiente 
           ? '<small style="color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.15); padding:1px 6px; border-radius:4px;">🟡 Guardado offline</small>' 
@@ -12249,6 +12249,7 @@ window.generarCorteX = async function() {
   }
 };
 
+// ------------------------------------------------------
 // -------------------------------------------------------------
 // APERTURA DINÁMICA DE CAJA CON SELECCIÓN DE PUNTOS FÍSICOS
 // -------------------------------------------------------------
@@ -12588,8 +12589,6 @@ window.ejecutarReasignacionTurnoCaja = async function() {
       })
     });
 
-    const data = await
-... [truncated for diff preview]
     const data = await res.json();
     if (!res.ok) {
       alert('❌ ' + (data.error || 'No se pudo reasignar el turno de caja'));
