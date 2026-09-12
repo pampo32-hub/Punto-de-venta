@@ -9596,17 +9596,48 @@ window.modificarCantidadTicket = async function(idx, delta) {
   const item = estado.mesaActiva.items[idx];
   if (!item) return;
   const prodId = item.producto_id || item.id;
-  item.cantidad += delta;
-  if (item.cantidad <= 0) {
+
+  if (delta > 0) {
     if (item.enviado) {
-      solicitarAnulacionItem(idx);
-      item.cantidad = 1;
+      // Si el producto ya fue guardado/enviado previamente, sumar 1 agrega una nueva unidad pendiente de guardar
+      if (typeof window.agregarAlTicketOneTap === 'function' && prodId) {
+        await window.agregarAlTicketOneTap(prodId);
+        return;
+      }
+      // Fallback: agregar línea no enviada
+      const nuevaLinea = {
+        ...item,
+        cantidad: delta,
+        enviado: false,
+        offlinePendiente: false,
+        id_detalle_existente: null,
+        creado_en: new Date().toISOString()
+      };
+      delete nuevaLinea.id_detalle;
+      delete nuevaLinea.id_detalle_existente;
+      estado.mesaActiva.items.push(nuevaLinea);
+      renderTicketItems();
+      actualizarBotonEnviarComanda();
       return;
     } else {
-      estado.mesaActiva.items.splice(idx, 1);
+      item.cantidad += delta;
+    }
+  } else if (delta < 0) {
+    if (item.enviado) {
+      // Si ya está guardado/enviado, anular o reducir requiere PIN de supervisor
+      solicitarAnulacionItem(idx);
+      return;
+    } else {
+      item.cantidad += delta;
+      if (item.cantidad <= 0) {
+        estado.mesaActiva.items.splice(idx, 1);
+      }
     }
   }
+
   renderTicketItems();
+  actualizarBotonEnviarComanda();
+
   if (delta > 0 && typeof prodId === 'number') {
     await window.verificarOfertaBaldeCerveza(prodId, delta);
   }
