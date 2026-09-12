@@ -1808,12 +1808,28 @@ try {
           if (d.estado === 'libre' || d.cliente === null) {
             mesa.cliente = null;
             mesa.mesa_cliente = null;
+            mesa.orden_total = 0;
+            mesa.total = 0;
           } else if (d.cliente !== undefined) {
             mesa.cliente = d.cliente;
             mesa.mesa_cliente = d.cliente;
           }
+          if (d.orden_total !== undefined) {
+            mesa.orden_total = Number(d.orden_total);
+            mesa.total = Number(d.orden_total);
+          } else if (d.total !== undefined) {
+            mesa.orden_total = Number(d.total);
+            mesa.total = Number(d.total);
+          }
+          if (d.estado) mesa.estado = d.estado;
+          if (typeof renderSalón === 'function') renderSalón();
         }
       }
+      cargarMesasDesdeBackend();
+    });
+    socket.on('mesas_actualizadas', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarMesasDesdeBackend();
     });
     socket.on('nueva_mesa_creada', (d) => {
@@ -10734,19 +10750,22 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
     iva = 0;
   }
 
-  // Detectar todos los comensales presentes para poblar splitState adecuadamente
+  if (typeof splitState === 'undefined' || !splitState) {
+    window.splitState = { personas: [], itemsDisponibles: [], numPersonas: 1, personaActivaIndex: 0 };
+  }
+
+  // Detectar comensales con ítems pendientes
   const comensalesSet = new Set();
   (estado.comensalesMesa || []).forEach(c => { if (c) comensalesSet.add(c); });
   (mesa.items || []).forEach(it => {
-    if (it.comensal) comensalesSet.add(it.comensal);
+    if (it.comensal && !it.pagado) comensalesSet.add(it.comensal);
   });
   if (!comensalesSet.has(comensalNombre)) comensalesSet.add(comensalNombre);
   const comensalesArray = Array.from(comensalesSet);
 
-  window.splitState = { personas: [], itemsDisponibles: [], numPersonas: comensalesArray.length, personaActivaIndex: 0 };
-
-  comensalesArray.forEach((nom) => {
-    const pItems = mesa.items.filter(it => (it.comensal || 'General') === nom && !it.pagado);
+  splitState.personas = [];
+  comensalesArray.forEach(nom => {
+    const pItems = (mesa.items || []).filter(it => (it.comensal || 'General') === nom && !it.pagado);
     const pSub = pItems.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
     let pBase = pSub, pServ = 0, pIva = 0, pTot = pSub;
     if (aplicaServicio && tieneIVA13) {
@@ -10775,7 +10794,7 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
     });
   });
 
-  const targetIdx = splitState.personas.findIndex(p => p.id === comensalNombre || p.nombre === comensalNombre);
+  const targetIdx = splitState.personas.findIndex(p => p.id === comensalNombre || p.nombre === comensalNombre || (comensalNombre === 'General' && p.nombre === 'Cuenta Compartida'));
   estado.cobroSplitPersonaIndex = targetIdx !== -1 ? targetIdx : 0;
   estado.vinoDeSubcuentaDirecta = true;
 
@@ -15026,8 +15045,8 @@ window.ejecutarCobroFinal = async function() {
           if (typeof renderTicketItems === 'function') renderTicketItems();
           if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
           if (typeof renderComensalesTabs === 'function') renderComensalesTabs();
-          if (typeof cargarMesasDesdeBackend === 'function') await cargarMesasDesdeBackend();
-          if (typeof renderMesas === 'function') renderMesas();
+          if (typeof renderSalón === 'function') renderSalón();
+          if (typeof cargarMesasDesdeBackend === 'function') cargarMesasDesdeBackend();
           if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
 
           const saldoTxt = estado.mesaActiva ? formatCRC(estado.mesaActiva.orden_total || estado.mesaActiva.total || 0) : '0';
@@ -15038,6 +15057,8 @@ window.ejecutarCobroFinal = async function() {
           if (typeof renderSplitPersonaActiva === 'function') renderSplitPersonaActiva();
           if (typeof renderSplitColaPersonas === 'function') renderSplitColaPersonas();
           if (typeof calcularSplitIgual === 'function') calcularSplitIgual();
+          if (typeof renderSalón === 'function') renderSalón();
+          if (typeof cargarMesasDesdeBackend === 'function') cargarMesasDesdeBackend();
 
           const mSplit = document.getElementById('modalSplitBill');
           if (mSplit) {

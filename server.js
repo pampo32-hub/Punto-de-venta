@@ -529,23 +529,7 @@ function evaluarEstadoMesaKDS(detalles = []) {
   }
 }
 
-async function recalcularTotalesOrden(ordenId) {
-  try {
-    const items = await dbAll(
-      "SELECT subtotal FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
-      [ordenId]
-    );
-    const subtotal = items.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0);
-    const total = subtotal;
-    await dbRun(
-      'UPDATE Ordenes SET subtotal = ?, total = ? WHERE id = ?',
-      [subtotal, total, ordenId]
-    );
-    return { subtotal, servicio: 0, iva: 0, total };
-  } catch (e) {
-    return { subtotal: 0, servicio: 0, iva: 0, total: 0 };
-  }
-}
+
 
 function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora = new Date()) {
   const fechaPedido = new Date(primeraComandaHora);
@@ -2910,6 +2894,9 @@ app.get('/api/mesas', async (req, res) => {
     const ahora = Date.now();
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
+      if (m.orden_activa_id) {
+        m.orden_total = items.reduce((acc, it) => acc + ((Number(it.precio_unitario) || 0) * (Number(it.cantidad) || 1)), 0);
+      }
       const cocinaItems = items.filter(
         it => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
       );
@@ -2943,7 +2930,6 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
-      } else if (m.estado === 'ocupada' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
@@ -2965,7 +2951,6 @@ app.get('/api/mesas', async (req, res) => {
           m.items_pendientes = [];
           m.minutos_espera = 0;
         }
-        m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
       } else if (m.estado === 'reservada') {
         m.orden_total = 0;
@@ -5003,7 +4988,6 @@ async function recalcularTotalesOrden(ordenId) {
   );
 
   const rows = await dbAll(
-    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
     "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL) AND (d.estado_comanda != 'pagado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );
@@ -6343,7 +6327,7 @@ async function procesarCobroOrden(ordenId, {
         }
 
         let restanteADescontar = qty;
-        for (const det of detalleItems) {
+        for (const det of (detalleItems || [])) {
           if (restanteADescontar <= 0) break;
           if (det.cantidad <= restanteADescontar) {
             restanteADescontar -= det.cantidad;
@@ -6367,9 +6351,6 @@ async function procesarCobroOrden(ordenId, {
     // Recalcular subtotal y total de la orden con los ítems activos no pagados usando el motor oficial
     const infoTotales = await recalcularTotalesOrden(ordenId);
     const nuevoTotal = Number(infoTotales?.total) || 0;
-    const nuevoSubtotal = Number(infoTotales?.subtotal) || 0;
-    const nuevoIva = Number(infoTotales?.iva) || 0;
-    const nuevoServicio = Number(infoTotales?.servicio) || 0;
 
     const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
     const impParcial = Math.round(subParcial * 0.23);
@@ -6396,13 +6377,11 @@ async function procesarCobroOrden(ordenId, {
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
       const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
       const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
-      await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, estado: estadoMesaActual });
       await dbRun("UPDATE Mesas SET estado = ?, orden_total = ? WHERE id = ?", [estadoMesaActual, nuevoTotal, orden.mesa_id]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual });
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual, negocio_id: orden.negocio_id });
+      io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id });
     }
 
     io.emit('inventario_actualizado');

@@ -529,23 +529,7 @@ function evaluarEstadoMesaKDS(detalles = []) {
   }
 }
 
-async function recalcularTotalesOrden(ordenId) {
-  try {
-    const items = await dbAll(
-      "SELECT subtotal FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
-      [ordenId]
-    );
-    const subtotal = items.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0);
-    const total = subtotal;
-    await dbRun(
-      'UPDATE Ordenes SET subtotal = ?, total = ? WHERE id = ?',
-      [subtotal, total, ordenId]
-    );
-    return { subtotal, servicio: 0, iva: 0, total };
-  } catch (e) {
-    return { subtotal: 0, servicio: 0, iva: 0, total: 0 };
-  }
-}
+
 
 function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora = new Date()) {
   const fechaPedido = new Date(primeraComandaHora);
@@ -2898,7 +2882,7 @@ app.get('/api/mesas', async (req, res) => {
     if (activeOrderIds.length > 0) {
       const placeholders = activeOrderIds.map(() => '?').join(',');
       const allItems = await dbAll(
-        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' ORDER BY hora_pedido ASC, id ASC`,
+        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY hora_pedido ASC, id ASC`,
         activeOrderIds
       );
       for (const it of allItems) {
@@ -2910,6 +2894,9 @@ app.get('/api/mesas', async (req, res) => {
     const ahora = Date.now();
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
+      if (m.orden_activa_id) {
+        m.orden_total = items.reduce((acc, it) => acc + ((Number(it.precio_unitario) || 0) * (Number(it.cantidad) || 1)), 0);
+      }
       const cocinaItems = items.filter(
         it => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
       );
@@ -2943,7 +2930,6 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
-      } else if (m.estado === 'ocupada' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
@@ -2965,7 +2951,6 @@ app.get('/api/mesas', async (req, res) => {
           m.items_pendientes = [];
           m.minutos_espera = 0;
         }
-        m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
       } else if (m.estado === 'reservada') {
         m.orden_total = 0;
@@ -4387,7 +4372,7 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     const solicitanteLogin = String(req.body.usuarioLogin || req.body.usuarioNombre || req.headers['x-user-login'] || req.headers['x-user-name'] || req.usuario?.usuario || 'cajero').trim();
 
     // Obtener detalles de la orden para calcular subtotal bruto
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'", [ordenId]);
     const subtotalBruto = (items || []).reduce((acc, it) => {
       const p = Number(it.subtotal != null ? it.subtotal : (Number(it.precio_unitario || it.precio || 0) * (Number(it.cantidad) || 1))) || 0;
       return acc + p;
@@ -4914,7 +4899,7 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
     );
     if (!orden) return res.json({ orden: null, items: [] });
 
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
     res.json({ orden, items });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4931,7 +4916,7 @@ app.get('/api/ordenes/:id', async (req, res) => {
       [ordenId, negocioId, negocioId]
     );
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
     res.json({ orden, items });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5003,7 +4988,7 @@ async function recalcularTotalesOrden(ordenId) {
   );
 
   const rows = await dbAll(
-    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
+    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL) AND (d.estado_comanda != 'pagado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );
 
@@ -6342,7 +6327,7 @@ async function procesarCobroOrden(ordenId, {
         }
 
         let restanteADescontar = qty;
-        for (const det of detalleItems) {
+        for (const det of (detalleItems || [])) {
           if (restanteADescontar <= 0) break;
           if (det.cantidad <= restanteADescontar) {
             restanteADescontar -= det.cantidad;
@@ -6363,25 +6348,9 @@ async function procesarCobroOrden(ordenId, {
       }
     }
 
-    // Recalcular subtotal y total de la orden con los ítems activos no pagados
-    const itemsActivos = await dbAll(
-      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado'",
-      [ordenId]
-    );
-
-    let nuevoSubtotal = 0;
-    for (const it of itemsActivos) {
-      nuevoSubtotal += Number(it.subtotal) || 0;
-    }
-
-    const nuevoIva = Math.round(nuevoSubtotal * 0.13);
-    const nuevoServicio = Math.round(nuevoSubtotal * 0.10);
-    const nuevoTotal = nuevoSubtotal + nuevoIva + nuevoServicio;
-
-    await dbRun(
-      'UPDATE Ordenes SET subtotal = ?, iva_13 = ?, servicio_10 = ?, total = ? WHERE id = ?',
-      [nuevoSubtotal, nuevoIva, nuevoServicio, nuevoTotal, ordenId]
-    );
+    // Recalcular subtotal y total de la orden con los ítems activos no pagados usando el motor oficial
+    const infoTotales = await recalcularTotalesOrden(ordenId);
+    const nuevoTotal = Number(infoTotales?.total) || 0;
 
     const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
     const impParcial = Math.round(subParcial * 0.23);
@@ -6408,11 +6377,11 @@ async function procesarCobroOrden(ordenId, {
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
       const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
       const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
-      await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, estado: estadoMesaActual });
+      await dbRun("UPDATE Mesas SET estado = ?, orden_total = ? WHERE id = ?", [estadoMesaActual, nuevoTotal, orden.mesa_id]);
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual, negocio_id: orden.negocio_id });
+      io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id });
     }
 
     io.emit('inventario_actualizado');
