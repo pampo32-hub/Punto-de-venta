@@ -4042,10 +4042,9 @@
         height: 20px;
         width: 20px;
         left: 3px;
-        bottom: 2px;
         top: 2px;
         background-color: white;
-        transition: transform 0.25s ease;
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         border-radius: 50%;
         display: block;
         box-shadow: 0 2px 5px rgba(0,0,0,0.35);
@@ -4063,7 +4062,7 @@
         border-color: #818cf8 !important;
       }
       #modalAdminSeguridadRed input:checked + .slider-round span {
-        transform: translateX(20px) !important;
+        transform: translateX(22px) !important;
       }
     </style>
 
