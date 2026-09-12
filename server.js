@@ -477,6 +477,19 @@ app.get('/m/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'cliente.html'));
 });
 
+// Rutas amigables para Landing Pages
+app.get('/landing', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
+
+app.get('/landing-dark', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
+
+app.get('/landing-minimal', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'landing-minimal.html'));
+});
+
 
 // WebSockets para tiempo real (KDS Cocina / Barra / Meseros / Admin)
 io.on('connection', (socket) => {
