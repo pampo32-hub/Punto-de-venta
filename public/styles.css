@@ -12584,22 +12584,53 @@ body.theme-capsula-elegance .btn-prefactura-split {
 }
 
 /* Agrupación en Lista de Items del Ticket */
+.ticket-comensal-grupo {
+  margin-bottom: 12px;
+}
 .ticket-comensal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  margin-top: 10px;
-  margin-bottom: 4px;
-  background: rgba(30, 41, 59, 0.7);
-  border-left: 3px solid #10b981;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #f1f5f9;
+  padding: 8px 12px;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 5px solid #10b981;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  gap: 10px;
 }
 .ticket-comensal-header.compartido {
   border-left-color: #3b82f6;
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.45), rgba(15, 23, 42, 0.98));
+}
+.ticket-comensal-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #f8fafc;
+  text-align: center;
+}
+.comensal-title-name {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+.badge-comensal-subtotal {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 .ticket-comensal-header-left {
   display: flex;
@@ -12616,7 +12647,7 @@ body.theme-capsula-elegance .btn-prefactura-split {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #a7f3d0;
   background: rgba(16, 185, 129, 0.15);
@@ -12627,47 +12658,75 @@ body.theme-capsula-elegance .btn-prefactura-split {
 }
 .ticket-comensal-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .btn-subcuenta-cobrar {
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  color: #60a5fa;
-  font-size: 0.72rem;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1.5px solid rgba(59, 130, 246, 0.7);
+  color: #93c5fd;
+  font-size: 0.82rem;
   font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 5px;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 .btn-subcuenta-cobrar:hover {
   background: #2563eb;
-  color: white;
-  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
+  transform: translateY(-1px);
 }
 .btn-subcuenta-pagar {
   background: linear-gradient(135deg, #059669, #10b981);
-  border: 1px solid rgba(16, 185, 129, 0.8);
+  border: 1.5px solid rgba(16, 185, 129, 0.9);
   color: #ffffff;
-  font-size: 0.72rem;
-  font-weight: 800;
-  padding: 3px 9px;
-  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 900;
+  padding: 7px 15px;
+  border-radius: 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+  gap: 5px;
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.45);
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 .btn-subcuenta-pagar:hover {
   background: linear-gradient(135deg, #047857, #059669);
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.75);
   transform: translateY(-1px);
+}
+@media (max-width: 900px) {
+  .ticket-comensal-header {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+  }
+  .ticket-comensal-title {
+    width: 100%;
+    justify-content: center;
+  }
+  .ticket-comensal-actions {
+    width: 100%;
+    justify-content: center;
+  }
+  .btn-subcuenta-cobrar,
+  .btn-subcuenta-pagar {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
 }
 
 

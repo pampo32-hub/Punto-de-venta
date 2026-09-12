@@ -6408,6 +6408,7 @@ async function procesarCobroOrden(ordenId, {
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
       const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
       const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
       await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);

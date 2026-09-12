@@ -10778,9 +10778,9 @@ function renderTicketItems() {
 
       html += `
         <div class="ticket-comensal-grupo">
-          <div class="ticket-comensal-header">
+          <div class="ticket-comensal-header ${(comNom === 'General') ? 'compartido' : ''}">
             <div class="ticket-comensal-title">
-              <span>${tituloCom}</span>
+              <span class="comensal-title-name">${tituloCom}</span>
               <span class="badge-comensal-subtotal">${formatCRC(subtotalGrupo)}</span>
             </div>
             <div class="ticket-comensal-actions">
