@@ -438,17 +438,26 @@
       position: absolute;
       top: 6px;
       right: 6px;
+      background: rgba(15, 23, 42, 0.84);
       background: linear-gradient(135deg, rgba(16, 185, 129, 0.95) 0%, rgba(5, 150, 105, 0.95) 100%);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.55);
+      font-size: 0.68rem;
       color: #ffffff;
       border: 1px solid rgba(255, 255, 255, 0.4);
       font-size: 0.72rem;
       font-weight: 800;
+      padding: 3px 8px;
       padding: 4px 10px;
       border-radius: 20px;
       display: inline-flex;
       align-items: center;
+      gap: 3px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4), 0 0 10px rgba(56, 189, 248, 0.25);
+      pointer-events: none;
+      z-index: 2;
       gap: 4px;
       box-shadow: 0 4px 12px rgba(16, 185, 129, 0.45);
       cursor: pointer;
@@ -1183,13 +1192,17 @@
       const grid = document.getElementById('clientProductsGrid');
 
       grid.innerHTML = prods.map(p => {
+        const ingStr = (p.ingredientes || '').replace(/"/g, '&quot;');
+        const tieneIngredientes = Boolean(p.ingredientes && p.ingredientes.trim().length > 0);
         const rawIng = (p.ingredientes || p.descripcion || '').trim();
         const ingStr = rawIng.replace(/"/g, '&quot;');
         const tieneIngredientes = Boolean(rawIng.length > 0);
         return `
+          <div class="menu-card" data-id="${p.id}" data-nombre="${escapeHtml(p.nombre)}" data-ingredientes="${ingStr}" title="Mantén presionado para ver ingredientes">
           <div class="menu-card" data-id="${p.id}" data-nombre="${escapeHtml(p.nombre)}" data-ingredientes="${ingStr}" title="Toca la pastilla verde para ver ingredientes">
             <div class="menu-card-media">
               ${p.imagen_url ? `<img class="menu-card-img" src="${p.imagen_url}" alt="${escapeHtml(p.nombre)}" loading="lazy" />` : '<div class="menu-card-no-img">🍽️</div>'}
+              ${tieneIngredientes ? `<div class="menu-card-badge-ingredientes"><span>👆</span> Ingredientes</div>` : ''}
               ${tieneIngredientes ? `
                 <button type="button" class="menu-card-badge-ingredientes" onclick="event.stopPropagation(); event.preventDefault(); abrirCardIngredientes(this.closest('.menu-card'), true);" title="Toca para ver ingredientes">
                   <span>🥗</span> Ingredientes
@@ -1342,17 +1355,21 @@
     }
   </script>
 
+  <!-- OVERLAY FLOTANTE LONG-PRESS INGREDIENTES -->
   <!-- OVERLAY FLOTANTE INGREDIENTES -->
   <div id="overlayIngredientesLongPress" class="overlay-long-press" onclick="cerrarCardIngredientes(event)">
     <div class="card-ingredientes-glass" id="cardIngredientesFlotante" onclick="event.stopPropagation()">
       <div class="card-ingredientes-header">
         <div class="card-ingredientes-badge">🥗 Ingredientes</div>
+        <button type="button" class="btn-close-ingredientes" onclick="cerrarCardIngredientes(event)">✕</button>
         <button type="button" class="btn-close-ingredientes" onclick="cerrarCardIngredientes(event)" title="Cerrar ventana">✕</button>
       </div>
       <h3 class="card-ingredientes-title" id="cardIngredientesTitle">Platillo</h3>
       <div class="card-ingredientes-list" id="cardIngredientesList">
         <!-- Lista dinámica de ingredientes -->
       </div>
+      <div class="card-ingredientes-footer">
+        <small>👆 Toca fuera o suelta para cerrar</small>
       <div class="card-ingredientes-footer" style="display:flex; flex-direction:column; gap:10px; align-items:center;">
         <button type="button" class="btn-entendido-ingredientes" onclick="cerrarCardIngredientes(event)" style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:10px 24px; border-radius:12px; font-weight:800; font-size:0.9rem; cursor:pointer; width:100%; box-shadow:0 3px 10px rgba(16,185,129,0.35); transition:transform 0.1s ease;">
           ✓ Entendido
@@ -1378,6 +1395,7 @@
 
       if (_longPressTimer) clearTimeout(_longPressTimer);
       _longPressTimer = setTimeout(() => {
+        abrirCardIngredientes(card);
         abrirCardIngredientes(card, false);
       }, 500);
     }
@@ -1411,8 +1429,10 @@
       cerrarCardIngredientes();
     }
 
+    function abrirCardIngredientes(card) {
     function abrirCardIngredientes(card, esTapDirecto = false) {
       if (!card) return;
+      card.classList.add('long-press-active');
       _abiertoPorTap = esTapDirecto;
       if (!esTapDirecto) {
         card.classList.add('long-press-active');
@@ -1433,9 +1453,13 @@
       }
 
       if (items.length === 0) {
+        listEl.innerHTML = '<div style="color:#64748b; font-size:0.9rem; font-style:italic; padding:8px 0;">Ingredientes no especificados para este platillo.</div>';
         listEl.innerHTML = '<div style="color:#64748b; font-size:0.9rem; font-style:italic; padding:12px 0; text-align:center;">Ingredientes no especificados para este platillo.</div>';
       } else {
         listEl.innerHTML = items.map(item => `
+          <div class="ingrediente-item">
+            <span class="ingrediente-bullet">🥗</span>
+            <span class="ingrediente-text">${escapeHtml(item)}</span>
           <div class="ingrediente-pill">
             <span class="ingrediente-pill-dot"></span>
             <span style="font-weight:700; color:#1e293b;">${escapeHtml(item)}</span>
@@ -1457,9 +1481,11 @@
       }
     }
 
+    // Event delegation para gestos de pulsación prolongada
     // Event delegation para gestos de pulsación prolongada en móvil
     document.addEventListener('pointerdown', (e) => {
       const card = e.target.closest('.menu-card');
+      if (card) {
       if (card && !e.target.closest('.menu-card-badge-ingredientes')) {
         iniciarLongPress(e, card);
       }

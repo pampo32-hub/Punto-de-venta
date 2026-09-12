@@ -143,5 +143,12 @@ describe('Tier 28: Restaurante Beta Tester y Sistema de Feature Flags por Restau
     assert.strictEqual(rLiberarNeg2.status, 200, 'En Negocio 2 debe permitir liberar sin PIN porque la regla estricta está apagada');
     assert.ok(rLiberarNeg2.data.ok);
   });
+
+  after(async () => {
+    try {
+      const db = require('../../database.js');
+      await new Promise(r => db.run("DELETE FROM Negocios WHERE nombre LIKE 'Restaurante Clon Test%'", [], () => r()));
+    } catch (_) {}
+  });
 });
 

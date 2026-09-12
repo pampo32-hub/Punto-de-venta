@@ -571,6 +571,7 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
              n.logo_url as negocio_logo
       FROM Usuarios u
       LEFT JOIN Negocios n ON u.negocio_id = n.id
+      WHERE (u.activo = 1 OR u.activo = true OR u.activo IS NULL OR CAST(u.activo AS TEXT) = '1')
       WHERE (COALESCE(u.activo, 1) = 1)
       ORDER BY 
         COALESCE(u.negocio_id, 1) ASC,
@@ -650,6 +651,7 @@ app.post('/api/auth/login', async (req, res) => {
             OR LOWER(TRIM(nombre_completo)) = LOWER(TRIM(?)) 
             OR pin = ? 
             OR TRIM(pin) = TRIM(?)) 
+           AND (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`,
            AND (COALESCE(activo, 1) = 1)`,
         [uInput, uInput, uInput, uInput]
       );
@@ -664,6 +666,7 @@ app.post('/api/auth/login', async (req, res) => {
       // Fallback: si no hubo match directo, buscar entre todos los usuarios activos
       if (!u) {
         const todos = await dbAll(
+          `SELECT * FROM Usuarios WHERE (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`
           `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)`
         );
         for (const cand of todos) {
@@ -681,6 +684,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     } else if (pInput) {
       const candidatos = await dbAll(
+        `SELECT * FROM Usuarios WHERE (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`
         `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)`
       );
       for (const cand of candidatos) {
