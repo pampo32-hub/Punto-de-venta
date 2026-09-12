@@ -18865,7 +18865,7 @@ window.esUsuarioDeveloperOSuperAdmin = function() {
     } catch (_) { return ''; }
   })();
   const r = (rawRol || '').toLowerCase().replace(/[\s_-]/g, '');
-  return r === 'developer' || r === 'superadmin' || r === 'superadministrador' || r === 'admin' || r === 'administrador';
+  return r === 'developer' || r === 'superadmin' || r === 'superadministrador';
 };
 
 window.actualizarVisibilidadBotonesPurgaDev = function() {
