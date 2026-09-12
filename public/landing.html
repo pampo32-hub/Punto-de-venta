@@ -1067,6 +1067,11 @@
       gap: 20px;
     }
 
+    /* Responsive adjustments */
+    @media (max-width: 900px) {
+      .nav-menu { display: none; }
+      .calc-grid { grid-template-columns: 1fr; }
+      .split-sim-wrap { grid-template-columns: 1fr; }
     /* Floating WhatsApp CTA */
     .floating-whatsapp-btn {
       position: fixed;
@@ -1171,6 +1176,8 @@
         <a href="/" class="btn-gold-3d" style="font-size: 1.1rem; padding: 14px 32px;">
           🔥 Ingresar al Sistema POS en Vivo
         </a>
+        <a href="https://wa.me/?text=Hola%2C%20quiero%20informaci%C3%B3n%20y%20demostraci%C3%B3n%20de%20GAMMA%20POS" target="_blank" class="btn-outline-glass" style="font-size: 1.05rem; padding: 14px 26px;">
+          💬 Solicitar Demo por WhatsApp
         <a href="https://wa.me/50671433852?text=Hola%2C%20quiero%20informaci%C3%B3n%20y%20demostraci%C3%B3n%20de%20GAMMA%20POS" target="_blank" class="btn-outline-glass" style="font-size: 1.05rem; padding: 14px 26px; border-color: rgba(37,211,102,0.5); color: #4ade80;">
           💬 WhatsApp: 7143 3852
         </a>
@@ -1974,6 +1981,8 @@
           <a href="/" class="btn-gold-3d" style="font-size:1.15rem; padding:16px 36px;">
             🔥 Ingresar a GAMMA POS Ahora
           </a>
+          <a href="https://wa.me/?text=Hola%20quiero%20informaci%C3%B3n%20de%20GAMMA%20POS" target="_blank" class="btn-outline-glass" style="font-size:1.05rem; padding:16px 28px;">
+            💬 Hablar con un Especialista
           <a href="https://wa.me/50671433852?text=Hola%2C%20quiero%20informaci%C3%B3n%20y%20demostraci%C3%B3n%20de%20GAMMA%20POS" target="_blank" class="btn-outline-glass" style="font-size:1.05rem; padding:16px 28px; border-color:rgba(37,211,102,0.5); color:#4ade80;">
             💬 WhatsApp: 7143 3852
           </a>
@@ -2047,6 +2056,11 @@
        FOOTER
        ======================================================================== -->
   <footer class="footer">
+    <div class="container footer-inner">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="/img/gamma_pos_logo.png" alt="GAMMA POS" style="width:28px; height:28px; border-radius:6px;" onerror="this.src='/gamma_pos_logo.png'" />
+        <span style="font-weight:700; color:#fff;">GAMMA POS Cloud Suite © 2026</span>
+      </div>
     <div class="container footer-inner" style="display: flex; flex-direction: column; gap: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; width: 100%;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -2054,6 +2068,11 @@
           <span style="font-weight:700; color:#fff;">GAMMA POS Cloud Suite © 2026</span>
         </div>
 
+      <div style="display:flex; gap:20px; font-size:0.85rem;">
+        <a href="/" style="color:var(--text-muted); text-decoration:none;">Acceso al POS</a>
+        <a href="#modulos" style="color:var(--text-muted); text-decoration:none;">Módulos</a>
+        <a href="#planes" style="color:var(--text-muted); text-decoration:none;">Planes y Precios</a>
+        <a href="#faq" style="color:var(--text-muted); text-decoration:none;">Preguntas Frecuentes</a>
         <div style="display: flex; align-items: center; gap: 22px; flex-wrap: wrap; font-size: 0.92rem;">
           <a href="https://wa.me/50671433852?text=Hola%2C%20quiero%20informaci%C3%B3n%20sobre%20GAMMA%20POS" target="_blank" style="color: #4ade80; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
             <span>💬</span> WhatsApp: 7143 3852
