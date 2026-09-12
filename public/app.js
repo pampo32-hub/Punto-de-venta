@@ -11911,8 +11911,6 @@ window.generarCorteX = async function() {
 
   try {
     mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
- 
-... [truncated for diff preview]
     const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const targetCajaId = window._cajaActivaData?.caja?.id || window._cajaVisualFiltroId || '';
     const urlCorte = targetCajaId 

@@ -6890,5 +6890,20 @@
   </form>
 </div>
 
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/offline-db.js"></script>
+  <script src="/offline-sync.js"></script>
+  <script src="app.js?v=3.0.1"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then((reg) => {
+          console.log('[PWA] Service Worker registrado exitosamente:', reg.scope);
+        }).catch((err) => {
+          console.warn('[PWA] Fallo al registrar Service Worker:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
