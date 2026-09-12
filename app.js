@@ -9916,6 +9916,21 @@ async function abrirComanderoMesa(mesaId) {
       mesa.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
       mesa.descuento_motivo = data.orden.descuento_motivo || '';
       mesa.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
+      mesa.items = (data.items || []).map(it => ({
+        id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
+        id: it.producto_id || it.id,
+        nombre: it.nombre_producto || it.nombre,
+        precio: Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0,
+        cantidad: Number(it.cantidad) || 1,
+        notas: it.notas || '',
+        curso: it.curso || 2,
+        destino: it.destino || 'cocina',
+        comensal: it.comensal || 'General',
+        origen_mesa_numero: it.origen_mesa_numero || null,
+        enviado: it.enviado !== false,
+        offlinePendiente: Boolean(it.offlinePendiente),
+        en_happy_hour: Boolean(it.en_happy_hour)
+      }));
       mesa.items = (data.items || [])
         .filter(it => it.estado_comanda !== 'pagado' && it.estado_comanda !== 'anulado' && !it.pagado)
         .map(it => ({
@@ -11838,6 +11853,7 @@ function renderKDS() {
                   ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
                 </div>
               </div>
+              <button type="button" class="btn-kds-check-item kds-item-checkbox ${isSelected ? 'selected' : ''}" id="btnK
               <button type="button" class="btn-kds-check-item kds-item-checkbox ${isSelected ? 'selected' : ''}" id="btnKdsCheck_${c.id}" title="Seleccionar platillo" onclick="event.stopPropagation(); toggleSeleccionItemKDS('${key}', ${c.id})">
                 ${isSelected ? '✓' : ''}
               </button>
