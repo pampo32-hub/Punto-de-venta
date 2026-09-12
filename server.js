@@ -651,7 +651,6 @@ app.post('/api/auth/login', async (req, res) => {
             OR LOWER(TRIM(nombre_completo)) = LOWER(TRIM(?)) 
             OR pin = ? 
             OR TRIM(pin) = TRIM(?)) 
-           AND (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`,
            AND (COALESCE(activo, 1) = 1)`,
         [uInput, uInput, uInput, uInput]
       );
@@ -666,7 +665,6 @@ app.post('/api/auth/login', async (req, res) => {
       // Fallback: si no hubo match directo, buscar entre todos los usuarios activos
       if (!u) {
         const todos = await dbAll(
-          `SELECT * FROM Usuarios WHERE (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`
           `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)`
         );
         for (const cand of todos) {
@@ -1120,17 +1118,90 @@ app.get('/api/dev/negocios', async (req, res) => {
 
 app.post('/api/dev/negocios', async (req, res) => {
   try {
-    const { nombre, slogan = '', logo_url = '', moneda = 'CRC', telefono = '', direccion = '', activo = 1 } = req.body;
+    const {
+      nombre,
+      slogan = '',
+      logo_url = '',
+      moneda = 'CRC',
+      telefono = '',
+      direccion = '',
+      activo = 1,
+      crear_admin,
+      admin_usuario,
+      admin_password,
+      admin_nombre,
+      admin_pin,
+      crear_estructura_base
+    } = req.body;
     if (!nombre) return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
 
     const valActivo = activo === 0 ? 0 : 1;
     const r = await dbRun(
-      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo]
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, modulos_activos, plan_nombre) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, 'all', 'Plan Full Tech 2026']
     );
-    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [r.lastID]);
+    const nuevoId = r.lastID;
+    const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [nuevoId]);
+
+    let infoAdmin = null;
+    if (crear_admin) {
+      const uLogin = (admin_usuario || '').trim() || `admin_${nuevoId}`;
+      const uPass = (admin_password || '').trim() || 'admin123';
+      const uNombre = (admin_nombre || '').trim() || `Admin ${nombre}`;
+      const uPin = (admin_pin || '').trim() || '1234';
+
+      let passToStore = uPass;
+      try {
+        if (typeof bcrypt !== 'undefined' && bcrypt.hash) {
+          passToStore = await bcrypt.hash(uPass, 10);
+        }
+      } catch (_) {}
+
+      await dbRun(
+        `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
+         VALUES (?, ?, ?, ?, 'admin', 'M', ?, ?, 1, 0)`,
+        [
+          nuevoId,
+          uLogin,
+          uNombre,
+          passToStore,
+          uPin,
+          JSON.stringify({ salon: true, kds: true, caja: true, facturacion: true, inventario: true, reportes: true, config: true })
+        ]
+      );
+      infoAdmin = { usuario: uLogin, pin: uPin, nombre: uNombre };
+    }
+
+    if (crear_estructura_base) {
+      const mesasBase = [
+        ['Mesa 1', 4, 'libre', 30, 30, 'square', nuevoId, 130, 115, 1],
+        ['Mesa 2', 4, 'libre', 190, 30, 'square', nuevoId, 130, 115, 1],
+        ['Mesa 3', 4, 'libre', 350, 30, 'round', nuevoId, 130, 115, 1],
+        ['Mesa 4', 6, 'libre', 30, 175, 'square', nuevoId, 150, 115, 1],
+        ['Mesa 5', 4, 'libre', 210, 175, 'round', nuevoId, 130, 115, 1],
+        ['Mesa 6', 4, 'libre', 370, 175, 'square', nuevoId, 130, 115, 1]
+      ];
+      for (const m of mesasBase) {
+        try {
+          await dbRun(
+            'INSERT INTO Mesas (numero, capacidad, estado, x, y, forma, negocio_id, ancho, alto, piso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            m
+          );
+        } catch (_) {}
+      }
+
+      try {
+        const ahoraIso = new Date().toISOString();
+        await dbRun(
+          `INSERT INTO PuntosDeCobro (negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en)
+           VALUES (?, 'Caja Principal', 'CAJA-1', 'Caja / Barra', '💳', 1, ?)`,
+          [nuevoId, ahoraIso]
+        );
+      } catch (_) {}
+    }
+
     io.emit('negocio_creado', nuevo);
-    res.json(nuevo);
+    res.json({ ...nuevo, admin: infoAdmin });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
