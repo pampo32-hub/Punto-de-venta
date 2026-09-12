@@ -10419,29 +10419,34 @@ window.renderComensalesTabs = function() {
   const chipsHtml = [];
 
   // Chip General / Compartido
-  const actGen = (estado.comensalActivo === 'General' || !estado.comensalActivo) ? 'active' : '';
+  const esGenActivo = (estado.comensalActivo === 'General' || !estado.comensalActivo);
+  const actGen = esGenActivo ? 'active' : '';
   const subGenTxt = subtotales['General'] ? ` (${formatCRC(subtotales['General'])})` : '';
+  const badgeGen = esGenActivo ? '<span class="chip-active-indicator">✓ SELECCIONADO</span>' : '';
   chipsHtml.push(`
-    <button class="chip-comensal chip-general ${actGen}" onclick="cambiarComensalActivo('General')">
-      👥 Compartido${subGenTxt}
+    <button type="button" class="chip-comensal chip-general ${actGen}" onclick="cambiarComensalActivo('General')" title="Agregar pedidos para la cuenta compartida">
+      👥 Compartido${subGenTxt} ${badgeGen}
     </button>
   `);
 
   // Chips individuales
   comensalesLista.forEach(nom => {
-    const act = (estado.comensalActivo === nom) ? 'active' : '';
+    const esActivo = (estado.comensalActivo === nom);
+    const act = esActivo ? 'active' : '';
     const subTxt = subtotales[nom] ? ` (${formatCRC(subtotales[nom])})` : '';
     const safeNom = nom.replace(/'/g, "\\'");
+    const badgeNom = esActivo ? '<span class="chip-active-indicator">✓ SELECCIONADO</span>' : '';
+    const escNom = typeof escapeHtml === 'function' ? escapeHtml(nom) : nom;
     chipsHtml.push(`
-      <button class="chip-comensal ${act}" onclick="cambiarComensalActivo('${safeNom}')">
-        👤 ${nom}${subTxt}
+      <button type="button" class="chip-comensal ${act}" onclick="cambiarComensalActivo('${safeNom}')" title="Agregar pedidos para ${escNom}">
+        👤 ${escNom}${subTxt} ${badgeNom}
       </button>
     `);
   });
 
   // Botón + Agregar Persona
   chipsHtml.push(`
-    <button class="chip-comensal chip-add" onclick="agregarNuevoComensal()">
+    <button type="button" class="chip-comensal chip-add" onclick="agregarNuevoComensal()" title="Añadir otra persona a la mesa">
       ➕ Agregar Persona
     </button>
   `);
