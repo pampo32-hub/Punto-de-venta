@@ -11966,6 +11966,7 @@ window.validarPinAdminManual = async function() {
       _pinAdminResolver(pinIngresado);
       _pinAdminResolver = null;
     }
+ 
   } catch (e) {
     mostrarNotificacionCentro('❌ Error al verificar PIN o PIN inválido', 'error');
     _pinAdminBuffer = '';

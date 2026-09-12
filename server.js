@@ -695,7 +695,6 @@ app.post('/api/auth/login', async (req, res) => {
       }
     } else if (pInput) {
       const candidatos = await dbAll(
-        `SELECT * FROM Usuarios WHERE (activo = 1 OR activo = true OR activo IS NULL OR CAST(activo AS TEXT) = '1')`
         `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)`
       );
       for (const cand of candidatos) {
