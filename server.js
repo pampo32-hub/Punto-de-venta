@@ -3427,14 +3427,16 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
       }
 
       // Registrar SIEMPRE en Auditoría (General para todos los comercios)
+      const adminInfo = pinValidado ? `${pinValidado.usuario} (${pinValidado.nombre_completo || pinValidado.usuario})` : (rol === 'admin' || rol === 'developer' ? usuarioNom : null);
       await registrarAuditoria({
         negocioId,
         usuarioId: req.usuario?.id || null,
         usuarioNombre: usuarioNom,
+        autorizadoPor: adminInfo,
         accion: 'cierre_forzado_cuenta',
         tipoEvento: 'seguridad',
         modulo: 'mesas',
-        detalle: `Cierre forzado de cuenta en mesa "${mesa.numero}". Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')}`,
+        detalle: `Cierre forzado de cuenta en mesa "${mesa.numero}". Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')} • Operador: @${usuarioNom} ${adminInfo ? `• Autorizó: @${adminInfo}` : ''}`,
         motivo: req.body?.motivo || (pin ? 'Liberación/Cierre autorizado con PIN' : 'Cierre forzado con saldo pendiente'),
         monto: totalPendiente,
         pinAutorizado: (pinValidado || pin || rol === 'admin' || rol === 'developer') ? 1 : 0
@@ -4081,11 +4083,10 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     if (!esValido) {
       return res.status(403).json({ error: '🔒 PIN incorrecto. Ingresa el PIN de Administrador o Supervisor autorizado.', pinInvalido: true });
     }
-    const uSupervisor = await dbGet(
-      "SELECT nombre_completo, rol FROM Usuarios WHERE (negocio_id = ? OR rol = 'developer' OR (negocio_id IS NULL AND ? = 1)) AND pin = ? AND (rol = 'admin' OR rol = 'developer')", 
-      [ordenNegocioId, ordenNegocioId, String(pin).trim()]
-    );
-    const autorizadorNombre = uSupervisor?.nombre_completo || 'Administrador (PIN)';
+    const adminLogin = esValido.usuario || 'admin';
+    const adminNombre = esValido.nombre_completo || adminLogin;
+    const autorizadorInfo = `${adminLogin} (${adminNombre})`;
+    const solicitanteLogin = String(req.body.usuarioLogin || req.body.usuarioNombre || req.headers['x-user-login'] || req.headers['x-user-name'] || req.usuario?.usuario || 'cajero').trim();
 
     // Obtener detalles de la orden para calcular subtotal bruto
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
@@ -4120,18 +4121,19 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
       `UPDATE Ordenes 
        SET subtotal = ?, descuento_monto = ?, descuento_porcentaje = ?, descuento_motivo = ?, descuento_autorizado_por = ?, servicio_10 = ?, iva_13 = ?, total = ?
        WHERE id = ?`,
-      [subtotalBruto || 0, descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorNombre, servicio10, iva13, totalFinal, ordenId]
+      [subtotalBruto || 0, descuentoMonto, descuentoPorcentaje, motivo || 'Descuento autorizado', autorizadorInfo, servicio10, iva13, totalFinal, ordenId]
     );
 
     // Registrar en Auditoría
     await registrarAuditoria({
       negocioId,
-      usuarioNombre: autorizadorNombre,
+      usuarioNombre: solicitanteLogin,
+      autorizadoPor: autorizadorInfo,
       accion: 'descuento_aplicado',
       tipoEvento: 'SEGURIDAD',
       modulo: 'ventas',
-      detalle: `Descuento de ₡${descuentoMonto.toLocaleString('es-CR')} (${descuentoPorcentaje}%) aplicado a Orden #${orden.numero_orden || orden.id}. Motivo: ${motivo || 'Descuento autorizado'}`,
-      motivo: motivo || 'Descuento autorizado',
+      detalle: `Descuento de ₡${descuentoMonto.toLocaleString('es-CR')} (${descuentoPorcentaje}%) aplicado a Orden #${orden.numero_orden || orden.id} • Solicitó: @${solicitanteLogin} • Autorizó PIN: @${adminLogin} (${adminNombre})`,
+      motivo: motivo || 'Descuento autorizado con PIN',
       monto: descuentoMonto,
       pinAutorizado: 1
     });
@@ -5243,27 +5245,41 @@ app.post('/api/comandas/anular-item', async (req, res) => {
     const ordenItem = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [item.orden_id]);
     const ordenNegocioId = Number(ordenItem?.negocio_id || req.negocioId || req.headers['x-negocio-id'] || 1);
 
-    const pinValido = await validarPinAdministrador(supervisorPin, ordenNegocioId);
-    if (!pinValido) {
+    const adminAutorizador = await validarPinAdministrador(supervisorPin, ordenNegocioId);
+    if (!adminAutorizador) {
       return res.status(403).json({ error: 'PIN de Supervisor / Administrador incorrecto o no autorizado' });
     }
 
+    const solicitanteLogin = String(req.body.usuarioLogin || req.body.usuarioNombre || req.headers['x-user-login'] || req.headers['x-user-name'] || req.usuario?.usuario || 'salonero').trim();
+    const adminLogin = adminAutorizador.usuario || 'admin';
+    const adminNombre = adminAutorizador.nombre_completo || adminLogin;
+    const autorizadorInfo = `${adminLogin} (${adminNombre})`;
+
     const ahora = new Date().toISOString();
     await dbRun("UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE id = ?", [detalleId]);
-    await dbRun(
-      `INSERT INTO Anulaciones (orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, fecha_hora)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, ahora]
-    );
+    try {
+      await dbRun(
+        `INSERT INTO Anulaciones (orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, autorizado_por, solicitado_por, fecha_hora)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, autorizadorInfo, solicitanteLogin, ahora]
+      );
+    } catch (_) {
+      await dbRun(
+        `INSERT INTO Anulaciones (orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, autorizado_por, fecha_hora)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, autorizadorInfo, ahora]
+      );
+    }
 
     await registrarAuditoria({
       negocioId: ordenNegocioId,
-      usuarioNombre: req.body.usuarioNombre || 'Supervisor Autorizado',
+      usuarioNombre: solicitanteLogin,
+      autorizadoPor: autorizadorInfo,
       accion: 'anulacion_comanda',
       tipoEvento: 'seguridad',
       modulo: 'comandas',
-      detalle: `Anulación de ${item.cantidad}x "${item.nombre_producto}" de ${mesaNumero}`,
-      motivo: motivo || 'Anulación autorizada',
+      detalle: `Anulación de ${item.cantidad}x "${item.nombre_producto}" en ${mesaNumero} • Solicitó: @${solicitanteLogin} • Autorizó PIN: @${adminLogin} (${adminNombre})`,
+      motivo: motivo || 'Anulación autorizada con PIN',
       monto: item.subtotal,
       pinAutorizado: 1
     });
@@ -7337,15 +7353,44 @@ app.get('/api/cliente/mesa/:id', async (req, res) => {
 // ============================================================================
 // HELPERS: AUDITORÍA & DEDUCCIÓN DE INVENTARIO
 // ============================================================================
-async function registrarAuditoria({ negocioId = null, negocio_id = null, usuarioId = null, usuarioNombre = 'Sistema', accion, tipoEvento = 'operativo', modulo = 'general', detalle, motivo = null, monto = 0, pinAutorizado = 0 }) {
+async function registrarAuditoria({ 
+  negocioId = null, 
+  negocio_id = null, 
+  usuarioId = null, 
+  usuarioNombre = 'Sistema', 
+  autorizadoPor = null,
+  autorizado_por = null,
+  accion, 
+  tipoEvento = 'operativo', 
+  modulo = 'general', 
+  detalle, 
+  motivo = null, 
+  monto = 0, 
+  pinAutorizado = 0 
+}) {
   try {
     const nid = Number(negocio_id || negocioId || 1);
     const ahora = new Date().toISOString();
-    await dbRun(
-      `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nid, usuarioId, usuarioNombre, accion, tipoEvento, modulo, detalle, motivo, monto, pinAutorizado ? 1 : 0, ahora]
-    );
+    const autorizadorFinal = (autorizado_por || autorizadoPor || '').trim() || null;
+    let usuarioRegistro = String(usuarioNombre || 'Sistema').trim();
+
+    try {
+      await dbRun(
+        `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, autorizado_por, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nid, usuarioId, usuarioRegistro, autorizadorFinal, accion, tipoEvento, modulo, detalle, motivo, monto, (pinAutorizado || autorizadorFinal) ? 1 : 0, ahora]
+      );
+    } catch (_) {
+      // Fallback si la base no tiene aún la columna autorizado_por
+      if (autorizadorFinal && !usuarioRegistro.includes('Autorizó')) {
+        usuarioRegistro = `${usuarioRegistro} (Autorizó: ${autorizadorFinal})`;
+      }
+      await dbRun(
+        `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nid, usuarioId, usuarioRegistro, accion, tipoEvento, modulo, detalle, motivo, monto, (pinAutorizado || autorizadorFinal) ? 1 : 0, ahora]
+      );
+    }
   } catch (e) {
     console.error('Error registrando auditoría:', e.message);
   }
@@ -7607,7 +7652,7 @@ async function validarPinAdministrador(pin, negocioId = null) {
         continue;
       }
       if (u.pin && String(u.pin).trim() === pinStr) {
-        return true;
+        return u;
       }
     }
     return false;
@@ -7623,7 +7668,13 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
     if (!esValido) {
       return res.status(401).json({ error: 'PIN de Administrador incorrecto o no autorizado.' });
     }
-    res.json({ ok: true, message: 'PIN de Administrador verificado con éxito.' });
+    res.json({ 
+      ok: true, 
+      message: 'PIN de Administrador verificado con éxito.',
+      adminUsuario: esValido.usuario,
+      adminNombre: esValido.nombre_completo,
+      adminRol: esValido.rol
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

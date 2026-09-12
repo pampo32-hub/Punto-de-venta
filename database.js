@@ -595,9 +595,12 @@ function initDb() {
       motivo TEXT,
       monto REAL DEFAULT 0,
       pin_autorizado INTEGER DEFAULT 0,
+      autorizado_por TEXT,
       fecha_hora TEXT NOT NULL,
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
     )`);
+    db.run("ALTER TABLE Auditoria ADD COLUMN autorizado_por TEXT", () => {});
+    db.run("ALTER TABLE Anulaciones ADD COLUMN solicitado_por TEXT", () => {});
 
     // Sembrar Insumos Iniciales si no existen
     db.get('SELECT COUNT(*) as count FROM Inventario', (err, row) => {

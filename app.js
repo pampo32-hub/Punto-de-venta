@@ -3595,10 +3595,15 @@ window.cargarAuditoriaDev = async function() {
         tagTipo = `<span style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid #eab308; padding:2px 8px; border-radius:6px; font-size:0.75rem; font-weight:700;">🧾 ORDEN</span>`;
       }
 
+      let userDevDisplay = `<span style="color:#a78bfa;">👤</span> @${escapeHtml(l.usuario_nombre || 'Sistema')}`;
+      if (l.autorizado_por) {
+        userDevDisplay += `<div style="font-size:0.72rem; color:#34d399; font-weight:700; margin-top:2px;">🔑 Autorizó: @${escapeHtml(l.autorizado_por)}</div>`;
+      }
+
       return `
         <tr style="border-bottom:1px solid #1f2937;">
           <td style="padding:10px 16px; font-size:0.8rem; color:#94a3b8; white-space:nowrap;">${fecha}</td>
-          <td style="padding:10px 16px; font-weight:700; color:#fff;"><span style="color:#a78bfa;">👤</span> ${l.usuario_nombre || 'Sistema'}</td>
+          <td style="padding:10px 16px; font-weight:700; color:#fff;">${userDevDisplay}</td>
           <td style="padding:10px 16px; color:#cbd5e1; font-size:0.82rem;">${l.modulo || '-'}</td>
           <td style="padding:10px 16px;">${tagTipo}</td>
           <td style="padding:10px 16px; font-weight:600; color:#38bdf8;">${l.accion || '-'}</td>
@@ -14028,17 +14033,21 @@ function initAnulaciones() {
       const it = estado.mesaActiva.items[anulaIndex];
       if (it.id_detalle_existente) {
         try {
+          const userLogin = String(estado.usuarioActual?.usuario || estado.usuarioActual?.nombre || localStorage.getItem('pos_usuario') || 'salonero').trim();
           const res = await fetch('/api/comandas/anular-item', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'x-negocio-id': String(estado?.negocio?.id || localStorage.getItem('pos_negocio_id') || 1)
+              'x-negocio-id': String(estado?.negocio?.id || localStorage.getItem('pos_negocio_id') || 1),
+              'x-user-login': userLogin
             },
             body: JSON.stringify({
               detalleId: it.id_detalle_existente,
               motivo,
               supervisorPin: pin,
-              mesaNumero: estado.mesaActiva.numero
+              mesaNumero: estado.mesaActiva.numero,
+              usuarioLogin: userLogin,
+              usuarioNombre: userLogin
             })
           });
           const data = await res.json();
@@ -20604,14 +20613,19 @@ function renderTablaAuditoria(eventos) {
   eventos.forEach(ev => {
     const tr = document.createElement('tr');
     let badgeClass = (ev.tipo_evento || 'operativo').toLowerCase();
-    if (ev.accion === 'cierre_forzado_cuenta' || ev.accion === 'liberacion_forzada_mesa') {
+    if (ev.accion === 'cierre_forzado_cuenta' || ev.accion === 'liberacion_forzada_mesa' || ev.accion === 'anulacion_comanda') {
       badgeClass = 'seguridad';
     }
     const fecha = ev.fecha_hora ? formatearFechaHoraCR(ev.fecha_hora) : 'Reciente';
 
+    let userDisplay = `<div style="font-weight:700; color:#f8fafc;">👤 @${escapeHtml(ev.usuario_nombre || 'Sistema')}</div>`;
+    if (ev.autorizado_por) {
+      userDisplay += `<div style="font-size:0.75rem; color:#34d399; margin-top:3px; font-weight:700; display:flex; align-items:center; gap:4px;"><span style="font-size:0.8rem;">🔑</span> Autorizó: @${escapeHtml(ev.autorizado_por)}</div>`;
+    }
+
     tr.innerHTML = `
       <td><span style="color:#9ca3af; font-size:0.8rem;">${fecha}</span></td>
-      <td><strong>👤 ${escapeHtml(ev.usuario_nombre)}</strong></td>
+      <td>${userDisplay}</td>
       <td><span class="audit-action-badge ${badgeClass}">${escapeHtml((ev.accion || '').replace(/_/g, ' '))}</span></td>
       <td><span style="color:#60a5fa; font-weight:600; text-transform:uppercase; font-size:0.75rem;">${escapeHtml(ev.modulo || 'general')}</span></td>
       <td>${escapeHtml(ev.detalle || '')}</td>
