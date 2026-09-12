@@ -1071,6 +1071,18 @@ function initDb() {
         });
       }
     });
+
+    // Auto-alineación de secuencias en PostgreSQL para prevenir errores de 'duplicate key / unique constraint'
+    if (db.isPg) {
+      const tablasConId = ['negocios', 'zonas', 'categorias', 'productos', 'mesas', 'usuarios', 'puntosdecobro'];
+      tablasConId.forEach(tbl => {
+        db.get(
+          `SELECT setval(pg_get_serial_sequence($1, 'id'), COALESCE((SELECT MAX(id) FROM ${tbl}), 1) + 1, false)`,
+          [tbl],
+          () => {}
+        );
+      });
+    }
   });
 }
 
