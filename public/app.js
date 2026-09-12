@@ -3063,6 +3063,11 @@ window.abrirPanelAdmin = async function() {
       mostrarNotificacionCentro('👑 Acción autorizada con PIN de Administrador', 'success');
     }
   }
+
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
+  }
+
   const modal = document.getElementById('modalPanelAdmin');
   if (modal) modal.classList.add('active');
 };
@@ -4688,6 +4693,11 @@ window.aplicarRestriccionesModulos = function() {
   document.querySelectorAll('.corte-z-ciego').forEach(el => {
     if (el !== btnZCiego) el.style.display = tieneArqueoCiegoZ ? '' : 'none';
   });
+
+  // 17. Funciones exclusivas de Developer (Ocultas para todos los demás roles)
+  if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
+    window.actualizarVisibilidadBotonesPurgaDev();
+  }
 };
 
 // ============================================================================
@@ -19058,7 +19068,7 @@ window.limpiarSugerenciasCompras = function() {
   }
 };
 
-// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE - EXCLUSIVO DEVELOPER / SUPERADMIN) ---
+// --- PURGA Y PUESTA A CERO DE DATOS DE PRUEBA (DELIVERY TO CLIENT BLANK STATE - EXCLUSIVO DEVELOPER) ---
 
 window.obtenerRolUsuarioActual = function() {
   const u = estado.usuarioActual;
@@ -19070,12 +19080,15 @@ window.obtenerRolUsuarioActual = function() {
   })();
   const r = (rawRol || '').toLowerCase().replace(/[\s_-]/g, '');
   if (r === 'superadmin' || r === 'superadministrador') return 'superadmin';
-  if (r === 'developer') return 'developer';
+  if (r === 'developer' || r === 'desarrollador') return 'developer';
   if (r === 'admin' || r === 'administrador') return 'admin';
-  return rawRol || 'developer';
+  if (r === 'cajero' || r === 'cajera') return 'cajero';
+  if (r === 'salonero' || r === 'mesero') return 'salonero';
+  if (r === 'cocina' || r === 'cocinero') return 'cocina';
+  return rawRol || 'salonero';
 };
 
-window.esUsuarioDeveloperOSuperAdmin = function() {
+window.esUsuarioDeveloper = function() {
   const u = estado.usuarioActual;
   const rawRol = u?.rol || (() => {
     try {
@@ -19084,16 +19097,27 @@ window.esUsuarioDeveloperOSuperAdmin = function() {
     } catch (_) { return ''; }
   })();
   const r = (rawRol || '').toLowerCase().replace(/[\s_-]/g, '');
-  return r === 'developer' || r === 'superadmin' || r === 'superadministrador';
+  return r === 'developer' || r === 'desarrollador' || Boolean(u?.es_developer);
+};
+
+window.esUsuarioDeveloperOSuperAdmin = function() {
+  // Exclusivo para Desarrollador (no se muestra para admin ni otros roles)
+  return window.esUsuarioDeveloper();
 };
 
 window.actualizarVisibilidadBotonesPurgaDev = function() {
-  const esDevOSuper = window.esUsuarioDeveloperOSuperAdmin();
-  document.querySelectorAll('.dev-purge-action').forEach(el => {
-    if (el.id === 'btnResetCajaPruebas' || el.id === 'cardAdminPurgaTotal') {
-      el.style.display = esDevOSuper ? 'flex' : 'none';
+  const esDev = window.esUsuarioDeveloper();
+  document.querySelectorAll('.dev-purge-action, .card-purga-total, #cardAdminPurgaTotal, #btnPurgarNegocioCompleto').forEach(el => {
+    if (esDev) {
+      el.classList.add('dev-visible');
+      if (el.id === 'btnResetCajaPruebas' || el.id === 'cardAdminPurgaTotal' || el.classList.contains('card-purga-total')) {
+        el.style.setProperty('display', 'flex', 'important');
+      } else {
+        el.style.setProperty('display', 'inline-flex', 'important');
+      }
     } else {
-      el.style.display = esDevOSuper ? 'inline-flex' : 'none';
+      el.classList.remove('dev-visible');
+      el.style.setProperty('display', 'none', 'important');
     }
   });
 };

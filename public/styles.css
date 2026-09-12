@@ -7154,6 +7154,37 @@ body.is-admin .admin-only-tab {
 }
 
 /* ============================================================= */
+/* BOTONES Y TARJETAS EXCLUSIVAS DE DEVELOPER (PURGA / RESET)   */
+/* Ocultos por defecto para todos los usuarios excepto Developer */
+/* ============================================================= */
+.dev-purge-action,
+.card-purga-total,
+#cardAdminPurgaTotal,
+#btnPurgarNegocioCompleto {
+  display: none !important;
+}
+
+.dev-purge-action.dev-visible,
+.card-purga-total.dev-visible,
+#cardAdminPurgaTotal.dev-visible {
+  display: flex !important;
+}
+
+button.dev-purge-action.dev-visible,
+button#btnPurgarNegocioCompleto.dev-visible,
+button#btnPurgarDashboardIntegral.dev-visible,
+button#btnPurgarVentasDev.dev-visible,
+button#btnPurgarAuditoriaDev.dev-visible,
+button#btnPurgarAuditoriaAdmin.dev-visible,
+button#btnLiberarTodasMesas.dev-visible,
+button#btnPurgarComandasKDS.dev-visible,
+button#btnPurgarFacturasDev.dev-visible,
+button#btnPurgarSugerenciasCompras.dev-visible,
+button#btnPurgarVentasProductosDev.dev-visible {
+  display: inline-flex !important;
+}
+
+/* ============================================================= */
 /* PAPEL CONTINUO TÉRMICO DE 80MM (SIMULADOR DE RECEIPT REAL) */
 /* ============================================================= */
 .receipt-paper-80mm-wrapper {
