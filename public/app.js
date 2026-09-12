@@ -11609,8 +11609,14 @@ window.validarPinAdminManual = async function() {
   try {
     const res = await fetch('/api/auth/verificar-pin-admin', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: pinIngresado })
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(estado?.negocio?.id || localStorage.getItem('pos_negocio_id') || 1)
+      },
+      body: JSON.stringify({ 
+        pin: pinIngresado,
+        negocio_id: estado?.negocio?.id || localStorage.getItem('pos_negocio_id') || 1
+      })
     });
     const data = await res.json();
     if (!res.ok || !data.ok) {
@@ -11630,21 +11636,9 @@ window.validarPinAdminManual = async function() {
       _pinAdminResolver = null;
     }
   } catch (e) {
-    if (pinIngresado === '1234' || pinIngresado === '9999') {
-      const modal = document.getElementById('modalSolicitarPinAdmin');
-      if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('active');
-      }
-      if (_pinAdminResolver) {
-        _pinAdminResolver(pinIngresado);
-        _pinAdminResolver = null;
-      }
-    } else {
-      mostrarNotificacionCentro('❌ PIN de Administrador incorrecto', 'error');
-      _pinAdminBuffer = '';
-      actualizarVisorPinAdmin();
-    }
+    mostrarNotificacionCentro('❌ Error al verificar PIN o PIN inválido', 'error');
+    _pinAdminBuffer = '';
+    actualizarVisorPinAdmin();
   }
 };
 
@@ -13991,10 +13985,19 @@ function cargarSelectoresMoverUnir() {
 
 
 // Anulaciones
+// Anulaciones
 var anulaIndex = null;
 function initAnulaciones() {
-  document.getElementById('btnCloseAnulaModal').addEventListener('click', () => document.getElementById('modalAnulacion').classList.remove('active'));
-  document.getElementById('btnCancelarAnula').addEventListener('click', () => document.getElementById('modalAnulacion').classList.remove('active'));
+  document.getElementById('btnCloseAnulaModal').addEventListener('click', () => {
+    document.getElementById('modalAnulacion').classList.remove('active');
+    const p = document.getElementById('txtPinSupervisor');
+    if (p) p.value = '';
+  });
+  document.getElementById('btnCancelarAnula').addEventListener('click', () => {
+    document.getElementById('modalAnulacion').classList.remove('active');
+    const p = document.getElementById('txtPinSupervisor');
+    if (p) p.value = '';
+  });
 
   document.querySelectorAll('.numeric-keypad .num-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -14003,15 +14006,23 @@ function initAnulaciones() {
     });
   });
 
-  document.getElementById('btnPinClear').addEventListener('click', () => document.getElementById('txtPinSupervisor').value = '');
+  document.getElementById('btnPinClear').addEventListener('click', () => {
+    const p = document.getElementById('txtPinSupervisor');
+    if (p) p.value = '';
+  });
   document.getElementById('btnPinDel').addEventListener('click', () => {
     const p = document.getElementById('txtPinSupervisor');
-    p.value = p.value.slice(0, -1);
+    if (p) p.value = p.value.slice(0, -1);
   });
 
   document.getElementById('btnConfirmarAnulacion').addEventListener('click', async () => {
-    const pin = document.getElementById('txtPinSupervisor')?.value || '1234';
-    const motivo = document.getElementById('anulaMotivoSelect').value;
+    const pin = (document.getElementById('txtPinSupervisor')?.value || '').trim();
+    const motivo = document.getElementById('anulaMotivoSelect')?.value || 'Anulación autorizada';
+
+    if (!pin || pin.length < 4) {
+      alert('⚠️ Debe ingresar el PIN de 4 dígitos del Administrador o Supervisor.');
+      return;
+    }
 
     if (anulaIndex !== null && estado.mesaActiva) {
       const it = estado.mesaActiva.items[anulaIndex];
@@ -14019,32 +14030,34 @@ function initAnulaciones() {
         try {
           const res = await fetch('/api/comandas/anular-item', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'x-negocio-id': String(estado?.negocio?.id || localStorage.getItem('pos_negocio_id') || 1)
+            },
             body: JSON.stringify({
               detalleId: it.id_detalle_existente,
               motivo,
-              supervisorPin: pin || '1234',
+              supervisorPin: pin,
               mesaNumero: estado.mesaActiva.numero
             })
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
+          if (!res.ok) throw new Error(data.error || 'PIN incorrecto o no autorizado');
           alert(`🗑️ Platillo "${it.nombre}" anulado y registrado en auditoría.`);
           estado.mesaActiva.items.splice(anulaIndex, 1);
         } catch (e) {
           alert('❌ ' + e.message);
+          const p = document.getElementById('txtPinSupervisor');
+          if (p) p.value = '';
           return;
         }
       } else {
-        if (pin !== '1234') {
-          alert('❌ PIN incorrecto.');
-          return;
-        }
         estado.mesaActiva.items.splice(anulaIndex, 1);
-        alert('🗑️ Platillo anulado.');
-        alert('🗑️ Platillo eliminado del pedido.');
+        alert(`🗑️ Platillo "${it.nombre}" retirado del pedido.`);
       }
       document.getElementById('modalAnulacion').classList.remove('active');
+      const p = document.getElementById('txtPinSupervisor');
+      if (p) p.value = '';
       renderTicketItems();
       cargarMesasDesdeBackend();
     }
@@ -14061,8 +14074,8 @@ window.solicitarAnulacionItem = function(idx) {
     return;
   }
   document.getElementById('anulaItemNombre').textContent = `${it.nombre} x ${it.cantidad}`;
-  document.getElementById('txtPinSupervisor').value = '';
-  document.getElementById('txtPinSupervisor').value = '1234';
+  const p = document.getElementById('txtPinSupervisor');
+  if (p) p.value = '';
   document.getElementById('modalAnulacion').classList.add('active');
 };
 

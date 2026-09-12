@@ -5237,13 +5237,16 @@ app.post('/api/comandas/anular-item', async (req, res) => {
   try {
     const { detalleId, motivo, supervisorPin, mesaNumero = 'Mesa' } = req.body;
 
-    const pinValido = await validarPinAdministrador(supervisorPin, req.negocioId || req.headers['x-negocio-id']) || supervisorPin === '1234' || supervisorPin === '9999';
-    if (!pinValido) {
-      return res.status(403).json({ error: 'PIN de Supervisor incorrecto' });
-    }
-
     const item = await dbGet('SELECT * FROM DetalleOrden WHERE id = ?', [detalleId]);
     if (!item) return res.status(404).json({ error: 'Ítem no encontrado' });
+
+    const ordenItem = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [item.orden_id]);
+    const ordenNegocioId = Number(ordenItem?.negocio_id || req.negocioId || req.headers['x-negocio-id'] || 1);
+
+    const pinValido = await validarPinAdministrador(supervisorPin, ordenNegocioId);
+    if (!pinValido) {
+      return res.status(403).json({ error: 'PIN de Supervisor / Administrador incorrecto o no autorizado' });
+    }
 
     const ahora = new Date().toISOString();
     await dbRun("UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE id = ?", [detalleId]);
@@ -5252,9 +5255,6 @@ app.post('/api/comandas/anular-item', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, ahora]
     );
-
-    const ordenItem = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [item.orden_id]);
-    const ordenNegocioId = Number(ordenItem?.negocio_id || req.negocioId || req.headers['x-negocio-id'] || 1);
 
     await registrarAuditoria({
       negocioId: ordenNegocioId,
@@ -7597,6 +7597,7 @@ async function descontarInventarioPorItems(items = []) {
 async function validarPinAdministrador(pin, negocioId = null) {
   if (!pin) return false;
   const pinStr = String(pin).trim();
+  if (!pinStr) return false;
   try {
     const usuariosAdmin = await dbAll(
       "SELECT id, usuario, nombre_completo, rol, pin, negocio_id FROM Usuarios WHERE rol IN ('admin', 'developer', 'superadmin', 'super_admin', 'superadministrador', 'administrador') AND activo = 1"
@@ -7605,12 +7606,9 @@ async function validarPinAdministrador(pin, negocioId = null) {
       if (negocioId && u.rol !== 'developer' && u.rol !== 'superadmin' && u.negocio_id != null && Number(u.negocio_id) !== Number(negocioId)) {
         continue;
       }
-      if (String(u.pin).trim() === pinStr) {
+      if (u.pin && String(u.pin).trim() === pinStr) {
         return true;
       }
-    }
-    if (pinStr === '1234' || pinStr === '9999') {
-      return true;
     }
     return false;
   } catch (_) {
