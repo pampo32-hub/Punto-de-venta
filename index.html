@@ -237,7 +237,10 @@
               <h3>🏬 Comercios y Restaurantes Registrados</h3>
               <p>Administra cada local, su logo oficial, moneda y configuración visual.</p>
             </div>
-            <button class="btn-pri" onclick="abrirModalNuevoNegocio()">➕ Registrar Nuevo Comercio</button>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn-pri" onclick="abrirModalNuevoNegocio('individual')">➕ Nuevo Comercio Individual</button>
+              <button class="btn-pri" onclick="abrirModalNuevoNegocio('multisucursal')" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border:none; padding:8px 16px; border-radius:8px; font-weight:800; color:#fff; cursor:pointer; box-shadow:0 4px 12px rgba(59,130,246,0.35);">🏢 Crear Negocio Multi-Sucursal</button>
+            </div>
           </div>
 
           <div class="negocios-cards-grid" id="devNegociosGrid">
@@ -2483,23 +2486,48 @@
           </select>
         </div>
 
-        <!-- CONFIGURACIÓN MULTI-SUCURSAL (CADENAS / FRANQUICIAS) -->
-        <div style="margin-top: 14px; padding: 12px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 10px;">
-          <div style="font-weight: 700; color: #60a5fa; font-size: 0.85rem; margin-bottom: 8px;">
-            🏢 Configuración Multi-Sucursal / Cadena
+        <!-- SECCIÓN: MODELO DE SUCURSAL Y CADENA -->
+        <div style="margin-top: 14px; padding: 14px; background: linear-gradient(135deg, rgba(30,58,138,0.2), rgba(15,23,42,0.6)); border: 1.5px solid #3b82f6; border-radius: 12px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <span style="font-size:1.2rem;">🏢</span>
+            <label style="font-weight: 800; color: #60a5fa; font-size: 0.92rem; margin: 0;">
+              Modalidad de Negocio / Multi-Sucursal
+            </label>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="field-group">
-              <label style="font-size: 0.8rem;">ID de Grupo / Cadena:</label>
-              <input type="text" id="devNegocioGrupoId" placeholder="Ej: grupo_la_terraza" style="font-size: 0.85rem;" />
-            </div>
-            <div class="field-group">
-              <label style="font-size: 0.8rem;">Tipo de Sucursal:</label>
-              <select id="devNegocioEsMatriz" style="width: 100%; padding: 8px 10px; border-radius: 8px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; font-weight: 600; font-size: 0.85rem;">
-                <option value="0">🏢 Sucursal Estándar</option>
-                <option value="1">🏛️ Sucursal Matriz / Principal</option>
+
+          <div class="field-group">
+            <label style="font-size:0.8rem; color:#cbd5e1; font-weight:700;">Selecciona la Modalidad:</label>
+            <select id="devNegocioTipoModalidad" onchange="window.cambiarModalidadNegocioDev(this.value)" style="width: 100%; padding: 10px; border-radius: 8px; background: #1e293b; color: #f8fafc; border: 1.5px solid #3b82f6; font-weight: 700; font-size: 0.9rem; cursor:pointer;">
+              <option value="individual">🏪 Comercio Individual (1 Sola Sucursal / Plan Estándar)</option>
+              <option value="matriz">🏛️ Sucursal Matriz (Crear Nueva Cadena Multi-Sucursal)</option>
+              <option value="sucursal">🏢 Sucursal Adicional (Unir a Cadena / Grupo Existente)</option>
+            </select>
+          </div>
+
+          <!-- Campos condicionales para Multi-Sucursal -->
+          <div id="devCamposMultiSucursalContainer" style="display:none; margin-top:12px; padding-top:12px; border-top:1px dashed #334155;">
+            <div id="devGrupoExistenteBox" style="display:none;" class="field-group">
+              <label style="font-size:0.8rem; color:#cbd5e1; font-weight:700;">Selecciona la Cadena / Grupo:</label>
+              <select id="devNegocioGrupoSelect" onchange="window.seleccionarGrupoExistenteDev(this.value)" style="width: 100%; padding: 9px; border-radius: 8px; background: #0f172a; color: #f8fafc; border: 1px solid #475569; font-weight: 600; font-size: 0.85rem; margin-bottom: 8px;">
               </select>
             </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="field-group">
+                <label style="font-size: 0.8rem; color:#cbd5e1; font-weight:700;">ID / Código de Cadena: <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="devNegocioGrupoId" placeholder="Ej: grupo_la_terraza" style="font-size: 0.85rem;" />
+              </div>
+              <div class="field-group">
+                <label style="font-size: 0.8rem; color:#cbd5e1; font-weight:700;">Tipo de Sucursal:</label>
+                <select id="devNegocioEsMatriz" style="width: 100%; padding: 8px 10px; border-radius: 8px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; font-weight: 600; font-size: 0.85rem;">
+                  <option value="0">🏢 Sucursal Operativa</option>
+                  <option value="1">🏛️ Sucursal Matriz / Principal</option>
+                </select>
+              </div>
+            </div>
+            <small id="devMultiSucursalHelpTxt" style="color: #93c5fd; font-size: 0.78rem; display: block; margin-top: 6px;">
+              ℹ️ Los administradores de esta cadena podrán alternar entre todas las sucursales y ver reportes consolidados globales.
+            </small>
           </div>
         </div>
 

@@ -4228,11 +4228,17 @@ async function cargarNegociosDev() {
             <span>🍽️ ${n.total_mesas || 0} Mesas</span>
             <span>💰 Moneda: ${n.moneda === 'CRC_USD' ? 'Bimoneda (₡ y $)' : (n.moneda === 'USD' ? 'Dólares ($)' : 'Colones (₡)')}</span>
             <span style="grid-column: 1 / -1; color: #818cf8; font-weight: 700;">🧩 ${modulosCount}/11 Módulos (${planTexto})</span>
+            ${n.grupo_id ? `<span style="grid-column: 1 / -1; color: #60a5fa; font-weight: 800; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; padding: 4px 8px;">🏢 ${n.es_matriz ? '🏛️ Matriz de Cadena: ' : '🏢 Sucursal de Cadena: '} <strong>${escapeHtml(n.grupo_id)}</strong></span>` : ''}
           </div>
           <div class="negocio-actions" style="display: flex; flex-wrap: wrap; gap: 8px;">
             <button class="btn-open-pos-as" style="flex: 1 1 100%;" onclick="abrirPosComoNegocio(${n.id})">
               👀 Abrir POS como este Local
             </button>
+            ${n.grupo_id || n.es_matriz ? `
+            <button class="btn-edit-negocio" style="flex: 1 1 100%; background: #1e3a8a; border-color: #3b82f6; color: #93c5fd; font-weight: 800;" onclick="abrirModalNuevaSucursalDeGrupo('${(n.grupo_id || '').replace(/'/g, "\\'")}', '${nombreEscapado}')" title="Crear una nueva sucursal para esta misma cadena">
+              ➕ Agregar Nueva Sucursal a esta Cadena
+            </button>
+            ` : ''}
             <button class="btn-edit-negocio" style="flex: 1; background: #581c87; border-color: #7e22ce; color: #f3e8ff; font-weight: 700;" onclick="abrirModalClonarNegocioDev(${n.id}, '${nombreEscapado}', '${(n.slogan || '').replace(/'/g, "\\'")}', '${n.moneda || 'CRC'}', '${(n.telefono || '').replace(/'/g, "\\'")}')" title="Clonar este restaurante en un entorno 100% aislado con su propio Super Admin">
               🧬 Clonar
             </button>
@@ -6169,7 +6175,93 @@ window.abrirPosComoNegocio = async function(negocioId) {
   }
 };
 
-window.abrirModalNuevoNegocio = function() {
+window.cambiarModalidadNegocioDev = function(modalidad) {
+  const container = document.getElementById('devCamposMultiSucursalContainer');
+  const grupoBox = document.getElementById('devGrupoExistenteBox');
+  const inpGrupoId = document.getElementById('devNegocioGrupoId');
+  const selEsMatriz = document.getElementById('devNegocioEsMatriz');
+  const helpTxt = document.getElementById('devMultiSucursalHelpTxt');
+
+  if (!container) return;
+
+  if (modalidad === 'individual') {
+    container.style.display = 'none';
+    if (inpGrupoId) inpGrupoId.value = '';
+    if (selEsMatriz) selEsMatriz.value = '0';
+  } else if (modalidad === 'matriz') {
+    container.style.display = 'block';
+    if (grupoBox) grupoBox.style.display = 'none';
+    if (selEsMatriz) selEsMatriz.value = '1';
+    if (helpTxt) helpTxt.textContent = '🏛️ Esta será la sucursal matriz/principal del grupo. Se creará una nueva cadena de locales.';
+    const nomVal = document.getElementById('devNegocioNombre')?.value.trim();
+    if (nomVal && inpGrupoId && !inpGrupoId.value) {
+      inpGrupoId.value = 'grupo_' + nomVal.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 18);
+    }
+  } else if (modalidad === 'sucursal') {
+    container.style.display = 'block';
+    if (grupoBox) {
+      grupoBox.style.display = 'block';
+      poblarSelectorGruposExistentesDev();
+    }
+    if (selEsMatriz) selEsMatriz.value = '0';
+    if (helpTxt) helpTxt.textContent = '🏢 Esta sucursal se unirá al grupo seleccionado y compartirá reportes consolidados con la matriz.';
+  }
+};
+
+window.poblarSelectorGruposExistentesDev = async function() {
+  const sel = document.getElementById('devNegocioGrupoSelect');
+  if (!sel) return;
+  try {
+    const res = await fetch('/api/dev/negocios');
+    const negocios = await res.json();
+    const gruposMap = {};
+    negocios.forEach(n => {
+      if (n.grupo_id) {
+        if (!gruposMap[n.grupo_id]) {
+          gruposMap[n.grupo_id] = n.nombre + (n.es_matriz ? ' (Matriz)' : '');
+        }
+      }
+    });
+
+    const grupoKeys = Object.keys(gruposMap);
+    if (grupoKeys.length === 0) {
+      sel.innerHTML = '<option value="">-- No hay cadenas creadas aún (crea una Matriz primero) --</option>';
+    } else {
+      sel.innerHTML = '<option value="">-- Seleccionar Cadena / Grupo --</option>' + grupoKeys.map(k => `
+        <option value="${k}">🏢 ${k} (Local: ${escapeHtml(gruposMap[k])})</option>
+      `).join('') + '<option value="__otro__">✏️ Escribir otro ID de Cadena...</option>';
+    }
+  } catch (_) {}
+};
+
+window.seleccionarGrupoExistenteDev = function(val) {
+  const inp = document.getElementById('devNegocioGrupoId');
+  if (!inp) return;
+  if (val && val !== '__otro__') {
+    inp.value = val;
+  } else if (val === '__otro__') {
+    inp.value = '';
+    inp.focus();
+  }
+};
+
+window.abrirModalNuevaSucursalDeGrupo = function(grupoId, matrizNombre) {
+  abrirModalNuevoNegocio('sucursal');
+  const inpNombre = document.getElementById('devNegocioNombre');
+  const inpGrupo = document.getElementById('devNegocioGrupoId');
+  const modalTitulo = document.getElementById('negocioModalTitulo');
+
+  if (inpGrupo) inpGrupo.value = grupoId;
+  if (inpNombre) {
+    inpNombre.placeholder = `Ej: ${matrizNombre || 'Cadena'} - Sucursal 2`;
+    inpNombre.focus();
+  }
+  if (modalTitulo) {
+    modalTitulo.textContent = `🏢 Nueva Sucursal para Cadena: ${matrizNombre || grupoId}`;
+  }
+};
+
+window.abrirModalNuevoNegocio = function(modalidad = 'individual') {
   document.getElementById('devNegocioId').value = '';
   document.getElementById('devNegocioNombre').value = '';
   document.getElementById('devNegocioSlogan').value = '';
@@ -6179,6 +6271,15 @@ window.abrirModalNuevoNegocio = function() {
   if (elMoneda) elMoneda.value = 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   if (elActivo) elActivo.value = '1';
+
+  // Configurar Modalidad Multi-Sucursal
+  const elModalidad = document.getElementById('devNegocioTipoModalidad');
+  const modElegida = modalidad === 'multisucursal' ? 'matriz' : (modalidad === 'sucursal' ? 'sucursal' : 'individual');
+  if (elModalidad) elModalidad.value = modElegida;
+  cambiarModalidadNegocioDev(modElegida);
+
+  const inpGrupo = document.getElementById('devNegocioGrupoId');
+  if (inpGrupo && modElegida === 'individual') inpGrupo.value = '';
 
   // Sección Admin inicial
   const seccionAdmin = document.getElementById('devSeccionCrearAdmin');
@@ -6199,17 +6300,22 @@ window.abrirModalNuevoNegocio = function() {
   const elEstructura = document.getElementById('devCrearEstructuraBase');
   if (elEstructura) elEstructura.checked = true;
 
-  document.getElementById('negocioModalTitulo').textContent = '🏬 Registrar Nuevo Comercio';
+  document.getElementById('negocioModalTitulo').textContent = (modElegida === 'matriz' || modElegida === 'sucursal')
+    ? '🏢 Registrar Negocio Multi-Sucursal (Cadena / Franquicia)'
+    : '🏬 Registrar Nuevo Comercio';
   document.getElementById('modalDevNegocio').classList.add('active');
 };
 
-// Auto-sugerir usuario admin al escribir el nombre del restaurante
+// Auto-sugerir usuario admin y grupo al escribir el nombre del restaurante
 document.getElementById('devNegocioNombre')?.addEventListener('input', (e) => {
   const id = document.getElementById('devNegocioId')?.value;
   if (id) return; // Solo para nuevos comercios
   const val = e.target.value.trim();
   const elAdminUser = document.getElementById('devAdminUsuario');
   const elAdminNombre = document.getElementById('devAdminNombre');
+  const elGrupoId = document.getElementById('devNegocioGrupoId');
+  const modVal = document.getElementById('devNegocioTipoModalidad')?.value;
+
   if (val && elAdminUser && (!elAdminUser.dataset.custom || elAdminUser.dataset.custom === 'false')) {
     const slug = val.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 15);
     elAdminUser.value = `admin_${slug}`;
@@ -6217,6 +6323,14 @@ document.getElementById('devNegocioNombre')?.addEventListener('input', (e) => {
   if (val && elAdminNombre && (!elAdminNombre.dataset.custom || elAdminNombre.dataset.custom === 'false')) {
     elAdminNombre.value = `Admin ${val}`;
   }
+  if (val && modVal === 'matriz' && elGrupoId && (!elGrupoId.dataset.custom || elGrupoId.dataset.custom === 'false')) {
+    const slug = val.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 18);
+    elGrupoId.value = `grupo_${slug}`;
+  }
+});
+
+document.getElementById('devNegocioGrupoId')?.addEventListener('input', function() {
+  this.dataset.custom = 'true';
 });
 
 document.getElementById('devAdminUsuario')?.addEventListener('input', function() {
@@ -6245,6 +6359,16 @@ window.editarNegocioDev = async function(negocioId) {
   if (elMoneda) elMoneda.value = n.moneda || 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   if (elActivo) elActivo.value = (Number(n.activo) === 0 ? '0' : '1');
+
+  // Configurar campos Multi-Sucursal
+  const elModalidad = document.getElementById('devNegocioTipoModalidad');
+  let modVal = 'individual';
+  if (n.grupo_id) {
+    modVal = Number(n.es_matriz) === 1 ? 'matriz' : 'sucursal';
+  }
+  if (elModalidad) elModalidad.value = modVal;
+  cambiarModalidadNegocioDev(modVal);
+
   const elGrupo = document.getElementById('devNegocioGrupoId');
   if (elGrupo) elGrupo.value = n.grupo_id || '';
   const elEsMatriz = document.getElementById('devNegocioEsMatriz');

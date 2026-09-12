@@ -879,12 +879,10 @@ app.post('/api/auth/login', async (req, res) => {
         debe_cambiar_password: debeCambiarPwd,
         permisos: JSON.parse(u.permisos || '{}'),
         negocio_id: u.negocio_id,
-        session_id: sessionId
         session_id: sessionId,
         sucursales: sucursalesAutorizadas,
         es_multi_sucursal: sucursalesAutorizadas.length > 1
       },
-      negocio: negocioObj
       negocio: negocioObj,
       sucursales: sucursalesAutorizadas
     });
@@ -1182,8 +1180,6 @@ app.post('/api/dev/negocios', async (req, res) => {
     const valGrupoId = grupo_id ? String(grupo_id).trim() : null;
     const valEsMatriz = Number(es_matriz) === 1 ? 1 : 0;
     const r = await dbRun(
-      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, modulos_activos, plan_nombre) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, 'all', 'Plan Full Tech 2026']
       'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, modulos_activos, plan_nombre, grupo_id, es_matriz) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, 'all', 'Plan Full Tech 2026', valGrupoId, valEsMatriz]
     );
@@ -1290,16 +1286,11 @@ app.get('/api/dev/backup-full-export', async (req, res) => {
 
 app.put('/api/dev/negocios/:id', async (req, res) => {
   try {
-    const { nombre, slogan, logo_url, moneda, telefono, direccion, activo } = req.body;
     const { nombre, slogan, logo_url, moneda, telefono, direccion, activo, grupo_id, es_matriz } = req.body;
     const negocioId = Number(req.params.id);
 
     let valActivo = (activo !== undefined && activo !== null) ? (Number(activo) === 0 ? 0 : 1) : 1;
 
-    await dbRun(
-      'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ?, activo = ? WHERE id = ?',
-      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, negocioId]
-    );
     let updates = ['nombre = ?', 'slogan = ?', 'logo_url = ?', 'moneda = ?', 'telefono = ?', 'direccion = ?', 'activo = ?'];
     let params = [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo];
 
