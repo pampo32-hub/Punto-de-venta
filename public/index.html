@@ -5939,6 +5939,56 @@
     </div>
   </div>
 
+  <!-- MODAL: PURGA INTEGRAL PARA ENTREGA OFICIAL (SOLO DEVELOPER) -->
+  <div class="modal-backdrop" id="modalConfirmarPurgaNegocio" style="display:none; z-index: 100150;">
+    <div class="modal-dialog" style="max-width: 520px; width: 92vw; background: #0f172a; border: 1.5px solid #ef4444; border-radius: 18px; box-shadow: 0 25px 70px rgba(0,0,0,0.9); overflow: hidden; margin: auto;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #7f1d1d, #450a0a); color: #fff; padding: 18px 22px; border-bottom: 1px solid #991b1b; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.6rem;">🚨</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #fff;">Purga Total para Entrega Oficial</h3>
+            <span style="color: #fca5a5; font-size: 0.78rem; font-weight: 700;">Limpieza de Datos de Prueba • Entorno 100% Virgen</span>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalPurgaNegocio()" style="background: transparent; border: none; color: #fca5a5; font-size: 1.3rem; cursor: pointer;">✕</button>
+      </div>
+      
+      <div class="dialog-body" style="padding: 22px; color: #f1f5f9; font-size: 0.9rem;">
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;">
+          <span style="color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 2px;">Local a Purgar:</span>
+          <strong id="lblModalPurgaNegocio" style="color: #fca5a5; font-size: 1.1rem; font-weight: 800;">Negocio</strong>
+        </div>
+
+        <p style="margin: 0 0 12px; color: #cbd5e1; line-height: 1.45;">
+          Esta acción eliminará de forma irreversible toda la información operativa generada en pruebas:
+        </p>
+
+        <ul style="margin: 0 0 18px; padding-left: 20px; color: #94a3b8; font-size: 0.84rem; display: flex; flex-direction: column; gap: 6px;">
+          <li><strong style="color:#f1f5f9;">🧾 Ventas y Facturas:</strong> Se borran todas las órdenes, ventas y tickets de prueba.</li>
+          <li><strong style="color:#f1f5f9;">🔒 Cajas y Arqueos:</strong> Historial limpio, caja cerrada en ₡0.00 lista para su apertura real.</li>
+          <li><strong style="color:#f1f5f9;">🪑 Mesas del Salón:</strong> Todas las mesas liberadas (en verde) con saldo ₡0.</li>
+          <li><strong style="color:#f1f5f9;">📦 Inventario y Kárdex:</strong> Movimientos vaciados y existencias/mínimos en 0 (sin alertas falsas).</li>
+          <li><strong style="color:#f1f5f9;">👥 Personal:</strong> Empleados de prueba eliminados; Administrador listo para entrega oficial.</li>
+          <li><strong style="color:#34d399;">✨ Intacto:</strong> Categorías, platillos, bebidas, precios y personalizaciones SE CONSERVAN.</li>
+        </ul>
+
+        <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 0.82rem; color: #94a3b8;">Seguridad: Rol <strong>Developer</strong> verificado</span>
+          <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 800; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem;">🔑 Autorizado</span>
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="padding: 14px 22px; background: #080d18; border-top: 1px solid #1e293b; display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn-sec" onclick="cerrarModalPurgaNegocio()" style="padding: 10px 18px; border-radius: 8px; font-weight: 700; background: #334155; color: #fff; border: none; cursor: pointer;">
+          ✕ Cancelar
+        </button>
+        <button class="btn-pri" id="btnConfirmarEjecutarPurga" onclick="ejecutarPurgaNegocioConfirmada()" style="padding: 10px 22px; border-radius: 8px; font-weight: 800; background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); display: flex; align-items: center; gap: 6px;">
+          <span>🔥 Sí, Purgar y Dejar en Ceros</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modalConfirmacionAccion" style="display:none; z-index: 100100;">
     <div class="dialog-box" style="max-width:420px; border-radius:18px; background:#0f172a; border:1px solid #334155; box-shadow:0 20px 60px rgba(0,0,0,0.7); padding:0; overflow:hidden;">
       <div class="dialog-header" style="background:linear-gradient(135deg,#1e293b,#0f172a); border-bottom:1px solid #334155; padding:18px 22px; display:flex; align-items:center; gap:12px;">
