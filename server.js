@@ -1427,7 +1427,7 @@ async function clonarODuplicarNegocioHandler(req, res) {
     const nuevoNegocioId = rNeg.lastID;
 
     // 2. Duplicar Zonas y mapear IDs
-    const zonasOrigen = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ?', [origenId]);
+    const zonasOrigen = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
     const mapaZonas = {};
     if (zonasOrigen && zonasOrigen.length > 0) {
       for (const z of zonasOrigen) {
@@ -1440,7 +1440,7 @@ async function clonarODuplicarNegocioHandler(req, res) {
     }
 
     // 3. Duplicar Mesas asociadas a las nuevas zonas
-    const mesasOrigen = await dbAll('SELECT * FROM Mesas WHERE negocio_id = ?', [origenId]);
+    const mesasOrigen = await dbAll('SELECT * FROM Mesas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
     if (mesasOrigen && mesasOrigen.length > 0) {
       for (const m of mesasOrigen) {
         const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
@@ -1453,7 +1453,7 @@ async function clonarODuplicarNegocioHandler(req, res) {
     }
 
     // 4. Duplicar Categorías y mapear IDs
-    const catsOrigen = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ?', [origenId]);
+    const catsOrigen = await dbAll('SELECT * FROM Categorias WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
     const mapaCats = {};
     if (catsOrigen && catsOrigen.length > 0) {
       for (const c of catsOrigen) {
@@ -1463,7 +1463,7 @@ async function clonarODuplicarNegocioHandler(req, res) {
     }
 
     // 5. Duplicar Productos asociados a las nuevas categorías
-    const prodsOrigen = await dbAll('SELECT * FROM Productos WHERE negocio_id = ?', [origenId]);
+    const prodsOrigen = await dbAll('SELECT * FROM Productos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
     const mapaProds = {};
     if (prodsOrigen && prodsOrigen.length > 0) {
       for (const p of prodsOrigen) {
@@ -1477,16 +1477,16 @@ async function clonarODuplicarNegocioHandler(req, res) {
       }
     }
 
-    // 6. Duplicar Inventario (Insumos) y mapear IDs
-    const invOrigen = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [origenId]);
+    // 6. Duplicar Inventario (Insumos) en estado inicial limpio y mapear IDs
+    const invOrigen = await dbAll('SELECT * FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
     const mapaInv = {};
     if (invOrigen && invOrigen.length > 0) {
       for (const i of invOrigen) {
         const nuevoProdId = i.producto_id ? (mapaProds[i.producto_id] || null) : null;
         const rI = await dbRun(
           `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, nuevoProdId, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
+           VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+          [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.costo_unitario || 0, nuevoProdId, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
         );
         mapaInv[i.id] = rI.lastID;
       }
@@ -1498,8 +1498,8 @@ async function clonarODuplicarNegocioHandler(req, res) {
         const recetasOrigen = await dbAll(
           `SELECT r.* FROM InventarioRecetas r
            JOIN Productos p ON r.producto_id = p.id
-           WHERE p.negocio_id = ?`,
-          [origenId]
+           WHERE (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))`,
+          [origenId, origenId]
         );
         for (const r of recetasOrigen) {
           const npId = mapaProds[r.producto_id];
@@ -1518,7 +1518,7 @@ async function clonarODuplicarNegocioHandler(req, res) {
     // 8. Duplicar Puntos de Cobro / Cajas Físicas
     const ahoraIso = new Date().toISOString();
     try {
-      const puntosOrigen = await dbAll('SELECT * FROM PuntosDeCobro WHERE negocio_id = ?', [origenId]);
+      const puntosOrigen = await dbAll('SELECT * FROM PuntosDeCobro WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
       if (puntosOrigen && puntosOrigen.length > 0) {
         for (const pt of puntosOrigen) {
           await dbRun(
@@ -7455,8 +7455,11 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
 
     const insumosConEstado = insumos.map(ins => {
       let estado = 'normal';
-      if (ins.stock_actual <= 0) estado = 'agotado';
-      else if (ins.stock_actual <= ins.stock_minimo) estado = 'bajo';
+      if (ins.stock_actual <= 0) {
+        estado = (Number(ins.stock_minimo) > 0) ? 'agotado' : 'sin_stock';
+      } else if (ins.stock_actual <= ins.stock_minimo) {
+        estado = 'bajo';
+      }
 
       let botellas_enteras = null;
       let shots_remanentes = null;
@@ -8256,7 +8259,8 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
       WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-        AND stock_actual <= stock_minimo 
+        AND stock_actual <= stock_minimo
+        AND stock_minimo > 0
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
     `, [negocioId, negocioId]);
 
@@ -9643,14 +9647,14 @@ app.post('/api/developer/purgar-negocio-completo', verificarDeveloper, async (re
     await dbRun(`DELETE FROM PedidosKDS WHERE negocio_id = ?`, [negocioId]).catch(() => {});
 
     // E. Kárdex e Inventario a Cero
-    await dbRun(`DELETE FROM InventarioMovimientos WHERE negocio_id = ? OR insumo_id IN (SELECT id FROM Inventario WHERE negocio_id = ?)`, [negocioId, negocioId]).catch(() => {});
+    await dbRun(`DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) OR insumo_id IN (SELECT id FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))`, [negocioId, negocioId, negocioId, negocioId]).catch(() => {});
     await dbRun(`
       UPDATE Inventario SET
         stock_actual = 0,
         stock_minimo = 0,
         stock_maximo = 0
-      WHERE negocio_id = ?
-    `, [negocioId]).catch(() => {});
+      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+    `, [negocioId, negocioId]).catch(() => {});
 
     // F. Auditoría y Notificaciones
     await dbRun(`DELETE FROM Auditoria WHERE negocio_id = ?`, [negocioId]).catch(() => {});

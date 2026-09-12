@@ -3532,6 +3532,8 @@ window.filtrarInventarioDev = function() {
       badgeEstado = '<span style="background:rgba(239,68,68,0.15); color:#f87171; border:1px solid #ef4444; padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">🔴 Agotado</span>';
     } else if (ins.estado_stock === 'bajo') {
       badgeEstado = '<span style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid #eab308; padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">⚠️ Bajo</span>';
+    } else if (ins.estado_stock === 'sin_stock') {
+      badgeEstado = '<span style="background:rgba(148,163,184,0.15); color:#cbd5e1; border:1px solid rgba(148,163,184,0.3); padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:700;">⚪ Sin Stock</span>';
     }
 
     let desgloseTexto = `<span style="color:#94a3b8; font-size:0.85rem;">${ins.unidad_medida}</span>`;
@@ -4143,8 +4145,8 @@ window.guardarClonarNegocioDev = async function() {
       })
     });
 
-    let data = {};
     const textResponse = await res.text();
+    let data = {};
     try {
       data = JSON.parse(textResponse);
     } catch (_) {
@@ -11930,8 +11932,6 @@ window.generarCorteX = async function() {
       titulo: 'CORTE X (PARCIAL)',
       negocio: {
         nombre: estado.negocioActual?.nombre || 'GastroBar Fuego & Brasas',
-        slogan: estado.negoc
-... [truncated for diff preview]
         slogan: estado.negocioActual?.slogan || 'Sistema de Punto de Venta & Bar',
         tel: estado.negocioActual?.telefono || '2222-0000 / 8888-9999'
       },
@@ -17042,7 +17042,7 @@ function renderTablaInventario(items) {
       <td style="color:#38bdf8; font-weight:700;">${formatCRC(valorTotal)}</td>
       <td>
         <span class="stock-pill ${ins.estado_stock}">
-          ${ins.estado_stock === 'agotado' ? '⛔ Agotado' : ins.estado_stock === 'bajo' ? '⚠️ Bajo Stock' : '✅ Normal'}
+          ${ins.estado_stock === 'agotado' ? '⛔ Agotado' : ins.estado_stock === 'bajo' ? '⚠️ Bajo Stock' : ins.estado_stock === 'sin_stock' ? '⚪ Sin Stock' : '✅ Normal'}
         </span>
       </td>
       <td style="text-align:right; white-space:nowrap;">
