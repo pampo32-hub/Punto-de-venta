@@ -3984,9 +3984,10 @@ body.theme-amethyst-3d .pay-method-tab.active {
   background: radial-gradient(circle at center, #1e1b4b 0%, #030712 100%);
   color: #fff;
   overflow-y: auto;
-  align-items: center;
+  -webkit-overflow-scrolling: touch;
+  align-items: flex-start;
   justify-content: center;
-  padding: 24px;
+  padding: 40px 16px 60px;
 }
 
 .landing-hero-view.active {
@@ -4008,6 +4009,8 @@ body.theme-amethyst-3d .pay-method-tab.active {
   max-width: 520px;
   width: 100%;
   text-align: center;
+  margin: auto;
+  padding-top: 10px;
 }
 
 .landing-brand-badge {
@@ -6330,7 +6333,7 @@ body.theme-amethyst-3d .pay-method-tab.active {
 
   /* LANDING & LOGIN MÓVIL */
   .landing-hero-view {
-    padding: 12px;
+    padding: 24px 12px 50px;
   }
 
   .landing-header h1 {
