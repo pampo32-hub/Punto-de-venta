@@ -4079,12 +4079,17 @@ window.abrirModalClonarNegocioDev = function(id, nombre, slogan, moneda, telefon
   document.getElementById('devClonAdminPassword').value = '123456';
   document.getElementById('devClonAdminPin').value = '1234';
 
+  modal.style.display = 'flex';
   modal.classList.add('active');
 };
 
 window.cerrarModalClonarNegocioDev = function() {
   const modal = document.getElementById('modalDevClonarNegocio');
   if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
 };
 
 window.guardarClonarNegocioDev = async function() {
@@ -4100,10 +4105,20 @@ window.guardarClonarNegocioDev = async function() {
 
   if (!nombre) {
     alert('Por favor indica el nombre del nuevo restaurante clonado.');
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Por favor indica el nombre del nuevo restaurante clonado.', 'warning');
+    } else {
+      alert('Por favor indica el nombre del nuevo restaurante clonado.');
+    }
     return;
   }
   if (!adminUsuario || !adminPassword) {
     alert('Por favor completa el usuario y contraseña del Super Admin.');
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('⚠️ Por favor completa el usuario y contraseña del Super Admin.', 'warning');
+    } else {
+      alert('Por favor completa el usuario y contraseña del Super Admin.');
+    }
     return;
   }
 
@@ -4130,6 +4145,14 @@ window.guardarClonarNegocioDev = async function() {
     });
 
     const data = await res.json();
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (_) {
+      const text = await res.text().catch(() => '');
+      data = { error: `Error del servidor (${res.status}): ${text.slice(0, 100)}` };
+    }
+
     if (!res.ok) throw new Error(data.error || 'Error al clonar el comercio');
 
     cerrarModalClonarNegocioDev();
@@ -4146,6 +4169,11 @@ window.guardarClonarNegocioDev = async function() {
     }
   } catch (e) {
     alert('❌ Error al clonar: ' + e.message);
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('❌ Error al clonar: ' + e.message, 'error');
+    } else {
+      alert('❌ Error al clonar: ' + e.message);
+    }
   } finally {
     if (btnGuardar) {
       btnGuardar.disabled = false;
@@ -11909,6 +11937,8 @@ window.generarCorteX = async function() {
       titulo: 'CORTE X (PARCIAL)',
       negocio: {
         nombre: estado.negocioActual?.nombre || 'GastroBar Fuego & Brasas',
+        slogan: estado.negoc
+... [truncated for diff preview]
         slogan: estado.negocioActual?.slogan || 'Sistema de Punto de Venta & Bar',
         tel: estado.negocioActual?.telefono || '2222-0000 / 8888-9999'
       },

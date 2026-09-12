@@ -1389,21 +1389,48 @@ app.get('/api/dev/modulos/catalogo', (req, res) => {
 
 // Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario)
 app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
+// Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario, Recetas, Cajas Físicas y Super Admin)
+async function clonarODuplicarNegocioHandler(req, res) {
   try {
     const origenId = Number(req.params.id);
     const { nombreNuevo = '', sloganNuevo = '' } = req.body || {};
+    const {
+      nombreNuevo = '',
+      nombre = '',
+      sloganNuevo = '',
+      slogan = '',
+      moneda = '',
+      telefono = '',
+      direccion = '',
+      adminNombre = '',
+      adminUsuario = '',
+      adminPassword = '',
+      adminPin = ''
+    } = req.body || {};
     
     const origen = await dbGet('SELECT * FROM Negocios WHERE id = ?', [origenId]);
     if (!origen) return res.status(404).json({ error: 'Negocio de origen no encontrado' });
 
     const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Copia)`;
     const sloganClon = sloganNuevo.trim() || origen.slogan || 'Copia de restaurante';
+    const nombreClon = (nombreNuevo || nombre || '').trim() || `${origen.nombre} (Copia)`;
+    const sloganClon = (sloganNuevo || slogan || '').trim() || origen.slogan || 'Copia de restaurante';
+    const monedaClon = moneda || origen.moneda || 'CRC';
+    const telefonoClon = telefono || origen.telefono || '';
+    const direccionClon = direccion || origen.direccion || '';
+    const planNombreClon = origen.plan_nombre || 'Plan Full Tech 2026';
+    const modulosClon = origen.modulos_activos || 'all';
+    const tipoCambioClon = origen.tipo_cambio_usd || 520;
+    const caracteristicasClon = origen.caracteristicas_activas || 'all';
 
     // 1. Insertar nuevo Negocio
     const rNeg = await dbRun(
       `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       [nombreClon, sloganClon, origen.logo_url, origen.moneda || 'CRC', origen.telefono, origen.direccion, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
+      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos, tipo_cambio_usd, caracteristicas_activas)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+      [nombreClon, sloganClon, origen.logo_url, monedaClon, telefonoClon, direccionClon, planNombreClon, modulosClon, tipoCambioClon, caracteristicasClon]
     );
     const nuevoNegocioId = rNeg.lastID;
 
@@ -1413,6 +1440,14 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
     for (const z of zonasOrigen) {
       const rZ = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, z.nombre]);
       mapaZonas[z.id] = rZ.lastID;
+    if (zonasOrigen && zonasOrigen.length > 0) {
+      for (const z of zonasOrigen) {
+        const rZ = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, z.nombre]);
+        mapaZonas[z.id] = rZ.lastID;
+      }
+    } else {
+      const rZDef = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, 'Salón Principal']);
+      mapaZonas[0] = rZDef.lastID;
     }
 
     // 3. Duplicar Mesas asociadas a las nuevas zonas
@@ -1424,6 +1459,15 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
          VALUES (?, ?, ?, ?, 'libre', ?, ?, ?, ?, ?, ?)`,
         [nuevoNegocioId, m.numero, nuevaZonaId, m.capacidad || 4, m.x || 40, m.y || 40, m.ancho || 130, m.alto || 120, m.forma || 'square', m.piso || 1]
       );
+    if (mesasOrigen && mesasOrigen.length > 0) {
+      for (const m of mesasOrigen) {
+        const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
+        await dbRun(
+          `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
+           VALUES (?, ?, ?, ?, 'libre', ?, ?, ?, ?, ?, ?)`,
+          [nuevoNegocioId, m.numero, nuevaZonaId, m.capacidad || 4, m.x || 40, m.y || 40, m.ancho || 130, m.alto || 120, m.forma || 'square', m.piso || 1]
+        );
+      }
     }
 
     // 4. Duplicar Categorías y mapear IDs
@@ -1432,6 +1476,11 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
     for (const c of catsOrigen) {
       const rC = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [nuevoNegocioId, c.nombre, c.icono, c.destino]);
       mapaCats[c.id] = rC.lastID;
+    if (catsOrigen && catsOrigen.length > 0) {
+      for (const c of catsOrigen) {
+        const rC = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [nuevoNegocioId, c.nombre, c.icono, c.destino]);
+        mapaCats[c.id] = rC.lastID;
+      }
     }
 
     // 5. Duplicar Productos asociados a las nuevas categorías
@@ -1443,9 +1492,21 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [nuevoNegocioId, nuevaCatId, p.codigo, p.nombre, p.precio, p.descripcion, p.destino, p.curso || 2, p.happy_hour || 0, p.agotado || 0, p.imagen_url, p.color_badge, p.activo !== undefined ? p.activo : 1]
       );
+    const mapaProds = {};
+    if (prodsOrigen && prodsOrigen.length > 0) {
+      for (const p of prodsOrigen) {
+        const nuevaCatId = mapaCats[p.categoria_id] || (Object.values(mapaCats)[0] || 1);
+        const rP = await dbRun(
+          `INSERT INTO Productos (negocio_id, categoria_id, codigo, nombre, precio, descripcion, destino, curso, happy_hour, agotado, imagen_url, color_badge, activo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [nuevoNegocioId, nuevaCatId, p.codigo, p.nombre, p.precio, p.descripcion, p.destino, p.curso || 2, p.happy_hour || 0, p.agotado || 0, p.imagen_url, p.color_badge, p.activo !== undefined ? p.activo : 1]
+        );
+        mapaProds[p.id] = rP.lastID;
+      }
     }
 
     // 6. Duplicar Inventario
+    // 6. Duplicar Inventario (Insumos) y mapear IDs
     const invOrigen = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [origenId]);
     for (const i of invOrigen) {
       await dbRun(
@@ -1453,15 +1514,102 @@ app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
       );
+    const mapaInv = {};
+    if (invOrigen && invOrigen.length > 0) {
+      for (const i of invOrigen) {
+        const nuevoProdId = i.producto_id ? (mapaProds[i.producto_id] || null) : null;
+        const rI = await dbRun(
+          `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, producto_id, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, nuevoProdId, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
+        );
+        mapaInv[i.id] = rI.lastID;
+      }
     }
+
+    // 7. Duplicar Recetas (InventarioRecetas)
+    if (prodsOrigen && prodsOrigen.length > 0) {
+      try {
+        const recetasOrigen = await dbAll(
+          `SELECT r.* FROM InventarioRecetas r
+           JOIN Productos p ON r.producto_id = p.id
+           WHERE p.negocio_id = ?`,
+          [origenId]
+        );
+        for (const r of recetasOrigen) {
+          const npId = mapaProds[r.producto_id];
+          const niId = mapaInv[r.insumo_id];
+          if (npId && niId) {
+            await dbRun(
+              `INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje)
+               VALUES (?, ?, ?, ?)`,
+              [npId, niId, r.cantidad, r.merma_porcentaje || 0]
+            );
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 8. Duplicar Puntos de Cobro / Cajas Físicas
+    const ahoraIso = new Date().toISOString();
+    try {
+      const puntosOrigen = await dbAll('SELECT * FROM PuntosDeCobro WHERE negocio_id = ?', [origenId]);
+      if (puntosOrigen && puntosOrigen.length > 0) {
+        for (const pt of puntosOrigen) {
+          await dbRun(
+            `INSERT INTO PuntosDeCobro (negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [nuevoNegocioId, pt.nombre, pt.codigo, pt.ubicacion, pt.icono || '💳', pt.activo !== undefined ? pt.activo : 1, ahoraIso]
+          );
+        }
+      } else {
+        await dbRun(
+          `INSERT INTO PuntosDeCobro (negocio_id, nombre, codigo, ubicacion, icono, activo, creado_en)
+           VALUES (?, 'Caja Principal', 'CAJA-1', 'Caja / Barra', '💳', 1, ?)`,
+          [nuevoNegocioId, ahoraIso]
+        );
+      }
+    } catch (_) {}
+
+    // 9. Crear Usuario Super Admin / Administrador para el nuevo negocio
+    const uLogin = (adminUsuario || '').trim() || `admin_${nuevoNegocioId}`;
+    const uNombre = (adminNombre || '').trim() || `Administrador ${nombreClon}`;
+    const uPass = (adminPassword || '').trim() || 'admin123';
+    const uPin = (adminPin || '').trim() || '1234';
+
+    const hashPass = await bcrypt.hash(uPass, 10);
+    await dbRun(
+      `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo, debe_cambiar_password)
+       VALUES (?, ?, ?, ?, 'admin', 'M', ?, ?, 1, 0)`,
+      [
+        nuevoNegocioId,
+        uLogin,
+        uNombre,
+        hashPass,
+        uPin,
+        JSON.stringify({ salon: true, kds: true, caja: true, facturacion: true, inventario: true, reportes: true, config: true })
+      ]
+    );
 
     const nuevoNegocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevoNegocio);
     res.json({ ok: true, message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`, negocio: nuevoNegocio });
+    res.json({
+      ok: true,
+      message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`,
+      negocio: nuevoNegocio
+    });
   } catch (e) {
+    console.error('Error al clonar negocio:', e);
     res.status(500).json({ error: e.message });
   }
 });
+}
+
+app.post('/api/dev/negocios/:id/clonar', clonarODuplicarNegocioHandler);
+app.post('/api/dev/negocios/:id/duplicar', clonarODuplicarNegocioHandler);
+app.post('/api/developer/negocios/:id/clonar', clonarODuplicarNegocioHandler);
+app.post('/api/developer/negocios/:id/duplicar', clonarODuplicarNegocioHandler);
 
 // Obtener módulos activos de un negocio
 app.get('/api/dev/negocios/:id/modulos', async (req, res) => {
@@ -8144,9 +8292,11 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
     const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
+      WHERE stock_actual <= stock_minimo 
       WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
         AND stock_actual <= stock_minimo 
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
+    `);
     `, [negocioId, negocioId]);
 
     let totalPresupuesto = 0;
@@ -8194,12 +8344,14 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       desde = inicioMes.toISOString();
     } else if (desde.length === 10) {
       desde = new Date(`${desde}T00:00:00-06:00`).toISOString();
+      desde = new Date(desde + 'T00:00:00-06:00').toISOString();
     }
 
     if (!hasta) {
       hasta = ahora.toISOString();
     } else if (hasta.length === 10) {
       hasta = new Date(`${hasta}T23:59:59.999-06:00`).toISOString();
+      hasta = new Date(hasta + 'T23:59:59.999-06:00').toISOString();
     }
 
     let sqlVentas = `
