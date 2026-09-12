@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propuestas Visuales - Botones de Comanda en Tablets</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background: #0b0f19; color: #f8fafc; padding: 24px; }
+    h1 { font-size: 1.8rem; font-weight: 800; color: #38bdf8; text-align: center; margin-bottom: 8px; }
+    p.subtitle { text-align: center; color: #94a3b8; font-size: 1rem; margin-bottom: 32px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
+    .card { background: #131d2e; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+    .card-body { padding: 20px; flex: 1; display: flex; flex-direction: column; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; margin-bottom: 12px; width: fit-content; }
+    .badge-1 { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid #059669; }
+    .badge-2 { background: rgba(56,189,248,0.2); color: #38bdf8; border: 1px solid #0284c7; }
+    .badge-3 { background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid #d97706; }
+    h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 8px; }
+    ul { list-style: none; margin: 12px 0; color: #cbd5e1; font-size: 0.9rem; }
+    li { margin-bottom: 8px; display: flex; align-items: flex-start; gap: 8px; }
+    li span { color: #38bdf8; font-weight: 800; }
+    .interactive-demo { margin-top: auto; padding-top: 16px; border-top: 1px dashed #334155; }
+    .demo-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700; margin-bottom: 10px; }
+    
+    /* Demo 1 Styles */
+    .dock-demo-1 { display: flex; flex-direction: column; gap: 8px; }
+    .btn-main-green { background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 800; font-size: 1rem; border: none; padding: 14px; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 14px rgba(16,185,129,0.4); text-align: center; }
+    .dock-row-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn-sub-blue { background: #1e3a8a; border: 1px solid #2563eb; color: #bfdbfe; font-weight: 700; padding: 10px; border-radius: 10px; cursor: pointer; text-align: center; font-size: 0.85rem; }
+    .btn-sub-orange { background: #7c2d12; border: 1px solid #ea580c; color: #fed7aa; font-weight: 700; padding: 10px; border-radius: 10px; cursor: pointer; text-align: center; font-size: 0.85rem; }
+    
+    /* Demo 2 Styles */
+    .dock-demo-2 { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+    .stepper-capsule { display: inline-flex; align-items: center; background: #0f172a; border: 1px solid #334155; border-radius: 30px; padding: 4px; gap: 8px; }
+    .btn-stepper-red { width: 36px; height: 36px; border-radius: 50%; background: #ef4444; color: #fff; border: none; font-size: 1.2rem; font-weight: 900; cursor: pointer; }
+    .btn-stepper-green { width: 36px; height: 36px; border-radius: 50%; background: #10b981; color: #fff; border: none; font-size: 1.2rem; font-weight: 900; cursor: pointer; }
+    .stepper-num { font-size: 1.1rem; font-weight: 800; padding: 0 8px; }
+    .side-rail-demo { display: flex; flex-direction: column; gap: 6px; }
+    .rail-btn { width: 44px; height: 44px; border-radius: 12px; background: #1e293b; border: 1px solid #38bdf8; color: #38bdf8; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; cursor: pointer; }
+    
+    /* Demo 3 Styles */
+    .dock-demo-3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tile-btn { padding: 12px 8px; border-radius: 12px; border: none; font-weight: 800; font-size: 0.82rem; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+    .tile-green { background: #065f46; color: #6ee7b7; border: 1px solid #059669; }
+    .tile-blue { background: #1e3a8a; color: #93c5fd; border: 1px solid #2563eb; }
+    .tile-orange { background: #7c2d12; color: #fdba74; border: 1px solid #ea580c; }
+    .tile-purple { background: #4c1d95; color: #d8b4fe; border: 1px solid #7c3aed; }
+  </style>
+</head>
+<body>
+
+  <h1>🎨 Propuestas de Diseño: Botones de Comanda para Tablets</h1>
+  <p class="subtitle">Explora los 3 estilos visuales interactivos para elegir la mejor experiencia en pantallas táctiles</p>
+
+  <div class="grid">
+    <!-- OPCIÓN 1 -->
+    <div class="card">
+      <div class="card-body">
+        <span class="badge badge-1">OPCIÓN 1</span>
+        <h2>Dock Inferior de Máxima Jerarquía</h2>
+        <ul>
+          <li><span>✓</span> Botón maestro verde <strong>ENVIAR A COCINA</strong> a lo ancho.</li>
+          <li><span>✓</span> Acciones secundarias (Guardar y Cobrar) en fila inferior.</li>
+          <li><span>✓</span> Al alcance directo del pulgar sosteniendo la tablet.</li>
+        </ul>
+        <div class="interactive-demo">
+          <div class="demo-title">Vista previa interactiva:</div>
+          <div class="dock-demo-1">
+            <button class="btn-main-green">🚀 ENVIAR A COCINA (F2)</button>
+            <div class="dock-row-sub">
+              <button class="btn-sub-blue">💾 GUARDAR</button>
+              <button class="btn-sub-orange">💳 COBRAR</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPCIÓN 2 -->
+    <div class="card">
+      <div class="card-body">
+        <span class="badge badge-2">OPCIÓN 2</span>
+        <h2>Cápsula Táctil + Barra Lateral Derecha</h2>
+        <ul>
+          <li><span>✓</span> Botones <strong>+</strong> y <strong>-</strong> gigantes circulares en cada ítem.</li>
+          <li><span>✓</span> Barra flotante de acciones rápidas fijada al borde derecho.</li>
+          <li><span>✓</span> Máxima superficie de contacto para evitar errores de dedo.</li>
+        </ul>
+        <div class="interactive-demo">
+          <div class="demo-title">Vista previa interactiva:</div>
+          <div class="dock-demo-2">
+            <div class="stepper-capsule">
+              <button class="btn-stepper-red">−</button>
+              <span class="stepper-num">2</span>
+              <button class="btn-stepper-green">+</button>
+            </div>
+            <div class="side-rail-demo">
+              <button class="rail-btn" title="Enviar Cocina">🍳</button>
+              <button class="rail-btn" title="Pre-cuenta">🧾</button>
+              <button class="rail-btn" title="Dividir Cuenta">✂️</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPCIÓN 3 -->
+    <div class="card">
+      <div class="card-body">
+        <span class="badge badge-3">OPCIÓN 3</span>
+        <h2>Cuadrícula Táctil 2x2 en Bloques</h2>
+        <ul>
+          <li><span>✓</span> 4 bloques de igual dimensión con iconos y texto claro.</li>
+          <li><span>✓</span> Cada acción tiene un color semántico distintivo.</li>
+          <li><span>✓</span> Excelente para tablets en atril o de uso a dos manos.</li>
+        </ul>
+        <div class="interactive-demo">
+          <div class="demo-title">Vista previa interactiva:</div>
+          <div class="dock-demo-3">
+            <button class="tile-btn tile-green"><span>🍳</span> ENVIAR COCINA</button>
+            <button class="tile-btn tile-blue"><span>💾</span> GUARDAR MESA</button>
+            <button class="tile-btn tile-orange"><span>💳</span> COBRAR / PAGAR</button>
+            <button class="tile-btn tile-purple"><span>⚙️</span> MÁS ACCIONES</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
+

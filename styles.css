@@ -12333,6 +12333,11 @@ body.theme-capsula-elegance .btn-prefactura-split {
 .comensales-tabs-bar {
   display: flex;
   align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
   gap: 10px;
   padding: 9px 14px;
   background: rgba(15, 23, 42, 0.95);
@@ -12340,6 +12345,8 @@ body.theme-capsula-elegance .btn-prefactura-split {
   border-radius: 14px;
   overflow-x: auto;
   scrollbar-width: thin;
+  margin-bottom: 10px;
+  backdrop-filter: blur(8px);
   margin-bottom: 12px;
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
@@ -12372,25 +12379,38 @@ body.theme-capsula-elegance .btn-prefactura-split {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 12px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
   padding: 7px 14px;
   background: #1e293b;
   border: 1.5px solid #475569;
   border-radius: 20px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
   color: #94a3b8;
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.2s ease;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
 }
 .chip-comensal:hover {
+  background: rgba(51, 65, 85, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #f8fafc;
   background: #334155;
   border-color: #64748b;
   color: #f1f5f9;
   transform: translateY(-1px);
 }
 .chip-comensal.active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(5, 150, 105, 0.5) 100%);
+  border-color: #10b981;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
   background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
   border: 2px solid #34d399 !important;
   color: #ffffff !important;
@@ -12441,24 +12461,33 @@ body.theme-capsula-elegance .btn-prefactura-split {
   font-weight: 600;
 }
 .chip-comensal.active .comensal-subtotal {
+  color: #a7f3d0;
   color: #d1fae5;
   font-weight: 800;
 }
+.chip-comensal-add {
 .chip-comensal-add, .chip-comensal.chip-add {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1.5px dashed rgba(59, 130, 246, 0.6);
   padding: 7px 14px;
   background: rgba(59, 130, 246, 0.15);
   border: 1.5px dashed #3b82f6;
   border-radius: 20px;
   color: #60a5fa;
+  font-size: 0.82rem;
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
 }
+.chip-comensal-add:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
 .chip-comensal-add:hover, .chip-comensal.chip-add:hover {
   background: rgba(59, 130, 246, 0.3);
   border-color: #60a5fa;
@@ -12596,20 +12625,49 @@ body.theme-capsula-elegance .btn-prefactura-split {
   border-radius: 4px;
   margin-top: 2px;
 }
+.ticket-comensal-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 .btn-subcuenta-cobrar {
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid rgba(16, 185, 129, 0.5);
-  color: #34d399;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #60a5fa;
   font-size: 0.72rem;
   font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   transition: all 0.15s ease;
 }
 .btn-subcuenta-cobrar:hover {
-  background: #10b981;
+  background: #2563eb;
   color: white;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
+}
+.btn-subcuenta-pagar {
+  background: linear-gradient(135deg, #059669, #10b981);
+  border: 1px solid rgba(16, 185, 129, 0.8);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+  transition: all 0.15s ease;
+}
+.btn-subcuenta-pagar:hover {
+  background: linear-gradient(135deg, #047857, #059669);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+  transform: translateY(-1px);
 }
 
 

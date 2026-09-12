@@ -10573,6 +10573,100 @@ window.imprimirSubcuentaComensal = function(comensalNombre) {
   w.document.close();
 };
 
+window.cobrarSubcuentaDirecta = function(comensalNombre) {
+  if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
+    mostrarNotificacionCentro('⚠️ No hay productos en la mesa activa para cobrar.', 'warning');
+    return;
+  }
+  const mesa = estado.mesaActiva;
+  const itemsComensal = mesa.items.filter(it => (it.comensal || 'General') === comensalNombre && !it.pagado);
+
+  if (itemsComensal.length === 0) {
+    mostrarNotificacionCentro(`⚠️ No hay productos pendientes de pago para "${comensalNombre}".`, 'warning');
+    return;
+  }
+
+  const subtotal = itemsComensal.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+  const esParaLlevar = Boolean(mesa.es_para_llevar);
+  const aplicaServicio = tieneServicio10 && !esParaLlevar;
+
+  let base = subtotal, serv = 0, iva = 0, tot = subtotal;
+  if (aplicaServicio && tieneIVA13) {
+    base = Math.round(subtotal / 1.23);
+    serv = Math.round(base * 0.10);
+    iva = subtotal - base - serv;
+  } else if (!aplicaServicio && tieneIVA13) {
+    base = Math.round(subtotal / 1.13);
+    serv = 0;
+    iva = subtotal - base;
+  } else if (aplicaServicio && !tieneIVA13) {
+    base = Math.round(subtotal / 1.10);
+    serv = subtotal - base;
+    iva = 0;
+  }
+
+  if (typeof splitState === 'undefined' || !splitState) {
+    window.splitState = { personas: [], itemsDisponibles: [], numPersonas: 1, personaActivaIndex: 0 };
+  }
+  if (!splitState.personas) splitState.personas = [];
+
+  // Buscar o registrar persona en splitState
+  let pIdx = splitState.personas.findIndex(p => p.nombre === comensalNombre || p.id === comensalNombre);
+  if (pIdx === -1) {
+    splitState.personas.push({
+      id: comensalNombre,
+      nombre: comensalNombre === 'General' ? 'Cuenta Compartida' : comensalNombre,
+      items: itemsComensal.map(it => ({ ...it })),
+      subtotal: base,
+      impuestos: iva + serv,
+      total: tot,
+      guardada: true,
+      pagada: false
+    });
+    pIdx = splitState.personas.length - 1;
+  } else {
+    splitState.personas[pIdx].items = itemsComensal.map(it => ({ ...it }));
+    splitState.personas[pIdx].subtotal = base;
+    splitState.personas[pIdx].impuestos = iva + serv;
+    splitState.personas[pIdx].total = tot;
+    splitState.personas[pIdx].pagada = false;
+  }
+
+  estado.cobroSplitPersonaIndex = pIdx;
+  estado.vinoDeSubcuentaDirecta = true;
+
+  const lblTitulo = document.getElementById('lblTituloCobroModal');
+  if (lblTitulo) lblTitulo.textContent = `💵 Cobro Factura - ${comensalNombre}`;
+  const btnCobrar = document.getElementById('btnFinalizarCobro');
+  if (btnCobrar) {
+    btnCobrar.textContent = '✓ Cobrar y Emitir Factura';
+    btnCobrar.className = 'btn-pri success';
+    btnCobrar.onclick = window.ejecutarCobroFinal;
+  }
+
+  const mesaNom = mesa.numero || mesa.nombre || ('Mesa ' + mesa.id);
+  const titEl = document.getElementById('cobroMesaTitulo');
+  if (titEl) titEl.textContent = `${mesaNom} - 👤 ${comensalNombre}`;
+  const dispEl = document.getElementById('cobroTotalDisplay');
+  if (dispEl) dispEl.textContent = formatCRCSinDecimales(tot);
+  const recEl = document.getElementById('txtEfectivoRecibido');
+  if (recEl) recEl.value = '';
+  const vuelEl = document.getElementById('cobroVueltoDisplay');
+  if (vuelEl) vuelEl.textContent = '₡ 0';
+
+  if (typeof inicializarPanelesCobroModal === 'function') {
+    inicializarPanelesCobroModal(tot);
+  }
+
+  const mCobro = document.getElementById('modalCobro');
+  if (mCobro) {
+    mCobro.classList.add('active');
+    mCobro.style.display = 'flex';
+  }
+};
+
 function renderTicketItems() {
   const list = document.getElementById('comTicketItemsList');
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
@@ -10675,7 +10769,8 @@ function renderTicketItems() {
               <span class="badge-comensal-subtotal">${formatCRC(subtotalGrupo)}</span>
             </div>
             <div class="ticket-comensal-actions">
-              <button class="btn-subcuenta-cobrar" onclick="imprimirSubcuentaComensal('${comNomEscapado}')" title="Prefactura / Sub-cuenta individual">🧾 Sub-cuenta</button>
+              <button type="button" class="btn-subcuenta-cobrar" onclick="imprimirSubcuentaComensal('${comNomEscapado}')" title="Prefactura / Sub-cuenta individual">🧾 Sub-cuenta</button>
+              <button type="button" class="btn-subcuenta-pagar" onclick="cobrarSubcuentaDirecta('${comNomEscapado}')" title="Cobrar y liquidar directamente a esta persona">💵 Cobrar</button>
             </div>
           </div>
           <div class="ticket-comensal-items">
@@ -14713,26 +14808,35 @@ window.ejecutarCobroFinal = async function() {
         if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
         if (typeof cargarKDSDesdeBackend === 'function') cargarKDSDesdeBackend();
       } else {
-        // Quedan personas pendientes: re-abrir split modal y avanzar a la siguiente persona
-        // Cobro parcial registrado silenciosamente
-
-        const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
-        if (sigPersonaIdx !== -1) {
-          splitState.personaActivaIndex = sigPersonaIdx;
+        // Quedan personas o productos pendientes
+        if (estado.vinoDeSubcuentaDirecta) {
+          estado.vinoDeSubcuentaDirecta = false;
+          if (typeof renderTicketItems === 'function') renderTicketItems();
+          if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
+          if (typeof renderComensalesTabs === 'function') renderComensalesTabs();
+          if (typeof cargarMesasDesdeBackend === 'function') await cargarMesasDesdeBackend();
+          if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
+          mostrarNotificacionCentro(`✅ ¡Sub-cuenta de ${personaCobrada.nombre} pagada con éxito! Quedan consumos pendientes en la mesa.`, 'success');
         } else {
-          const sigUnpaid = splitState.personas.findIndex(p => !p.pagada);
-          if (sigUnpaid !== -1) splitState.personaActivaIndex = sigUnpaid;
-        }
+          // Re-abrir split modal y avanzar a la siguiente persona
+          const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
+          if (sigPersonaIdx !== -1) {
+            splitState.personaActivaIndex = sigPersonaIdx;
+          } else {
+            const sigUnpaid = splitState.personas.findIndex(p => !p.pagada);
+            if (sigUnpaid !== -1) splitState.personaActivaIndex = sigUnpaid;
+          }
 
-        renderSplitDisponibles();
-        renderSplitPersonaActiva();
-        renderSplitColaPersonas();
-        calcularSplitIgual();
+          renderSplitDisponibles();
+          renderSplitPersonaActiva();
+          renderSplitColaPersonas();
+          calcularSplitIgual();
 
-        const mSplit = document.getElementById('modalSplitBill');
-        if (mSplit) {
-          mSplit.classList.add('active');
-          mSplit.style.display = 'flex';
+          const mSplit = document.getElementById('modalSplitBill');
+          if (mSplit) {
+            mSplit.classList.add('active');
+            mSplit.style.display = 'flex';
+          }
         }
 
         if (typeof renderComanda === 'function') {
@@ -15327,33 +15431,129 @@ function iniciarDivisionCuentas() {
   document.getElementById('splitModeItemsBody')?.classList.add('active');
   document.getElementById('splitModeEqualBody')?.classList.remove('active');
 
-  const numInicial = Math.max(2, estado.splitPersonas || 2);
-  splitState.numPersonas = numInicial;
-  splitState.personaActivaIndex = 0;
+  // Detectar si la mesa ya tiene comensales o items por comensal
+  const comensalesSet = new Set();
+  (estado.comensalesMesa || []).forEach(c => { if (c && c !== 'General') comensalesSet.add(c); });
+  (estado.mesaActiva.items || []).forEach(it => {
+    if (it.comensal && it.comensal !== 'General') comensalesSet.add(it.comensal);
+  });
+  const comensalesArray = Array.from(comensalesSet);
 
-  // Clonar ítems disponibles
-  splitState.itemsDisponibles = (estado.mesaActiva.items || []).map((it, idx) => ({
-    id: it.id || (idx + 1),
-    producto_id: it.producto_id || it.id,
-    nombre: it.nombre || it.nombre_producto || 'Platillo',
-    precio: Number(it.precio) || 0,
-    cantidad: Number(it.cantidad) || 1,
-    curso: it.curso || 2
-  }));
+  if (comensalesArray.length > 0) {
+    // Si ya existen comensales definidos, pre-distribuir automáticamente todos los productos
+    splitState.numPersonas = Math.max(2, comensalesArray.length);
+    splitState.personaActivaIndex = 0;
+    splitState.personas = [];
+    splitState.itemsDisponibles = [];
 
-  // Inicializar personas
-  splitState.personas = [];
-  for (let i = 1; i <= splitState.numPersonas; i++) {
-    splitState.personas.push({
-      id: i,
-      nombre: `Persona ${i}`,
-      items: [],
-      subtotal: 0,
-      impuestos: 0,
-      total: 0,
-      guardada: false,
-      pagada: false
+    const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
+    const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+    const esParaLlevar = Boolean(estado.mesaActiva?.es_para_llevar);
+    const aplicaServicio = tieneServicio10 && !esParaLlevar;
+
+    // Crear personas para cada comensal con sus items asignados
+    comensalesArray.forEach((nom, i) => {
+      const pItems = [];
+      (estado.mesaActiva.items || []).forEach((it, idx) => {
+        if (it.comensal === nom) {
+          pItems.push({
+            id: it.id || (idx + 1),
+            producto_id: it.producto_id || it.id,
+            nombre: it.nombre || it.nombre_producto || 'Platillo',
+            precio: Number(it.precio) || 0,
+            cantidad: Number(it.cantidad) || 1,
+            curso: it.curso || 2
+          });
+        }
+      });
+
+      const subtotal = pItems.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+      let base = subtotal, serv = 0, iva = 0, tot = subtotal;
+      if (aplicaServicio && tieneIVA13) {
+        base = Math.round(subtotal / 1.23);
+        serv = Math.round(base * 0.10);
+        iva = subtotal - base - serv;
+      } else if (!aplicaServicio && tieneIVA13) {
+        base = Math.round(subtotal / 1.13);
+        serv = 0;
+        iva = subtotal - base;
+      } else if (aplicaServicio && !tieneIVA13) {
+        base = Math.round(subtotal / 1.10);
+        serv = subtotal - base;
+        iva = 0;
+      }
+
+      splitState.personas.push({
+        id: i + 1,
+        nombre: nom,
+        items: pItems,
+        subtotal: base,
+        impuestos: iva + serv,
+        total: tot,
+        guardada: true,
+        pagada: false
+      });
     });
+
+    // Rellenar hasta mínimo 2 personas si sólo había 1
+    while (splitState.personas.length < 2) {
+      const idx = splitState.personas.length + 1;
+      splitState.personas.push({
+        id: idx,
+        nombre: `Persona ${idx}`,
+        items: [],
+        subtotal: 0,
+        impuestos: 0,
+        total: 0,
+        guardada: false,
+        pagada: false
+      });
+    }
+
+    // Los ítems sin comensal o 'General' quedan disponibles para distribuir
+    (estado.mesaActiva.items || []).forEach((it, idx) => {
+      if (!it.comensal || it.comensal === 'General') {
+        splitState.itemsDisponibles.push({
+          id: it.id || (idx + 1),
+          producto_id: it.producto_id || it.id,
+          nombre: it.nombre || it.nombre_producto || 'Platillo',
+          precio: Number(it.precio) || 0,
+          cantidad: Number(it.cantidad) || 1,
+          curso: it.curso || 2
+        });
+      }
+    });
+
+  } else {
+    // Si no hay comensales previos, inicialización estándar
+    const numInicial = Math.max(2, estado.splitPersonas || 2);
+    splitState.numPersonas = numInicial;
+    splitState.personaActivaIndex = 0;
+
+    // Clonar ítems disponibles
+    splitState.itemsDisponibles = (estado.mesaActiva.items || []).map((it, idx) => ({
+      id: it.id || (idx + 1),
+      producto_id: it.producto_id || it.id,
+      nombre: it.nombre || it.nombre_producto || 'Platillo',
+      precio: Number(it.precio) || 0,
+      cantidad: Number(it.cantidad) || 1,
+      curso: it.curso || 2
+    }));
+
+    // Inicializar personas
+    splitState.personas = [];
+    for (let i = 1; i <= splitState.numPersonas; i++) {
+      splitState.personas.push({
+        id: i,
+        nombre: `Persona ${i}`,
+        items: [],
+        subtotal: 0,
+        impuestos: 0,
+        total: 0,
+        guardada: false,
+        pagada: false
+      });
+    }
   }
 
   actualizarContadorPersonasUI();
