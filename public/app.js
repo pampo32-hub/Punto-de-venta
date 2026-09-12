@@ -6469,7 +6469,6 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
     return;
   }
 
-  const payload = { nombre, slogan, logo_url, telefono, moneda, activo };
   const payload = { nombre, slogan, logo_url, telefono, moneda, activo, grupo_id, es_matriz };
 
   // Si es un nuevo negocio, verificar opciones de Admin y Estructura Base
@@ -14186,8 +14185,6 @@ function initMoverUnirMesas() {
       document.querySelectorAll('.transfer-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       const targetTab = tab.dataset.tab;
-      
-... [truncated for diff preview]
       const panelMover = document.getElementById('transferPanelMover');
       const panelUnir = document.getElementById('transferPanelUnir');
       const panelSeparar = document.getElementById('transferPanelSeparar');
