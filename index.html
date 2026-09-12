@@ -5185,14 +5185,14 @@
   </div>
 
   <!-- COBRO -->
-  <div class="modal-backdrop" id="modalCobro" style="z-index: 100050;">
+  <div class="modal-backdrop" id="modalCobro" style="z-index: 100050;" onclick="if(event.target===this) cerrarModalCobro()">
     <div class="modal-dialog cobro-dialog">
       <div class="dialog-header">
         <div>
           <h3 id="lblTituloCobroModal">💵 Cobrar y Liquidar Cuenta</h3>
           <small id="cobroMesaTitulo">Mesa 1</small>
         </div>
-        <button class="btn-icon-close" id="btnCloseCobroModal">✕</button>
+        <button type="button" class="btn-icon-close" id="btnCloseCobroModal" onclick="cerrarModalCobro()" title="Cerrar ventana de cobro (Esc)">✕</button>
       </div>
       <div class="dialog-body">
         <div class="cobro-total-banner">
@@ -5382,7 +5382,7 @@
       </div>
       <div class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div style="display:flex; gap:8px;">
-          <button class="btn-sec" id="btnCancelarCobro">Cancelar</button>
+          <button type="button" class="btn-sec" id="btnCancelarCobro" onclick="cerrarModalCobro()">Cancelar</button>
           <button type="button" class="btn-sec" id="btnImprimirPreFacturaCobro" style="background:#0284c7; color:#fff; border:none; font-weight:700;" title="Imprimir pre-factura sin liquidar (F9)">📄 Pre-Factura <kbd class="kbd-shortcut">F9</kbd></button>
         </div>
         <button class="btn-pri success" id="btnFinalizarCobro" onclick="window.ejecutarCobroFinal()" title="Confirmar y liquidar cobro (Enter)">✅ Liquidar, Imprimir & Liberar Mesa <kbd class="kbd-shortcut">Enter</kbd></button>

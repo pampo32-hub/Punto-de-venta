@@ -10728,7 +10728,7 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
 
   window.splitState = { personas: [], itemsDisponibles: [], numPersonas: comensalesArray.length, personaActivaIndex: 0 };
 
-  comensalesArray.forEach((nom, i) => {
+  comensalesArray.forEach((nom) => {
     const pItems = mesa.items.filter(it => (it.comensal || 'General') === nom && !it.pagado);
     const pSub = pItems.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
     let pBase = pSub, pServ = 0, pIva = 0, pTot = pSub;
@@ -10748,7 +10748,7 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
 
     splitState.personas.push({
       id: nom,
-      nombre: nom,
+      nombre: nom === 'General' ? 'Cuenta Compartida' : nom,
       items: pItems.map(it => ({ ...it })),
       subtotal: pBase,
       impuestos: pIva + pServ,
@@ -10758,8 +10758,8 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
     });
   });
 
-  const pIdx = splitState.personas.findIndex(p => p.nombre === comensalNombre);
-  estado.cobroSplitPersonaIndex = pIdx !== -1 ? pIdx : 0;
+  const targetIdx = splitState.personas.findIndex(p => p.id === comensalNombre || p.nombre === comensalNombre);
+  estado.cobroSplitPersonaIndex = targetIdx !== -1 ? targetIdx : 0;
   estado.vinoDeSubcuentaDirecta = true;
 
   const lblTitulo = document.getElementById('lblTituloCobroModal');
@@ -14184,21 +14184,45 @@ function inicializarPanelesCobroModal(totalTxt) {
   calcularPagoMixto();
 }
 
-document.getElementById('btnCloseCobroModal').addEventListener('click', () => {
-  document.getElementById('modalCobro').classList.remove('active');
-  if (estado.cobroSplitPersonaIndex != null) {
-    document.getElementById('modalSplitBill').classList.add('active');
-    estado.cobroSplitPersonaIndex = null;
+window.cerrarModalCobro = function() {
+  const mCobro = document.getElementById('modalCobro');
+  if (mCobro) {
+    mCobro.classList.remove('active');
+    mCobro.style.display = 'none';
   }
-});
+  const vinoDeSubcuenta = Boolean(estado.vinoDeSubcuentaDirecta);
+  const eraSplitPersona = estado.cobroSplitPersonaIndex != null;
+  estado.cobroSplitPersonaIndex = null;
+  estado.vinoDeSubcuentaDirecta = false;
 
-document.getElementById('btnCancelarCobro').addEventListener('click', () => {
-  document.getElementById('modalCobro').classList.remove('active');
-  if (estado.cobroSplitPersonaIndex != null) {
-    document.getElementById('modalSplitBill').classList.add('active');
-    estado.cobroSplitPersonaIndex = null;
+  // Restaurar título y botón por defecto de cobro de mesa
+  const lblTitulo = document.getElementById('lblTituloCobroModal');
+  if (lblTitulo) lblTitulo.textContent = '💵 Cobrar y Liquidar Cuenta';
+  const btnCobrar = document.getElementById('btnFinalizarCobro');
+  if (btnCobrar) {
+    btnCobrar.textContent = '✅ Liquidar, Imprimir & Liberar Mesa';
+    btnCobrar.className = 'btn-pri success';
+    btnCobrar.onclick = window.ejecutarCobroFinal;
   }
-});
+
+  // Si venía del modal de dividir cuenta (modalSplitBill) y NO de la comanda directa, reabrir dividir cuenta
+  if (eraSplitPersona && !vinoDeSubcuenta) {
+    const mSplit = document.getElementById('modalSplitBill');
+    if (mSplit) {
+      mSplit.classList.add('active');
+      mSplit.style.display = 'flex';
+    }
+  }
+};
+
+const btnCloseCobro = document.getElementById('btnCloseCobroModal');
+if (btnCloseCobro) {
+  btnCloseCobro.addEventListener('click', window.cerrarModalCobro);
+}
+const btnCancelarCobro = document.getElementById('btnCancelarCobro');
+if (btnCancelarCobro) {
+  btnCancelarCobro.addEventListener('click', window.cerrarModalCobro);
+}
 
 // Selector interactivo de pestañas de pago
 document.querySelectorAll('.pay-method-tab').forEach(btn => {
