@@ -10607,34 +10607,49 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
     iva = 0;
   }
 
-  if (typeof splitState === 'undefined' || !splitState) {
-    window.splitState = { personas: [], itemsDisponibles: [], numPersonas: 1, personaActivaIndex: 0 };
-  }
-  if (!splitState.personas) splitState.personas = [];
+  // Detectar todos los comensales presentes para poblar splitState adecuadamente
+  const comensalesSet = new Set();
+  (estado.comensalesMesa || []).forEach(c => { if (c) comensalesSet.add(c); });
+  (mesa.items || []).forEach(it => {
+    if (it.comensal) comensalesSet.add(it.comensal);
+  });
+  if (!comensalesSet.has(comensalNombre)) comensalesSet.add(comensalNombre);
+  const comensalesArray = Array.from(comensalesSet);
 
-  // Buscar o registrar persona en splitState
-  let pIdx = splitState.personas.findIndex(p => p.nombre === comensalNombre || p.id === comensalNombre);
-  if (pIdx === -1) {
+  window.splitState = { personas: [], itemsDisponibles: [], numPersonas: comensalesArray.length, personaActivaIndex: 0 };
+
+  comensalesArray.forEach((nom, i) => {
+    const pItems = mesa.items.filter(it => (it.comensal || 'General') === nom && !it.pagado);
+    const pSub = pItems.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+    let pBase = pSub, pServ = 0, pIva = 0, pTot = pSub;
+    if (aplicaServicio && tieneIVA13) {
+      pBase = Math.round(pSub / 1.23);
+      pServ = Math.round(pBase * 0.10);
+      pIva = pSub - pBase - pServ;
+    } else if (!aplicaServicio && tieneIVA13) {
+      pBase = Math.round(pSub / 1.13);
+      pServ = 0;
+      pIva = pSub - pBase;
+    } else if (aplicaServicio && !tieneIVA13) {
+      pBase = Math.round(pSub / 1.10);
+      pServ = pSub - pBase;
+      pIva = 0;
+    }
+
     splitState.personas.push({
-      id: comensalNombre,
-      nombre: comensalNombre === 'General' ? 'Cuenta Compartida' : comensalNombre,
-      items: itemsComensal.map(it => ({ ...it })),
-      subtotal: base,
-      impuestos: iva + serv,
-      total: tot,
+      id: nom,
+      nombre: nom,
+      items: pItems.map(it => ({ ...it })),
+      subtotal: pBase,
+      impuestos: pIva + pServ,
+      total: pTot,
       guardada: true,
       pagada: false
     });
-    pIdx = splitState.personas.length - 1;
-  } else {
-    splitState.personas[pIdx].items = itemsComensal.map(it => ({ ...it }));
-    splitState.personas[pIdx].subtotal = base;
-    splitState.personas[pIdx].impuestos = iva + serv;
-    splitState.personas[pIdx].total = tot;
-    splitState.personas[pIdx].pagada = false;
-  }
+  });
 
-  estado.cobroSplitPersonaIndex = pIdx;
+  const pIdx = splitState.personas.findIndex(p => p.nombre === comensalNombre);
+  estado.cobroSplitPersonaIndex = pIdx !== -1 ? pIdx : 0;
   estado.vinoDeSubcuentaDirecta = true;
 
   const lblTitulo = document.getElementById('lblTituloCobroModal');
@@ -14588,11 +14603,13 @@ window.ejecutarCobroFinal = async function() {
         } catch (_) {}
       }
 
-      // Verificar si quedan personas con productos o cuotas sin pagar
-      const personasSinPagar = splitState.personas.filter(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
-      const itemsEnMesaSinAsignar = (splitState.itemsDisponibles || []).filter(it => it.cantidad > 0);
-      const hayPersonasSinPagar = splitState.personas.some(p => !p.pagada);
-      esLiquidacionFinal = (personasSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0 && (!hayPersonasSinPagar || (estado.mesaActiva?.items?.length === 0)));
+      // Verificar si quedan productos o cuotas sin pagar en la mesa
+      const quedanItemsEnMesaActiva = Boolean(estado.mesaActiva?.items && estado.mesaActiva.items.length > 0);
+      const personasSinPagar = (splitState?.personas || []).filter(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
+      const itemsEnMesaSinAsignar = (splitState?.itemsDisponibles || []).filter(it => it.cantidad > 0);
+      const hayPersonasSinPagar = (splitState?.personas || []).some(p => !p.pagada);
+
+      esLiquidacionFinal = !quedanItemsEnMesaActiva && (personasSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0 && (!hayPersonasSinPagar || (estado.mesaActiva?.items?.length === 0)));
     }
 
     const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
@@ -14811,12 +14828,40 @@ window.ejecutarCobroFinal = async function() {
         // Quedan personas o productos pendientes
         if (estado.vinoDeSubcuentaDirecta) {
           estado.vinoDeSubcuentaDirecta = false;
+          const remMesaTot = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+          if (estado.mesaActiva) {
+            estado.mesaActiva.total = remMesaTot;
+            estado.mesaActiva.orden_total = remMesaTot;
+            if (cobroResData?.saldo_restante !== undefined) {
+              estado.mesaActiva.total = Number(cobroResData.saldo_restante);
+              estado.mesaActiva.orden_total = Number(cobroResData.saldo_restante);
+            }
+          }
+
+          // Actualizar comensales restantes
+          const comensalesRestantes = new Set((estado.mesaActiva?.items || []).map(it => it.comensal).filter(c => c && c !== 'General'));
+          estado.comensalesMesa = Array.from(comensalesRestantes);
+          if (estado.comensalActivo === personaCobrada.nombre || !comensalesRestantes.has(estado.comensalActivo)) {
+            estado.comensalActivo = estado.comensalesMesa.length > 0 ? estado.comensalesMesa[0] : 'General';
+          }
+
+          // Actualizar mesa en lista de mesas del salón
+          const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva?.id));
+          if (mesaEnLista && estado.mesaActiva) {
+            mesaEnLista.total = estado.mesaActiva.total;
+            mesaEnLista.orden_total = estado.mesaActiva.orden_total;
+            mesaEnLista.items = [...(estado.mesaActiva.items || [])];
+          }
+
           if (typeof renderTicketItems === 'function') renderTicketItems();
           if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
           if (typeof renderComensalesTabs === 'function') renderComensalesTabs();
           if (typeof cargarMesasDesdeBackend === 'function') await cargarMesasDesdeBackend();
+          if (typeof renderMesas === 'function') renderMesas();
           if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
-          mostrarNotificacionCentro(`✅ ¡Sub-cuenta de ${personaCobrada.nombre} pagada con éxito! Quedan consumos pendientes en la mesa.`, 'success');
+
+          const saldoTxt = estado.mesaActiva ? formatCRC(estado.mesaActiva.orden_total || estado.mesaActiva.total || 0) : '0';
+          mostrarNotificacionCentro(`✅ ¡Sub-cuenta de ${personaCobrada.nombre} pagada con éxito! Mesa permanece abierta (Saldo restante: ${saldoTxt})`, 'success');
         } else {
           // Re-abrir split modal y avanzar a la siguiente persona
           const sigPersonaIdx = splitState.personas.findIndex(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));

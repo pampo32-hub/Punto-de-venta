@@ -6327,10 +6327,19 @@ async function procesarCobroOrden(ordenId, {
     if (Array.isArray(items_pagados) && items_pagados.length > 0) {
       for (const item of items_pagados) {
         const qty = Number(item.cantidad) || 1;
-        const detalleItems = await dbAll(
-          "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
-          [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto]
-        );
+        let detalleItems = [];
+        if (item.comensal) {
+          detalleItems = await dbAll(
+            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND comensal = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+            [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto, item.comensal]
+          );
+        }
+        if (!detalleItems || detalleItems.length === 0) {
+          detalleItems = await dbAll(
+            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+            [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto]
+          );
+        }
 
         let restanteADescontar = qty;
         for (const det of detalleItems) {
@@ -6345,8 +6354,8 @@ async function procesarCobroOrden(ordenId, {
 
             const subPagado = restanteADescontar * det.precio_unitario;
             await dbRun(
-              "INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?)",
-              [det.orden_id, det.producto_id, det.nombre_producto, det.precio_unitario, restanteADescontar, subPagado, det.notas, det.curso, det.destino, det.hora_pedido, det.hora_listo, det.creado_en, det.origen_mesa_numero, det.comanda_numero || 1]
+              "INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, hora_listo, creado_en, origen_mesa_numero, comanda_numero, comensal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pagado', ?, ?, ?, ?, ?, ?)",
+              [det.orden_id, det.producto_id, det.nombre_producto, det.precio_unitario, restanteADescontar, subPagado, det.notas, det.curso, det.destino, det.hora_pedido, det.hora_listo, det.creado_en, det.origen_mesa_numero, det.comanda_numero || 1, det.comensal || 'General']
             );
             restanteADescontar = 0;
           }
@@ -6399,7 +6408,10 @@ async function procesarCobroOrden(ordenId, {
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
+      const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
+      const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
+      await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, estado: estadoMesaActual });
     }
 
     io.emit('inventario_actualizado');
