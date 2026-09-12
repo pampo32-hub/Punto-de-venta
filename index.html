@@ -3223,6 +3223,100 @@
     </div>
   </div>
 
+  <!-- MODAL AGREGAR MESA O SILLA CON SELECCIÓN DE SECCIÓN / ZONA -->
+  <div class="modal-backdrop" id="modalCrearMesaConZona" style="z-index: 100005;">
+    <div class="modal-dialog" style="width: 490px; max-width: 95vw; background:#0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); overflow:hidden;">
+      <div class="dialog-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-bottom: 1px solid rgba(255,255,255,0.1); padding: 16px 20px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">➕</span>
+          <div>
+            <h3 style="margin:0; font-size:1.15rem; color:#fff;">Agregar Mesa o Silla</h3>
+            <small style="color:#94a3b8;">Elige la sección, tipo y capacidad del nuevo elemento</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalCrearMesaConZona()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px;">
+        <!-- 1. TIPO / FORMA -->
+        <label style="display:block; margin-bottom:8px; font-weight:700; font-size:0.85rem; color:#e2e8f0;">
+          1. Tipo de elemento:
+        </label>
+        <div class="crear-mesa-tipo-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-bottom:16px;">
+          <button type="button" class="btn-tipo-mesa active" id="btnTipoMesaCuadrada" onclick="seleccionarTipoMesaModal('square')">
+            <span style="font-size:1.6rem; display:block; margin-bottom:4px;">🔲</span>
+            <span style="font-weight:700; font-size:0.82rem;">Mesa Cuadrada</span>
+          </button>
+          <button type="button" class="btn-tipo-mesa" id="btnTipoMesaRedonda" onclick="seleccionarTipoMesaModal('round')">
+            <span style="font-size:1.6rem; display:block; margin-bottom:4px;">⭕</span>
+            <span style="font-weight:700; font-size:0.82rem;">Mesa Redonda</span>
+          </button>
+          <button type="button" class="btn-tipo-mesa" id="btnTipoMesaSilla" onclick="seleccionarTipoMesaModal('silla')">
+            <span style="font-size:1.6rem; display:block; margin-bottom:4px;">🍸</span>
+            <span style="font-weight:700; font-size:0.82rem;">Silla de Barra</span>
+          </button>
+        </div>
+
+        <!-- 2. SECCIÓN / ZONA -->
+        <div style="margin-bottom:16px;">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.85rem; color:#e2e8f0;">
+            2. ¿A qué sección / zona la deseas agregar?
+          </label>
+          <select id="selectCrearMesaZona" class="select-styled" onchange="alCambiarZonaCrearMesa()" style="width:100%; font-size:0.95rem; padding:10px 12px; background:#1e293b; color:#fff; border:1px solid #475569; border-radius:10px; cursor:pointer;">
+            <!-- Opciones cargadas dinámicamente -->
+          </select>
+          <div id="boxNuevaZonaCrearMesa" style="display:none; margin-top:8px;">
+            <input type="text" id="txtNuevaZonaNombre" class="select-styled" placeholder="Escribe el nombre de la nueva sección (ej: Balcón, Terraza Exterior)..." style="width:100%; font-size:0.9rem; padding:8px 12px; background:rgba(99,102,241,0.1); border:1px solid #6366f1; color:#fff; border-radius:8px;" />
+          </div>
+        </div>
+
+        <!-- 3. NOMBRE O NÚMERO -->
+        <div style="margin-bottom:16px;">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.85rem; color:#e2e8f0;">
+            3. Nombre o número de identificación:
+          </label>
+          <input type="text" id="txtCrearMesaNumero" class="select-styled" placeholder="Ej: Mesa 12, Terraza 3, Barra 5..." style="width:100%; font-size:1rem; padding:10px 12px; background:#1e293b; color:#fff; border:1px solid #0284c7; border-radius:10px;" />
+        </div>
+
+        <!-- 4. CAPACIDAD DE PERSONAS -->
+        <div id="boxCrearMesaCapacidad" style="margin-bottom:16px;">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.85rem; color:#e2e8f0;">
+            4. Capacidad de comensales:
+          </label>
+          <div class="cap-stepper-box" style="margin: 8px 0 10px 0;">
+            <button type="button" class="btn-cap-step" onclick="ajustarCapacidadCrearMesa(-1)">-</button>
+            <input type="number" id="txtCrearMesaCapacidad" class="input-cap-display" min="1" max="50" value="4" />
+            <button type="button" class="btn-cap-step" onclick="ajustarCapacidadCrearMesa(1)">+</button>
+          </div>
+          <div class="cap-quick-grid" style="grid-template-columns: repeat(5, 1fr); gap:6px;">
+            <button type="button" class="btn-cap-quick" onclick="setCapacidadRapidaCrearMesa(1)">1 pers</button>
+            <button type="button" class="btn-cap-quick" onclick="setCapacidadRapidaCrearMesa(2)">2 pers</button>
+            <button type="button" class="btn-cap-quick" onclick="setCapacidadRapidaCrearMesa(4)">4 pers</button>
+            <button type="button" class="btn-cap-quick" onclick="setCapacidadRapidaCrearMesa(6)">6 pers</button>
+            <button type="button" class="btn-cap-quick" onclick="setCapacidadRapidaCrearMesa(8)">8 pers</button>
+          </div>
+        </div>
+
+        <!-- 5. PISO / PLANTA -->
+        <div style="margin-bottom:8px;">
+          <label style="display:block; margin-bottom:6px; font-weight:700; font-size:0.85rem; color:#e2e8f0;">
+            5. Nivel / Piso:
+          </label>
+          <div style="display:flex; gap:10px;">
+            <button type="button" class="btn-tool active" id="btnCrearMesaPiso1" onclick="seleccionarPisoCrearMesa(1)" style="flex:1; padding:10px; font-weight:700; text-align:center; justify-content:center;">🏢 1er Piso</button>
+            <button type="button" class="btn-tool" id="btnCrearMesaPiso2" onclick="seleccionarPisoCrearMesa(2)" style="flex:1; padding:10px; font-weight:700; text-align:center; justify-content:center;">🏢 2do Piso</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <button class="btn-sec" onclick="cerrarModalCrearMesaConZona()">Cancelar</button>
+        <button class="btn-pri" id="btnConfirmarCrearMesaConZona" onclick="confirmarCrearMesaConZona()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:800; padding: 10px 22px; font-size:0.95rem;">
+          ➕ Crear en el Salón
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL AGREGAR PRODUCTO Y PRECIO AL MENÚ -->
   <div class="modal-backdrop" id="modalAgregarProducto">
     <div class="modal-dialog" style="max-width:520px; width:92vw; max-height:92vh; overflow-y:auto;">

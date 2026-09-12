@@ -15752,97 +15752,318 @@ document.getElementById('btnAutoOrganizarPlano')?.addEventListener('click', asyn
   }
 });
 
-document.getElementById('btnAgregarMesaCuadrada').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-  const pisoActivo = estado.pisoActualEditor || 1;
-  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 || m.zona_id === 105 ? 2 : 1)) === pisoActivo);
-  const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
-  const zonaPiso = (estado.zonas || []).find(z => pisoActivo === 2 ? z.nombre.toLowerCase().includes('segundo') : !z.nombre.toLowerCase().includes('segundo')) || (estado.zonas || [])[0];
-  const zonaId = zonaPiso ? zonaPiso.id : (pisoActivo === 2 ? 5 : 1);
+// ============================================================================
+// MODAL AGREGAR MESA O SILLA CON SELECCIÓN DE SECCIÓN / ZONA
+// ============================================================================
+window.crearMesaFormaSeleccionada = 'square';
+window.crearMesaPisoSeleccionado = 1;
+
+window.abrirModalCrearMesa = function(formaInicial = 'square') {
+  window.crearMesaFormaSeleccionada = formaInicial || 'square';
+  window.crearMesaPisoSeleccionado = estado.pisoActualEditor || 1;
+
+  // 1. Selector de Forma
+  ['square', 'round', 'silla'].forEach(f => {
+    const btn = document.getElementById(f === 'square' ? 'btnTipoMesaCuadrada' : (f === 'round' ? 'btnTipoMesaRedonda' : 'btnTipoMesaSilla'));
+    if (btn) {
+      if (f === window.crearMesaFormaSeleccionada) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+
+  // 2. Selector de Piso
+  const btnPiso1 = document.getElementById('btnCrearMesaPiso1');
+  const btnPiso2 = document.getElementById('btnCrearMesaPiso2');
+  if (btnPiso1 && btnPiso2) {
+    if (window.crearMesaPisoSeleccionado === 2) {
+      btnPiso2.classList.add('active');
+      btnPiso1.classList.remove('active');
+    } else {
+      btnPiso1.classList.add('active');
+      btnPiso2.classList.remove('active');
+    }
+  }
+
+  // 3. Rellenar Zonas / Secciones
+  const selectZona = document.getElementById('selectCrearMesaZona');
+  if (selectZona) {
+    selectZona.innerHTML = '';
+    const zonas = (estado.zonas && estado.zonas.length > 0) ? estado.zonas : [
+      { id: 1, nombre: 'Salón Principal' },
+      { id: 2, nombre: 'Barra / Bar' },
+      { id: 3, nombre: 'Terraza' },
+      { id: 4, nombre: 'Área VIP' },
+      { id: 5, nombre: 'Segundo Piso' }
+    ];
+
+    zonas.forEach(z => {
+      const opt = document.createElement('option');
+      opt.value = z.id;
+      opt.textContent = `📍 ${z.nombre}`;
+      opt.dataset.nombre = z.nombre;
+      selectZona.appendChild(opt);
+    });
+
+    const optNueva = document.createElement('option');
+    optNueva.value = '__nueva__';
+    optNueva.textContent = '➕ [ Nueva Sección / Zona Personalizada... ]';
+    selectZona.appendChild(optNueva);
+
+    // Auto-seleccionar zona adecuada según el tipo o piso
+    if (formaInicial === 'silla') {
+      const zBarra = zonas.find(z => z.nombre.toLowerCase().includes('barra') || z.nombre.toLowerCase().includes('bar'));
+      if (zBarra) selectZona.value = zBarra.id;
+    } else if (window.crearMesaPisoSeleccionado === 2) {
+      const zPiso2 = zonas.find(z => z.nombre.toLowerCase().includes('segundo') || z.nombre.toLowerCase().includes('piso 2'));
+      if (zPiso2) selectZona.value = zPiso2.id;
+      else selectZona.selectedIndex = 0;
+    } else {
+      const zSalon = zonas.find(z => !z.nombre.toLowerCase().includes('segundo') && !z.nombre.toLowerCase().includes('barra')) || zonas[0];
+      if (zSalon) selectZona.value = zSalon.id;
+      else selectZona.selectedIndex = 0;
+    }
+  }
+
+  const boxNueva = document.getElementById('boxNuevaZonaCrearMesa');
+  if (boxNueva) boxNueva.style.display = 'none';
+
+  // 4. Capacidad
+  const txtCap = document.getElementById('txtCrearMesaCapacidad');
+  if (txtCap) {
+    txtCap.value = formaInicial === 'silla' ? 1 : 4;
+  }
+
+  // 5. Sugerir número/nombre
+  generarSugerenciaNombreMesa();
+
+  const modal = document.getElementById('modalCrearMesaConZona');
+  if (modal) modal.classList.add('active');
+};
+
+window.cerrarModalCrearMesaConZona = function() {
+  const modal = document.getElementById('modalCrearMesaConZona');
+  if (modal) modal.classList.remove('active');
+};
+
+window.seleccionarTipoMesaModal = function(forma) {
+  window.crearMesaFormaSeleccionada = forma;
+  ['square', 'round', 'silla'].forEach(f => {
+    const btn = document.getElementById(f === 'square' ? 'btnTipoMesaCuadrada' : (f === 'round' ? 'btnTipoMesaRedonda' : 'btnTipoMesaSilla'));
+    if (btn) {
+      if (f === forma) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+
+  const txtCap = document.getElementById('txtCrearMesaCapacidad');
+  if (txtCap) {
+    txtCap.value = forma === 'silla' ? 1 : 4;
+  }
+
+  const selectZona = document.getElementById('selectCrearMesaZona');
+  if (forma === 'silla' && selectZona) {
+    const zonas = estado.zonas || [];
+    const zBarra = zonas.find(z => z.nombre.toLowerCase().includes('barra') || z.nombre.toLowerCase().includes('bar'));
+    if (zBarra) selectZona.value = zBarra.id;
+  }
+
+  generarSugerenciaNombreMesa();
+};
+
+window.alCambiarZonaCrearMesa = function() {
+  const selectZona = document.getElementById('selectCrearMesaZona');
+  const boxNueva = document.getElementById('boxNuevaZonaCrearMesa');
+  if (selectZona && boxNueva) {
+    if (selectZona.value === '__nueva__') {
+      boxNueva.style.display = 'block';
+      const txtNueva = document.getElementById('txtNuevaZonaNombre');
+      if (txtNueva) {
+        txtNueva.value = '';
+        setTimeout(() => txtNueva.focus(), 100);
+      }
+    } else {
+      boxNueva.style.display = 'none';
+      const opt = selectZona.options[selectZona.selectedIndex];
+      const zNom = opt ? (opt.dataset.nombre || opt.textContent) : '';
+      if (zNom.toLowerCase().includes('segundo') || zNom.toLowerCase().includes('piso 2')) {
+        seleccionarPisoCrearMesa(2);
+      }
+    }
+  }
+  generarSugerenciaNombreMesa();
+};
+
+window.seleccionarPisoCrearMesa = function(pisoNum) {
+  window.crearMesaPisoSeleccionado = pisoNum;
+  const btnPiso1 = document.getElementById('btnCrearMesaPiso1');
+  const btnPiso2 = document.getElementById('btnCrearMesaPiso2');
+  if (btnPiso1 && btnPiso2) {
+    if (pisoNum === 2) {
+      btnPiso2.classList.add('active');
+      btnPiso1.classList.remove('active');
+    } else {
+      btnPiso1.classList.add('active');
+      btnPiso2.classList.remove('active');
+    }
+  }
+  generarSugerenciaNombreMesa();
+};
+
+window.ajustarCapacidadCrearMesa = function(delta) {
+  const txtCap = document.getElementById('txtCrearMesaCapacidad');
+  if (!txtCap) return;
+  let val = parseInt(txtCap.value, 10) || 4;
+  val = Math.max(1, Math.min(100, val + delta));
+  txtCap.value = val;
+};
+
+window.setCapacidadRapidaCrearMesa = function(val) {
+  const txtCap = document.getElementById('txtCrearMesaCapacidad');
+  if (txtCap) txtCap.value = val;
+};
+
+function generarSugerenciaNombreMesa() {
+  const txtNum = document.getElementById('txtCrearMesaNumero');
+  if (!txtNum) return;
+  const forma = window.crearMesaFormaSeleccionada || 'square';
+  const piso = window.crearMesaPisoSeleccionado || 1;
+  const selectZona = document.getElementById('selectCrearMesaZona');
+  const opt = selectZona ? selectZona.options[selectZona.selectedIndex] : null;
+  const zonaNom = opt ? (opt.dataset.nombre || opt.textContent || '') : '';
+  const zLow = zonaNom.toLowerCase();
+
+  const mesas = estado.mesas || [];
+
+  if (forma === 'silla' || zLow.includes('barra') || zLow.includes('bar')) {
+    const countBarras = mesas.filter(m => m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))).length + 1;
+    txtNum.value = piso === 2 ? `Barra P2-${countBarras}` : `Silla Barra ${countBarras}`;
+  } else if (zLow.includes('terraza')) {
+    const countTerraza = mesas.filter(m => m.numero && m.numero.toLowerCase().includes('terraza')).length + 1;
+    txtNum.value = `Terraza ${countTerraza}`;
+  } else if (zLow.includes('vip')) {
+    const countVip = mesas.filter(m => m.numero && m.numero.toLowerCase().includes('vip')).length + 1;
+    txtNum.value = `VIP ${countVip}`;
+  } else if (piso === 2 || zLow.includes('segundo')) {
+    const countPiso2 = mesas.filter(m => (m.piso === 2 || (m.numero && m.numero.includes('20')))).length + 1;
+    txtNum.value = `Mesa 20${countPiso2}`;
+  } else {
+    const countGeneral = mesas.filter(m => !m.numero.toLowerCase().includes('barra') && !m.numero.toLowerCase().includes('terraza') && !m.numero.toLowerCase().includes('vip') && (m.piso || 1) === 1).length + 1;
+    txtNum.value = `Mesa ${countGeneral}`;
+  }
+}
+
+window.confirmarCrearMesaConZona = async function() {
+  const btnSubmit = document.getElementById('btnConfirmarCrearMesaConZona');
+  if (btnSubmit) btnSubmit.disabled = true;
+
   try {
-    await fetch('/api/mesas/crear', {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const forma = window.crearMesaFormaSeleccionada || 'square';
+    const piso = window.crearMesaPisoSeleccionado || 1;
+    const selectZona = document.getElementById('selectCrearMesaZona');
+    let zonaId = selectZona ? selectZona.value : null;
+
+    // Si seleccionó crear nueva zona personalizada
+    if (zonaId === '__nueva__') {
+      const txtNueva = document.getElementById('txtNuevaZonaNombre');
+      const nombreNueva = txtNueva ? txtNueva.value.trim() : '';
+      if (!nombreNueva) {
+        mostrarNotificacionCentro('⚠️ Por favor escribe el nombre de la nueva sección.', 'warning');
+        if (btnSubmit) btnSubmit.disabled = false;
+        return;
+      }
+      const resZ = await fetch('/api/zonas', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-negocio-id': String(nid)
+        },
+        body: JSON.stringify({ nombre: nombreNueva })
+      });
+      const dataZ = await resZ.json();
+      if (dataZ && dataZ.id) {
+        zonaId = dataZ.id;
+        if (!estado.zonas) estado.zonas = [];
+        if (!estado.zonas.find(z => z.id === dataZ.id)) {
+          estado.zonas.push(dataZ);
+        }
+      } else {
+        zonaId = 1;
+      }
+    } else {
+      zonaId = Number(zonaId) || 1;
+    }
+
+    const txtNum = document.getElementById('txtCrearMesaNumero');
+    const numero = txtNum ? txtNum.value.trim() : '';
+    if (!numero) {
+      mostrarNotificacionCentro('⚠️ Por favor ingresa el nombre o número de la mesa.', 'warning');
+      if (btnSubmit) btnSubmit.disabled = false;
+      return;
+    }
+
+    const txtCap = document.getElementById('txtCrearMesaCapacidad');
+    const capacidad = txtCap ? (parseInt(txtCap.value, 10) || 4) : 4;
+
+    const esSilla = forma === 'silla';
+    const ancho = esSilla ? 85 : (forma === 'round' ? 130 : 135);
+    const alto = esSilla ? 95 : (forma === 'round' ? 130 : 115);
+
+    // Posición inteligente en el plano
+    const mesasMismoPiso = (estado.mesas || []).filter(m => (m.piso || (m.zona_id === 5 ? 2 : 1)) === piso);
+    let posX = 60 + ((mesasMismoPiso.length % 5) * 150);
+    let posY = 60 + (Math.floor(mesasMismoPiso.length / 5) * 130);
+    if (posX > 650) posX = 60;
+    if (posY > 500) posY = 60;
+
+    const res = await fetch('/api/mesas/crear', {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'x-negocio-id': String(nid)
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         negocio_id: nid,
-        numero: num, 
-        zona_id: zonaId, 
-        capacidad: 4, 
-        forma: 'square', 
-        x: 60, 
-        y: 60,
-        piso: pisoActivo,
-        ancho: 135,
-        alto: 115
+        numero: numero,
+        zona_id: zonaId,
+        capacidad: capacidad,
+        forma: forma,
+        x: posX,
+        y: posY,
+        piso: piso,
+        ancho: ancho,
+        alto: alto
       })
     });
-    await cargarMesasDesdeBackend();
-  } catch (e) {}
+
+    const data = await res.json();
+    if (data.error) {
+      mostrarNotificacionCentro('❌ Error: ' + data.error, 'error');
+    } else {
+      const zonaObj = (estado.zonas || []).find(z => z.id === zonaId);
+      const nombreZona = zonaObj ? zonaObj.nombre : 'Salón';
+      mostrarNotificacionCentro(`✨ ${numero} agregada a "${nombreZona}" exitosamente`, 'success');
+      cerrarModalCrearMesaConZona();
+      await cargarMesasDesdeBackend();
+      if (typeof renderEditorPlano === 'function') renderEditorPlano();
+    }
+  } catch (err) {
+    mostrarNotificacionCentro('❌ Error al crear mesa: ' + err.message, 'error');
+  } finally {
+    if (btnSubmit) btnSubmit.disabled = false;
+  }
+};
+
+document.getElementById('btnAgregarMesaCuadrada')?.addEventListener('click', () => {
+  window.abrirModalCrearMesa('square');
 });
 
-document.getElementById('btnAgregarMesaRedonda').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-  const pisoActivo = estado.pisoActualEditor || 1;
-  const mesasPiso = estado.mesas.filter(m => (m.piso || (m.zona_id === 5 || m.zona_id === 105 ? 2 : 1)) === pisoActivo);
-  const num = pisoActivo === 2 ? `Mesa 20${mesasPiso.length + 1}` : `Mesa ${estado.mesas.length + 1}`;
-  const zonaPiso = (estado.zonas || []).find(z => pisoActivo === 2 ? z.nombre.toLowerCase().includes('segundo') : !z.nombre.toLowerCase().includes('segundo')) || (estado.zonas || [])[0];
-  const zonaId = zonaPiso ? zonaPiso.id : (pisoActivo === 2 ? 5 : 1);
-  try {
-    await fetch('/api/mesas/crear', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
-      body: JSON.stringify({ 
-        negocio_id: nid,
-        numero: num, 
-        zona_id: zonaId, 
-        capacidad: 4, 
-        forma: 'round', 
-        x: 80, 
-        y: 80,
-        piso: pisoActivo,
-        ancho: 130,
-        alto: 130
-      })
-    });
-    await cargarMesasDesdeBackend();
-  } catch (e) {}
+document.getElementById('btnAgregarMesaRedonda')?.addEventListener('click', () => {
+  window.abrirModalCrearMesa('round');
 });
 
-document.getElementById('btnAgregarBarra').addEventListener('click', async () => {
-  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-  const pisoActivo = estado.pisoActualEditor || 1;
-  const totalBarras = estado.mesas.filter(m => m.numero.includes('Barra')).length + 1;
-  const num = pisoActivo === 2 ? `Barra P2-${totalBarras}` : `Silla Barra ${totalBarras}`;
-  const zonaBarra = (estado.zonas || []).find(z => z.nombre.toLowerCase().includes('barra')) || (estado.zonas || [])[0];
-  const zonaId = zonaBarra ? zonaBarra.id : (pisoActivo === 2 ? 5 : 2);
-  try {
-    await fetch('/api/mesas/crear', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-negocio-id': String(nid)
-      },
-      body: JSON.stringify({ 
-        negocio_id: nid,
-        numero: num, 
-        zona_id: zonaId, 
-        capacidad: 1, 
-        forma: 'silla', 
-        x: 620, 
-        y: 80,
-        ancho: 85,
-        alto: 95,
-        piso: pisoActivo
-      })
-    });
-    await cargarMesasDesdeBackend();
-  } catch (e) {}
+document.getElementById('btnAgregarBarra')?.addEventListener('click', () => {
+  window.abrirModalCrearMesa('silla');
 });
 
 // Agotados (86)

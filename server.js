@@ -2658,6 +2658,37 @@ app.put('/api/productos/:id/visual', async (req, res) => {
   }
 });
 
+// Zonas / Secciones del Salón
+app.get('/api/zonas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const zonas = await dbAll('SELECT * FROM Zonas WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC', [negocioId, negocioId]);
+    res.json(zonas || []);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/zonas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const { nombre } = req.body;
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: 'El nombre de la sección es obligatorio' });
+    }
+    const cleanNombre = nombre.trim();
+    let existing = await dbGet('SELECT * FROM Zonas WHERE LOWER(nombre) = LOWER(?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [cleanNombre, negocioId, negocioId]);
+    if (existing) {
+      return res.json(existing);
+    }
+    const r = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [negocioId, cleanNombre]);
+    const nuevaZona = await dbGet('SELECT * FROM Zonas WHERE id = ?', [r.lastID]);
+    res.json(nuevaZona);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================================
 // 5. MESAS & SALÓN (DRAG & DROP)
 // ============================================================================
