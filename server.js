@@ -781,7 +781,7 @@ app.post('/api/auth/login', async (req, res) => {
     const sesionUnicaActiva = negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined);
     const forzarCierrePrevio = req.body.forzar_cierre_previo === true;
 
-    if (!esRolExento && sesionUnicaActiva && u.ultimo_token_sesion && !forzarCierrePrevio) {
+    if (!esRolExento && !isLoopback && sesionUnicaActiva && u.ultimo_token_sesion && !forzarCierrePrevio) {
       const mismoDispositivo = deviceToken && u.ultimo_dispositivo_id && (deviceToken === u.ultimo_dispositivo_id);
       if (!mismoDispositivo) {
         let nombreDispPrevio = 'otro dispositivo';
