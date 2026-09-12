@@ -1387,13 +1387,10 @@ app.get('/api/dev/modulos/catalogo', (req, res) => {
   res.json(CATALOGO_MODULOS);
 });
 
-// Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario)
-app.post('/api/dev/negocios/:id/duplicar', async (req, res) => {
 // Duplicar/Clonar un negocio completo (Zonas, Mesas, Categorías, Productos, Inventario, Recetas, Cajas Físicas y Super Admin)
 async function clonarODuplicarNegocioHandler(req, res) {
   try {
     const origenId = Number(req.params.id);
-    const { nombreNuevo = '', sloganNuevo = '' } = req.body || {};
     const {
       nombreNuevo = '',
       nombre = '',
@@ -1411,8 +1408,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
     const origen = await dbGet('SELECT * FROM Negocios WHERE id = ?', [origenId]);
     if (!origen) return res.status(404).json({ error: 'Negocio de origen no encontrado' });
 
-    const nombreClon = nombreNuevo.trim() || `${origen.nombre} (Copia)`;
-    const sloganClon = sloganNuevo.trim() || origen.slogan || 'Copia de restaurante';
     const nombreClon = (nombreNuevo || nombre || '').trim() || `${origen.nombre} (Copia)`;
     const sloganClon = (sloganNuevo || slogan || '').trim() || origen.slogan || 'Copia de restaurante';
     const monedaClon = moneda || origen.moneda || 'CRC';
@@ -1425,9 +1420,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
 
     // 1. Insertar nuevo Negocio
     const rNeg = await dbRun(
-      `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-      [nombreClon, sloganClon, origen.logo_url, origen.moneda || 'CRC', origen.telefono, origen.direccion, origen.plan_nombre || 'Plan Full Tech 2026', origen.modulos_activos || 'all']
       `INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, plan_nombre, modulos_activos, tipo_cambio_usd, caracteristicas_activas)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
       [nombreClon, sloganClon, origen.logo_url, monedaClon, telefonoClon, direccionClon, planNombreClon, modulosClon, tipoCambioClon, caracteristicasClon]
@@ -1437,9 +1429,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
     // 2. Duplicar Zonas y mapear IDs
     const zonasOrigen = await dbAll('SELECT * FROM Zonas WHERE negocio_id = ?', [origenId]);
     const mapaZonas = {};
-    for (const z of zonasOrigen) {
-      const rZ = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, z.nombre]);
-      mapaZonas[z.id] = rZ.lastID;
     if (zonasOrigen && zonasOrigen.length > 0) {
       for (const z of zonasOrigen) {
         const rZ = await dbRun('INSERT INTO Zonas (negocio_id, nombre) VALUES (?, ?)', [nuevoNegocioId, z.nombre]);
@@ -1452,13 +1441,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
 
     // 3. Duplicar Mesas asociadas a las nuevas zonas
     const mesasOrigen = await dbAll('SELECT * FROM Mesas WHERE negocio_id = ?', [origenId]);
-    for (const m of mesasOrigen) {
-      const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
-      await dbRun(
-        `INSERT INTO Mesas (negocio_id, numero, zona_id, capacidad, estado, x, y, ancho, alto, forma, piso)
-         VALUES (?, ?, ?, ?, 'libre', ?, ?, ?, ?, ?, ?)`,
-        [nuevoNegocioId, m.numero, nuevaZonaId, m.capacidad || 4, m.x || 40, m.y || 40, m.ancho || 130, m.alto || 120, m.forma || 'square', m.piso || 1]
-      );
     if (mesasOrigen && mesasOrigen.length > 0) {
       for (const m of mesasOrigen) {
         const nuevaZonaId = mapaZonas[m.zona_id] || (Object.values(mapaZonas)[0] || 1);
@@ -1473,9 +1455,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
     // 4. Duplicar Categorías y mapear IDs
     const catsOrigen = await dbAll('SELECT * FROM Categorias WHERE negocio_id = ?', [origenId]);
     const mapaCats = {};
-    for (const c of catsOrigen) {
-      const rC = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [nuevoNegocioId, c.nombre, c.icono, c.destino]);
-      mapaCats[c.id] = rC.lastID;
     if (catsOrigen && catsOrigen.length > 0) {
       for (const c of catsOrigen) {
         const rC = await dbRun('INSERT INTO Categorias (negocio_id, nombre, icono, destino) VALUES (?, ?, ?, ?)', [nuevoNegocioId, c.nombre, c.icono, c.destino]);
@@ -1485,13 +1464,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
 
     // 5. Duplicar Productos asociados a las nuevas categorías
     const prodsOrigen = await dbAll('SELECT * FROM Productos WHERE negocio_id = ?', [origenId]);
-    for (const p of prodsOrigen) {
-      const nuevaCatId = mapaCats[p.categoria_id] || (Object.values(mapaCats)[0] || 1);
-      await dbRun(
-        `INSERT INTO Productos (negocio_id, categoria_id, codigo, nombre, precio, descripcion, destino, curso, happy_hour, agotado, imagen_url, color_badge, activo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nuevoNegocioId, nuevaCatId, p.codigo, p.nombre, p.precio, p.descripcion, p.destino, p.curso || 2, p.happy_hour || 0, p.agotado || 0, p.imagen_url, p.color_badge, p.activo !== undefined ? p.activo : 1]
-      );
     const mapaProds = {};
     if (prodsOrigen && prodsOrigen.length > 0) {
       for (const p of prodsOrigen) {
@@ -1505,15 +1477,8 @@ async function clonarODuplicarNegocioHandler(req, res) {
       }
     }
 
-    // 6. Duplicar Inventario
     // 6. Duplicar Inventario (Insumos) y mapear IDs
     const invOrigen = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [origenId]);
-    for (const i of invOrigen) {
-      await dbRun(
-        `INSERT INTO Inventario (negocio_id, nombre, categoria, unidad_medida, stock_actual, stock_minimo, costo_unitario, actualizado_en, es_licor, capacidad_ml, medida_shot_ml, rendimiento_shots)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nuevoNegocioId, i.nombre, i.categoria, i.unidad_medida, i.stock_actual, i.stock_minimo, i.costo_unitario, new Date().toISOString(), i.es_licor || 0, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots]
-      );
     const mapaInv = {};
     if (invOrigen && invOrigen.length > 0) {
       for (const i of invOrigen) {
@@ -1593,7 +1558,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
 
     const nuevoNegocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [nuevoNegocioId]);
     io.emit('negocio_creado', nuevoNegocio);
-    res.json({ ok: true, message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`, negocio: nuevoNegocio });
     res.json({
       ok: true,
       message: `Restaurante clonado con éxito bajo el nombre "${nombreClon}".`,
@@ -1603,7 +1567,6 @@ async function clonarODuplicarNegocioHandler(req, res) {
     console.error('Error al clonar negocio:', e);
     res.status(500).json({ error: e.message });
   }
-});
 }
 
 app.post('/api/dev/negocios/:id/clonar', clonarODuplicarNegocioHandler);
@@ -8292,11 +8255,9 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
     const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
-      WHERE stock_actual <= stock_minimo 
       WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
         AND stock_actual <= stock_minimo 
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
-    `);
     `, [negocioId, negocioId]);
 
     let totalPresupuesto = 0;
@@ -8343,14 +8304,12 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       const inicioMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), 1, 0, 0, 0, 0));
       desde = inicioMes.toISOString();
     } else if (desde.length === 10) {
-      desde = new Date(`${desde}T00:00:00-06:00`).toISOString();
       desde = new Date(desde + 'T00:00:00-06:00').toISOString();
     }
 
     if (!hasta) {
       hasta = ahora.toISOString();
     } else if (hasta.length === 10) {
-      hasta = new Date(`${hasta}T23:59:59.999-06:00`).toISOString();
       hasta = new Date(hasta + 'T23:59:59.999-06:00').toISOString();
     }
 

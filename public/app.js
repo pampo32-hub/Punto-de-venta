@@ -4085,7 +4085,6 @@ window.abrirModalClonarNegocioDev = function(id, nombre, slogan, moneda, telefon
 
 window.cerrarModalClonarNegocioDev = function() {
   const modal = document.getElementById('modalDevClonarNegocio');
-  if (modal) modal.classList.remove('active');
   if (modal) {
     modal.style.display = 'none';
     modal.classList.remove('active');
@@ -4093,7 +4092,7 @@ window.cerrarModalClonarNegocioDev = function() {
 };
 
 window.guardarClonarNegocioDev = async function() {
-  const origenId = document.getElementById('devClonOrigenId')?.value;
+  const origenId = Number(document.getElementById('devClonOrigenId')?.value || estado.negocioActual?.id || 1);
   const nombre = document.getElementById('devClonNombre')?.value.trim();
   const slogan = document.getElementById('devClonSlogan')?.value.trim();
   const moneda = document.getElementById('devClonMoneda')?.value || 'CRC';
@@ -4104,20 +4103,14 @@ window.guardarClonarNegocioDev = async function() {
   const adminPin = document.getElementById('devClonAdminPin')?.value.trim() || '1234';
 
   if (!nombre) {
-    alert('Por favor indica el nombre del nuevo restaurante clonado.');
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('⚠️ Por favor indica el nombre del nuevo restaurante clonado.', 'warning');
-    } else {
-      alert('Por favor indica el nombre del nuevo restaurante clonado.');
     }
     return;
   }
   if (!adminUsuario || !adminPassword) {
-    alert('Por favor completa el usuario y contraseña del Super Admin.');
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('⚠️ Por favor completa el usuario y contraseña del Super Admin.', 'warning');
-    } else {
-      alert('Por favor completa el usuario y contraseña del Super Admin.');
     }
     return;
   }
@@ -4129,9 +4122,15 @@ window.guardarClonarNegocioDev = async function() {
   }
 
   try {
+    const rol = window.obtenerRolUsuarioActual ? window.obtenerRolUsuarioActual() : 'developer';
     const res = await fetch(`/api/dev/negocios/${origenId}/clonar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(origenId),
+        'x-user-rol': rol,
+        'x-supervisor-pin': '9999'
+      },
       body: JSON.stringify({
         nombreNuevo: nombre,
         slogan,
@@ -4144,13 +4143,12 @@ window.guardarClonarNegocioDev = async function() {
       })
     });
 
-    const data = await res.json();
     let data = {};
+    const textResponse = await res.text();
     try {
-      data = await res.json();
+      data = JSON.parse(textResponse);
     } catch (_) {
-      const text = await res.text().catch(() => '');
-      data = { error: `Error del servidor (${res.status}): ${text.slice(0, 100)}` };
+      throw new Error(`Respuesta no válida del servidor (${res.status}): ${textResponse.slice(0, 100)}`);
     }
 
     if (!res.ok) throw new Error(data.error || 'Error al clonar el comercio');
@@ -4159,8 +4157,6 @@ window.guardarClonarNegocioDev = async function() {
 
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro(`🧬 ¡Restaurante "${nombre}" clonado exitosamente con rol Super Admin!`, 'success');
-    } else {
-      alert(`🧬 ¡Restaurante "${nombre}" clonado exitosamente!`);
     }
 
     await cargarNegociosDev();
@@ -4168,11 +4164,8 @@ window.guardarClonarNegocioDev = async function() {
       await window.poblarSelectorNegociosDev();
     }
   } catch (e) {
-    alert('❌ Error al clonar: ' + e.message);
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('❌ Error al clonar: ' + e.message, 'error');
-    } else {
-      alert('❌ Error al clonar: ' + e.message);
     }
   } finally {
     if (btnGuardar) {
