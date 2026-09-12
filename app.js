@@ -6175,6 +6175,7 @@ window.abrirPosComoNegocio = async function(negocioId) {
   }
 };
 
+window.abrirModalNuevoNegocio = function() {
 window.cambiarModalidadNegocioDev = function(modalidad) {
   const container = document.getElementById('devCamposMultiSucursalContainer');
   const grupoBox = document.getElementById('devGrupoExistenteBox');
@@ -6300,12 +6301,14 @@ window.abrirModalNuevoNegocio = function(modalidad = 'individual') {
   const elEstructura = document.getElementById('devCrearEstructuraBase');
   if (elEstructura) elEstructura.checked = true;
 
+  document.getElementById('negocioModalTitulo').textContent = '🏬 Registrar Nuevo Comercio';
   document.getElementById('negocioModalTitulo').textContent = (modElegida === 'matriz' || modElegida === 'sucursal')
     ? '🏢 Registrar Negocio Multi-Sucursal (Cadena / Franquicia)'
     : '🏬 Registrar Nuevo Comercio';
   document.getElementById('modalDevNegocio').classList.add('active');
 };
 
+// Auto-sugerir usuario admin al escribir el nombre del restaurante
 // Auto-sugerir usuario admin y grupo al escribir el nombre del restaurante
 document.getElementById('devNegocioNombre')?.addEventListener('input', (e) => {
   const id = document.getElementById('devNegocioId')?.value;
@@ -11802,6 +11805,7 @@ window.ejecutarReasignacionTurnoCaja = async function() {
         'x-supervisor-pin': adminPin
       },
       body: JSON.stringify({
+       
         turno_id: turnoId,
         nuevo_cajero: nuevoCajero,
         nueva_caja_fisica_id: nuevaCajaFisicaId,
