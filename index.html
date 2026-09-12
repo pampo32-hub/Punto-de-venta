@@ -139,48 +139,23 @@
           <div id="loginUsuariosDisponiblesGrid">
             <div class="negocio-login-group" style="margin-bottom: 12px;">
               <div style="font-size: 0.76rem; font-weight: 700; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                <span>🍔</span> <span>GastroBar Fuego &amp; Brasas</span>
                 <span>🌴</span> <span>La Terrazita</span>
               </div>
               <div class="demo-chips-grid">
                 <button type="button" class="chip-account dev" onclick="cargarCredencialDemo('dev', '1234')" title="Ingresar como Juan Developer">
                   🛠️ Juan Developer <small style="opacity:0.8; font-size:0.75rem;">(Developer)</small>
                 </button>
-                <button type="button" class="chip-account admin" onclick="cargarCredencialDemo('admin', 'admin123')" title="Ingresar como Don Alberto">
                 <button type="button" class="chip-account admin" onclick="cargarCredencialDemo('admin', '1234')" title="Ingresar como Don Alberto">
                   👑 Don Alberto <small style="opacity:0.8; font-size:0.75rem;">(Admin)</small>
                 </button>
-                <button type="button" class="chip-account cajero" onclick="cargarCredencialDemo('cajero', 'caja123')" title="Ingresar como Roberto Caja">
                 <button type="button" class="chip-account cajero" onclick="cargarCredencialDemo('cajero', '5555')" title="Ingresar como Roberto Caja">
                   💵 Roberto Caja <small style="opacity:0.8; font-size:0.75rem;">(Caja)</small>
                 </button>
-                <button type="button" class="chip-account salonero" onclick="cargarCredencialDemo('carlos', 'mesero123')" title="Ingresar como Carlos Solano">
                 <button type="button" class="chip-account salonero" onclick="cargarCredencialDemo('carlos', '1111')" title="Ingresar como Carlos Solano">
                   🤵 Carlos Solano <small style="opacity:0.8; font-size:0.75rem;">(Salonero)</small>
                 </button>
-                <button type="button" class="chip-account salonera" onclick="cargarCredencialDemo('sofia', 'mesera123')" title="Ingresar como Sofía Morales">
                 <button type="button" class="chip-account salonera" onclick="cargarCredencialDemo('sofia', '2222')" title="Ingresar como Sofía Morales">
                   👩‍🍳 Sofía Morales <small style="opacity:0.8; font-size:0.75rem;">(Salonera)</small>
-                </button>
-              </div>
-            </div>
-
-            <div class="negocio-login-group" style="margin-bottom: 12px;">
-              <div style="font-size: 0.76rem; font-weight: 700; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                <span>🌴</span> <span>Bistro &amp; Grill La Terraza</span>
-              </div>
-              <div class="demo-chips-grid">
-                <button type="button" class="chip-account admin" onclick="cargarCredencialDemo('admin_terraza', '123')" title="Ingresar como Administrador La Terraza">
-                  👑 Admin Terraza <small style="opacity:0.8; font-size:0.75rem;">(Admin)</small>
-                </button>
-                <button type="button" class="chip-account cajero" onclick="cargarCredencialDemo('cajero_terraza', '123')" title="Ingresar como Cajero La Terraza">
-                  💵 Cajero Terraza <small style="opacity:0.8; font-size:0.75rem;">(Caja)</small>
-                </button>
-                <button type="button" class="chip-account salonero" onclick="cargarCredencialDemo('mesero_terraza', '123')" title="Ingresar como Carlos Mesero">
-                  🤵 Mesero Terraza <small style="opacity:0.8; font-size:0.75rem;">(Salonero)</small>
-                </button>
-                <button type="button" class="chip-account salonera" onclick="cargarCredencialDemo('salonera_terraza', '123')" title="Ingresar como María Salonera">
-                  👩‍🍳 Salonera Terraza <small style="opacity:0.8; font-size:0.75rem;">(Salonera)</small>
                 </button>
               </div>
             </div>
@@ -6910,8 +6885,6 @@
   <!-- FOOTER INPUT -->
   <form class="chat-ai-footer" id="formChatIA" onsubmit="event.preventDefault(); enviarMensajeFormularioIA();">
     <input type="text" id="inputChatIA" placeholder="Pregunta sobre stock, insumos, precios o caja..." autocomplete="off" />
-    <button type="submit" id="btnEnviarChatIA" class="btn-send-ai" title="Enviar p
-... [truncated for diff preview]
     <button type="submit" id="btnEnviarChatIA" class="btn-send-ai" title="Enviar pregunta">
       <span>🚀</span>
     </button>
