@@ -499,6 +499,8 @@ function initDb() {
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
       UNIQUE(negocio_id, usuario)
     )`);
+    db.run("ALTER TABLE Usuarios ADD COLUMN activo INTEGER DEFAULT 1", () => {});
+    db.run("UPDATE Usuarios SET activo = 1 WHERE activo IS NULL", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN debe_cambiar_password INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN caja_defecto_id INTEGER", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_token_sesion TEXT", () => {});
@@ -842,6 +844,8 @@ function initDb() {
           db.run(
             `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, activo) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
             [u.negocio_id, u.usuario, u.nombre, u.password, u.rol, u.genero, u.pin, u.permisos]
           );
         });
