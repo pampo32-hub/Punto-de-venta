@@ -2152,6 +2152,11 @@
         </div>
       </div>
 
+      <!-- SPLITTER / PANEL DIVISOR REDIMENSIONABLE (ARRASTRABLE EN PC Y TABLETS) -->
+      <div class="comandero-resizer" id="comanderoResizerSplitter" title="Arrastra hacia los lados para ajustar el ancho de la comanda">
+        <div class="resizer-handle">⋮</div>
+      </div>
+
       <div class="comandero-ticket" id="comanderoTicketCol">
         <!-- BOTÓN VOLVER AL MENÚ (TABLETS PORTRAIT & SMARTPHONES) -->
         <div class="mob-ticket-back-banner" style="display:flex; gap:8px;">
@@ -2169,6 +2174,9 @@
             <small id="comTicketOrdenId">Orden #ORD-0000</small>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="btn-toggle-ticket-width" id="btnToggleAnchoComanda" onclick="toggleAnchoComandaPreset()" title="Ajustar tamaño de la comanda (Normal / Amplia / 50-50)">
+              ↔️ Ancho
+            </button>
             <button class="btn-tool" id="btnResetearMesaComandero" onclick="resetearMesaActualComandero()" title="Liberar mesa y dejar saldo en ₡0" style="display:none; background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#f87171; padding:4px 10px; font-size:0.78rem; font-weight:700; border-radius:6px; cursor:pointer;">
               🔄 Liberar Mesa
             </button>

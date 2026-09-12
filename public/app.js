@@ -10100,6 +10100,116 @@ if (btnCloseComEl) {
   btnCloseComEl.addEventListener('click', window.cerrarComandero);
 }
 
+// ============================================================================
+// SPLITTER / REDIMENSIONAMIENTO DINÁMICO DE COMANDA (PC Y TABLETS)
+// ============================================================================
+window.aplicarAnchoTicket = function(widthPx) {
+  const ticketCol = document.getElementById('comanderoTicketCol');
+  if (!ticketCol) return;
+  const wVal = typeof widthPx === 'number' ? `${widthPx}px` : widthPx;
+  ticketCol.style.flex = `0 0 ${wVal}`;
+  ticketCol.style.width = wVal;
+  ticketCol.style.maxWidth = wVal;
+  ticketCol.style.minWidth = '300px';
+};
+
+window.initComanderoResizer = function() {
+  const splitter = document.getElementById('comanderoResizerSplitter');
+  const ticketCol = document.getElementById('comanderoTicketCol');
+  if (!splitter || !ticketCol) return;
+
+  const savedWidth = localStorage.getItem('pos_comanda_width');
+  if (savedWidth && window.innerWidth >= 900) {
+    window.aplicarAnchoTicket(parseInt(savedWidth, 10));
+  }
+
+  let isDragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  function onDragStart(clientX) {
+    if (window.innerWidth < 900) return;
+    isDragging = true;
+    startX = clientX;
+    startWidth = ticketCol.getBoundingClientRect().width;
+    splitter.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function onDragMove(clientX) {
+    if (!isDragging) return;
+    const deltaX = startX - clientX;
+    const maxAllowed = Math.round(window.innerWidth * 0.70);
+    const newWidth = Math.max(300, Math.min(maxAllowed, startWidth + deltaX));
+    window.aplicarAnchoTicket(newWidth);
+  }
+
+  function onDragEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    splitter.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    const currentW = Math.round(ticketCol.getBoundingClientRect().width);
+    localStorage.setItem('pos_comanda_width', currentW);
+  }
+
+  splitter.onmousedown = (e) => {
+    e.preventDefault();
+    onDragStart(e.clientX);
+  };
+
+  window.addEventListener('mousemove', (e) => {
+    if (isDragging) onDragMove(e.clientX);
+  });
+
+  window.addEventListener('mouseup', onDragEnd);
+
+  splitter.ontouchstart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      onDragStart(e.touches[0].clientX);
+    }
+  };
+
+  window.addEventListener('touchmove', (e) => {
+    if (isDragging && e.touches && e.touches.length === 1) {
+      onDragMove(e.touches[0].clientX);
+    }
+  }, { passive: true });
+
+  window.addEventListener('touchend', onDragEnd);
+};
+
+window.toggleAnchoComandaPreset = function() {
+  const ticketCol = document.getElementById('comanderoTicketCol');
+  if (!ticketCol) return;
+  const currentWidth = ticketCol.getBoundingClientRect().width;
+  const parentContainer = ticketCol.parentElement || document.body;
+  const containerWidth = parentContainer.getBoundingClientRect().width || window.innerWidth;
+  
+  let targetWidth;
+  if (currentWidth < 430) {
+    targetWidth = Math.min(540, Math.round(containerWidth * 0.45));
+    if (typeof mostrarNotificacionCentro === 'function') mostrarNotificacionCentro('📐 Comanda Ampliada (540px)', 'info');
+  } else if (currentWidth < Math.round(containerWidth * 0.48)) {
+    targetWidth = Math.round(containerWidth * 0.50);
+    if (typeof mostrarNotificacionCentro === 'function') mostrarNotificacionCentro('📐 Pantalla Dividida 50% / 50%', 'info');
+  } else {
+    targetWidth = 380;
+    if (typeof mostrarNotificacionCentro === 'function') mostrarNotificacionCentro('📐 Comanda Tamaño Normal (380px)', 'info');
+  }
+
+  window.aplicarAnchoTicket(targetWidth);
+  localStorage.setItem('pos_comanda_width', targetWidth);
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => window.initComanderoResizer());
+} else {
+  window.initComanderoResizer();
+}
+
 window.liberarMesaId = async function(mesaId) {
   const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(mesaId)) || (estado.mesaActiva?.id === Number(mesaId) ? estado.mesaActiva : null) || { id: Number(mesaId), numero: `Mesa ${mesaId}`, orden_total: 0 };
   const mesaNom = mesa.numero || `Mesa ${mesa.id}`;
@@ -10778,8 +10888,10 @@ function renderTicketItems() {
 
       html += `
         <div class="ticket-comensal-grupo">
+          <div class="ticket-comensal-header">
           <div class="ticket-comensal-header ${(comNom === 'General') ? 'compartido' : ''}">
             <div class="ticket-comensal-title">
+              <span>${tituloCom}</span>
               <span class="comensal-title-name">${tituloCom}</span>
               <span class="badge-comensal-subtotal">${formatCRC(subtotalGrupo)}</span>
             </div>
@@ -11837,7 +11949,6 @@ window.actualizarBotonesAccionKDS = function(key) {
     if (btnSel) btnSel.style.display = 'none';
     btnTodo.style.display = 'flex';
     btnTodo.style.flex = '1';
-    btnTodo.style.width = '100%';
     btnTodo.innerHTML = `✅ Servir Todas (${totalCount})`;
   } else if (selectedCount > 0 && selectedCount < totalCount) {
     if (btnSel) {
