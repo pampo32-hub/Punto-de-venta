@@ -4050,6 +4050,9 @@ async function cargarNegociosDev() {
             <button class="btn-delete-negocio" style="flex: 1; background: #7f1d1d; border: 1px solid #991b1b; color: #fecaca; font-weight: 700; border-radius: 8px; padding: 7px 10px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;" onmouseover="this.style.background='#991b1b'" onmouseout="this.style.background='#7f1d1d'" onclick="eliminarNegocioDev(${n.id}, '${nombreEscapado}')">
               🗑️ Eliminar Comercio
             </button>
+            <button class="btn-purga-total-card" style="flex: 1 1 100%; background: linear-gradient(135deg, #b91c1c, #991b1b); border: 1px solid #ef4444; color: #fff; font-weight: 800; border-radius: 8px; padding: 8px 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px;" onclick="purgarNegocioCompletoDev(${n.id})">
+              🚨 Dejar en Blanco para Entrega Oficial (Cero Datos)
+            </button>
             ` : ''}
           </div>
         </div>
@@ -18769,8 +18772,8 @@ window.esUsuarioDeveloperOSuperAdmin = function() {
 window.actualizarVisibilidadBotonesPurgaDev = function() {
   const esDevOSuper = window.esUsuarioDeveloperOSuperAdmin();
   document.querySelectorAll('.dev-purge-action').forEach(el => {
-    if (el.id === 'btnResetCajaPruebas') {
-      el.style.display = esDevOSuper ? 'block' : 'none';
+    if (el.id === 'btnResetCajaPruebas' || el.id === 'cardAdminPurgaTotal') {
+      el.style.display = esDevOSuper ? 'flex' : 'none';
     } else {
       el.style.display = esDevOSuper ? 'inline-flex' : 'none';
     }
