@@ -2556,6 +2556,7 @@ window.ejecutarLogin = async function() {
         'Content-Type': 'application/json',
         'x-device-token': devToken
       },
+      body: JSON.stringify({ usuario, password, deviceToken: devToken })
       body: JSON.stringify({ usuario, password, deviceToken: devToken, forzar_cierre_previo: true })
     });
     const data = await res.json();
@@ -11807,6 +11808,7 @@ window.ejecutarReasignacionTurnoCaja = async function() {
         nueva_caja_fisica_id: nuevaCajaFisicaId,
         motivo,
         adminPin,
+        usuario_admin: estado.usuarioActual?.nombre || 'Administrado
         usuario_admin: estado.usuarioActual?.nombre || 'Administrador'
       })
     });

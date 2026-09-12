@@ -682,7 +682,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
       }
 
-      // Fallback: búsqueda general por coincidencia fonética o aproximada de nombre
+      // Fallback: búsqueda general por nombre fonético o aproximado
       if (!u) {
         const todos = await dbAll(
           `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
@@ -723,7 +723,6 @@ app.post('/api/auth/login', async (req, res) => {
     // Obtener información del negocio
     const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
 
-    // Validar estado del negocio (bloqueado para operativos si está inactivo)
     if (u.rol !== 'developer' && negocio && Number(negocio.activo) === 0) {
       return res.status(403).json({
         error: 'Comercio desactivado, contacte con su proveedor.',
@@ -731,7 +730,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // ── SEGURIDAD PERIMETRAL: RESTRICCIÓN DE ACCESO POR IP ──
+    // Seguridad perimetral e IP
     const clientIp = obtenerIpCliente(req);
     const isLoopback = ['127.0.0.1', '::1', 'localhost', '::ffff:127.0.0.1'].includes(clientIp) || !clientIp;
     const rolesExentosIp = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer', 'supervisor'];
@@ -740,18 +739,15 @@ app.post('/api/auth/login', async (req, res) => {
     if (!esRolExento && !isLoopback && negocio && Number(negocio.restringir_ip_operativos) === 1) {
       const rawIps = (negocio.ips_permitidas || '').trim();
       const permitidas = rawIps ? rawIps.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean) : [];
-      const ipCoincide = permitidas.includes(clientIp);
-
-      if (!ipCoincide && permitidas.length > 0) {
+      if (!permitidas.includes(clientIp) && permitidas.length > 0) {
         return res.status(403).json({
-          error: `🚫 Acceso denegado: El personal operativo solo puede acceder conectado a la red WiFi oficial de ${negocio.nombre || 'el bar'}. (IP detectada: ${clientIp})`,
-          ip_bloqueada: true,
-          client_ip: clientIp
+          error: `🚫 Acceso denegado: El personal operativo solo puede acceder conectado a la red WiFi oficial de ${negocio.nombre || 'el bar'}.`,
+          ip_bloqueada: true
         });
       }
     }
 
-    // ── SEGURIDAD DE TERMINALES: DISPOSITIVOS AUTORIZADOS (DEVICE WHITELISTING) ──
+    // Seguridad de terminales: Dispositivos autorizados
     const deviceToken = String(req.headers['x-device-token'] || req.body.deviceToken || req.body.device_token || '').trim();
 
     if (!esRolExento && !isLoopback && negocio && Number(negocio.restringir_dispositivos) === 1) {
@@ -777,7 +773,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN) ──
+    // Sesión única activa
     const sesionUnicaActiva = negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined);
     const forzarCierrePrevio = req.body.forzar_cierre_previo === true;
 
@@ -801,7 +797,6 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // Generar identificador de sesión y registrar conexión
     const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const ahoraIso = new Date().toISOString();
 
@@ -820,7 +815,6 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Formatear etiqueta de rol y perfil visual
     let rolEtiqueta = u.rol.toUpperCase();
     if (u.rol === 'salonero') {
       rolEtiqueta = u.genero === 'F' ? 'Salonera' : 'Salonero';
@@ -841,7 +835,6 @@ app.post('/api/auth/login', async (req, res) => {
       logo_url: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80'
     };
 
-    // ── GESTIÓN MULTI-SUCURSAL: RESOLVER LOCALES AUTORIZADOS ──
     let sucursalesAutorizadas = [];
     try {
       if (u.rol === 'developer') {
