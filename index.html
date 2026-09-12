@@ -1733,8 +1733,11 @@
                   Registro inmutable de todas las entradas, ventas automáticas por comandas, mermas y ajustes de bodega.
                 </p>
               </div>
-              <div style="display:flex; gap:8px;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <button class="btn-tool" onclick="cargarKardexGeneral()" style="background:#1e293b; border-color:#475569;">🔄 Actualizar Kárdex</button>
+                <button class="btn-tool btn-vaciar-kardex-dev" id="btnVaciarKardexDev" onclick="vaciarKardexCompletoDev()" style="background:rgba(239, 68, 68, 0.18); border:1px solid #ef4444; color:#fca5a5; font-weight:700; padding:8px 14px; border-radius:8px; cursor:pointer; display:none; align-items:center; gap:6px; transition:all 0.2s ease;" title="Eliminar todo el historial de movimientos de kárdex (Exclusivo Developer)">
+                  <span>🗑️</span> Vaciar Historial (Dev)
+                </button>
               </div>
             </div>
 

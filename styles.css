@@ -11848,3 +11848,20 @@ body.theme-capsula-elegance .btn-prefactura-split {
     gap: 4px;
   }
 }
+
+.btn-vaciar-kardex-dev {
+  background: rgba(239, 68, 68, 0.16) !important;
+  border: 1px solid #ef4444 !important;
+  color: #fca5a5 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+.btn-vaciar-kardex-dev:hover {
+  background: rgba(239, 68, 68, 0.32) !important;
+  border-color: #f87171 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
+}
+

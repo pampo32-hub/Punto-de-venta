@@ -16620,14 +16620,26 @@ window.kardexMovimientosActuales = [];
 
 window.cargarKardexGeneral = async function() {
   try {
-    const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
+    const rol = window.obtenerRolUsuarioActual ? window.obtenerRolUsuarioActual() : (estado.usuarioActual ? estado.usuarioActual.rol : 'admin');
     const insumoId = document.getElementById('selectFiltroKardexInsumo')?.value || 'todos';
     const tipo = document.getElementById('selectFiltroKardexTipo')?.value || 'todos';
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+
+    // Mostrar / Ocultar botón de vaciar kardex para developer / superadmin
+    const btnVaciar = document.getElementById('btnVaciarKardexDev');
+    if (btnVaciar) {
+      const esDev = (typeof window.esUsuarioDeveloperOSuperAdmin === 'function' && window.esUsuarioDeveloperOSuperAdmin()) ||
+                    rol === 'developer' || rol === 'superadmin' || estado.usuarioActual?.es_developer;
+      btnVaciar.style.display = esDev ? 'inline-flex' : 'none';
+    }
 
     poblarSelectorKardexInsumos();
 
-    const res = await fetch(`/api/admin/inventario/kardex/movimientos?insumo_id=${insumoId}&tipo=${tipo}&limit=250`, {
-      headers: { 'x-user-rol': rol }
+    const res = await fetch(`/api/admin/inventario/kardex/movimientos?insumo_id=${insumoId}&tipo=${tipo}&limit=250&negocio_id=${nid}`, {
+      headers: {
+        'x-user-rol': rol,
+        'x-negocio-id': String(nid)
+      }
     });
     if (!res.ok) throw new Error('Error al cargar historial Kárdex');
     const data = await res.json();
@@ -16637,7 +16649,71 @@ window.cargarKardexGeneral = async function() {
     console.error('Error al cargar kardex general:', e);
     const tbody = document.getElementById('tbodyKardexGeneral');
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#ef4444;">Error al cargar movimientos de Kárdex: ${escapeHtml(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:#ef4444;">Error al cargar movimientos de Kárdex: ${escapeHtml(e.message)}</td></tr>`;
+    }
+  }
+};
+
+window.vaciarKardexCompletoDev = async function() {
+  const u = estado.usuarioActual;
+  const rol = window.obtenerRolUsuarioActual ? window.obtenerRolUsuarioActual() : (u ? u.rol : 'developer');
+  const esDev = (typeof window.esUsuarioDeveloperOSuperAdmin === 'function' && window.esUsuarioDeveloperOSuperAdmin()) ||
+                rol === 'developer' || rol === 'superadmin' || u?.es_developer;
+
+  let pinSupervisor = '9999';
+  if (!esDev) {
+    const pin = await window.solicitarPinAdmin({
+      icono: '🗑️',
+      titulo: 'Vaciar Historial Kárdex (Developer)',
+      subtitulo: 'Acción Destructiva de Auditoría',
+      mensaje: 'Ingresa el PIN de Developer / Administrador para vaciar de forma irreversible todo el historial de Kárdex:'
+    });
+    if (!pin) return;
+    pinSupervisor = pin;
+  }
+
+  const nombreNegocio = estado.negocioActual?.nombre || 'este comercio';
+  const confirmar = confirm(`⚠️ ATENCIÓN DEVELOPER / SUPER ADMIN:\n\n¿Estás seguro de que deseas eliminar TODOS los movimientos del historial de Kárdex de "${nombreNegocio}"?\n\n• Se borrarán todos los registros de compras, ventas automáticas, mermas y ajustes.\n• Esta acción es irreversible.\n• El stock actual de los insumos en bodega se conservará intacto.\n\n¿Deseas continuar?`);
+  if (!confirmar) return;
+
+  const btnVaciar = document.getElementById('btnVaciarKardexDev');
+  if (btnVaciar) {
+    btnVaciar.disabled = true;
+    btnVaciar.innerHTML = '<span>⏳</span> Vaciando Kárdex...';
+  }
+
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch(`/api/admin/inventario/kardex/vaciar?negocio_id=${nid}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid),
+        'x-user-rol': rol,
+        'x-supervisor-pin': pinSupervisor
+      },
+      body: JSON.stringify({
+        negocio_id: nid,
+        pin: pinSupervisor
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al vaciar el historial de Kárdex');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`🗑️ ${data.mensaje || 'Historial de Kárdex vaciado exitosamente'}`, 'success');
+    }
+
+    await cargarKardexGeneral();
+  } catch (e) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`❌ Error: ${e.message}`, 'error');
+    }
+  } finally {
+    if (btnVaciar) {
+      btnVaciar.disabled = false;
+      btnVaciar.innerHTML = '<span>🗑️</span> Vaciar Historial (Dev)';
     }
   }
 };

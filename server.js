@@ -1477,7 +1477,7 @@ async function clonarODuplicarNegocioHandler(req, res) {
       }
     }
 
-    // 6. Duplicar Inventario (Insumos) en estado inicial limpio y mapear IDs
+    // 6. Duplicar Inventario (Insumos) en estado inicial limpio (stock = 0) y mapear IDs
     const invOrigen = await dbAll('SELECT * FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenId, origenId]);
     const mapaInv = {};
     if (invOrigen && invOrigen.length > 0) {
@@ -7455,6 +7455,8 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
 
     const insumosConEstado = insumos.map(ins => {
       let estado = 'normal';
+      if (ins.stock_actual <= 0) estado = 'agotado';
+      else if (ins.stock_actual <= ins.stock_minimo) estado = 'bajo';
       if (ins.stock_actual <= 0) {
         estado = (Number(ins.stock_minimo) > 0) ? 'agotado' : 'sin_stock';
       } else if (ins.stock_actual <= ins.stock_minimo) {
@@ -7527,7 +7529,7 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida})${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
     });
 
-    res.json({
+    res.status(201).json({
       id: result.lastID,
       insumoId: result.lastID,
       message: 'Insumo registrado correctamente',
@@ -8059,14 +8061,15 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
 // --- KARDEX GENERAL / MOVIMIENTOS COMPLETOS ---
 app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, res) => {
   try {
-    const { insumo_id, tipo, limit } = req.query;
+    const { insumo_id, tipo, limit, negocio_id } = req.query;
+    const nid = negocio_id ? Number(negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
     let query = `
       SELECT m.*, i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, i.es_licor, i.rendimiento_shots
       FROM InventarioMovimientos m
       LEFT JOIN Inventario i ON m.insumo_id = i.id
-      WHERE 1=1
+      WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
     `;
-    const params = [];
+    const params = [nid, nid];
     if (insumo_id && insumo_id !== 'todos') {
       query += ' AND m.insumo_id = ?';
       params.push(insumo_id);
@@ -8076,7 +8079,7 @@ app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, 
       params.push(tipo);
     }
     query += ' ORDER BY m.id DESC LIMIT ?';
-    params.push(parseInt(limit) || 200);
+    params.push(parseInt(limit) || 250);
 
     const movimientos = await dbAll(query, params);
     res.json({ movimientos });
@@ -8084,6 +8087,52 @@ app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, 
     res.status(500).json({ error: e.message });
   }
 });
+
+// --- VACIAR TODO EL HISTORIAL DE KARDEX (DEVELOPER / SUPER ADMIN) ---
+const vaciarKardexHandler = async (req, res) => {
+  try {
+    const rol = (req.usuario && req.usuario.rol) || req.headers['x-user-rol'] || '';
+    const pinSupervisor = req.headers['x-supervisor-pin'] || req.body?.pin || '';
+    
+    const esDeveloper = rol === 'developer' || rol === 'superadmin' || pinSupervisor === '9999';
+    if (!esDeveloper && rol !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de Developer o Administrador.' });
+    }
+
+    const negocioId = req.query.negocio_id 
+      ? Number(req.query.negocio_id) 
+      : (req.body?.negocio_id ? Number(req.body.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1));
+
+    const totalAntes = await dbGet(
+      `SELECT COUNT(*) as total FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
+      [negocioId, negocioId]
+    );
+
+    await dbRun(
+      `DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
+      [negocioId, negocioId]
+    );
+
+    // Registrar en auditoría
+    await dbRun(
+      `INSERT INTO Auditoria (negocio_id, usuario_nombre, accion, tipo_evento, modulo, detalle, fecha_hora)
+       VALUES (?, ?, 'VACIAR_KARDEX', 'seguridad', 'inventario', ?, datetime('now'))`,
+      [negocioId, req.usuario?.nombre || 'Developer', `Se vaciaron ${totalAntes?.total || 0} movimientos de Kárdex.`]
+    ).catch(() => {});
+
+    res.json({
+      success: true,
+      eliminados: totalAntes?.total || 0,
+      mensaje: `Historial de Kárdex vaciado correctamente (${totalAntes?.total || 0} registros eliminados).`
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+};
+
+app.post('/api/admin/inventario/kardex/vaciar', verificarAdmin, vaciarKardexHandler);
+app.post('/api/developer/inventario/kardex/vaciar', verificarAdmin, vaciarKardexHandler);
+app.delete('/api/developer/inventario/kardex/todos', verificarAdmin, vaciarKardexHandler);
 
 // --- MODIFICAR MOVIMIENTO DE KARDEX ---
 app.put('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async (req, res) => {
@@ -9647,6 +9696,7 @@ app.post('/api/developer/purgar-negocio-completo', verificarDeveloper, async (re
     await dbRun(`DELETE FROM PedidosKDS WHERE negocio_id = ?`, [negocioId]).catch(() => {});
 
     // E. Kárdex e Inventario a Cero
+    await dbRun(`DELETE FROM InventarioMovimientos WHERE negocio_id = ? OR insumo_id IN (SELECT id FROM Inventario WHERE negocio_id = ?)`, [negocioId, negocioId]).catch(() => {});
     await dbRun(`DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) OR insumo_id IN (SELECT id FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))`, [negocioId, negocioId, negocioId, negocioId]).catch(() => {});
     await dbRun(`
       UPDATE Inventario SET
