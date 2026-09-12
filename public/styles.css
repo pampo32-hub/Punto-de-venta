@@ -6333,6 +6333,7 @@ body.theme-amethyst-3d .pay-method-tab.active {
 
   /* LANDING & LOGIN MÓVIL */
   .landing-hero-view {
+    padding: 12px;
     padding: 24px 12px 50px;
   }
 

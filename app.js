@@ -11907,6 +11907,8 @@ window.generarCorteX = async function() {
     titulo: 'Autorización: Corte X Parcial',
     mensaje: 'Ingresa el PIN de Administrador para generar e imprimir el reporte parcial de caja.'
   });
+  if (!pi
+... [truncated for diff preview]
   if (!pinAutorizado) return;
 
   try {
