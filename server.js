@@ -645,19 +645,21 @@ function obtenerIpCliente(req) {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { usuario, password, pin } = req.body;
-    const uInput = (usuario || '').trim();
-    const pInput = (password || pin || '').trim();
+    const rawUser = req.body.usuario || req.body.username || req.body.email || req.body.user || '';
+    const rawPass = req.body.password || req.body.pass || req.body.pin || req.body.clave || '';
+    const rawPin = req.body.pin || '';
+
+    const uInput = String(rawUser).trim();
+    const pInput = String(rawPass || rawPin).trim();
 
     if (!uInput && !pInput) {
-      return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
-    }
-    if (uInput && !pInput && isNaN(Number(uInput))) {
-      return res.status(400).json({ error: 'Contraseña o PIN requerido' });
+      return res.status(400).json({ error: 'Debes ingresar tu usuario, contraseña o PIN de acceso.' });
     }
 
     let u = null;
+
     if (uInput) {
+      // 1. Buscar usuario por coincidencia de usuario, nombre, email o PIN
       const candidatos = await dbAll(
         `SELECT * FROM Usuarios 
          WHERE (LOWER(TRIM(usuario)) = LOWER(TRIM(?)) 
@@ -665,9 +667,13 @@ app.post('/api/auth/login', async (req, res) => {
             OR pin = ? 
             OR TRIM(pin) = TRIM(?)) 
            AND (COALESCE(activo, 1) = 1)
-         ORDER BY (CASE WHEN LOWER(TRIM(usuario)) = LOWER(TRIM(?)) THEN 1 WHEN rol IN ('developer','admin','superadmin') THEN 2 ELSE 3 END)`,
+         ORDER BY 
+           (CASE WHEN LOWER(TRIM(usuario)) = LOWER(TRIM(?)) THEN 1 
+                 WHEN rol IN ('developer', 'admin', 'superadmin') THEN 2 
+                 ELSE 3 END)`,
         [uInput, uInput, uInput, uInput, uInput]
       );
+
       for (const cand of candidatos) {
         const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
         if (passOk) {
@@ -676,11 +682,11 @@ app.post('/api/auth/login', async (req, res) => {
         }
       }
 
-      // Fallback: si no hubo match directo, buscar entre todos los usuarios activos
+      // Fallback: búsqueda general por coincidencia fonética o aproximada de nombre
       if (!u) {
         const todos = await dbAll(
           `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
-           ORDER BY (CASE WHEN rol IN ('developer','admin','superadmin') THEN 1 ELSE 2 END)`
+           ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`
         );
         for (const cand of todos) {
           const candUser = (cand.usuario || '').toLowerCase().trim();
@@ -696,9 +702,10 @@ app.post('/api/auth/login', async (req, res) => {
         }
       }
     } else if (pInput) {
+      // 2. Login directo solo con PIN
       const candidatos = await dbAll(
         `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
-         ORDER BY (CASE WHEN rol IN ('developer','admin','superadmin') THEN 1 ELSE 2 END)`
+         ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`
       );
       for (const cand of candidatos) {
         const passOk = await verificarCredencialUsuario(cand, pInput);
@@ -713,26 +720,27 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
     }
 
+    // Obtener información del negocio
     const negocio = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [u.negocio_id || 1]);
 
-    // Bloquear acceso a comercios desactivados para cualquier usuario (excepto Developer)
+    // Validar estado del negocio (bloqueado para operativos si está inactivo)
     if (u.rol !== 'developer' && negocio && Number(negocio.activo) === 0) {
       return res.status(403).json({
-        error: 'Comercio desactivado, contacte con su proveedor!',
+        error: 'Comercio desactivado, contacte con su proveedor.',
         comercio_desactivado: true
       });
     }
 
-    // ── SEGURIDAD PERIMETRAL: RESTRICCIÓN DE ACCESO POR RED WIFI / IP PÚBLICA ──
+    // ── SEGURIDAD PERIMETRAL: RESTRICCIÓN DE ACCESO POR IP ──
     const clientIp = obtenerIpCliente(req);
     const isLoopback = ['127.0.0.1', '::1', 'localhost', '::ffff:127.0.0.1'].includes(clientIp) || !clientIp;
     const rolesExentosIp = ['admin', 'superadmin', 'super_admin', 'superadministrador', 'administrador', 'developer', 'supervisor'];
     const esRolExento = rolesExentosIp.includes((u.rol || '').toLowerCase().trim());
 
-    if (!esRolExento && negocio && Number(negocio.restringir_ip_operativos) === 1) {
+    if (!esRolExento && !isLoopback && negocio && Number(negocio.restringir_ip_operativos) === 1) {
       const rawIps = (negocio.ips_permitidas || '').trim();
       const permitidas = rawIps ? rawIps.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean) : [];
-      const ipCoincide = permitidas.includes(clientIp) || (isLoopback && (permitidas.includes('127.0.0.1') || permitidas.includes('localhost') || permitidas.length === 0));
+      const ipCoincide = permitidas.includes(clientIp);
 
       if (!ipCoincide && permitidas.length > 0) {
         return res.status(403).json({
@@ -770,12 +778,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN) ──
-    // ── SESIÓN ÚNICA ACTIVA (ANTI-CLONACIÓN DE SESIÓN: BLOQUEO DE SEGUNDO LOGIN) ──
     const sesionUnicaActiva = negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined);
     const forzarCierrePrevio = req.body.forzar_cierre_previo === true;
 
     if (!esRolExento && sesionUnicaActiva && u.ultimo_token_sesion && !forzarCierrePrevio) {
-      // Si el login es en el mismo dispositivo, permitimos reingreso (ej: refresh de página o reautenticación)
       const mismoDispositivo = deviceToken && u.ultimo_dispositivo_id && (deviceToken === u.ultimo_dispositivo_id);
       if (!mismoDispositivo) {
         let nombreDispPrevio = 'otro dispositivo';
@@ -795,6 +801,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
+    // Generar identificador de sesión y registrar conexión
     const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const ahoraIso = new Date().toISOString();
 
@@ -804,7 +811,6 @@ app.post('/api/auth/login', async (req, res) => {
     );
 
     if (negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined)) {
-      // Notificar a otras terminales para invalidar sesiones concurrentes del mismo usuario
       io.emit('usuario_sesion_iniciada', {
         usuarioId: u.id,
         sessionId,
@@ -814,7 +820,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Adaptación dinámica de género para el rol
+    // Formatear etiqueta de rol y perfil visual
     let rolEtiqueta = u.rol.toUpperCase();
     if (u.rol === 'salonero') {
       rolEtiqueta = u.genero === 'F' ? 'Salonera' : 'Salonero';
@@ -860,7 +866,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = generarTokenUsuario(u, negocioObj.id);
 
-    res.json({
+    return res.json({
       ok: true,
       token,
       session_id: sessionId,
@@ -885,7 +891,8 @@ app.post('/api/auth/login', async (req, res) => {
       sucursales: sucursalesAutorizadas
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('Error en /api/auth/login:', e);
+    return res.status(500).json({ error: 'Error interno en el servidor de autenticación: ' + e.message });
   }
 });
 
