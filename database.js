@@ -1072,7 +1072,7 @@ function initDb() {
       }
     });
 
-    // Auto-alineación de secuencias en PostgreSQL para prevenir errores de 'duplicate key / unique constraint'
+    // Auto-alineación de secuencias y claves foráneas con ON DELETE CASCADE en PostgreSQL
     if (db.isPg) {
       const tablasConId = ['negocios', 'zonas', 'categorias', 'productos', 'mesas', 'usuarios', 'puntosdecobro'];
       tablasConId.forEach(tbl => {
@@ -1081,6 +1081,13 @@ function initDb() {
           [tbl],
           () => {}
         );
+      });
+      // Asegurar que claves foráneas a negocios tengan ON DELETE CASCADE
+      db.run('ALTER TABLE puntosdecobro DROP CONSTRAINT IF EXISTS puntosdecobro_negocio_id_fkey', () => {
+        db.run('ALTER TABLE puntosdecobro ADD CONSTRAINT puntosdecobro_negocio_id_fkey FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE', () => {});
+      });
+      db.run('ALTER TABLE dispositivosautorizados DROP CONSTRAINT IF EXISTS dispositivosautorizados_negocio_id_fkey', () => {
+        db.run('ALTER TABLE dispositivosautorizados ADD CONSTRAINT dispositivosautorizados_negocio_id_fkey FOREIGN KEY (negocio_id) REFERENCES negocios(id) ON DELETE CASCADE', () => {});
       });
     }
   });

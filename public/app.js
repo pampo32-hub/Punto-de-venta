@@ -11907,6 +11907,8 @@ window.generarCorteX = async function() {
     icono: '📑',
     titulo: 'Autorización: Corte X Parcial',
     subtitulo: 'Acceso seguro al arqueo de caja',
+    mensaje: 'Ingresa el PIN de Administrad
+... [truncated for diff preview]
     mensaje: 'Ingresa el PIN de Administrador para generar e imprimir el reporte parcial de caja.'
   });
   if (!pinAutorizado) return;

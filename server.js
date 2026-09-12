@@ -1326,15 +1326,39 @@ app.delete('/api/dev/negocios/:id', async (req, res) => {
     }
 
     // Limpieza de datos dependientes asociados a este negocio
-    await dbRun('DELETE FROM Usuarios WHERE negocio_id = ? AND rol != ?', [negocioId, 'developer']);
-    await dbRun('DELETE FROM Mesas WHERE negocio_id = ?', [negocioId]);
-    await dbRun('DELETE FROM Zonas WHERE negocio_id = ?', [negocioId]);
-    await dbRun('DELETE FROM Categorias WHERE negocio_id = ?', [negocioId]);
-    await dbRun('DELETE FROM Productos WHERE negocio_id = ?', [negocioId]);
-    await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [negocioId]);
-    try { await dbRun('DELETE FROM Insumos WHERE negocio_id = ?', [negocioId]); } catch (_) {}
-    try { await dbRun('DELETE FROM KardexMovimientos WHERE negocio_id = ?', [negocioId]); } catch (_) {}
-    try { await dbRun('DELETE FROM PersonalizacionPagina WHERE negocio_id = ?', [negocioId]); } catch (_) {}
+    await dbRun('DELETE FROM DetalleOrden WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Pagos WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Ordenes WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM FacturasDetalle WHERE factura_id IN (SELECT id FROM Facturas WHERE negocio_id = ?)', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Facturas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM VentasDetalle WHERE venta_id IN (SELECT id FROM Ventas WHERE negocio_id = ?)', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Ventas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM FacturasElectronicasDetalle WHERE factura_id IN (SELECT id FROM FacturasElectronicas WHERE negocio_id = ?)', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM FacturasElectronicas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM BitacoraHacienda WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Propinas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM ComandasDetalle WHERE comanda_id IN (SELECT id FROM Comandas WHERE negocio_id = ?)', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Comandas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM PedidosKDS WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM InventarioRecetas WHERE insumo_id IN (SELECT id FROM Inventario WHERE negocio_id = ?) OR producto_id IN (SELECT id FROM Productos WHERE negocio_id = ?)', [negocioId, negocioId]).catch(() => {});
+    await dbRun('DELETE FROM InventarioMovimientos WHERE negocio_id = ? OR insumo_id IN (SELECT id FROM Inventario WHERE negocio_id = ?)', [negocioId, negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Inventario WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Insumos WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM KardexMovimientos WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM PuntosDeCobro WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM DispositivosAutorizados WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Auditoria WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Notificaciones WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Usuarios WHERE negocio_id = ? AND rol != ?', [negocioId, 'developer']).catch(() => {});
+    await dbRun('DELETE FROM Mesas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Zonas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Categorias WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Productos WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM Cajas WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM CierresZ WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM CortesX WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM PersonalizacionPagina WHERE negocio_id = ?', [negocioId]).catch(() => {});
+    await dbRun('DELETE FROM ConfigNegocio WHERE clave LIKE ?', ['%negocio_' + negocioId + '%']).catch(() => {});
     await dbRun('DELETE FROM Negocios WHERE id = ?', [negocioId]);
 
     io.emit('negocio_eliminado', { id: negocioId, nombre: target.nombre });

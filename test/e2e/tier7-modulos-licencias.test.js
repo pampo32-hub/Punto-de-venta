@@ -27,6 +27,8 @@ describe('Tier 7: Modular SaaS Architecture & Licensing Hub', () => {
   it('T7.1: GET /api/dev/modulos/catalogo returns all 11 SaaS modules', async () => {
     const res = await req('/api/dev/modulos/catalogo');
     assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body));
+    assert.equal(res.body.length, 11);
     assert.ok(res.body.length >= 11);
 
     const ids = res.body.map(m => m.id);
