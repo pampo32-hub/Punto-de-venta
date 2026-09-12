@@ -233,6 +233,8 @@ function initDb() {
     db.run("ALTER TABLE Negocios ADD COLUMN ips_permitidas TEXT DEFAULT ''", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN restringir_dispositivos INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE Negocios ADD COLUMN sesion_unica_activa INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN grupo_id TEXT DEFAULT NULL", () => {});
+    db.run("ALTER TABLE Negocios ADD COLUMN es_matriz INTEGER DEFAULT 0", () => {});
 
     // 1. Zonas del local
     db.run(`CREATE TABLE IF NOT EXISTS Zonas (
@@ -506,6 +508,7 @@ function initDb() {
     db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_token_sesion TEXT", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN ultima_conexion TEXT", () => {});
     db.run("ALTER TABLE Usuarios ADD COLUMN ultimo_dispositivo_id TEXT", () => {});
+    db.run("ALTER TABLE Usuarios ADD COLUMN sucursales_asignadas TEXT DEFAULT NULL", () => {});
 
     // 12b. Terminales y Dispositivos Autorizados (Device Whitelisting)
     db.run(`CREATE TABLE IF NOT EXISTS DispositivosAutorizados (

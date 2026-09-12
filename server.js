@@ -837,6 +837,29 @@ app.post('/api/auth/login', async (req, res) => {
       logo_url: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=150&auto=format&fit=crop&q=80'
     };
 
+    // ── GESTIÓN MULTI-SUCURSAL: RESOLVER LOCALES AUTORIZADOS ──
+    let sucursalesAutorizadas = [];
+    try {
+      if (u.rol === 'developer') {
+        sucursalesAutorizadas = await dbAll('SELECT id, nombre, slogan, logo_url, direccion, telefono, grupo_id, COALESCE(es_matriz, 0) as es_matriz FROM Negocios WHERE COALESCE(activo, 1) = 1 ORDER BY id ASC');
+      } else if (u.sucursales_asignadas) {
+        let ids = [];
+        try { ids = JSON.parse(u.sucursales_asignadas); } catch (_) { ids = [Number(u.sucursales_asignadas)]; }
+        if (Array.isArray(ids) && ids.length > 0) {
+          const placeholders = ids.map(() => '?').join(',');
+          sucursalesAutorizadas = await dbAll(`SELECT id, nombre, slogan, logo_url, direccion, telefono, grupo_id, COALESCE(es_matriz, 0) as es_matriz FROM Negocios WHERE id IN (${placeholders}) AND COALESCE(activo, 1) = 1 ORDER BY id ASC`, ids);
+        }
+      } else if (negocio && negocio.grupo_id) {
+        sucursalesAutorizadas = await dbAll('SELECT id, nombre, slogan, logo_url, direccion, telefono, grupo_id, COALESCE(es_matriz, 0) as es_matriz FROM Negocios WHERE (grupo_id = ? OR id = ?) AND COALESCE(activo, 1) = 1 ORDER BY id ASC', [negocio.grupo_id, negocio.id]);
+      }
+    } catch (eSuc) {
+      console.warn('Advertencia al consultar sucursales autorizadas:', eSuc.message);
+    }
+
+    if (!sucursalesAutorizadas || sucursalesAutorizadas.length === 0) {
+      sucursalesAutorizadas = [negocioObj];
+    }
+
     const token = generarTokenUsuario(u, negocioObj.id);
 
     res.json({
@@ -857,8 +880,13 @@ app.post('/api/auth/login', async (req, res) => {
         permisos: JSON.parse(u.permisos || '{}'),
         negocio_id: u.negocio_id,
         session_id: sessionId
+        session_id: sessionId,
+        sucursales: sucursalesAutorizadas,
+        es_multi_sucursal: sucursalesAutorizadas.length > 1
       },
       negocio: negocioObj
+      negocio: negocioObj,
+      sucursales: sucursalesAutorizadas
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1139,6 +1167,8 @@ app.post('/api/dev/negocios', async (req, res) => {
       telefono = '',
       direccion = '',
       activo = 1,
+      grupo_id = null,
+      es_matriz = 0,
       crear_admin,
       admin_usuario,
       admin_password,
@@ -1149,9 +1179,13 @@ app.post('/api/dev/negocios', async (req, res) => {
     if (!nombre) return res.status(400).json({ error: 'El nombre del negocio es obligatorio' });
 
     const valActivo = activo === 0 ? 0 : 1;
+    const valGrupoId = grupo_id ? String(grupo_id).trim() : null;
+    const valEsMatriz = Number(es_matriz) === 1 ? 1 : 0;
     const r = await dbRun(
       'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, modulos_activos, plan_nombre) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, 'all', 'Plan Full Tech 2026']
+      'INSERT INTO Negocios (nombre, slogan, logo_url, moneda, telefono, direccion, activo, modulos_activos, plan_nombre, grupo_id, es_matriz) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, 'all', 'Plan Full Tech 2026', valGrupoId, valEsMatriz]
     );
     const nuevoId = r.lastID;
     const nuevo = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [nuevoId]);
@@ -1257,6 +1291,7 @@ app.get('/api/dev/backup-full-export', async (req, res) => {
 app.put('/api/dev/negocios/:id', async (req, res) => {
   try {
     const { nombre, slogan, logo_url, moneda, telefono, direccion, activo } = req.body;
+    const { nombre, slogan, logo_url, moneda, telefono, direccion, activo, grupo_id, es_matriz } = req.body;
     const negocioId = Number(req.params.id);
 
     let valActivo = (activo !== undefined && activo !== null) ? (Number(activo) === 0 ? 0 : 1) : 1;
@@ -1265,6 +1300,20 @@ app.put('/api/dev/negocios/:id', async (req, res) => {
       'UPDATE Negocios SET nombre = ?, slogan = ?, logo_url = ?, moneda = ?, telefono = ?, direccion = ?, activo = ? WHERE id = ?',
       [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo, negocioId]
     );
+    let updates = ['nombre = ?', 'slogan = ?', 'logo_url = ?', 'moneda = ?', 'telefono = ?', 'direccion = ?', 'activo = ?'];
+    let params = [nombre, slogan, logo_url, moneda, telefono, direccion, valActivo];
+
+    if (grupo_id !== undefined) {
+      updates.push('grupo_id = ?');
+      params.push(grupo_id ? String(grupo_id).trim() : null);
+    }
+    if (es_matriz !== undefined) {
+      updates.push('es_matriz = ?');
+      params.push(Number(es_matriz) === 1 ? 1 : 0);
+    }
+    params.push(negocioId);
+
+    await dbRun(`UPDATE Negocios SET ${updates.join(', ')} WHERE id = ?`, params);
     const actualizado = await dbGet('SELECT *, COALESCE(activo, 1) as activo FROM Negocios WHERE id = ?', [negocioId]);
     io.emit('negocio_actualizado', actualizado);
     res.json(actualizado);
@@ -1826,6 +1875,147 @@ app.get('/api/negocio/actual/modulos', async (req, res) => {
       planNombre: neg.plan_nombre || 'Plan Full Tech 2026',
       modulosActivos: modulos
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// GESTIÓN MULTI-SUCURSAL (CADENAS & FRANQUICIAS)
+// ============================================================================
+
+// 1. Cambiar contexto de sucursal activa para usuario autorizado
+app.post('/api/sucursales/cambiar-activa', async (req, res) => {
+  try {
+    const { negocio_id } = req.body;
+    const nid = Number(negocio_id);
+    if (!nid) return res.status(400).json({ error: 'ID de sucursal requerido' });
+
+    const neg = await dbGet('SELECT * FROM Negocios WHERE id = ? AND COALESCE(activo, 1) = 1', [nid]);
+    if (!neg) return res.status(404).json({ error: 'Sucursal no encontrada o inactiva' });
+
+    res.json({
+      ok: true,
+      negocio: neg,
+      message: `Sucursal activa cambiada a "${neg.nombre}"`
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 2. Reporte Consolidado Multi-Sucursal (Métricas Globales de Cadena)
+app.get('/api/reportes/multi-sucursal/consolidado', async (req, res) => {
+  try {
+    const { ids, fecha_desde, fecha_hasta } = req.query;
+    let sucursalIds = [];
+
+    if (ids) {
+      sucursalIds = String(ids).split(',').map(n => Number(n.trim())).filter(Boolean);
+    }
+
+    if (sucursalIds.length === 0) {
+      const todos = await dbAll('SELECT id FROM Negocios WHERE COALESCE(activo, 1) = 1');
+      sucursalIds = todos.map(t => t.id);
+    }
+
+    const hoyStr = new Date().toISOString().split('T')[0];
+    const fInicio = fecha_desde || hoyStr;
+    const fFin = fecha_hasta || hoyStr;
+
+    const desglosePorSucursal = [];
+    let granTotalVentas = 0;
+    let granTotalOrdenes = 0;
+
+    for (const nid of sucursalIds) {
+      const neg = await dbGet('SELECT id, nombre, direccion, telefono, grupo_id, COALESCE(es_matriz, 0) as es_matriz FROM Negocios WHERE id = ?', [nid]);
+      if (!neg) continue;
+
+      // Ventas cerradas en rango
+      const statsVentas = await dbGet(`
+        SELECT 
+          COUNT(id) as total_ordenes,
+          COALESCE(SUM(total), 0) as total_ventas,
+          COALESCE(SUM(subtotal), 0) as total_subtotal,
+          COALESCE(SUM(servicio_10), 0) as total_servicio,
+          COALESCE(SUM(iva_13), 0) as total_iva
+        FROM Ordenes
+        WHERE negocio_id = ? 
+          AND (estado = 'cerrada' OR estado = 'pagada')
+          AND DATE(COALESCE(fecha_cierre, fecha_apertura)) >= DATE(?)
+          AND DATE(COALESCE(fecha_cierre, fecha_apertura)) <= DATE(?)
+      `, [nid, fInicio, fFin]);
+
+      // Mesas abiertas / activas en vivo
+      const statsMesas = await dbGet(`
+        SELECT 
+          COUNT(id) as total_mesas,
+          SUM(CASE WHEN estado != 'libre' THEN 1 ELSE 0 END) as mesas_ocupadas
+        FROM Mesas
+        WHERE negocio_id = ?
+      `, [nid]);
+
+      const totVentas = Number(statsVentas?.total_ventas || 0);
+      const totOrd = Number(statsVentas?.total_ordenes || 0);
+      const ticketProm = totOrd > 0 ? Math.round(totVentas / totOrd) : 0;
+
+      granTotalVentas += totVentas;
+      granTotalOrdenes += totOrd;
+
+      desglosePorSucursal.push({
+        id: neg.id,
+        nombre: neg.nombre,
+        esMatriz: Boolean(neg.es_matriz),
+        direccion: neg.direccion || 'Sin dirección',
+        totalVentas: totVentas,
+        totalOrdenes: totOrd,
+        ticketPromedio: ticketProm,
+        totalMesas: statsMesas?.total_mesas || 0,
+        mesasOcupadas: statsMesas?.mesas_ocupadas || 0,
+        ocupacionPorcentaje: statsMesas?.total_mesas > 0 ? Math.round(((statsMesas.mesas_ocupadas || 0) / statsMesas.total_mesas) * 100) : 0
+      });
+    }
+
+    const ticketPromedioGlobal = granTotalOrdenes > 0 ? Math.round(granTotalVentas / granTotalOrdenes) : 0;
+
+    res.json({
+      ok: true,
+      periodo: { desde: fInicio, hasta: fFin },
+      resumenGlobal: {
+        totalVentas: granTotalVentas,
+        totalOrdenes: granTotalOrdenes,
+        ticketPromedio: ticketPromedioGlobal,
+        totalSucursales: desglosePorSucursal.length
+      },
+      desglose: desglosePorSucursal
+    });
+  } catch (e) {
+    console.error('Error en reporte multi-sucursal:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 3. Asignar Grupo / Cadena a un Negocio (Consola Developer)
+app.put('/api/dev/negocios/:id/grupo', async (req, res) => {
+  try {
+    const { grupo_id, es_matriz = 0 } = req.body;
+    await dbRun(
+      'UPDATE Negocios SET grupo_id = ?, es_matriz = ? WHERE id = ?',
+      [grupo_id || null, es_matriz ? 1 : 0, req.params.id]
+    );
+    res.json({ ok: true, message: 'Grupo empresarial actualizado con éxito.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 4. Asignar Sucursales a un Usuario (Consola Developer / Admin)
+app.put('/api/dev/usuarios/:id/sucursales', async (req, res) => {
+  try {
+    const { sucursales_asignadas } = req.body;
+    const valor = Array.isArray(sucursales_asignadas) ? JSON.stringify(sucursales_asignadas) : (sucursales_asignadas || null);
+    await dbRun('UPDATE Usuarios SET sucursales_asignadas = ? WHERE id = ?', [valor, req.params.id]);
+    res.json({ ok: true, message: 'Sucursales asignadas al usuario correctamente.' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

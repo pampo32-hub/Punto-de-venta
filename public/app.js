@@ -2927,6 +2927,9 @@ function aplicarEnrutamientoPorRol() {
   if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
     window.actualizarVisibilidadBotonesPurgaDev();
   }
+  if (typeof window.actualizarSelectorMultiSucursal === 'function') {
+    window.actualizarSelectorMultiSucursal();
+  }
 
   // Cargar datos operativos del restaurante para el negocio actual
   const nid = estado.negocioActual?.id || 1;
@@ -3019,6 +3022,9 @@ window.irAPuntoDeVentaAdmin = function() {
   if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
     window.actualizarVisibilidadBotonesPurgaDev();
   }
+  if (typeof window.actualizarSelectorMultiSucursal === 'function') {
+    window.actualizarSelectorMultiSucursal();
+  }
 
   const nid = estado.negocioActual?.id || 1;
   cargarMesasDesdeBackend();
@@ -3027,6 +3033,193 @@ window.irAPuntoDeVentaAdmin = function() {
   cargarCajaDesdeBackend();
   cargarPisoSalonDesdeBackend(nid);
   cargarPersonalizacionPagina(nid);
+};
+
+// ============================================================================
+// FUNCIONES MULTI-SUCURSAL (SELECTORES, CAMBIO EN VIVO Y REPORTE CONSOLIDADO)
+// ============================================================================
+window.actualizarSelectorMultiSucursal = function() {
+  const u = estado.usuarioActual;
+  const multiBox = document.getElementById('posTopMultiSucursalBox');
+  const multiSelect = document.getElementById('posTopSelectSucursal');
+  const cardMulti = document.getElementById('btnAdminMultiSucursal');
+
+  if (!multiBox || !multiSelect) return;
+
+  const sucursales = u?.sucursales || [];
+  const esMulti = Boolean(u?.es_multi_sucursal || u?.rol === 'developer' || sucursales.length > 1);
+
+  if (esMulti && sucursales.length > 1) {
+    multiBox.style.display = 'flex';
+    multiSelect.innerHTML = sucursales.map(s => `
+      <option value="${s.id}" ${Number(s.id) === Number(estado.negocioActual?.id) ? 'selected' : ''}>
+        🏢 ${escapeHtml(s.nombre)}${s.es_matriz ? ' (Matriz)' : ''}
+      </option>
+    `).join('');
+    multiSelect.value = String(estado.negocioActual?.id || sucursales[0].id);
+    if (cardMulti) cardMulti.style.display = 'flex';
+  } else {
+    multiBox.style.display = 'none';
+    if (cardMulti) cardMulti.style.display = 'none';
+  }
+};
+
+window.cambiarSucursalActiva = async function(nuevoNegocioId) {
+  if (!nuevoNegocioId) return;
+  nuevoNegocioId = Number(nuevoNegocioId);
+
+  try {
+    const token = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token') || '';
+    const res = await fetch('/api/sucursales/cambiar-activa', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token,
+        'x-user-rol': estado.usuarioActual?.rol || 'admin'
+      },
+      body: JSON.stringify({
+        usuario_id: estado.usuarioActual?.id,
+        negocio_id: nuevoNegocioId
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al cambiar de sucursal');
+    }
+
+    estado.negocioActual = data.negocio;
+    sessionStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
+    localStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
+
+    // Actualizar branding e indicadores
+    actualizarBrandingNegocio(data.negocio);
+    const badgeName = document.getElementById('devActiveNegocioName');
+    if (badgeName) badgeName.textContent = data.negocio.nombre;
+
+    // Actualizar valor en selector
+    const multiSelect = document.getElementById('posTopSelectSucursal');
+    if (multiSelect) multiSelect.value = String(nuevoNegocioId);
+
+    // Recargar datos para la nueva sucursal
+    cargarMesasDesdeBackend();
+    cargarMenuDesdeBackend();
+    cargarKDSDesdeBackend();
+    cargarCajaDesdeBackend();
+    cargarPisoSalonDesdeBackend(nuevoNegocioId);
+    cargarPersonalizacionPagina(nuevoNegocioId);
+    if (typeof cargarPuntosCobro === 'function') cargarPuntosCobro();
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`🏢 Sucursal activa: ${data.negocio.nombre}`, 'success');
+    } else {
+      console.log(`🏢 Sucursal cambiada a: ${data.negocio.nombre}`);
+    }
+  } catch (err) {
+    alert('❌ ' + err.message);
+  }
+};
+
+window.abrirModalReporteMultiSucursal = function() {
+  const modal = document.getElementById('modalReporteMultiSucursal');
+  if (!modal) return;
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+  window._modalActivoId = 'modalReporteMultiSucursal';
+
+  const hoy = new Date().toISOString().split('T')[0];
+  const inpDesde = document.getElementById('multiRepFechaDesde');
+  const inpHasta = document.getElementById('multiRepFechaHasta');
+  if (inpDesde && !inpDesde.value) inpDesde.value = hoy;
+  if (inpHasta && !inpHasta.value) inpHasta.value = hoy;
+
+  cargarReporteMultiSucursal();
+};
+
+window.cerrarModalMultiSucursal = function() {
+  const modal = document.getElementById('modalReporteMultiSucursal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+window.cargarReporteMultiSucursal = async function() {
+  const tbody = document.getElementById('multiRepTableBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="7" style="padding: 24px; text-align: center; color: #94a3b8;">⏳ Consultando métricas de todas las sucursales...</td></tr>';
+  }
+
+  const sucursales = estado.usuarioActual?.sucursales || [];
+  const ids = sucursales.map(s => s.id).join(',');
+  const fechaDesde = document.getElementById('multiRepFechaDesde')?.value || '';
+  const fechaHasta = document.getElementById('multiRepFechaHasta')?.value || '';
+
+  try {
+    const token = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token') || '';
+    const res = await fetch(`/api/reportes/multi-sucursal/consolidado?ids=${ids}&fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`, {
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'x-user-rol': estado.usuarioActual?.rol || 'admin'
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al obtener reporte consolidado');
+
+    const fmt = (n) => '₡' + Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+    const totalVentasEl = document.getElementById('multiRepTotalVentas');
+    const totalOrdenesEl = document.getElementById('multiRepTotalOrdenes');
+    const ticketPromEl = document.getElementById('multiRepTicketPromedio');
+    const totalSucEl = document.getElementById('multiRepTotalSucursales');
+
+    if (totalVentasEl) totalVentasEl.textContent = fmt(data.totales?.ventas);
+    if (totalOrdenesEl) totalOrdenesEl.textContent = Number(data.totales?.ordenes || 0).toLocaleString();
+    if (ticketPromEl) ticketPromEl.textContent = fmt(data.totales?.ticket_promedio);
+    if (totalSucEl) totalSucEl.textContent = (data.sucursales || []).length;
+
+    if (!data.sucursales || data.sucursales.length === 0) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: #94a3b8;">No se encontraron sucursales asociadas.</td></tr>';
+      return;
+    }
+
+    if (tbody) {
+      tbody.innerHTML = data.sucursales.map(s => {
+        const pctMesas = s.mesas?.total > 0 ? Math.round((s.mesas.ocupadas / s.mesas.total) * 100) : 0;
+        const esActiva = Number(s.id) === Number(estado.negocioActual?.id);
+        return `
+          <tr style="border-bottom: 1px solid #1e293b; ${esActiva ? 'background: rgba(59,130,246,0.1);' : ''}">
+            <td style="padding: 12px 16px; font-weight: 700; color: #f8fafc;">
+              ${escapeHtml(s.nombre)} ${esActiva ? '<span style="font-size:0.72rem; background:#3b82f6; color:#fff; padding:2px 6px; border-radius:4px; margin-left:4px;">ACTIVA</span>' : ''}
+            </td>
+            <td style="padding: 12px 16px; color: #94a3b8;">
+              ${s.es_matriz ? '🏛️ Matriz' : '🏢 Sucursal'}
+            </td>
+            <td style="padding: 12px 16px; text-align: right; font-weight: 800; color: #60a5fa;">
+              ${fmt(s.ventas)}
+            </td>
+            <td style="padding: 12px 16px; text-align: right; color: #f8fafc; font-weight: 700;">
+              ${Number(s.ordenes || 0).toLocaleString()}
+            </td>
+            <td style="padding: 12px 16px; text-align: right; color: #fbbf24; font-weight: 700;">
+              ${fmt(s.ticket_promedio)}
+            </td>
+            <td style="padding: 12px 16px; text-align: center; color: #94a3b8;">
+              <span style="color: ${pctMesas > 70 ? '#ef4444' : pctMesas > 30 ? '#f59e0b' : '#10b981'}; font-weight: 700;">
+                ${s.mesas?.ocupadas || 0} / ${s.mesas?.total || 0} (${pctMesas}%)
+              </span>
+            </td>
+            <td style="padding: 12px 16px; text-align: center;">
+              ${!esActiva ? `<button class="btn-pri" onclick="cerrarModalMultiSucursal(); cambiarSucursalActiva(${s.id});" style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; background: #2563eb; cursor:pointer;">Cambiar a Esta</button>` : '<span style="color:#38bdf8; font-size:0.8rem; font-weight:700;">En Uso</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" style="padding: 20px; text-align: center; color: #f87171;">❌ ${err.message}</td></tr>`;
+    }
+  }
 };
 
 window._pinSupervisorActivo = null;
@@ -3130,6 +3323,8 @@ window.ejecutarAccionAdmin = function(tipo) {
     if (typeof abrirModalSeguridadRed === 'function') abrirModalSeguridadRed();
   } else if (tipo === 'cajas-fisicas') {
     abrirModalAdminPuntosCobro();
+  } else if (tipo === 'multisucursal') {
+    if (typeof abrirModalReporteMultiSucursal === 'function') abrirModalReporteMultiSucursal();
   }
 };
 
@@ -6050,6 +6245,10 @@ window.editarNegocioDev = async function(negocioId) {
   if (elMoneda) elMoneda.value = n.moneda || 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   if (elActivo) elActivo.value = (Number(n.activo) === 0 ? '0' : '1');
+  const elGrupo = document.getElementById('devNegocioGrupoId');
+  if (elGrupo) elGrupo.value = n.grupo_id || '';
+  const elEsMatriz = document.getElementById('devNegocioEsMatriz');
+  if (elEsMatriz) elEsMatriz.value = (Number(n.es_matriz) === 1 ? '1' : '0');
   
   // Ocultar sección de creación de admin al editar
   const seccionAdmin = document.getElementById('devSeccionCrearAdmin');
@@ -6138,6 +6337,8 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
   const moneda = elMoneda ? elMoneda.value : 'CRC';
   const elActivo = document.getElementById('devNegocioActivo');
   const activo = elActivo ? parseInt(elActivo.value) : 1;
+  const grupo_id = document.getElementById('devNegocioGrupoId')?.value.trim() || null;
+  const es_matriz = parseInt(document.getElementById('devNegocioEsMatriz')?.value || '0', 10);
 
   if (!nombre) {
     alert('El nombre del negocio es obligatorio.');
@@ -6145,6 +6346,7 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
   }
 
   const payload = { nombre, slogan, logo_url, telefono, moneda, activo };
+  const payload = { nombre, slogan, logo_url, telefono, moneda, activo, grupo_id, es_matriz };
 
   // Si es un nuevo negocio, verificar opciones de Admin y Estructura Base
   if (!id) {
@@ -13860,6 +14062,7 @@ function initMoverUnirMesas() {
       tab.classList.add('active');
       const targetTab = tab.dataset.tab;
       
+... [truncated for diff preview]
       const panelMover = document.getElementById('transferPanelMover');
       const panelUnir = document.getElementById('transferPanelUnir');
       const panelSeparar = document.getElementById('transferPanelSeparar');

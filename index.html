@@ -1056,6 +1056,15 @@
 
         </nav>
 
+      <!-- SELECTOR DINÁMICO MULTI-SUCURSAL (ADMIN / DUEÑO / MULTI-LOCAL) -->
+      <div class="sucursal-selector-top" id="posTopMultiSucursalBox" style="display:none; align-items:center; gap:6px; margin:0 6px;">
+        <div style="display:flex; align-items:center; gap:6px; background:linear-gradient(135deg, rgba(30,58,138,0.7) 0%, rgba(15,23,42,0.85) 100%); border:1.5px solid #3b82f6; padding:4px 10px; border-radius:10px; box-shadow:0 2px 8px rgba(59,130,246,0.3);">
+          <span style="font-size:1rem;">🏢</span>
+          <select id="posTopSelectSucursal" onchange="window.cambiarSucursalActiva(this.value)" style="background:transparent; border:none; color:#f8fafc; font-weight:800; font-size:0.85rem; cursor:pointer; outline:none; max-width:180px;">
+          </select>
+        </div>
+      </div>
+
       <!-- BOTÓN ÚNICO DEL PANEL DE ADMINISTRACIÓN (ADMIN & DEV CON ACCESO POR PIN) -->
       <div class="admin-extra-actions" id="adminExtraActions">
         <button class="btn-topbar-tool btn-admin-panel-trigger" id="btnAbrirPanelAdmin" onclick="abrirPanelAdmin()" title="Abrir Panel con todas las funciones de administración y Kárdex">
@@ -2474,6 +2483,26 @@
           </select>
         </div>
 
+        <!-- CONFIGURACIÓN MULTI-SUCURSAL (CADENAS / FRANQUICIAS) -->
+        <div style="margin-top: 14px; padding: 12px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 10px;">
+          <div style="font-weight: 700; color: #60a5fa; font-size: 0.85rem; margin-bottom: 8px;">
+            🏢 Configuración Multi-Sucursal / Cadena
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="field-group">
+              <label style="font-size: 0.8rem;">ID de Grupo / Cadena:</label>
+              <input type="text" id="devNegocioGrupoId" placeholder="Ej: grupo_la_terraza" style="font-size: 0.85rem;" />
+            </div>
+            <div class="field-group">
+              <label style="font-size: 0.8rem;">Tipo de Sucursal:</label>
+              <select id="devNegocioEsMatriz" style="width: 100%; padding: 8px 10px; border-radius: 8px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; font-weight: 600; font-size: 0.85rem;">
+                <option value="0">🏢 Sucursal Estándar</option>
+                <option value="1">🏛️ Sucursal Matriz / Principal</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <!-- SECCIÓN: CREACIÓN DE SUPER ADMIN INICIAL (Para nuevos comercios) -->
         <div id="devSeccionCrearAdmin" style="margin-top: 16px; padding: 14px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
@@ -3659,6 +3688,20 @@
             </div>
           </div>
 
+          <!-- 1.1 Reporte Consolidado Multi-Sucursal -->
+          <div class="admin-panel-card card-multisucursal" id="btnAdminMultiSucursal" onclick="ejecutarAccionAdmin('multisucursal')" style="display:none; border-left: 4px solid #3b82f6;">
+            <div class="admin-card-header">
+              <div class="admin-card-icon">🏢</div>
+              <span class="admin-card-tag" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">Cadena / Franquicia</span>
+            </div>
+            <h4>Reporte Multi-Sucursal</h4>
+            <p>Métricas consolidadas, ventas globales del grupo, tickets y ocupación comparativa entre sucursales.</p>
+            <div class="admin-card-action">
+              <span>Ver Consolidado</span>
+              <span class="arrow">→</span>
+            </div>
+          </div>
+
           <!-- 2. Inventario -->
           <div class="admin-panel-card card-inventario" onclick="ejecutarAccionAdmin('inventario')">
             <div class="admin-card-header">
@@ -3875,6 +3918,88 @@
       <div class="dialog-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 22px;">
         <span style="color: var(--text-muted); font-size: 0.8rem;">GastroBar Pro • Panel Central de Administración</span>
         <button class="btn-sec" onclick="cerrarPanelAdmin()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: REPORTE CONSOLIDADO MULTI-SUCURSAL (GRUPO / CADENA) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalReporteMultiSucursal" style="z-index: 100060;" onclick="if(event.target===this) cerrarModalMultiSucursal();">
+    <div class="modal-dialog" style="max-width: 950px; width: 95vw; max-height: 90vh; display: flex; flex-direction: column; background: #0f172a; border: 1px solid #3b82f6; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.85);">
+      <div class="dialog-header" style="background: linear-gradient(135deg, rgba(30,58,138,0.9) 0%, rgba(15,23,42,0.95) 100%); border-bottom: 1px solid #3b82f6; padding: 16px 22px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(59,130,246,0.2); border: 1px solid #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">🏢</div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.25rem; color: #fff; font-weight: 800;">Reporte Consolidado Multi-Sucursal</h3>
+            <small style="color: #93c5fd; font-size: 0.82rem;">Métricas en tiempo real comparativas y globales de tu cadena / franquicia</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalMultiSucursal()">✕</button>
+      </div>
+
+      <div class="dialog-body" style="padding: 20px; overflow-y: auto; flex: 1;">
+        <!-- Filtros de fecha -->
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; background: rgba(15,23,42,0.6); padding: 12px 16px; border-radius: 10px; border: 1px solid #334155;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: #94a3b8; font-size: 0.85rem; font-weight: 700;">📅 Desde:</label>
+            <input type="date" id="multiRepFechaDesde" style="background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem;" />
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: #94a3b8; font-size: 0.85rem; font-weight: 700;">📅 Hasta:</label>
+            <input type="date" id="multiRepFechaHasta" style="background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 6px 10px; border-radius: 6px; font-size: 0.85rem;" />
+          </div>
+          <button class="btn-pri" onclick="cargarReporteMultiSucursal()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; color: #fff; cursor: pointer;">
+            🔄 Actualizar Datos
+          </button>
+        </div>
+
+        <!-- KPI Cards Globales -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px;">
+          <div style="background: linear-gradient(135deg, rgba(30,58,138,0.35), rgba(15,23,42,0.7)); border: 1px solid #3b82f6; border-radius: 12px; padding: 16px;">
+            <div style="color: #93c5fd; font-size: 0.82rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">💰 Ventas Totales Grupo</div>
+            <div id="multiRepTotalVentas" style="font-size: 1.55rem; font-weight: 900; color: #60a5fa;">₡0</div>
+          </div>
+          <div style="background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(15,23,42,0.7)); border: 1px solid #10b981; border-radius: 12px; padding: 16px;">
+            <div style="color: #6ee7b7; font-size: 0.82rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">🧾 Total Órdenes / Tickets</div>
+            <div id="multiRepTotalOrdenes" style="font-size: 1.55rem; font-weight: 900; color: #34d399;">0</div>
+          </div>
+          <div style="background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(15,23,42,0.7)); border: 1px solid #f59e0b; border-radius: 12px; padding: 16px;">
+            <div style="color: #fcd34d; font-size: 0.82rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">🎯 Ticket Promedio Global</div>
+            <div id="multiRepTicketPromedio" style="font-size: 1.55rem; font-weight: 900; color: #fbbf24;">₡0</div>
+          </div>
+          <div style="background: linear-gradient(135deg, rgba(168,85,247,0.2), rgba(15,23,42,0.7)); border: 1px solid #a855f7; border-radius: 12px; padding: 16px;">
+            <div style="color: #d8b4fe; font-size: 0.82rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">🏢 Sucursales Activas</div>
+            <div id="multiRepTotalSucursales" style="font-size: 1.55rem; font-weight: 900; color: #c084fc;">0</div>
+          </div>
+        </div>
+
+        <!-- Tabla Detallada por Sucursal -->
+        <h4 style="color: #f8fafc; margin: 0 0 12px 0; font-size: 1.05rem;">📊 Desglose Comparativo por Sucursal</h4>
+        <div style="overflow-x: auto; background: #0f172a; border-radius: 10px; border: 1px solid #334155;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem;">
+            <thead>
+              <tr style="background: rgba(30,41,59,0.9); color: #94a3b8; border-bottom: 1px solid #334155;">
+                <th style="padding: 12px 16px;">Sucursal</th>
+                <th style="padding: 12px 16px;">Rol / Tipo</th>
+                <th style="padding: 12px 16px; text-align: right;">Ventas</th>
+                <th style="padding: 12px 16px; text-align: right;">Órdenes</th>
+                <th style="padding: 12px 16px; text-align: right;">Ticket Prom.</th>
+                <th style="padding: 12px 16px; text-align: center;">Mesas Ocupadas</th>
+                <th style="padding: 12px 16px; text-align: center;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="multiRepTableBody">
+              <tr>
+                <td colspan="7" style="padding: 24px; text-align: center; color: #64748b;">Cargando datos consolidados...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="dialog-footer" style="display: flex; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid #334155; background: #0b1120;">
+        <button class="btn-sec" onclick="cerrarModalMultiSucursal()">Cerrar</button>
       </div>
     </div>
   </div>
