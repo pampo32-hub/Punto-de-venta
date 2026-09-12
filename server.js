@@ -134,6 +134,7 @@ db.serialize(() => {
     accion TEXT,
     creado_en TEXT
   )`);
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_idempotencylog_key ON IdempotencyLog (idempotency_key)`, () => {});
 
   // Asegurar recetas iniciales (Escandallos) si la tabla está vacía
   db.get('SELECT COUNT(*) as count FROM InventarioRecetas', (err, row) => {

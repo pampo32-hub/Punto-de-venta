@@ -5176,6 +5176,14 @@ window.cerrarModalSeguridadRed = function() {
 };
 
 window.actualizarEstadoVisualSeguridadRed = function() {
+  const chk = document.getElementById('chkAdminRestringirIP');
+  if (!chk) return;
+  const slider = chk.nextElementSibling;
+  if (slider) {
+    slider.style.backgroundColor = chk.checked ? '#0284c7' : '#334155';
+    const knob = slider.querySelector('span');
+    if (knob) knob.style.left = chk.checked ? '26px' : '3px';
+  }
   const switches = [
     { id: 'chkAdminRestringirIP', color: '#0284c7' },
     { id: 'chkAdminRestringirDispositivos', color: '#10b981' },
@@ -5190,7 +5198,9 @@ window.actualizarEstadoVisualSeguridadRed = function() {
       slider.style.backgroundColor = el.checked ? sw.color : '#334155';
       slider.style.borderColor = el.checked ? sw.color : 'rgba(255,255,255,0.15)';
       const knob = slider.querySelector('span');
+      if (knob) knob.style.left = el.checked ? '26px' : '3px';
       if (knob) {
+        knob.style.transform = el.checked ? 'translateX(24px)' : 'translateX(0px)';
         knob.style.left = '3px';
         knob.style.transform = el.checked ? 'translateX(22px)' : 'translateX(0px)';
       }
@@ -11901,6 +11911,8 @@ window.generarCorteX = async function() {
 
   try {
     mostrarNotificacionCentro('📑 Generando Corte X parcial de caja...', 'info');
+ 
+... [truncated for diff preview]
     const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
     const targetCajaId = window._cajaActivaData?.caja?.id || window._cajaVisualFiltroId || '';
     const urlCorte = targetCajaId 
