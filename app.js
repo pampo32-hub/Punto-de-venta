@@ -9596,6 +9596,8 @@ window.modificarCantidadTicket = async function(idx, delta) {
   const item = estado.mesaActiva.items[idx];
   if (!item) return;
   const prodId = item.producto_id || item.id;
+  item.cantidad += delta;
+  if (item.cantidad <= 0) {
 
   if (delta > 0) {
     if (item.enviado) {
@@ -9626,8 +9628,10 @@ window.modificarCantidadTicket = async function(idx, delta) {
     if (item.enviado) {
       // Si ya está guardado/enviado, anular o reducir requiere PIN de supervisor
       solicitarAnulacionItem(idx);
+      item.cantidad = 1;
       return;
     } else {
+      estado.mesaActiva.items.splice(idx, 1);
       item.cantidad += delta;
       if (item.cantidad <= 0) {
         estado.mesaActiva.items.splice(idx, 1);
@@ -11940,6 +11944,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.generarCorteX = async function() {
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || 
+... [truncated for diff preview]
   const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
   const targetCajaId = window._cajaActivaData?.caja?.id || window._cajaVisualFiltroId || '';
 
