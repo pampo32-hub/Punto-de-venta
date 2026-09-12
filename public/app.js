@@ -2469,6 +2469,17 @@ window.cargarUsuariosPublicosLogin = async function() {
     if (!Array.isArray(usuarios) || !usuarios.length) return;
 
     const demoDefaults = {
+      'dev': 'dev123',
+      'admin': 'admin123',
+      'cajero': 'caja123',
+      'carlos': 'mesero123',
+      'sofia': 'mesera123',
+      'admin_beta': 'admin123',
+      'mesero_beta': 'mesero123',
+      'admin_terraza': '123',
+      'cajero_terraza': '123',
+      'mesero_terraza': '123',
+      'salonera_terraza': '123'
       'dev': '1234',
       'admin': '1234',
       'cajero': '5555',
@@ -2483,6 +2494,7 @@ window.cargarUsuariosPublicosLogin = async function() {
     const porNegocio = {};
     usuarios.forEach(u => {
       const nId = Number(u.negocio_id) || 1;
+      const nNombre = u.negocio_nombre || (nId === 3 ? 'Bistro & Grill La Terraza' : 'GastroBar Fuego & Brasas');
       const nNombre = u.negocio_nombre || (nId === 3 ? 'Bistro & Grill La Terraza' : 'La Terrazita');
       if (!porNegocio[nId]) {
         porNegocio[nId] = {
@@ -2502,6 +2514,7 @@ window.cargarUsuariosPublicosLogin = async function() {
         </div>
         <div class="demo-chips-grid">
           ${neg.usuarios.map(u => {
+            const defaultPass = demoDefaults[u.usuario] || (u.pin || '123');
             const defaultPass = u.pin || demoDefaults[u.usuario] || '1234';
             const rolClass = u.rol === 'salonero' && u.genero === 'F' ? 'salonera' : u.rol;
             return `
