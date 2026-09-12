@@ -11853,7 +11853,6 @@ function renderKDS() {
                   ${c.notas ? `<div class="kds-modif-box">⚠️ ${escapeHtml(c.notas)}</div>` : ''}
                 </div>
               </div>
-              <button type="button" class="btn-kds-check-item kds-item-checkbox ${isSelected ? 'selected' : ''}" id="btnK
               <button type="button" class="btn-kds-check-item kds-item-checkbox ${isSelected ? 'selected' : ''}" id="btnKdsCheck_${c.id}" title="Seleccionar platillo" onclick="event.stopPropagation(); toggleSeleccionItemKDS('${key}', ${c.id})">
                 ${isSelected ? '✓' : ''}
               </button>

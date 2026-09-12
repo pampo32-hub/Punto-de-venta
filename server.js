@@ -2898,7 +2898,6 @@ app.get('/api/mesas', async (req, res) => {
     if (activeOrderIds.length > 0) {
       const placeholders = activeOrderIds.map(() => '?').join(',');
       const allItems = await dbAll(
-        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' ORDER BY hora_pedido ASC, id ASC`,
         `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY hora_pedido ASC, id ASC`,
         activeOrderIds
       );
@@ -5004,6 +5003,7 @@ async function recalcularTotalesOrden(ordenId) {
   );
 
   const rows = await dbAll(
+    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
     "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL) AND (d.estado_comanda != 'pagado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );
@@ -6366,15 +6366,10 @@ async function procesarCobroOrden(ordenId, {
 
     // Recalcular subtotal y total de la orden con los ítems activos no pagados usando el motor oficial
     const infoTotales = await recalcularTotalesOrden(ordenId);
-    const nuevoTotal = Number(infoTotales.total) || 0;
-    const nuevoSubtotal = Number(infoTotales.subtotal) || 0;
-    const nuevoIva = Number(infoTotales.iva) || 0;
-    const nuevoServicio = Number(infoTotales.servicio) || 0;
-
-    await dbRun(
-      'UPDATE Ordenes SET subtotal = ?, iva_13 = ?, servicio_10 = ?, total = ? WHERE id = ?',
-      [nuevoSubtotal, nuevoIva, nuevoServicio, nuevoTotal, ordenId]
-    );
+    const nuevoTotal = Number(infoTotales?.total) || 0;
+    const nuevoSubtotal = Number(infoTotales?.subtotal) || 0;
+    const nuevoIva = Number(infoTotales?.iva) || 0;
+    const nuevoServicio = Number(infoTotales?.servicio) || 0;
 
     const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
     const impParcial = Math.round(subParcial * 0.23);
@@ -6401,8 +6396,11 @@ async function procesarCobroOrden(ordenId, {
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal });
       const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
       const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
+      await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, estado: estadoMesaActual });
       await dbRun("UPDATE Mesas SET estado = ?, orden_total = ? WHERE id = ?", [estadoMesaActual, nuevoTotal, orden.mesa_id]);
       io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual });
     }
