@@ -2289,6 +2289,7 @@ body {
 .btn-btn-cmd.guardado { background: #1e293b !important; color: #10b981 !important; border: 1px solid #059669 !important; cursor: default !important; opacity: 0.9; }
 .btn-btn-cmd:disabled { opacity: 0.65; cursor: not-allowed; }
 .btn-btn-cmd.split { background: #8b5cf6; color: #fff; }
+.btn-btn-cmd.descuento { background: #059669; color: #fff; }
 .btn-btn-cmd.prefactura { background: #0284c7; color: #fff; }
 .btn-btn-cmd.cobrar { background: var(--success); color: #fff; }
 
@@ -6080,28 +6081,64 @@ body.theme-amethyst-3d .pay-method-tab.active {
   }
 
   .ticket-action-buttons {
-    display: grid;
-    grid-template-columns: 1.2fr 1fr 1fr;
-    gap: 5px;
-    margin-top: 6px;
-    gap: 6px;
-    margin-top: 8px;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    margin-top: 10px !important;
   }
 
   .btn-btn-cmd {
-    padding: 8px 4px;
-    font-size: 0.76rem;
-    white-space: nowrap;
-    text-align: center;
-    padding: 12px 6px !important;
-    font-size: 0.88rem !important;
+    padding: 10px 8px !important;
+    font-size: 0.82rem !important;
     font-weight: 800 !important;
-    border-radius: 8px !important;
-    min-height: 44px !important;
+    border-radius: 10px !important;
+    min-height: 46px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    white-space: nowrap !important;
+    text-align: center !important;
+    white-space: normal !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25) !important;
+    transition: transform 0.1s ease, filter 0.15s ease !important;
+    touch-action: manipulation !important;
+  }
+
+  .btn-btn-cmd:active {
+    transform: scale(0.96) !important;
+  }
+
+  .btn-btn-cmd.guardar {
+    grid-column: span 2 !important;
+    background: linear-gradient(135deg, #059669, #047857) !important;
+    border: 1px solid #10b981 !important;
+    color: #ecfdf5 !important;
+    font-size: 0.92rem !important;
+    min-height: 50px !important;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
+  }
+
+  .btn-btn-cmd.prefactura {
+    background: linear-gradient(135deg, #1e40af, #1e3a8a) !important;
+    border: 1px solid #3b82f6 !important;
+    color: #eff6ff !important;
+  }
+
+  .btn-btn-cmd.cobrar {
+    background: linear-gradient(135deg, #c2410c, #9a3412) !important;
+    border: 1px solid #f97316 !important;
+    color: #fff7ed !important;
+  }
+
+  .btn-btn-cmd.split {
+    background: linear-gradient(135deg, #6b21a8, #581c87) !important;
+    border: 1px solid #a855f7 !important;
+    color: #faf5ff !important;
+  }
+
+  .btn-btn-cmd.descuento {
+    background: linear-gradient(135deg, #334155, #1e293b) !important;
+    border: 1px solid #64748b !important;
+    color: #f1f5f9 !important;
   }
 }
 
@@ -6280,22 +6317,64 @@ body.theme-amethyst-3d .pay-method-tab.active {
   }
 
   .ticket-action-buttons {
-    grid-template-columns: 1fr !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
     margin-top: 10px !important;
-    gap: 10px !important;
-    margin-top: 12px !important;
   }
 
   .btn-btn-cmd {
-    padding: 12px !important;
-    font-size: 0.95rem !important;
-    padding: 14px !important;
-    font-size: 1.05rem !important;
+    padding: 12px 8px !important;
+    font-size: 0.88rem !important;
     font-weight: 800 !important;
-    border-radius: 10px !important;
-    min-height: 50px !important;
+    border-radius: 12px !important;
+    min-height: 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
     white-space: normal !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25) !important;
+    transition: transform 0.1s ease, filter 0.15s ease !important;
+    touch-action: manipulation !important;
+  }
+
+  .btn-btn-cmd:active {
+    transform: scale(0.96) !important;
+  }
+
+  .btn-btn-cmd.guardar {
+    grid-column: span 2 !important;
+    background: linear-gradient(135deg, #059669, #047857) !important;
+    border: 1px solid #10b981 !important;
+    color: #ecfdf5 !important;
+    font-size: 0.98rem !important;
+    min-height: 52px !important;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35) !important;
+  }
+
+  .btn-btn-cmd.prefactura {
+    background: linear-gradient(135deg, #1e40af, #1e3a8a) !important;
+    border: 1px solid #3b82f6 !important;
+    color: #eff6ff !important;
+  }
+
+  .btn-btn-cmd.cobrar {
+    background: linear-gradient(135deg, #c2410c, #9a3412) !important;
+    border: 1px solid #f97316 !important;
+    color: #fff7ed !important;
+  }
+
+  .btn-btn-cmd.split {
+    background: linear-gradient(135deg, #6b21a8, #581c87) !important;
+    border: 1px solid #a855f7 !important;
+    color: #faf5ff !important;
+  }
+
+  .btn-btn-cmd.descuento {
+    background: linear-gradient(135deg, #334155, #1e293b) !important;
+    border: 1px solid #64748b !important;
+    color: #f1f5f9 !important;
   }
 }
 
