@@ -271,8 +271,32 @@ function initDb() {
     db.run("ALTER TABLE Mesas ADD COLUMN piso INTEGER DEFAULT 1", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN pidio_cuenta_qr INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE Mesas ADD COLUMN hora_pidio_cuenta TEXT", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN reserva_id INTEGER", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN cliente_reserva TEXT", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN hora_reserva TEXT", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN fecha_reserva TEXT", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN pax_reserva INTEGER DEFAULT 2", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN notas_reserva TEXT", () => {});
+    db.run("ALTER TABLE Mesas ADD COLUMN telefono_reserva TEXT", () => {});
     db.run("ALTER TABLE Zonas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
     db.run("INSERT OR IGNORE INTO Zonas (id, nombre) VALUES (5, 'Segundo Piso')", () => {});
+
+    // Reservas de Mesas (Fase 1)
+    db.run(`CREATE TABLE IF NOT EXISTS Reservas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
+      mesa_id INTEGER,
+      cliente_nombre TEXT NOT NULL,
+      cliente_telefono TEXT,
+      pax INTEGER DEFAULT 2,
+      fecha TEXT NOT NULL,
+      hora TEXT NOT NULL,
+      estado TEXT DEFAULT 'confirmada',
+      notas TEXT,
+      creado_en TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
+      FOREIGN KEY(mesa_id) REFERENCES Mesas(id)
+    )`);
 
     // 3. Categorías
     db.run(`CREATE TABLE IF NOT EXISTS Categorias (

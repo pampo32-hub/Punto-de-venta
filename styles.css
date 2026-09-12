@@ -623,6 +623,41 @@ body {
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
+/* MESA RESERVADA (ESTILO APAGADO IDÉNTICO A PRODUCTO AGOTADO) */
+.mesa-render-card.reservada,
+.mesa-grid-card.reservada,
+.mesa-card.reservada,
+.mesa.reservada {
+  opacity: 0.55 !important;
+  filter: grayscale(0.8) !important;
+  position: relative !important;
+  border: 2px dashed #f59e0b !important;
+  background: linear-gradient(180deg, #181d28 0%, #78350f33 100%) !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25) !important;
+  animation: none !important;
+}
+
+.mesa-render-card.reservada::after,
+.mesa-grid-card.reservada::after,
+.mesa-card.reservada::after,
+.mesa.reservada::after {
+  content: "📅 RESERVADA";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  background: #d97706;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+}
+
 .m-cliente-tag {
   display: inline-flex;
   align-items: center;
@@ -1077,6 +1112,8 @@ body {
 .mesa-render-card.esperando_parcial .m-badge { background: #78350f; color: #fde047; }
 .mesa-render-card.activa .m-badge { background: #7f1d1d; color: #f87171; }
 .mesa-render-card.cuenta .m-badge { background: #78350f; color: #fbbf24; }
+.mesa-render-card.reservada .m-badge { background: #78350f; color: #fde68a; }
+.m-grid-badge.badge-reservada { background: #78350f; color: #fde68a; }
 
 .m-total {
   font-size: 1rem;
@@ -12210,4 +12247,84 @@ body.theme-capsula-elegance .btn-prefactura-split {
   box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
   transform: translateY(-1px);
 }
+
+/* ============================================================================ */
+/* MÓDULO DE RESERVAS DE MESAS (FASE 1)                                         */
+/* ============================================================================ */
+.reserva-badge-confirmada {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.reserva-badge-sentada {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.reserva-badge-cancelada {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.reserva-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  transition: all 0.2s ease;
+}
+.reserva-item-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+.reserva-detalle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+.reserva-detalle-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.reserva-detalle-box label {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-bottom: 3px;
+}
+.reserva-detalle-box strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #f8fafc;
+}
+
 

@@ -1824,6 +1824,22 @@ try {
       cargarMesasDesdeBackend();
     });
     socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
+    socket.on('mesa_reservada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+      if (typeof cargarAgendaReservas === 'function' && document.getElementById('modalGestionReservas')?.classList.contains('active')) {
+        cargarAgendaReservas();
+      }
+    });
+    socket.on('reserva_actualizada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+      if (typeof cargarAgendaReservas === 'function' && document.getElementById('modalGestionReservas')?.classList.contains('active')) {
+        cargarAgendaReservas();
+      }
+    });
     socket.on('mesa_renombrada', (d) => {
       const currentNid = estado.negocioActual?.id || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
@@ -8146,7 +8162,9 @@ function renderGrillaOrdenada(filtroZona = null) {
         const estaEsperandoCocina = Boolean((m.estado === 'esperando' || m.estado === 'esperando_parcial') || (platosPendientes && platosPendientes.length > 0));
 
         let estadoEfectivo = m.estado;
-        if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
+        if (m.estado === 'reservada') {
+          estadoEfectivo = 'reservada';
+        } else if (estaEsperandoCocina && m.estado !== 'esperando_parcial' && m.estado !== 'cuenta') {
           estadoEfectivo = 'esperando';
         }
         const estadoClass = esCuenta ? 'cuenta-qr' : estadoEfectivo;
@@ -8159,12 +8177,15 @@ function renderGrillaOrdenada(filtroZona = null) {
           esperando_parcial: 'Esperando Parcial',
           activa: 'Ocupada',
           cuenta: 'Cuenta Pedida',
-          unida: 'Unida'
+          unida: 'Unida',
+          reservada: 'Reservada'
         }[estadoEfectivo] || (estaEsperandoCocina ? 'Esperando' : 'Libre');
 
-        const badgeClass = (estadoEfectivo === 'libre' && !estaEsperandoCocina)
-          ? 'badge-libre'
-          : (esCuenta ? 'badge-cuenta' : (estadoEfectivo === 'esperando' || estaEsperandoCocina ? 'badge-esperando' : (estadoEfectivo === 'esperando_parcial' ? 'badge-esperando_parcial' : 'badge-ocupada')));
+        const badgeClass = (estadoEfectivo === 'reservada')
+          ? 'badge-reservada'
+          : ((estadoEfectivo === 'libre' && !estaEsperandoCocina)
+            ? 'badge-libre'
+            : (esCuenta ? 'badge-cuenta' : (estadoEfectivo === 'esperando' || estaEsperandoCocina ? 'badge-esperando' : (estadoEfectivo === 'esperando_parcial' ? 'badge-esperando_parcial' : 'badge-ocupada'))));
 
         const clienteMesa = m.cliente || m.mesa_cliente;
         let clienteHtml = '';
@@ -8321,6 +8342,10 @@ function renderGrillaOrdenada(filtroZona = null) {
 
         // Manejador de clic
         card.addEventListener('click', () => {
+          if (m.estado === 'reservada') {
+            abrirModalDetalleReserva(m.id);
+            return;
+          }
           const esMesaSinCliente = m.estado === 'libre' || ((!m.cliente || m.cliente === 'Cliente General') && !m.orden_activa_id);
           if (esMesaSinCliente) {
             abrirModalPreguntaCliente(m.id);
@@ -8412,7 +8437,8 @@ function renderSalón(filtroZona = null) {
       esperando_parcial: 'Esperando Parcial',
       activa: 'Ocupada',
       cuenta: 'Cuenta Pedida',
-      unida: 'Unida'
+      unida: 'Unida',
+      reservada: 'Reservada'
     }[m.estado] || 'Libre';
 
     const platosPendientes = m.platos_pendientes || m.items_pendientes || [];
@@ -8877,11 +8903,15 @@ function agregarDragMesa(card, mesaData, canvas) {
     if (!wasDragging) {
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
       if (dist <= 12) {
-        const esMesaSinCliente = mesaData.estado === 'libre' || ((!mesaData.cliente || mesaData.cliente === 'Cliente General') && !mesaData.orden_activa_id);
-        if (esMesaSinCliente) {
-          abrirModalPreguntaCliente(mesaData.id);
+        if (mesaData.estado === 'reservada') {
+          abrirModalDetalleReserva(mesaData.id);
         } else {
-          abrirComanderoMesa(mesaData.id);
+          const esMesaSinCliente = mesaData.estado === 'libre' || ((!mesaData.cliente || mesaData.cliente === 'Cliente General') && !mesaData.orden_activa_id);
+          if (esMesaSinCliente) {
+            abrirModalPreguntaCliente(mesaData.id);
+          } else {
+            abrirComanderoMesa(mesaData.id);
+          }
         }
       }
     }
@@ -9478,6 +9508,324 @@ function abrirModalEditarClienteActivo() {
   }
 }
 window.abrirModalEditarClienteActivo = abrirModalEditarClienteActivo;
+
+// ============================================================================
+// MÓDULO DE RESERVAS DE MESAS (FASE 1)
+// ============================================================================
+window._mesaReservaActivaId = null;
+window._reservaActivaId = null;
+
+function abrirModalCrearReserva(mesaId = null) {
+  const modPreg = document.getElementById('modalPreguntaCliente');
+  if (modPreg) { modPreg.classList.remove('active'); modPreg.style.display = 'none'; }
+  const modAgenda = document.getElementById('modalGestionReservas');
+  if (modAgenda) { modAgenda.classList.remove('active'); modAgenda.style.display = 'none'; }
+
+  window._mesaReservaActivaId = mesaId;
+  const selMesa = document.getElementById('selReservaMesa');
+  if (selMesa) {
+    selMesa.innerHTML = '<option value="">Seleccionar mesa...</option>';
+    (estado.mesas || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      const estadoTxt = m.estado === 'reservada' ? ' (Ya Reservada)' : (m.estado === 'libre' ? ' (Libre)' : ' (Ocupada)');
+      opt.textContent = `Mesa ${m.numero} [${m.capacidad || 4}p]${estadoTxt}`;
+      if (mesaId && Number(m.id) === Number(mesaId)) {
+        opt.selected = true;
+      }
+      selMesa.appendChild(opt);
+    });
+  }
+
+  const hoy = new Date().toISOString().split('T')[0];
+  const dateInput = document.getElementById('dateReservaFecha');
+  if (dateInput) dateInput.value = hoy;
+
+  const timeInput = document.getElementById('timeReservaHora');
+  if (timeInput) {
+    const ahora = new Date();
+    ahora.setMinutes(ahora.getMinutes() + 30);
+    const hh = String(ahora.getHours()).padStart(2, '0');
+    const mm = String(ahora.getMinutes()).padStart(2, '0');
+    timeInput.value = `${hh}:${mm}`;
+  }
+
+  const modal = document.getElementById('modalCrearReserva');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    setTimeout(() => {
+      const inp = document.getElementById('txtReservaCliente');
+      if (inp) { inp.focus(); }
+    }, 100);
+  }
+}
+window.abrirModalCrearReserva = abrirModalCrearReserva;
+
+function abrirModalCrearReservaDesdeMesa(mesaId) {
+  abrirModalCrearReserva(mesaId);
+}
+window.abrirModalCrearReservaDesdeMesa = abrirModalCrearReservaDesdeMesa;
+
+function cerrarModalCrearReserva() {
+  const modal = document.getElementById('modalCrearReserva');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+window.cerrarModalCrearReserva = cerrarModalCrearReserva;
+
+async function guardarNuevaReserva() {
+  const mesaId = document.getElementById('selReservaMesa')?.value;
+  const cliente = document.getElementById('txtReservaCliente')?.value.trim();
+  const telefono = document.getElementById('txtReservaTelefono')?.value.trim();
+  const pax = document.getElementById('numReservaPax')?.value || 2;
+  const fecha = document.getElementById('dateReservaFecha')?.value;
+  const hora = document.getElementById('timeReservaHora')?.value;
+  const notas = document.getElementById('txtReservaNotas')?.value.trim();
+
+  if (!cliente || !fecha || !hora) {
+    alert('Por favor completa el nombre del cliente, fecha y hora de la reserva.');
+    return;
+  }
+
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const res = await fetch('/api/reservas', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-negocio-id': String(nid)
+      },
+      body: JSON.stringify({
+        mesa_id: mesaId ? Number(mesaId) : null,
+        cliente_nombre: cliente,
+        cliente_telefono: telefono,
+        pax: Number(pax),
+        fecha,
+        hora,
+        notas
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al guardar la reserva');
+
+    cerrarModalCrearReserva();
+    
+    const form = document.getElementById('formNuevaReserva');
+    if (form) form.reset();
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ Reserva confirmada para "${cliente}" a las ${hora}`, 'success');
+    }
+
+    await cargarMesasDesdeBackend();
+  } catch (err) {
+    alert('❌ ' + err.message);
+  }
+}
+window.guardarNuevaReserva = guardarNuevaReserva;
+
+async function abrirModalDetalleReserva(mesaId) {
+  const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
+  if (!mesa) return;
+
+  window._mesaReservaActivaId = mesaId;
+  window._reservaActivaId = mesa.reserva_id || null;
+
+  const titEl = document.getElementById('detalleReservaMesaTitulo');
+  if (titEl) titEl.textContent = `Mesa ${mesa.numero || mesaId} - RESERVADA`;
+
+  const detCli = document.getElementById('detResCliente');
+  if (detCli) detCli.textContent = mesa.cliente_reserva || mesa.cliente || 'Cliente Registrado';
+
+  const detTel = document.getElementById('detResTelefono');
+  if (detTel) detTel.textContent = mesa.telefono_reserva || 'No especificado';
+
+  const detPax = document.getElementById('detResPax');
+  if (detPax) detPax.textContent = `${mesa.pax_reserva || mesa.capacidad || 2} personas`;
+
+  const detHora = document.getElementById('detResHora');
+  const fechaStr = mesa.fecha_reserva || 'Hoy';
+  const horaStr = mesa.hora_reserva || 'Hora programada';
+  if (detHora) detHora.textContent = `${fechaStr} a las ${horaStr}`;
+
+  const detNotas = document.getElementById('detResNotas');
+  if (detNotas) detNotas.textContent = mesa.notas_reserva || 'Sin notas adicionales';
+
+  const btnSentar = document.getElementById('btnSentarMesaReserva');
+  if (btnSentar) {
+    btnSentar.onclick = () => sentarReservaMesa(mesa.reserva_id, mesa.id);
+  }
+
+  const btnCancelar = document.getElementById('btnCancelarMesaReserva');
+  if (btnCancelar) {
+    btnCancelar.onclick = () => cancelarReservaMesa(mesa.reserva_id, mesa.id);
+  }
+
+  const modal = document.getElementById('modalDetalleReservaMesa');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
+}
+window.abrirModalDetalleReserva = abrirModalDetalleReserva;
+
+function cerrarModalDetalleReservaMesa() {
+  const modal = document.getElementById('modalDetalleReservaMesa');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+window.cerrarModalDetalleReservaMesa = cerrarModalDetalleReservaMesa;
+
+async function sentarReservaMesa(reservaId, mesaId) {
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const url = reservaId ? `/api/reservas/${reservaId}/sentar` : `/api/mesas/${mesaId}/cliente`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) },
+      body: JSON.stringify({ mesa_id: mesaId })
+    });
+    
+    cerrarModalDetalleReservaMesa();
+    await cargarMesasDesdeBackend();
+    
+    // Abrir inmediatamente la comanda para tomar pedido
+    abrirComanderoMesa(mesaId);
+  } catch (err) {
+    alert('❌ Error al sentar la mesa: ' + err.message);
+  }
+}
+window.sentarReservaMesa = sentarReservaMesa;
+
+async function cancelarReservaMesa(reservaId, mesaId) {
+  if (!confirm('¿Seguro que deseas cancelar esta reserva y liberar la mesa para otros clientes?')) {
+    return;
+  }
+  try {
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+    if (reservaId) {
+      await fetch(`/api/reservas/${reservaId}/cancelar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) }
+      });
+    } else if (mesaId) {
+      await fetch(`/api/mesas/${mesaId}/liberar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nid) }
+      });
+    }
+
+    cerrarModalDetalleReservaMesa();
+    await cargarMesasDesdeBackend();
+  } catch (err) {
+    alert('❌ Error al cancelar reserva: ' + err.message);
+  }
+}
+window.cancelarReservaMesa = cancelarReservaMesa;
+
+function abrirModalGestionReservas() {
+  const filtroInput = document.getElementById('filtroFechaAgendaReservas');
+  if (filtroInput && !filtroInput.value) {
+    filtroInput.value = new Date().toISOString().split('T')[0];
+  }
+  const modal = document.getElementById('modalGestionReservas');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+  }
+  cargarAgendaReservas();
+}
+window.abrirModalGestionReservas = abrirModalGestionReservas;
+
+function cerrarModalGestionReservas() {
+  const modal = document.getElementById('modalGestionReservas');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+window.cerrarModalGestionReservas = cerrarModalGestionReservas;
+
+async function cargarAgendaReservas() {
+  const container = document.getElementById('listaAgendaReservas');
+  if (!container) return;
+  container.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:20px;">Cargando reservas...</div>';
+
+  const fecha = document.getElementById('filtroFechaAgendaReservas')?.value || new Date().toISOString().split('T')[0];
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+
+  try {
+    const res = await fetch(`/api/reservas?fecha=${fecha}&negocio_id=${nid}`, {
+      headers: { 'x-negocio-id': String(nid) }
+    });
+    const data = await res.json();
+    const reservas = data.reservas || [];
+
+    if (reservas.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:35px 20px; color:#64748b; border:1px dashed rgba(255,255,255,0.1); border-radius:10px;">
+          <div style="font-size:2rem; margin-bottom:8px;">📅</div>
+          <p style="margin:0; font-size:0.95rem;">No hay reservas registradas para esta fecha (${fecha}).</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+    reservas.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'reserva-item-card';
+
+      const estadoBadge = r.estado === 'confirmada'
+        ? '<span class="reserva-badge-confirmada">📅 Confirmada</span>'
+        : (r.estado === 'sentada' ? '<span class="reserva-badge-sentada">🟢 Sentada</span>' : '<span class="reserva-badge-cancelada">❌ Cancelada</span>');
+
+      const mesaTexto = r.mesa_numero ? `Mesa ${r.mesa_numero}` : 'Sin mesa asignada';
+      const notasHtml = r.notas ? `<div style="font-size:0.8rem; color:#94a3b8; font-style:italic; margin-top:3px;">📝 ${escapeHtml(r.notas)}</div>` : '';
+
+      let botonesAccion = '';
+      if (r.estado === 'confirmada') {
+        botonesAccion = `
+          <button type="button" class="btn-tool" onclick="sentarReservaMesa(${r.id}, ${r.mesa_id || 'null'})" style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#6ee7b7; font-weight:700; font-size:0.8rem; padding:6px 12px; border-radius:6px; cursor:pointer;">
+            🟢 Sentar
+          </button>
+          <button type="button" class="btn-tool" onclick="cancelarReservaMesa(${r.id}, ${r.mesa_id || 'null'})" style="background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#fca5a5; font-weight:700; font-size:0.8rem; padding:6px 12px; border-radius:6px; cursor:pointer;">
+            ❌ Cancelar
+          </button>
+        `;
+      }
+
+      card.innerHTML = `
+        <div style="flex:1;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <strong style="font-size:1.05rem; color:#fff;">${escapeHtml(r.cliente_nombre)}</strong>
+            ${estadoBadge}
+          </div>
+          <div style="font-size:0.85rem; color:#cbd5e1; display:flex; gap:12px; flex-wrap:wrap;">
+            <span>🕒 <strong>${escapeHtml(r.hora)}</strong></span>
+            <span>🪑 <strong>${escapeHtml(mesaTexto)}</strong></span>
+            <span>👥 <strong>${r.pax || 2} personas</strong></span>
+            ${r.cliente_telefono ? `<span>📞 ${escapeHtml(r.cliente_telefono)}</span>` : ''}
+          </div>
+          ${notasHtml}
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${botonesAccion}
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444; padding:20px; text-align:center;">Error al cargar agenda: ${err.message}</div>`;
+  }
+}
+window.cargarAgendaReservas = cargarAgendaReservas;
 
 window.abrirComanderoMesa = abrirComanderoMesa;
 async function abrirComanderoMesa(mesaId) {

@@ -2943,7 +2943,7 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
-      } else if (m.estado === 'ocupada' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
+      } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
         const rowsPend = ultimaOrden ? await dbAll(
@@ -2966,6 +2966,13 @@ app.get('/api/mesas', async (req, res) => {
         }
         m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
+      } else if (m.estado === 'reservada') {
+        m.orden_total = 0;
+        m.orden_activa_id = null;
+        m.platos_pendientes = [];
+        m.items_pendientes = [];
+        m.minutos_espera = 0;
+        m.cliente = m.cliente_reserva || clientePreservado;
       } else if (!m.orden_activa_id) {
         m.estado = 'libre';
         m.pidio_cuenta_qr = 0;
@@ -3538,6 +3545,112 @@ app.post('/api/mesas/:id/cliente', async (req, res) => {
   }
 });
 
+// ============================================================================
+// ENDPOINTS DE RESERVAS DE MESAS (FASE 1)
+// ============================================================================
+app.get('/api/reservas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const fecha = req.query.fecha || new Date().toISOString().split('T')[0];
+    const sql = `
+      SELECT r.*, m.numero as mesa_numero, m.capacidad as mesa_capacidad
+      FROM Reservas r
+      LEFT JOIN Mesas m ON r.mesa_id = m.id
+      WHERE (r.negocio_id = ? OR (r.negocio_id IS NULL AND ? = 1))
+        ${req.query.todas ? '' : 'AND r.fecha = ?'}
+      ORDER BY r.hora ASC, r.id ASC
+    `;
+    const params = req.query.todas ? [negocioId, negocioId] : [negocioId, negocioId, fecha];
+    const reservas = await dbAll(sql, params);
+    res.json({ ok: true, reservas, fecha });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/reservas', async (req, res) => {
+  try {
+    const negocioId = obtenerNegocioIdReq(req);
+    const { mesa_id, cliente_nombre, cliente_telefono, pax, fecha, hora, notas } = req.body;
+    if (!cliente_nombre || !fecha || !hora) {
+      return res.status(400).json({ error: 'Nombre del cliente, fecha y hora son obligatorios.' });
+    }
+    const fechaLimpia = String(fecha).trim();
+    const horaLimpia = String(hora).trim();
+    const clienteLimpio = String(cliente_nombre).trim();
+    const telLimpio = cliente_telefono ? String(cliente_telefono).trim() : null;
+    const paxNum = Number(pax) || 2;
+    const notasLimpias = notas ? String(notas).trim() : null;
+    const mesaIdNum = mesa_id ? Number(mesa_id) : null;
+
+    const result = await dbRun(
+      `INSERT INTO Reservas (negocio_id, mesa_id, cliente_nombre, cliente_telefono, pax, fecha, hora, estado, notas, creado_en)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmada', ?, datetime('now', 'localtime'))`,
+      [negocioId, mesaIdNum, clienteLimpio, telLimpio, paxNum, fechaLimpia, horaLimpia, notasLimpias]
+    );
+    const reservaId = result.lastID || result.id;
+
+    if (mesaIdNum) {
+      await dbRun(
+        `UPDATE Mesas SET estado = 'reservada', reserva_id = ?, cliente_reserva = ?, hora_reserva = ?, fecha_reserva = ?, pax_reserva = ?, notas_reserva = ?, telefono_reserva = ?, cliente = ? WHERE id = ?`,
+        [reservaId, clienteLimpio, horaLimpia, fechaLimpia, paxNum, notasLimpias, telLimpio, clienteLimpio, mesaIdNum]
+      );
+      io.emit('mesa_reservada', { mesaId: mesaIdNum, reservaId, cliente: clienteLimpio, hora: horaLimpia, negocio_id: negocioId });
+      io.emit('mesa_actualizada', { mesaId: mesaIdNum, estado: 'reservada', cliente: clienteLimpio, negocio_id: negocioId });
+    }
+
+    io.emit('reserva_actualizada', { negocio_id: negocioId });
+    res.json({ ok: true, id: reservaId, message: 'Reserva registrada exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/reservas/:id/sentar', async (req, res) => {
+  try {
+    const reservaId = req.params.id;
+    const reserva = await dbGet('SELECT * FROM Reservas WHERE id = ?', [reservaId]);
+    if (!reserva) return res.status(404).json({ error: 'Reserva no encontrada' });
+
+    await dbRun("UPDATE Reservas SET estado = 'sentada' WHERE id = ?", [reservaId]);
+    
+    const mesaId = req.body.mesa_id || reserva.mesa_id;
+    if (mesaId) {
+      await dbRun(
+        "UPDATE Mesas SET estado = 'abierta', cliente = ?, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL WHERE id = ?",
+        [reserva.cliente_nombre, mesaId]
+      );
+      io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'abierta', cliente: reserva.cliente_nombre, negocio_id: reserva.negocio_id });
+    }
+    io.emit('reserva_actualizada', { negocio_id: reserva.negocio_id });
+    res.json({ ok: true, message: 'Mesa sentada con éxito' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/reservas/:id/cancelar', async (req, res) => {
+  try {
+    const reservaId = req.params.id;
+    const reserva = await dbGet('SELECT * FROM Reservas WHERE id = ?', [reservaId]);
+    if (!reserva) return res.status(404).json({ error: 'Reserva no encontrada' });
+
+    await dbRun("UPDATE Reservas SET estado = 'cancelada' WHERE id = ?", [reservaId]);
+
+    if (reserva.mesa_id) {
+      await dbRun(
+        "UPDATE Mesas SET estado = 'libre', cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL WHERE id = ?",
+        [reserva.mesa_id]
+      );
+      io.emit('mesa_actualizada', { mesaId: Number(reserva.mesa_id), estado: 'libre', cliente: null, negocio_id: reserva.negocio_id });
+    }
+    io.emit('reserva_actualizada', { negocio_id: reserva.negocio_id });
+    res.json({ ok: true, message: 'Reserva cancelada' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Liberar mesa: Meseros/Cajeros si saldo es ₡0, o requiere PIN de Admin si hay saldo pendiente
 app.post('/api/mesas/:id/liberar', async (req, res) => {
   try {
@@ -3629,8 +3742,11 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     );
 
     // 4. Liberar mesa completamente
+    if (mesa.reserva_id) {
+      await dbRun("UPDATE Reservas SET estado = 'cancelada' WHERE id = ?", [mesa.reserva_id]);
+    }
     await dbRun(
-      "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+      "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [mesaId]
     );
     await dbRun(
@@ -3639,6 +3755,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     );
 
     io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
+    io.emit('reserva_actualizada', { negocio_id: negocioId });
 
     res.json({
       ok: true,

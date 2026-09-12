@@ -1170,6 +1170,9 @@
           </div>
 
           <div class="salon-quick-tools">
+            <button class="btn-quick-action" id="btnGestionReservasSalon" onclick="abrirModalGestionReservas()" style="background: linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(217,119,6,0.28) 100%); border: 1px solid rgba(245,158,11,0.5); color: #fbbf24; font-weight: 700;" title="Ver y gestionar reservas de mesas">
+              📅 Reservas
+            </button>
             <button class="btn-quick-action" id="btnParaLlevarSalon" onclick="abrirModoParaLlevar()" style="background: linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.25) 100%); border: 1px solid rgba(236,72,153,0.45); color: #f472b6; font-weight: 700;" title="Tomar pedido rápido para Llevar o Barra sin mesa física">
               🛍️ Para Llevar / Barra
             </button>
@@ -3216,13 +3219,165 @@
         <input type="text" id="txtNombreClienteMesa" class="select-styled" placeholder="Ej. Carlos Mora / Familia Pérez..." style="width:100%; font-size:1rem; padding:10px 14px; border:1px solid #ef4444; background:rgba(239,68,68,0.08); color:#fff; border-radius:8px;" onkeydown="if(event.key==='Enter') responderPreguntaCliente(true)" />
         <small style="display:block; margin-top:8px; color:#94a3b8; font-size:0.8rem;">El nombre aparecerá en la tarjeta de la mesa en el salón y en la comanda.</small>
       </div>
-      <div class="dialog-footer" style="display:flex; justify-content:space-between; gap:10px; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
-        <button type="button" class="btn-sec" style="flex:1; padding: 11px 16px; font-weight:700;" onclick="responderPreguntaCliente(false)">
-          ❌ No, abrir directo
+      <div class="dialog-footer" style="display:flex; flex-direction:column; gap:8px; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="display:flex; justify-content:space-between; gap:10px; width:100%;">
+          <button type="button" class="btn-sec" style="flex:1; padding: 11px 16px; font-weight:700;" onclick="responderPreguntaCliente(false)">
+            ❌ No, abrir directo
+          </button>
+          <button type="button" class="btn-pri" style="flex:1; background:linear-gradient(135deg, #ef4444, #dc2626); color:#fff; font-weight:800; padding: 11px 18px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);" onclick="responderPreguntaCliente(true)">
+            ✅ Sí, registrar
+          </button>
+        </div>
+        <button type="button" class="btn-sec" style="width:100%; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; color:#fde68a; font-weight:700; padding:9px 12px; border-radius:8px;" onclick="abrirModalCrearReservaDesdeMesa(window._mesaParaPreguntaCliente)">
+          📅 Reservar esta Mesa
         </button>
-        <button type="button" class="btn-pri" style="flex:1; background:linear-gradient(135deg, #ef4444, #dc2626); color:#fff; font-weight:800; padding: 11px 18px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);" onclick="responderPreguntaCliente(true)">
-          ✅ Sí, registrar
-        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CREAR / EDITAR RESERVA -->
+  <div class="modal-backdrop" id="modalCrearReserva" style="z-index: 100060;">
+    <div class="modal-dialog" style="width: 500px; max-width: 92vw; border: 1px solid rgba(245,158,11,0.4); box-shadow: 0 16px 36px rgba(0,0,0,0.7);">
+      <div class="dialog-header" style="border-bottom: 1px solid rgba(245,158,11,0.25);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">📅</span>
+          <div>
+            <h3 id="crearReservaModalTitulo" style="margin:0; font-size:1.18rem; color:#fff;">Nueva Reserva de Mesa</h3>
+            <small style="color:#fde68a;">Apartar y programar mesa en el salón</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalCrearReserva()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px;">
+        <form id="formNuevaReserva" onsubmit="event.preventDefault(); guardarNuevaReserva();">
+          <div style="margin-bottom: 14px;">
+            <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Mesa a Reservar *</label>
+            <select id="selReservaMesa" class="select-styled" style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#1e293b; color:#fff;" required>
+              <option value="">Seleccionar mesa...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Nombre del Cliente *</label>
+            <input type="text" id="txtReservaCliente" class="select-styled" placeholder="Ej. Ana Solano / Corporación XYZ" style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#0f172a; color:#fff;" required />
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 14px;">
+            <div>
+              <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Teléfono / WhatsApp</label>
+              <input type="tel" id="txtReservaTelefono" class="select-styled" placeholder="Ej. 8888-8888" style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#0f172a; color:#fff;" />
+            </div>
+            <div>
+              <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Personas (PAX)</label>
+              <input type="number" id="numReservaPax" min="1" max="50" value="2" class="select-styled" style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#0f172a; color:#fff;" />
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom: 14px;">
+            <div>
+              <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Fecha *</label>
+              <input type="date" id="dateReservaFecha" class="select-styled" style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#0f172a; color:#fff;" required />
+            </div>
+            <div>
+              <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Hora *</label>
+              <input type="time" id="timeReservaHora" class="select-styled" style="width:100%; font-size:0.95rem; padding:9px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#0f172a; color:#fff;" required />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <label style="display:block; font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:5px;">Notas / Ocasión Especial</label>
+            <textarea id="txtReservaNotas" rows="2" class="select-styled" placeholder="Ej. Cumpleaños, requiere silla para bebé, cerca de la ventana..." style="width:100%; font-size:0.9rem; padding:8px 12px; border:1px solid rgba(255,255,255,0.15); border-radius:8px; background:#0f172a; color:#fff; resize:none;"></textarea>
+          </div>
+
+          <div class="dialog-footer" style="display:flex; justify-content:flex-end; gap:10px; padding:12px 0 0 0; border-top:1px solid rgba(255,255,255,0.08);">
+            <button type="button" class="btn-sec" onclick="cerrarModalCrearReserva()" style="padding:10px 16px; font-weight:700;">Cancelar</button>
+            <button type="submit" class="btn-pri" style="background:linear-gradient(135deg, #d97706, #b45309); color:#fff; font-weight:800; padding:10px 20px; box-shadow:0 4px 14px rgba(217,119,6,0.4);">
+              💾 Confirmar Reserva
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DETALLE DE MESA RESERVADA (CLICK EN MESA RESERVADA) -->
+  <div class="modal-backdrop" id="modalDetalleReservaMesa" style="z-index: 100060;">
+    <div class="modal-dialog" style="width: 480px; max-width: 92vw; border: 1px solid rgba(245,158,11,0.5); box-shadow: 0 16px 36px rgba(0,0,0,0.75);">
+      <div class="dialog-header" style="border-bottom: 1px solid rgba(245,158,11,0.25);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.6rem;">📅</span>
+          <div>
+            <h3 id="detalleReservaMesaTitulo" style="margin:0; font-size:1.2rem; color:#fde68a;">Mesa 1 - RESERVADA</h3>
+            <span class="reserva-badge-confirmada">📅 RESERVA CONFIRMADA</span>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalDetalleReservaMesa()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px;">
+        <div class="reserva-detalle-grid">
+          <div class="reserva-detalle-box">
+            <label>👤 Cliente</label>
+            <strong id="detResCliente">—</strong>
+          </div>
+          <div class="reserva-detalle-box">
+            <label>📞 Teléfono</label>
+            <strong id="detResTelefono">—</strong>
+          </div>
+          <div class="reserva-detalle-box">
+            <label>👥 Personas (PAX)</label>
+            <strong id="detResPax">—</strong>
+          </div>
+          <div class="reserva-detalle-box">
+            <label>🕒 Fecha y Hora</label>
+            <strong id="detResHora">—</strong>
+          </div>
+        </div>
+
+        <div id="detResNotasBox" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:10px 14px; margin-bottom:16px;">
+          <label style="display:block; font-size:0.75rem; color:#94a3b8; margin-bottom:3px;">📝 Notas:</label>
+          <span id="detResNotas" style="color:#e2e8f0; font-size:0.9rem; font-style:italic;">Sin notas adicionales</span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button type="button" id="btnSentarMesaReserva" class="btn-pri" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-size:1rem; font-weight:800; padding:12px; border-radius:8px; box-shadow:0 4px 14px rgba(16,185,129,0.4); display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span>🟢</span> Sentar Mesa / Abrir Comanda
+          </button>
+          <button type="button" id="btnCancelarMesaReserva" class="btn-sec" style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; font-weight:700; padding:10px; border-radius:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span>🔓</span> Cancelar / Liberar Reserva
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GESTIÓN Y AGENDA DE RESERVAS -->
+  <div class="modal-backdrop" id="modalGestionReservas" style="z-index: 100050;">
+    <div class="modal-dialog" style="width: 720px; max-width: 95vw; border: 1px solid rgba(245,158,11,0.3); box-shadow: 0 16px 40px rgba(0,0,0,0.8);">
+      <div class="dialog-header" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.6rem;">📅</span>
+          <div>
+            <h3 style="margin:0; font-size:1.2rem; color:#fff;">Agenda de Reservas del Salón</h3>
+            <small style="color:#94a3b8;">Control de reservas de mesas por fecha</small>
+          </div>
+        </div>
+        <button class="btn-icon-close" onclick="cerrarModalGestionReservas()">✕</button>
+      </div>
+      <div class="dialog-body" style="padding: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="font-size:0.88rem; color:#cbd5e1; font-weight:600;">Fecha:</label>
+            <input type="date" id="filtroFechaAgendaReservas" class="select-styled" style="padding:7px 12px; font-size:0.9rem; border-radius:6px; background:#0f172a; color:#fff;" onchange="cargarAgendaReservas()" />
+            <button type="button" class="btn-tool" onclick="document.getElementById('filtroFechaAgendaReservas').value = new Date().toISOString().split('T')[0]; cargarAgendaReservas();" style="font-size:0.8rem; padding:7px 10px;">Hoy</button>
+          </div>
+          <button type="button" class="btn-pri" onclick="abrirModalCrearReserva()" style="background:linear-gradient(135deg, #d97706, #b45309); color:#fff; font-weight:800; padding:8px 16px; border-radius:8px; box-shadow:0 4px 12px rgba(217,119,6,0.35);">
+            + Nueva Reserva
+          </button>
+        </div>
+
+        <div id="listaAgendaReservas" style="max-height: 55vh; overflow-y: auto; padding-right: 4px;">
+          <!-- Se llena dinámicamente con JS -->
+        </div>
       </div>
     </div>
   </div>
