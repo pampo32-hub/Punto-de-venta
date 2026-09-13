@@ -529,6 +529,23 @@ function evaluarEstadoMesaKDS(detalles = []) {
   }
 }
 
+async function recalcularTotalesOrden(ordenId) {
+  try {
+    const items = await dbAll(
+      "SELECT subtotal FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'",
+      [ordenId]
+    );
+    const subtotal = items.reduce((sum, it) => sum + (Number(it.subtotal) || 0), 0);
+    const total = subtotal;
+    await dbRun(
+      'UPDATE Ordenes SET subtotal = ?, total = ? WHERE id = ?',
+      [subtotal, total, ordenId]
+    );
+    return { subtotal, servicio: 0, iva: 0, total };
+  } catch (e) {
+    return { subtotal: 0, servicio: 0, iva: 0, total: 0 };
+  }
+}
 
 
 function formatearTooltipEspera(primeraComandaHora, itemsPendientes = [], ahora = new Date()) {
@@ -2882,6 +2899,7 @@ app.get('/api/mesas', async (req, res) => {
     if (activeOrderIds.length > 0) {
       const placeholders = activeOrderIds.map(() => '?').join(',');
       const allItems = await dbAll(
+        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' ORDER BY hora_pedido ASC, id ASC`,
         `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY hora_pedido ASC, id ASC`,
         activeOrderIds
       );
@@ -2930,6 +2948,7 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
+      } else if (m.estado === 'ocupada' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
@@ -2951,6 +2970,7 @@ app.get('/api/mesas', async (req, res) => {
           m.items_pendientes = [];
           m.minutos_espera = 0;
         }
+        m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
       } else if (m.estado === 'reservada') {
         m.orden_total = 0;
@@ -4988,6 +5008,7 @@ async function recalcularTotalesOrden(ordenId) {
   );
 
   const rows = await dbAll(
+    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
     "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL) AND (d.estado_comanda != 'pagado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );

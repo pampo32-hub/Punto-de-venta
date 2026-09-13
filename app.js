@@ -9458,7 +9458,9 @@ function abrirModalPreguntaCliente(mesaId) {
   }
   window._mesaParaPreguntaCliente = mesaId;
   const titEl = document.getElementById('preguntaClienteMesaTitulo') || document.getElementById('modalPreguntaClienteTitulo');
-  if (titEl) titEl.textContent = `Mesa ${mesa.numero || mesaId}`;
+  const numMesa = String(mesa.numero || mesaId).trim();
+  const titTexto = (/^(mesa|barra|terraza|vip|salon)\b/i.test(numMesa)) ? numMesa : `Mesa ${numMesa}`;
+  if (titEl) titEl.textContent = titTexto;
 
   const inp = document.getElementById('txtNombreClienteMesa');
   if (inp) {
@@ -9524,7 +9526,10 @@ function abrirModalEditarClienteActivo() {
   const txtTitulo = document.getElementById('preguntaClienteMesaTitulo');
   const inp = document.getElementById('txtNombreClienteMesa');
   
-  if (txtTitulo) txtTitulo.textContent = `Mesa ${estado.mesaActiva.numero || estado.mesaActiva.id}`;
+  if (txtTitulo) {
+    const numMesa = String(estado.mesaActiva.numero || estado.mesaActiva.id).trim();
+    txtTitulo.textContent = (/^(mesa|barra|terraza|vip|salon)\b/i.test(numMesa)) ? numMesa : `Mesa ${numMesa}`;
+  }
   if (inp) {
     inp.value = actual;
     setTimeout(() => { inp.focus(); inp.select(); }, 120);
