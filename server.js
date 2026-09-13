@@ -3751,7 +3751,6 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
       await dbRun("UPDATE Reservas SET estado = 'cancelada' WHERE id = ?", [mesa.reserva_id]);
     }
     await dbRun(
-      "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [mesaId]
     );
@@ -5007,7 +5006,6 @@ async function recalcularTotalesOrden(ordenId) {
   );
 
   const rows = await dbAll(
-    "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL)",
     "SELECT d.*, p.happy_hour as prod_happy_hour, p.categoria_id as prod_categoria_id FROM DetalleOrden d LEFT JOIN Productos p ON (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT)) WHERE d.orden_id = ? AND (d.estado_comanda != 'anulado' OR d.estado_comanda IS NULL) AND (d.estado_comanda != 'pagado' OR d.estado_comanda IS NULL)",
     [ordenId]
   );
