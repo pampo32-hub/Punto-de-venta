@@ -2175,13 +2175,17 @@ window.actualizarBadgeTipoCambioTop = function() {
   const badge = document.getElementById('posTipoCambioBadge');
   const lbl = document.getElementById('lblTipoCambioTop');
   const aceptaUSD = typeof negocioAceptaDolares === 'function' ? negocioAceptaDolares() : false;
-  const tc = parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || window._tipoCambioBCCR?.venta || estado.negocioActual?.tipo_cambio_usd || 520;
+  const bccr = window._tipoCambioBCCR;
+  const tc = bccr?.venta || parseFloat(localStorage.getItem('pos_tipo_cambio_usd')) || estado?.negocioActual?.tipo_cambio_usd || 450;
   
   if (lbl) {
-    lbl.textContent = `₡${Math.round(Number(tc)).toLocaleString('es-CR')}`;
+    lbl.textContent = `₡${Number(tc).toLocaleString('es-CR', { minimumFractionDigits: (tc % 1 === 0 ? 0 : 2), maximumFractionDigits: 2 })}`;
   }
   if (badge) {
     badge.style.display = aceptaUSD ? 'inline-flex' : 'none';
+    if (bccr && bccr.venta) {
+      badge.title = `Tipo de cambio oficial BCCR (${bccr.fecha || 'Hoy'}): Venta ₡${bccr.venta} | Compra ₡${bccr.compra || bccr.venta} [${bccr.fuente || 'BCCR'}]`;
+    }
   }
 };
 
@@ -2189,7 +2193,7 @@ window.actualizarTipoCambioBCCR = async function() {
   try {
     const res = await fetch('/api/tipo-cambio');
     const data = await res.json();
-    const tc = Number(data?.venta || data?.tipo_cambio) || 520;
+    const tc = Number(data?.venta || data?.tipo_cambio) || 0;
     if (tc > 0) {
       window._tipoCambioBCCR = { ...data, venta: tc, tipo_cambio: tc };
       localStorage.setItem('pos_tipo_cambio_usd', String(tc));
@@ -2204,13 +2208,23 @@ window.actualizarTipoCambioBCCR = async function() {
     console.warn('No se pudo obtener el tipo de cambio BCCR en vivo:', e);
   }
   actualizarBadgeTipoCambioTop();
-  return 520;
+  return 450;
 };
+
+// Intentar cargar tipo de cambio BCCR en segundo plano al iniciar
+setTimeout(() => {
+  if (typeof window.actualizarTipoCambioBCCR === 'function') {
+    window.actualizarTipoCambioBCCR().catch(() => {});
+  }
+}, 1000);
 
 window.aplicarConfiguracionMonedaNegocio = function() {
   const aceptaUSD = negocioAceptaDolares();
 
   actualizarBadgeTipoCambioTop();
+  if (aceptaUSD) {
+    actualizarTipoCambioBCCR().catch(() => {});
+  }
 
   // Pestaña Dólares en Modal de Cobro
   const tabDol = document.getElementById('tabCobroDolares');
@@ -9513,6 +9527,10 @@ async function responderPreguntaCliente(conNombre) {
   }
 
   if (conNombre && nombre) {
+    const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
+    if (mesa) {
+      mesa.cliente = nombre;
+    }
     try {
       const nid = estado.negocioActual?.id || 1;
       fetch(`/api/mesas/${mesaId}/cliente`, {
@@ -9523,6 +9541,7 @@ async function responderPreguntaCliente(conNombre) {
     } catch (e) {
       console.warn('Error en fetch cliente:', e);
     }
+    renderSalón();
   }
   renderSalón();
 
@@ -11890,6 +11909,7 @@ function renderKDS() {
           const badge = `<span class="course-badge ${cursoClasses[c.curso] || 'c-fuerte'}" style="font-size:0.62rem; padding:1px 4px;">${cursoLabels[c.curso] || 'Fuerte'}</span>`;
           const isSelected = selectedSet.has(c.id);
           return `
+            <div class="kds-item-row ${isSelected ? 'selected' : ''}" id="kd
             <div class="kds-item-row ${isSelected ? 'selected' : ''}" id="kdsItemRow_${c.id}" data-item-id="${c.id}" onclick="toggleSeleccionItemKDS('${key}', ${c.id})">
               <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
                 <div style="font-size:0.92rem; font-weight:700; color:var(--text-main); line-height:1.3; flex:1; min-width:0;">

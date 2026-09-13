@@ -2838,6 +2838,102 @@ app.put('/api/productos/:id/visual', async (req, res) => {
   }
 });
 
+// ============================================================================
+// TIPO DE CAMBIO BCCR (BANCO CENTRAL DE COSTA RICA)
+// ============================================================================
+let cachedTipoCambio = null;
+let lastFetchTipoCambio = 0;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+async function obtenerTipoCambioBCCR() {
+  const ahora = Date.now();
+  if (cachedTipoCambio && (ahora - lastFetchTipoCambio) < CACHE_TTL_MS) {
+    return cachedTipoCambio;
+  }
+
+  // 1. Intentar API oficial de Indicadores Económicos Hacienda / BCCR
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const resp = await fetch('https://api.hacienda.go.cr/indicadores/tc/dolar', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (resp.ok) {
+      const data = await resp.json();
+      const venta = Number(data?.venta?.valor) || 0;
+      const compra = Number(data?.compra?.valor) || 0;
+      const fecha = data?.venta?.fecha || new Date().toISOString().split('T')[0];
+      if (venta > 0) {
+        cachedTipoCambio = {
+          ok: true,
+          venta,
+          compra: compra || venta,
+          tipo_cambio: venta,
+          fecha,
+          fuente: 'BCCR (Hacienda)'
+        };
+        lastFetchTipoCambio = ahora;
+        console.log(`💵 Tipo de Cambio BCCR actualizado: Venta ₡${venta} | Compra ₡${compra} (${fecha})`);
+        return cachedTipoCambio;
+      }
+    }
+  } catch (err) {
+    console.warn('Fallo consulta a api.hacienda.go.cr para tipo de cambio:', err.message);
+  }
+
+  // 2. Fallback a servicio paginasweb.cr
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const resp = await fetch('https://tipodecambio.paginasweb.cr/api/', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (resp.ok) {
+      const data = await resp.json();
+      const venta = Number(data?.venta) || 0;
+      const compra = Number(data?.compra) || 0;
+      const fecha = data?.fecha || new Date().toISOString().split('T')[0];
+      if (venta > 0) {
+        cachedTipoCambio = {
+          ok: true,
+          venta,
+          compra: compra || venta,
+          tipo_cambio: venta,
+          fecha,
+          fuente: 'BCCR (paginasweb.cr)'
+        };
+        lastFetchTipoCambio = ahora;
+        console.log(`💵 Tipo de Cambio BCCR (fallback) actualizado: Venta ₡${venta} | Compra ₡${compra}`);
+        return cachedTipoCambio;
+      }
+    }
+  } catch (err) {
+    console.warn('Fallo consulta de respaldo para tipo de cambio:', err.message);
+  }
+
+  // Si fallan ambos y tenemos caché anterior, devolverlo
+  if (cachedTipoCambio) {
+    return cachedTipoCambio;
+  }
+
+  // Fallback por defecto si no hay conexión a internet
+  return {
+    ok: true,
+    venta: 520,
+    compra: 515,
+    tipo_cambio: 520,
+    fecha: new Date().toISOString().split('T')[0],
+    fuente: 'Por defecto (Offline)'
+  };
+}
+
+app.get('/api/tipo-cambio', async (req, res) => {
+  try {
+    const tc = await obtenerTipoCambioBCCR();
+    res.json(tc);
+  } catch (e) {
+    res.status(500).json({ error: e.message, tipo_cambio: 520, venta: 520, compra: 515 });
+  }
+});
+
 // Zonas / Secciones del Salón
 app.get('/api/zonas', async (req, res) => {
   try {
