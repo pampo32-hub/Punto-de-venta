@@ -514,11 +514,12 @@
       display: inline-block;
     }
 
-    /* KDS Simulated UI */
+    /* KDS Simulated UI & Dynamic Animation */
     .kds-sim-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 16px;
+      position: relative;
     }
 
     .kds-sim-ticket {
@@ -529,6 +530,33 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kds-sim-ticket.ready-dispatched {
+      animation: kdsDispatched 0.6s ease forwards;
+    }
+
+    .kds-sim-ticket.incoming-new {
+      animation: kdsSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes kdsDispatched {
+      0% { transform: scale(1); opacity: 1; border-color: #10b981; box-shadow: 0 0 25px rgba(16, 185, 129, 0.4); }
+      50% { transform: scale(0.95) translateY(-10px); opacity: 0.8; }
+      100% { transform: scale(0.85) translateY(-40px); opacity: 0; height: 0; padding: 0; margin: 0; border: none; }
+    }
+
+    @keyframes kdsSlideIn {
+      0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .kds-sim-ticket.urgent {
+      border-color: rgba(239, 68, 68, 0.6);
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
     }
 
     .kds-header {
@@ -546,6 +574,12 @@
       background: rgba(239, 68, 68, 0.15);
       padding: 2px 8px;
       border-radius: 4px;
+      animation: pulseTimer 1.5s infinite;
+    }
+
+    @keyframes pulseTimer {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.75; transform: scale(1.03); }
     }
 
     .kds-timer-ok {
@@ -557,18 +591,126 @@
       border-radius: 4px;
     }
 
-    /* Split Bill Simulated UI */
+    /* Waiter Tablet Float Notification */
+    .waiter-tablet-alert {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1.5px solid #10b981;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(16, 185, 129, 0.3);
+      padding: 12px 18px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 50;
+      transform: translateY(-50px) scale(0.9);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(10px);
+    }
+
+    .waiter-tablet-alert.show {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+
+    /* Split Bill Simulated UI & Dynamic Animation */
+    .split-demo-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .split-demo-topbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 16px;
+    }
+
+    .split-stepper-dots {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .split-step-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #1e293b;
+      color: #94a3b8;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.75rem;
+      transition: all 0.3s ease;
+    }
+
+    .split-step-dot.active {
+      background: var(--gold-light);
+      color: #0f172a;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+    }
+
     .split-sim-wrap {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 20px;
+      transition: all 0.4s ease;
+    }
+
+    @media (max-width: 768px) {
+      .split-sim-wrap {
+        grid-template-columns: 1fr;
+      }
     }
 
     .split-person-card {
       background: #0f172a;
-      border: 1px solid var(--border-gold);
+      border: 1.5px solid var(--border-gold);
       border-radius: 14px;
       padding: 18px;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .split-person-card.paid {
+      border-color: #10b981;
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.06) 0%, #0f172a 100%);
+    }
+
+    /* Animated Mini Thermal Ticket */
+    .sim-ticket-container {
+      margin-top: 12px;
+      background: #ffffff;
+      color: #111827;
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      border-top: 3px dashed #cbd5e1;
+      border-bottom: 3px dashed #cbd5e1;
+      animation: ejectTicket 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transform-origin: top center;
+    }
+
+    @keyframes ejectTicket {
+      0% { opacity: 0; transform: translateY(-15px) scaleY(0.6); max-height: 0; }
+      100% { opacity: 1; transform: translateY(0) scaleY(1); max-height: 350px; }
     }
 
     /* ==========================================================================
@@ -1366,39 +1508,85 @@
           </div>
 
           <!-- TAB 3: KDS COCINA -->
-          <div id="tabKds" class="tab-content">
-            <div class="kds-sim-grid">
-              <div class="kds-sim-ticket">
+          <div id="tabKds" class="tab-content" style="position:relative;">
+            <!-- Notificación flotante de Tablet de Mesero -->
+            <div id="waiterTabletAlert" class="waiter-tablet-alert">
+              <span style="font-size:1.4rem;">🔔</span>
+              <div>
+                <strong style="color:#34d399; font-size:0.88rem;">¡Platillo Listo para Servir!</strong>
+                <div id="waiterAlertText" style="font-size:0.8rem; color:#cbd5e1;">Mesa 2: Ribeye Steak 400g listo en cocina.</div>
+              </div>
+            </div>
+
+            <!-- Topbar KDS -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; background:rgba(255,255,255,0.03); padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="f-badge" style="background:rgba(16,185,129,0.2); color:#34d399;">● KDS Cocina &amp; Barra Activo</span>
+                <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">⏱️ Cronómetros en Tiempo Real</span>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn-outline-glass" style="padding:5px 12px; font-size:0.78rem;" onclick="simularNuevaComandaKDS()">
+                  ➕ Enviar Nueva Comanda
+                </button>
+                <button type="button" class="btn-outline-glass" style="padding:5px 12px; font-size:0.78rem; border-color:var(--primary); color:var(--primary-glow);" onclick="reiniciarSimuladorKDS()">
+                  🔄 Reiniciar KDS
+                </button>
+              </div>
+            </div>
+
+            <!-- Grid de Tickets KDS -->
+            <div class="kds-sim-grid" id="kdsSimGrid">
+              <!-- Ticket 1: Urgente -->
+              <div class="kds-sim-ticket urgent" id="kdsTicket1">
                 <div class="kds-header">
                   <div>
                     <strong style="color:#fff;">Mesa 2 • Tique #48</strong>
                     <div style="font-size:0.75rem; color:var(--text-muted);">Mesero: Carlos • 2 Comensales</div>
                   </div>
-                  <span class="kds-timer-urgent">⏱️ 16:40 min</span>
+                  <span class="kds-timer-urgent" id="kdsTimer1" data-seconds="1000">⏱️ 16:40 min</span>
                 </div>
                 <div style="font-size:0.9rem; line-height:1.5;">
                   <div>🥩 <strong>1x Ribeye Steak 400g</strong> <span style="color:#f87171;">(Término 3/4, Papa Asada)</span></div>
                   <div>🍔 <strong>1x Burger BBQ Crujiente</strong> <span style="color:#38bdf8;">(Sin cebolla)</span></div>
                 </div>
-                <button class="btn-outline-glass" style="margin-top:auto; font-size:0.8rem; justify-content:center; border-color:#10b981; color:#34d399;">
-                  ✓ Marcar Listo para Servir
+                <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('kdsTicket1', 'Mesa 2', 'Ribeye Steak & Burger BBQ')">
+                  ✓ Despachar y Notificar Mesero
                 </button>
               </div>
 
-              <div class="kds-sim-ticket">
+              <!-- Ticket 2: En Preparación -->
+              <div class="kds-sim-ticket" id="kdsTicket2">
                 <div class="kds-header">
                   <div>
                     <strong style="color:#fff;">Mesa 6 • Tique #49</strong>
                     <div style="font-size:0.75rem; color:var(--text-muted);">Mesera: Sofía • 4 Comensales</div>
                   </div>
-                  <span class="kds-timer-ok">⏱️ 03:15 min</span>
+                  <span class="kds-timer-ok" id="kdsTimer2" data-seconds="195">⏱️ 03:15 min</span>
                 </div>
                 <div style="font-size:0.9rem; line-height:1.5;">
                   <div>🍕 <strong>1x Pizza Margherita Grande</strong></div>
                   <div>🍟 <strong>1x Papas Trufadas con Parmesano</strong></div>
                 </div>
-                <button class="btn-outline-glass" style="margin-top:auto; font-size:0.8rem; justify-content:center; border-color:var(--primary); color:var(--primary-glow);">
-                  👨‍🍳 En Preparación
+                <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('kdsTicket2', 'Mesa 6', 'Pizza Margherita & Papas Trufadas')">
+                  ✓ Despachar y Notificar Mesera
+                </button>
+              </div>
+
+              <!-- Ticket 3: Barra Cocktails -->
+              <div class="kds-sim-ticket" id="kdsTicket3">
+                <div class="kds-header">
+                  <div>
+                    <strong style="color:#fff;">Barra 1 • Tique #50</strong>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Bartender: Andrés • Barra Central</div>
+                  </div>
+                  <span class="kds-timer-ok" id="kdsTimer3" data-seconds="70">⏱️ 01:10 min</span>
+                </div>
+                <div style="font-size:0.9rem; line-height:1.5;">
+                  <div>🍸 <strong>2x Gin Tonic Premium</strong> <span style="color:#fbbf24;">(Happy Hour 2x1)</span></div>
+                  <div>🍹 <strong>1x Mojito Clásico con Menta</strong></div>
+                </div>
+                <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('kdsTicket3', 'Barra 1', 'Gin Tonic & Mojito')">
+                  ✓ Despachar Bebidas
                 </button>
               </div>
             </div>
@@ -1406,54 +1594,159 @@
 
           <!-- TAB 4: SPLIT BILL -->
           <div id="tabSplit" class="tab-content">
-            <div class="split-sim-wrap">
-              <div class="split-person-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                  <strong style="color:var(--gold-light);">👤 Persona 1 (Carlos)</strong>
-                  <span class="f-badge" style="background:#10b981; color:#fff;">Listo para Pagar</span>
+            <div class="split-demo-container">
+              
+              <!-- Barra Superior de Control de la Demostración -->
+              <div class="split-demo-topbar">
+                <div class="split-stepper-dots">
+                  <span style="font-weight:800; color:#fff; margin-right:4px;">Flujo 3 Segundos:</span>
+                  <span class="split-step-dot active" id="dotStep1" title="Cuenta Compartida">1</span>
+                  <span>➔</span>
+                  <span class="split-step-dot" id="dotStep2" title="División por Comensales">2</span>
+                  <span>➔</span>
+                  <span class="split-step-dot" id="dotStep3" title="Pre-Facturas Térmicas">3</span>
+                  <span>➔</span>
+                  <span class="split-step-dot" id="dotStep4" title="Cobro Final">4</span>
                 </div>
-                <div style="font-size:0.85rem; margin-bottom:6px; display:flex; justify-content:space-between;">
-                  <span>1x Ribeye Steak</span> <span>₡16,500</span>
+                
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <button type="button" class="btn-gold-3d" style="padding:6px 14px; font-size:0.8rem; justify-content:center;" onclick="autoPlayDemoSplit(this)" id="btnAutoPlaySplit">
+                    ▶️ Ver Repetición Automática
+                  </button>
+                  <button type="button" class="btn-outline-glass" style="padding:6px 12px; font-size:0.8rem;" onclick="reiniciarDemoSplit()">
+                    🔄 Reiniciar
+                  </button>
                 </div>
-                <div style="font-size:0.85rem; margin-bottom:12px; display:flex; justify-content:space-between;">
-                  <span>1x Copa Vino Tinto</span> <span>₡4,500</span>
-                </div>
-                <div style="border-top:1px solid #334155; padding-top:8px; margin-bottom:12px; display:flex; justify-content:space-between; font-weight:800;">
-                  <span>Subtotal + IVA:</span> <span style="color:#fff;">₡23,730</span>
-                </div>
-                <div style="display:flex; gap:10px; margin-top:10px;">
-      <button type="button" class="btn-capsule-secondary" style="flex:1; padding:9px 14px; font-size:0.84rem; border-radius:50px; background:#ffffff; border:1.5px solid #cbd5e1; color:#0f172a; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 2px 5px rgba(0,0,0,0.04); cursor:pointer;">
-        📄 Pre-Factura
-      </button>
-      <button type="button" class="btn-capsule-primary" style="flex:1; padding:9px 14px; font-size:0.84rem; border-radius:50px; background:linear-gradient(180deg, #d97706 0%, #b45309 100%); border:1px solid rgba(251,191,36,0.4); color:#ffffff; font-weight:800; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 4px 14px rgba(180, 83, 9, 0.35); cursor:pointer;">
-        💳 Cobrar Factura
-      </button>
-    </div>
               </div>
 
-              <div class="split-person-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                  <strong style="color:var(--primary-glow);">👤 Persona 2 (María)</strong>
-                  <span class="f-badge" style="background:#3b82f6; color:#fff;">Pendiente</span>
+              <!-- Banner Interactivo Central -->
+              <div id="splitStatusBanner" style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); border-radius:10px; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                  <span style="font-weight:800; color:var(--gold-light);">Mesa 5: Total Global ₡33,900</span>
+                  <span style="font-size:0.82rem; color:#94a3b8; margin-left:8px;">(4 ítems • Carlos y María solicitan pagar por separado)</span>
                 </div>
-                <div style="font-size:0.85rem; margin-bottom:6px; display:flex; justify-content:space-between;">
-                  <span>1x Ensalada César con Pollo</span> <span>₡6,800</span>
-                </div>
-                <div style="font-size:0.85rem; margin-bottom:12px; display:flex; justify-content:space-between;">
-                  <span>1x Limonada con Menta</span> <span>₡2,200</span>
-                </div>
-                <div style="border-top:1px solid #334155; padding-top:8px; margin-bottom:12px; display:flex; justify-content:space-between; font-weight:800;">
-                  <span>Subtotal + IVA:</span> <span style="color:#fff;">₡10,170</span>
-                </div>
-                <div style="display:flex; gap:10px; margin-top:10px;">
-      <button type="button" class="btn-capsule-secondary" style="flex:1; padding:9px 14px; font-size:0.84rem; border-radius:50px; background:#ffffff; border:1.5px solid #cbd5e1; color:#0f172a; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 2px 5px rgba(0,0,0,0.04); cursor:pointer;">
-        📄 Pre-Factura
-      </button>
-      <button type="button" class="btn-capsule-primary" style="flex:1; padding:9px 14px; font-size:0.84rem; border-radius:50px; background:linear-gradient(180deg, #d97706 0%, #b45309 100%); border:1px solid rgba(251,191,36,0.4); color:#ffffff; font-weight:800; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 4px 14px rgba(180, 83, 9, 0.35); cursor:pointer;">
-        💳 Cobrar Factura
-      </button>
-    </div>
+                <button type="button" class="btn-gold-3d" id="btnActionDividir" style="font-size:0.85rem; padding:8px 18px; justify-content:center;" onclick="ejecutarDivisionAnimada()">
+                  ⚡ Dividir Cuenta por Personas (1 Clic)
+                </button>
               </div>
+
+              <!-- Grid de Comensales Divididos -->
+              <div class="split-sim-wrap" id="splitCardsGrid">
+                
+                <!-- Persona 1: Carlos -->
+                <div class="split-person-card" id="cardPersona1">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <strong style="color:var(--gold-light); font-size:1.05rem;">👤 Persona 1 (Carlos)</strong>
+                    <span class="f-badge" id="badgePersona1" style="background:#f59e0b; color:#fff;">Por Cobrar</span>
+                  </div>
+                  <div style="font-size:0.88rem; margin-bottom:6px; display:flex; justify-content:space-between;">
+                    <span>🥩 1x Ribeye Steak 400g</span> <span style="font-weight:700;">₡16,500</span>
+                  </div>
+                  <div style="font-size:0.88rem; margin-bottom:12px; display:flex; justify-content:space-between;">
+                    <span>🍷 1x Copa Vino Tinto Reserva</span> <span style="font-weight:700;">₡4,500</span>
+                  </div>
+                  <div style="border-top:1px solid #334155; padding-top:8px; margin-bottom:12px; font-size:0.84rem; color:#cbd5e1;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                      <span>Subtotal alimentos &amp; bebidas:</span> <span>₡21,000</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.78rem; color:#94a3b8;">
+                      <span>+ IVA (13%) &amp; Servicio (10%):</span> <span>₡2,730</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.08rem; color:#fff; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px;">
+                      <span>Total Persona 1:</span> <span style="color:var(--gold-light);" id="totalPersona1">₡23,730</span>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:10px; margin-top:10px;">
+                    <button type="button" class="btn-capsule-secondary" onclick="mostrarPreFacturaSim(1)" style="flex:1; padding:9px 12px; font-size:0.82rem; border-radius:50px; background:#ffffff; border:1.5px solid #cbd5e1; color:#0f172a; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+                      📄 Pre-Factura
+                    </button>
+                    <button type="button" class="btn-capsule-primary" id="btnCobrarP1" onclick="cobrarPersonaSim(1)" style="flex:1; padding:9px 12px; font-size:0.82rem; border-radius:50px; background:linear-gradient(180deg, #d97706 0%, #b45309 100%); border:1px solid rgba(251,191,36,0.4); color:#ffffff; font-weight:800; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 4px 14px rgba(180, 83, 9, 0.35); cursor:pointer;">
+                      💳 Cobrar ₡23,730
+                    </button>
+                  </div>
+
+                  <!-- Tique Térmico Desplegable Persona 1 -->
+                  <div id="simTicketP1" style="display:none;" class="sim-ticket-container">
+                    <div style="text-align:center; font-weight:bold; border-bottom:1px dashed #64748b; padding-bottom:4px; margin-bottom:6px;">
+                      *** PRE-FACTURA TÉRMICA 80MM ***<br>
+                      GAMMA RESTAURANTE &amp; BAR<br>
+                      MESA 5 • CUENTA SEPARADA #1
+                    </div>
+                    <div>Cliente: <strong>Carlos Mora</strong></div>
+                    <div>Fecha: <strong>12/09/2026</strong> • Hora: <strong>20:45</strong></div>
+                    <div style="border-top:1px dashed #64748b; margin-top:6px; padding-top:6px;">
+                      1x Ribeye Steak 400g ........ ₡16,500<br>
+                      1x Copa Vino Tinto .......... ₡4,500
+                    </div>
+                    <div style="border-top:1px dashed #64748b; margin-top:6px; padding-top:6px; text-align:right;">
+                      Subtotal: ₡21,000<br>
+                      IVA 13%: ₡2,730<br>
+                      <strong>TOTAL A PAGAR: ₡23,730</strong>
+                    </div>
+                    <div style="text-align:center; font-size:0.7rem; color:#64748b; margin-top:6px;">
+                      ¡Gracias por su visita!
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Persona 2: María -->
+                <div class="split-person-card" id="cardPersona2">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <strong style="color:var(--primary-glow); font-size:1.05rem;">👤 Persona 2 (María)</strong>
+                    <span class="f-badge" id="badgePersona2" style="background:#3b82f6; color:#fff;">Por Cobrar</span>
+                  </div>
+                  <div style="font-size:0.88rem; margin-bottom:6px; display:flex; justify-content:space-between;">
+                    <span>🥗 1x Ensalada César con Pollo</span> <span style="font-weight:700;">₡6,800</span>
+                  </div>
+                  <div style="font-size:0.88rem; margin-bottom:12px; display:flex; justify-content:space-between;">
+                    <span>🍋 1x Limonada con Menta Fresca</span> <span style="font-weight:700;">₡2,200</span>
+                  </div>
+                  <div style="border-top:1px solid #334155; padding-top:8px; margin-bottom:12px; font-size:0.84rem; color:#cbd5e1;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                      <span>Subtotal alimentos &amp; bebidas:</span> <span>₡9,000</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.78rem; color:#94a3b8;">
+                      <span>+ IVA (13%) &amp; Servicio (10%):</span> <span>₡1,170</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:800; font-size:1.08rem; color:#fff; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px;">
+                      <span>Total Persona 2:</span> <span style="color:#38bdf8;" id="totalPersona2">₡10,170</span>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:10px; margin-top:10px;">
+                    <button type="button" class="btn-capsule-secondary" onclick="mostrarPreFacturaSim(2)" style="flex:1; padding:9px 12px; font-size:0.82rem; border-radius:50px; background:#ffffff; border:1.5px solid #cbd5e1; color:#0f172a; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;">
+                      📄 Pre-Factura
+                    </button>
+                    <button type="button" class="btn-capsule-primary" id="btnCobrarP2" onclick="cobrarPersonaSim(2)" style="flex:1; padding:9px 12px; font-size:0.82rem; border-radius:50px; background:linear-gradient(180deg, #d97706 0%, #b45309 100%); border:1px solid rgba(251,191,36,0.4); color:#ffffff; font-weight:800; display:inline-flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 4px 14px rgba(180, 83, 9, 0.35); cursor:pointer;">
+                      💳 Cobrar ₡10,170
+                    </button>
+                  </div>
+
+                  <!-- Tique Térmico Desplegable Persona 2 -->
+                  <div id="simTicketP2" style="display:none;" class="sim-ticket-container">
+                    <div style="text-align:center; font-weight:bold; border-bottom:1px dashed #64748b; padding-bottom:4px; margin-bottom:6px;">
+                      *** PRE-FACTURA TÉRMICA 80MM ***<br>
+                      GAMMA RESTAURANTE &amp; BAR<br>
+                      MESA 5 • CUENTA SEPARADA #2
+                    </div>
+                    <div>Cliente: <strong>María Jiménez</strong></div>
+                    <div>Fecha: <strong>12/09/2026</strong> • Hora: <strong>20:45</strong></div>
+                    <div style="border-top:1px dashed #64748b; margin-top:6px; padding-top:6px;">
+                      1x Ensalada César Pollo ..... ₡6,800<br>
+                      1x Limonada Menta ........... ₡2,200
+                    </div>
+                    <div style="border-top:1px dashed #64748b; margin-top:6px; padding-top:6px; text-align:right;">
+                      Subtotal: ₡9,000<br>
+                      IVA 13%: ₡1,170<br>
+                      <strong>TOTAL A PAGAR: ₡10,170</strong>
+                    </div>
+                    <div style="text-align:center; font-size:0.7rem; color:#64748b; margin-top:6px;">
+                      ¡Gracias por su visita!
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           </div>
 
@@ -2113,6 +2406,304 @@
       if (box) {
         box.innerHTML = `🍽️ <strong>${nombre}:</strong> Estado [${estado}] — ${detalle}. <span style="color:#fbbf24; cursor:pointer; font-weight:700;" onclick="location.href='/'">➡️ Abrir Comanda en POS</span>`;
       }
+    }
+
+    // ========================================================================
+    // MICRO-DEMO KDS EN VIVO (COCINA & BARRA)
+    // ========================================================================
+    let kdsTimerInterval = null;
+
+    function iniciarCronometrosKDS() {
+      if (kdsTimerInterval) clearInterval(kdsTimerInterval);
+      kdsTimerInterval = setInterval(() => {
+        ['kdsTimer1', 'kdsTimer2', 'kdsTimer3'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            let secs = parseInt(el.getAttribute('data-seconds') || '0', 10) + 1;
+            el.setAttribute('data-seconds', String(secs));
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            const formatted = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            el.textContent = `⏱️ ${formatted} min`;
+          }
+        });
+      }, 1000);
+    }
+    iniciarCronometrosKDS();
+
+    function despacharTicketKDS(ticketId, mesaNom, platillo) {
+      const ticket = document.getElementById(ticketId);
+      if (!ticket) return;
+
+      ticket.classList.add('ready-dispatched');
+
+      // Mostrar alerta flotante de Tablet de Mesero
+      const alertBox = document.getElementById('waiterTabletAlert');
+      const alertText = document.getElementById('waiterAlertText');
+      if (alertBox && alertText) {
+        alertText.innerHTML = `<strong>${mesaNom}:</strong> ${platillo} marcado como listo.`;
+        alertBox.classList.add('show');
+        setTimeout(() => {
+          alertBox.classList.remove('show');
+        }, 4000);
+      }
+
+      // Si todos los tickets fueron despachados, generar uno nuevo automáticamente
+      setTimeout(() => {
+        ticket.style.display = 'none';
+        const visibles = document.querySelectorAll('#kdsSimGrid .kds-sim-ticket:not([style*="display: none"])');
+        if (visibles.length === 0) {
+          simularNuevaComandaKDS();
+        }
+      }, 600);
+    }
+
+    let comandaContadorKDS = 51;
+    function simularNuevaComandaKDS() {
+      const grid = document.getElementById('kdsSimGrid');
+      if (!grid) return;
+
+      const newId = 'kdsTicket_' + Date.now();
+      const comandaNum = comandaContadorKDS++;
+      const mesasOpciones = [
+        { mesa: 'Mesa 4', mesero: 'Carlos', items: '🍔 1x Burger Doble Queso • 🍟 1x Papas Rústicas' },
+        { mesa: 'Terraza 2', mesera: 'Sofía', items: '🥩 1x New York Steak • 🥗 1x Ensalada Griega' },
+        { mesa: 'Barra 2', mesero: 'Andrés', items: '🍹 2x Margarita Maracuyá • 🍺 1x Cerveza Ipa' }
+      ];
+      const opt = mesasOpciones[Math.floor(Math.random() * mesasOpciones.length)];
+
+      const card = document.createElement('div');
+      card.className = 'kds-sim-ticket incoming-new';
+      card.id = newId;
+      card.innerHTML = `
+        <div class="kds-header">
+          <div>
+            <strong style="color:#fff;">${opt.mesa} • Tique #${comandaNum}</strong>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Mesero: ${opt.mesero} • Recién enviado</div>
+          </div>
+          <span class="kds-timer-ok" data-seconds="0">⏱️ 00:00 min</span>
+        </div>
+        <div style="font-size:0.9rem; line-height:1.5;">
+          <div>${opt.items}</div>
+        </div>
+        <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('${newId}', '${opt.mesa}', '${opt.items.replace(/<[^>]*>?/gm, '')}')">
+          ✓ Despachar y Notificar Mesero
+        </button>
+      `;
+
+      grid.prepend(card);
+    }
+
+    function reiniciarSimuladorKDS() {
+      const grid = document.getElementById('kdsSimGrid');
+      if (!grid) return;
+      grid.innerHTML = `
+        <div class="kds-sim-ticket urgent" id="kdsTicket1">
+          <div class="kds-header">
+            <div>
+              <strong style="color:#fff;">Mesa 2 • Tique #48</strong>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Mesero: Carlos • 2 Comensales</div>
+            </div>
+            <span class="kds-timer-urgent" id="kdsTimer1" data-seconds="1000">⏱️ 16:40 min</span>
+          </div>
+          <div style="font-size:0.9rem; line-height:1.5;">
+            <div>🥩 <strong>1x Ribeye Steak 400g</strong> <span style="color:#f87171;">(Término 3/4, Papa Asada)</span></div>
+            <div>🍔 <strong>1x Burger BBQ Crujiente</strong> <span style="color:#38bdf8;">(Sin cebolla)</span></div>
+          </div>
+          <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('kdsTicket1', 'Mesa 2', 'Ribeye Steak & Burger BBQ')">
+            ✓ Despachar y Notificar Mesero
+          </button>
+        </div>
+        <div class="kds-sim-ticket" id="kdsTicket2">
+          <div class="kds-header">
+            <div>
+              <strong style="color:#fff;">Mesa 6 • Tique #49</strong>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Mesera: Sofía • 4 Comensales</div>
+            </div>
+            <span class="kds-timer-ok" id="kdsTimer2" data-seconds="195">⏱️ 03:15 min</span>
+          </div>
+          <div style="font-size:0.9rem; line-height:1.5;">
+            <div>🍕 <strong>1x Pizza Margherita Grande</strong></div>
+            <div>🍟 <strong>1x Papas Trufadas con Parmesano</strong></div>
+          </div>
+          <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('kdsTicket2', 'Mesa 6', 'Pizza Margherita & Papas Trufadas')">
+            ✓ Despachar y Notificar Mesera
+          </button>
+        </div>
+        <div class="kds-sim-ticket" id="kdsTicket3">
+          <div class="kds-header">
+            <div>
+              <strong style="color:#fff;">Barra 1 • Tique #50</strong>
+              <div style="font-size:0.75rem; color:var(--text-muted);">Bartender: Andrés • Barra Central</div>
+            </div>
+            <span class="kds-timer-ok" id="kdsTimer3" data-seconds="70">⏱️ 01:10 min</span>
+          </div>
+          <div style="font-size:0.9rem; line-height:1.5;">
+            <div>🍸 <strong>2x Gin Tonic Premium</strong> <span style="color:#fbbf24;">(Happy Hour 2x1)</span></div>
+            <div>🍹 <strong>1x Mojito Clásico con Menta</strong></div>
+          </div>
+          <button type="button" class="btn-gold-3d" style="margin-top:auto; font-size:0.84rem; justify-content:center; background:linear-gradient(180deg, #10b981 0%, #059669 100%); border-color:#34d399;" onclick="despacharTicketKDS('kdsTicket3', 'Barra 1', 'Gin Tonic & Mojito')">
+            ✓ Despachar Bebidas
+          </button>
+        </div>
+      `;
+      iniciarCronometrosKDS();
+    }
+
+    // ========================================================================
+    // MICRO-DEMO DIVISIÓN DE CUENTAS EN 3 SEGUNDOS
+    // ========================================================================
+    let isAutoPlayingSplit = false;
+    let autoPlaySplitTimeout = null;
+
+    function setSplitStep(stepNum) {
+      for (let i = 1; i <= 4; i++) {
+        const dot = document.getElementById('dotStep' + i);
+        if (dot) {
+          if (i <= stepNum) {
+            dot.classList.add('active');
+          } else {
+            dot.classList.remove('active');
+          }
+        }
+      }
+    }
+
+    function ejecutarDivisionAnimada() {
+      setSplitStep(2);
+      const banner = document.getElementById('splitStatusBanner');
+      const btn = document.getElementById('btnActionDividir');
+      const card1 = document.getElementById('cardPersona1');
+      const card2 = document.getElementById('cardPersona2');
+
+      if (btn) {
+        btn.innerHTML = '⚡ ¡Dividido en 0.8 segundos!';
+        btn.style.background = 'linear-gradient(180deg, #10b981 0%, #059669 100%)';
+        btn.style.borderColor = '#34d399';
+      }
+
+      if (banner) {
+        banner.style.background = 'rgba(16,185,129,0.12)';
+        banner.style.borderColor = 'rgba(16,185,129,0.4)';
+      }
+
+      if (card1 && card2) {
+        card1.style.transform = 'scale(1.02)';
+        card2.style.transform = 'scale(1.02)';
+        setTimeout(() => {
+          card1.style.transform = 'scale(1)';
+          card2.style.transform = 'scale(1)';
+        }, 300);
+      }
+    }
+
+    function mostrarPreFacturaSim(personaNum) {
+      setSplitStep(3);
+      const ticket = document.getElementById('simTicketP' + personaNum);
+      if (ticket) {
+        const isHidden = ticket.style.display === 'none' || !ticket.style.display;
+        ticket.style.display = isHidden ? 'block' : 'none';
+      }
+    }
+
+    function cobrarPersonaSim(personaNum) {
+      setSplitStep(4);
+      const card = document.getElementById('cardPersona' + personaNum);
+      const badge = document.getElementById('badgePersona' + personaNum);
+      const btnCobrar = document.getElementById('btnCobrarP' + personaNum);
+
+      if (card) card.classList.add('paid');
+      if (badge) {
+        badge.textContent = '✅ PAGADO';
+        badge.style.background = '#10b981';
+      }
+      if (btnCobrar) {
+        btnCobrar.innerHTML = '✓ Cuenta Saldada';
+        btnCobrar.style.background = '#059669';
+        btnCobrar.style.pointerEvents = 'none';
+        btnCobrar.style.opacity = '0.85';
+      }
+    }
+
+    function reiniciarDemoSplit() {
+      if (autoPlaySplitTimeout) clearTimeout(autoPlaySplitTimeout);
+      isAutoPlayingSplit = false;
+      const btnAuto = document.getElementById('btnAutoPlaySplit');
+      if (btnAuto) btnAuto.innerHTML = '▶️ Ver Repetición Automática';
+
+      setSplitStep(1);
+
+      const banner = document.getElementById('splitStatusBanner');
+      const btn = document.getElementById('btnActionDividir');
+      if (btn) {
+        btn.innerHTML = '⚡ Dividir Cuenta por Personas (1 Clic)';
+        btn.style.background = '';
+        btn.style.borderColor = '';
+      }
+      if (banner) {
+        banner.style.background = 'rgba(245,158,11,0.1)';
+        banner.style.borderColor = 'rgba(245,158,11,0.3)';
+      }
+
+      [1, 2].forEach(num => {
+        const card = document.getElementById('cardPersona' + num);
+        const badge = document.getElementById('badgePersona' + num);
+        const btnCobrar = document.getElementById('btnCobrarP' + num);
+        const ticket = document.getElementById('simTicketP' + num);
+
+        if (card) card.classList.remove('paid');
+        if (badge) {
+          badge.textContent = 'Por Cobrar';
+          badge.style.background = num === 1 ? '#f59e0b' : '#3b82f6';
+        }
+        if (btnCobrar) {
+          btnCobrar.innerHTML = num === 1 ? '💳 Cobrar ₡23,730' : '💳 Cobrar ₡10,170';
+          btnCobrar.style.background = '';
+          btnCobrar.style.pointerEvents = 'auto';
+          btnCobrar.style.opacity = '1';
+        }
+        if (ticket) ticket.style.display = 'none';
+      });
+    }
+
+    function autoPlayDemoSplit(btn) {
+      if (isAutoPlayingSplit) {
+        reiniciarDemoSplit();
+        return;
+      }
+
+      reiniciarDemoSplit();
+      isAutoPlayingSplit = true;
+      if (btn) btn.innerHTML = '⏹️ Pausar Demo';
+
+      // Paso 1: Dividir
+      autoPlaySplitTimeout = setTimeout(() => {
+        ejecutarDivisionAnimada();
+
+        // Paso 2: Imprimir Pre-Factura Persona 1
+        autoPlaySplitTimeout = setTimeout(() => {
+          mostrarPreFacturaSim(1);
+
+          // Paso 3: Cobrar Persona 1
+          autoPlaySplitTimeout = setTimeout(() => {
+            cobrarPersonaSim(1);
+
+            // Paso 4: Imprimir y Cobrar Persona 2
+            autoPlaySplitTimeout = setTimeout(() => {
+              mostrarPreFacturaSim(2);
+              cobrarPersonaSim(2);
+
+              // Reiniciar loop tras 4 segundos
+              autoPlaySplitTimeout = setTimeout(() => {
+                if (isAutoPlayingSplit) {
+                  reiniciarDemoSplit();
+                  autoPlayDemoSplit(btn);
+                }
+              }, 4000);
+            }, 1200);
+          }, 1200);
+        }, 1200);
+      }, 800);
     }
 
     // Selector de temas visuales
