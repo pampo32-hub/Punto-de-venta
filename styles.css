@@ -471,11 +471,11 @@ body {
 .legend-badge.libre .dot { background: #10b981; box-shadow: 0 0 6px #10b981; }
 
 .legend-badge.ocupada {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #f87171;
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid rgba(249, 115, 22, 0.45);
+  color: #fb923c;
 }
-.legend-badge.ocupada .dot { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+.legend-badge.ocupada .dot { background: #f97316; box-shadow: 0 0 6px #f97316; }
 
 .legend-badge.esperando {
   background: rgba(234, 88, 12, 0.12);
@@ -591,35 +591,35 @@ body {
 }
 
 .mesa-render-card.ocupada {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, #7f1d1d44 100%) !important;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 8px rgba(239, 68, 68, 0.2) !important;
+  border-color: #f97316 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65), inset 0 0 8px rgba(249, 115, 22, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
 .mesa-render-card.abierta {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, #7f1d1d44 100%) !important;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 8px rgba(239, 68, 68, 0.2) !important;
+  border-color: #f97316 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65), inset 0 0 8px rgba(249, 115, 22, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
 .mesa-render-card.esperando {
-  border-color: #ef4444 !important;
+  border-color: #f97316 !important;
   background: linear-gradient(180deg, #111827 0%, #7c2d1244 100%);
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.45), inset 0 0 6px rgba(249, 115, 22, 0.15) !important;
 }
 
 .mesa-render-card.esperando_parcial {
-  border-color: #ef4444 !important;
+  border-color: #f59e0b !important;
   background: linear-gradient(180deg, #111827 0%, #78350f44 100%);
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45), inset 0 0 6px rgba(245, 158, 11, 0.15) !important;
 }
 
 .mesa-render-card.activa {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, #7f1d1d44 100%) !important;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 8px rgba(239, 68, 68, 0.2) !important;
+  border-color: #f97316 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65), inset 0 0 8px rgba(249, 115, 22, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
@@ -724,12 +724,12 @@ body {
 
 @keyframes mesaOcupadaHaloGlow {
   0%, 100% {
-    border-color: #ef4444;
-    box-shadow: 0 0 12px 2px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.2);
+    border-color: #f97316;
+    box-shadow: 0 0 14px 2px rgba(249, 115, 22, 0.5), inset 0 0 8px rgba(249, 115, 22, 0.25);
   }
   50% {
-    border-color: #f87171;
-    box-shadow: 0 0 24px 6px rgba(239, 68, 68, 0.75), 0 0 38px 10px rgba(239, 68, 68, 0.35), inset 0 0 10px rgba(239, 68, 68, 0.35);
+    border-color: #fb923c;
+    box-shadow: 0 0 28px 6px rgba(249, 115, 22, 0.8), 0 0 42px 10px rgba(249, 115, 22, 0.4), inset 0 0 12px rgba(251, 146, 60, 0.4);
   }
 }
 
@@ -910,9 +910,9 @@ body {
 .mesa-grid-card.ocupada,
 .mesa-grid-card.abierta,
 .mesa-grid-card.activa {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, #7f1d1d44 100%) !important;
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  border-color: #f97316 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.55), inset 0 0 6px rgba(249, 115, 22, 0.2) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
@@ -1106,11 +1106,11 @@ body {
 }
 
 .mesa-render-card.libre .m-badge { background: #064e3b; color: #34d399; }
-.mesa-render-card.ocupada .m-badge { background: #7f1d1d; color: #f87171; }
-.mesa-render-card.abierta .m-badge { background: #7f1d1d; color: #f87171; }
+.mesa-render-card.ocupada .m-badge { background: #7c2d12 !important; color: #fdba74 !important; }
+.mesa-render-card.abierta .m-badge { background: #7c2d12 !important; color: #fdba74 !important; }
 .mesa-render-card.esperando .m-badge { background: #7c2d12; color: #fb923c; }
 .mesa-render-card.esperando_parcial .m-badge { background: #78350f; color: #fde047; }
-.mesa-render-card.activa .m-badge { background: #7f1d1d; color: #f87171; }
+.mesa-render-card.activa .m-badge { background: #7c2d12 !important; color: #fdba74 !important; }
 .mesa-render-card.cuenta .m-badge { background: #78350f; color: #fbbf24; }
 .mesa-render-card.reservada .m-badge { background: #78350f; color: #fde68a; }
 .m-grid-badge.badge-reservada { background: #78350f; color: #fde68a; }
@@ -5407,42 +5407,42 @@ body.theme-amethyst-3d .pay-method-tab.active {
 
 .mesa-render-card.silla.abierta,
 .mesa-render-card.silla.ocupada {
-  border-color: #ef4444 !important;
-  background: radial-gradient(circle at center, #7f1d1d55 20%, #111827 100%) !important;
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  border-color: #f97316 !important;
+  background: radial-gradient(circle at center, rgba(249, 115, 22, 0.35) 20%, #111827 100%) !important;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.55), inset 0 0 6px rgba(249, 115, 22, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 .mesa-render-card.silla.abierta .m-num,
 .mesa-render-card.silla.ocupada .m-num {
-  color: #f87171 !important;
+  color: #fdba74 !important;
 }
 
 .mesa-render-card.silla.esperando {
-  border-color: #ef4444 !important;
+  border-color: #f97316 !important;
   background: radial-gradient(circle at center, #7c2d1255 20%, #111827 100%) !important;
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.45), inset 0 0 6px rgba(249, 115, 22, 0.15) !important;
 }
 .mesa-render-card.silla.esperando .m-num {
-  color: #f87171 !important;
+  color: #fdba74 !important;
 }
 
 .mesa-render-card.silla.esperando_parcial {
-  border-color: #ef4444 !important;
+  border-color: #f59e0b !important;
   background: radial-gradient(circle at center, #78350f55 20%, #111827 100%) !important;
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45), inset 0 0 6px rgba(245, 158, 11, 0.15) !important;
 }
 .mesa-render-card.silla.esperando_parcial .m-num {
-  color: #f87171 !important;
+  color: #fde047 !important;
 }
 
 .mesa-render-card.silla.activa {
-  border-color: #ef4444 !important;
-  background: radial-gradient(circle at center, #7f1d1d55 20%, #111827 100%) !important;
-  box-shadow: 0 0 14px rgba(239, 68, 68, 0.45), inset 0 0 6px rgba(239, 68, 68, 0.15) !important;
+  border-color: #f97316 !important;
+  background: radial-gradient(circle at center, rgba(249, 115, 22, 0.35) 20%, #111827 100%) !important;
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.55), inset 0 0 6px rgba(249, 115, 22, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 .mesa-render-card.silla.activa .m-num {
-  color: #f87171 !important;
+  color: #fdba74 !important;
 }
 
 /* Respaldo curvado de la silla de barra */
@@ -13061,6 +13061,8 @@ body.theme-capsula-elegance .btn-prefactura-split {
     padding: 14px 18px !important;
   }
 }
+
+
 
 /* ============================================================= */
 /* ELEMENTOS OCULTOS DE ACCESO RÁPIDO & PÁGINA WEB (RESTAURABLES) */
