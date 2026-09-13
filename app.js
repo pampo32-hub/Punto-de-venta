@@ -9492,14 +9492,27 @@ async function responderPreguntaCliente(conNombre) {
   const mesaId = window._mesaParaPreguntaCliente;
   if (!mesaId) return;
 
+  // Desactivar explícitamente cualquier modo multi-comensal para operar en cuenta única tradicional
+  estado.asistenteComensal = {
+    activo: false,
+    paso: 1,
+    comensalActual: 'Persona 1'
+  };
+  estado.comensalesMesa = [];
+  estado.comensalActivo = 'General';
+  const banner = document.getElementById('bannerAsistenteComensal');
+  if (banner) banner.style.display = 'none';
+
   const inp = document.getElementById('txtNombreClienteMesa');
   const nombre = inp ? inp.value.trim() : '';
+  const nombreFinal = conNombre ? (nombre || 'Cliente General') : 'Cliente General';
+
+  const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
+  if (mesa) {
+    mesa.cliente = nombreFinal;
+  }
 
   if (conNombre && nombre) {
-    const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId));
-    if (mesa) {
-      mesa.cliente = nombre;
-    }
     try {
       const nid = estado.negocioActual?.id || 1;
       fetch(`/api/mesas/${mesaId}/cliente`, {
@@ -9510,8 +9523,8 @@ async function responderPreguntaCliente(conNombre) {
     } catch (e) {
       console.warn('Error en fetch cliente:', e);
     }
-    renderSalón();
   }
+  renderSalón();
 
   abrirComanderoMesa(mesaId);
 }
@@ -10120,6 +10133,14 @@ window.cerrarComandero = function() {
     modal.classList.remove('active');
     modal.style.display = 'none';
   }
+  estado.asistenteComensal = {
+    activo: false,
+    paso: 1,
+    comensalActual: 'Persona 1'
+  };
+  const banner = document.getElementById('bannerAsistenteComensal');
+  if (banner) banner.style.display = 'none';
+
   document.querySelectorAll('.nav-pill').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
   const btnSalon = document.querySelector('.nav-pill[data-view="salon"]');
