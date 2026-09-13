@@ -281,6 +281,18 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
+// Servir archivos estáticos del POS y Landing
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
+
+// Rutas directas para la Landing Page
+app.get('/landing', (req, res) => {
+  res.sendFile(path.join(__dirname, 'landing.html'));
+});
+app.get('/landing.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'landing.html'));
+});
+
 // Endpoint para subir y almacenar imágenes localmente en el servidor
 app.post('/api/upload/imagen', async (req, res) => {
   try {
