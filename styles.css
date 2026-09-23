@@ -489,11 +489,11 @@ body {
 .legend-badge.libre .dot { background: #10b981; box-shadow: 0 0 6px #10b981; }
 
 .legend-badge.ocupada {
-  background: rgba(249, 115, 22, 0.15);
-  border: 1px solid rgba(249, 115, 22, 0.45);
-  color: #fb923c;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #f87171;
 }
-.legend-badge.ocupada .dot { background: #f97316; box-shadow: 0 0 6px #f97316; }
+.legend-badge.ocupada .dot { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
 
 .legend-badge.esperando {
   background: rgba(234, 88, 12, 0.12);
@@ -609,16 +609,16 @@ body {
 }
 
 .mesa-render-card.ocupada {
-  border-color: #f97316 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
-  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65), inset 0 0 8px rgba(249, 115, 22, 0.25) !important;
+  border-color: #ef4444 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65), inset 0 0 8px rgba(239, 68, 68, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
 .mesa-render-card.abierta {
-  border-color: #f97316 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
-  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65), inset 0 0 8px rgba(249, 115, 22, 0.25) !important;
+  border-color: #ef4444 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65), inset 0 0 8px rgba(239, 68, 68, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
@@ -635,9 +635,9 @@ body {
 }
 
 .mesa-render-card.activa {
-  border-color: #f97316 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
-  box-shadow: 0 0 18px rgba(249, 115, 22, 0.65), inset 0 0 8px rgba(249, 115, 22, 0.25) !important;
+  border-color: #ef4444 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65), inset 0 0 8px rgba(239, 68, 68, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
@@ -742,12 +742,12 @@ body {
 
 @keyframes mesaOcupadaHaloGlow {
   0%, 100% {
-    border-color: #f97316;
-    box-shadow: 0 0 14px 2px rgba(249, 115, 22, 0.5), inset 0 0 8px rgba(249, 115, 22, 0.25);
+    border-color: #ef4444;
+    box-shadow: 0 0 14px 2px rgba(239, 68, 68, 0.5), inset 0 0 8px rgba(239, 68, 68, 0.25);
   }
   50% {
-    border-color: #fb923c;
-    box-shadow: 0 0 28px 6px rgba(249, 115, 22, 0.8), 0 0 42px 10px rgba(249, 115, 22, 0.4), inset 0 0 12px rgba(251, 146, 60, 0.4);
+    border-color: #f87171;
+    box-shadow: 0 0 28px 6px rgba(239, 68, 68, 0.8), 0 0 42px 10px rgba(239, 68, 68, 0.4), inset 0 0 12px rgba(248, 113, 113, 0.4);
   }
 }
 
@@ -928,9 +928,9 @@ body {
 .mesa-grid-card.ocupada,
 .mesa-grid-card.abierta,
 .mesa-grid-card.activa {
-  border-color: #f97316 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(249, 115, 22, 0.28) 100%) !important;
-  box-shadow: 0 0 16px rgba(249, 115, 22, 0.55), inset 0 0 6px rgba(249, 115, 22, 0.2) !important;
+  border-color: #ef4444 !important;
+  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 6px rgba(239, 68, 68, 0.2) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 
@@ -1124,11 +1124,11 @@ body {
 }
 
 .mesa-render-card.libre .m-badge { background: #064e3b; color: #34d399; }
-.mesa-render-card.ocupada .m-badge { background: #7c2d12 !important; color: #fdba74 !important; }
-.mesa-render-card.abierta .m-badge { background: #7c2d12 !important; color: #fdba74 !important; }
+.mesa-render-card.ocupada .m-badge { background: #991b1b !important; color: #fecaca !important; }
+.mesa-render-card.abierta .m-badge { background: #991b1b !important; color: #fecaca !important; }
 .mesa-render-card.esperando .m-badge { background: #7c2d12; color: #fb923c; }
 .mesa-render-card.esperando_parcial .m-badge { background: #78350f; color: #fde047; }
-.mesa-render-card.activa .m-badge { background: #7c2d12 !important; color: #fdba74 !important; }
+.mesa-render-card.activa .m-badge { background: #991b1b !important; color: #fecaca !important; }
 .mesa-render-card.cuenta .m-badge { background: #78350f; color: #fbbf24; }
 .mesa-render-card.reservada .m-badge { background: #78350f; color: #fde68a; }
 .m-grid-badge.badge-reservada { background: #78350f; color: #fde68a; }
@@ -5425,14 +5425,14 @@ body.theme-amethyst-3d .pay-method-tab.active {
 
 .mesa-render-card.silla.abierta,
 .mesa-render-card.silla.ocupada {
-  border-color: #f97316 !important;
-  background: radial-gradient(circle at center, rgba(249, 115, 22, 0.35) 20%, #111827 100%) !important;
-  box-shadow: 0 0 16px rgba(249, 115, 22, 0.55), inset 0 0 6px rgba(249, 115, 22, 0.25) !important;
+  border-color: #ef4444 !important;
+  background: radial-gradient(circle at center, rgba(239, 68, 68, 0.35) 20%, #111827 100%) !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 6px rgba(239, 68, 68, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 .mesa-render-card.silla.abierta .m-num,
 .mesa-render-card.silla.ocupada .m-num {
-  color: #fdba74 !important;
+  color: #fca5a5 !important;
 }
 
 .mesa-render-card.silla.esperando {
@@ -5454,13 +5454,13 @@ body.theme-amethyst-3d .pay-method-tab.active {
 }
 
 .mesa-render-card.silla.activa {
-  border-color: #f97316 !important;
-  background: radial-gradient(circle at center, rgba(249, 115, 22, 0.35) 20%, #111827 100%) !important;
-  box-shadow: 0 0 16px rgba(249, 115, 22, 0.55), inset 0 0 6px rgba(249, 115, 22, 0.25) !important;
+  border-color: #ef4444 !important;
+  background: radial-gradient(circle at center, rgba(239, 68, 68, 0.35) 20%, #111827 100%) !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 6px rgba(239, 68, 68, 0.25) !important;
   animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
 }
 .mesa-render-card.silla.activa .m-num {
-  color: #fdba74 !important;
+  color: #fca5a5 !important;
 }
 
 /* Respaldo curvado de la silla de barra */
