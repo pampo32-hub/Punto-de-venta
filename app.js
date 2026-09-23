@@ -18210,28 +18210,23 @@ document.addEventListener('DOMContentLoaded', () => {
   initRenombrarMesas();
   initNuevoProducto();
 
-  // Verificar si hay sesión previa guardada en sessionStorage o localStorage (F5 persistence)
-  const userStr = sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario');
-  const negStr = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
-  const tokenStr = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token');
+  // Verificar si hay sesión activa en la pestaña actual (sessionStorage para persistencia de F5)
+  const userStr = sessionStorage.getItem('pos_usuario');
+  const negStr = sessionStorage.getItem('pos_negocio');
+  const tokenStr = sessionStorage.getItem('pos_token');
 
-  if (userStr) {
+  if (userStr && tokenStr) {
     try {
       estado.usuarioActual = JSON.parse(userStr);
       estado.negocioActual = negStr ? JSON.parse(negStr) : null;
     } catch (_) {}
 
-    if (tokenStr) {
-      sessionStorage.setItem('pos_token', tokenStr);
-      localStorage.setItem('pos_token', tokenStr);
-    }
+    sessionStorage.setItem('pos_token', tokenStr);
     if (estado.usuarioActual) {
       sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
-      localStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
     }
     if (estado.negocioActual) {
       sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
-      localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
     }
 
     if (estado.negocioActual && estado.negocioActual.id) {
@@ -18251,7 +18246,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (huboCambios) {
           sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
-          localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
           if (typeof aplicarRestriccionesModulos === 'function') {
             aplicarRestriccionesModulos();
           }
@@ -18266,7 +18260,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     aplicarEnrutamientoPorRol();
   } else {
-    document.getElementById('landingLoginView').classList.add('active');
+    // Limpiar sesiones previas persistentes en el navegador para que siempre entre al panel de Login
+    try {
+      localStorage.removeItem('pos_usuario');
+      localStorage.removeItem('pos_token');
+      localStorage.removeItem('pos_negocio');
+      localStorage.removeItem('pos_user_context');
+      localStorage.removeItem('pos_active_view');
+      sessionStorage.clear();
+    } catch(e) {}
+    estado.usuarioActual = null;
+    const loginView = document.getElementById('landingLoginView');
+    const devView = document.getElementById('developerPortalView');
+    const posView = document.getElementById('posMainView');
+    if (loginView) loginView.classList.add('active');
+    if (devView) devView.classList.remove('active');
+    if (posView) posView.classList.remove('active');
     if (typeof cargarUsuariosPublicosLogin === 'function') {
       cargarUsuariosPublicosLogin();
     }
