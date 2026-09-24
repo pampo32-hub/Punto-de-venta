@@ -94,6 +94,7 @@ db.serialize(() => {
   db.run("ALTER TABLE Inventario ADD COLUMN medida_shot_ml REAL DEFAULT 30", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN rendimiento_shots REAL DEFAULT 25", () => {});
   db.run("UPDATE Inventario SET es_licor = 1, capacidad_ml = 750, medida_shot_ml = 30, rendimiento_shots = 25 WHERE es_licor = 0 AND (categoria LIKE '%licor%' OR LOWER(nombre) LIKE '%ron %' OR LOWER(nombre) LIKE '%tequila%' OR LOWER(nombre) LIKE '%gin %' OR LOWER(nombre) LIKE '%whisky%' OR LOWER(nombre) LIKE '%vodka%')", () => {});
+  db.run("UPDATE Inventario SET es_licor = 0, capacidad_ml = CASE WHEN LOWER(nombre) LIKE '%lata%' OR LOWER(nombre) LIKE '%350%' THEN 350 ELSE 355 END, medida_shot_ml = CASE WHEN LOWER(nombre) LIKE '%lata%' OR LOWER(nombre) LIKE '%350%' THEN 350 ELSE 355 END, rendimiento_shots = 1 WHERE (LOWER(nombre) LIKE '%cerveza%' OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%heineken%' OR LOWER(nombre) LIKE '%corona%') AND (rendimiento_shots > 1 OR es_licor = 1 OR es_licor = '1')", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN referencia TEXT", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN tipo_cambio REAL DEFAULT 1", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN monto_usd REAL DEFAULT 0", () => {});
@@ -8804,7 +8805,10 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
       let botellas_enteras = null;
       let shots_remanentes = null;
       let total_shots_actual = null;
-      if (ins.es_licor && ins.rendimiento_shots > 0) {
+      const esLicorReal = (ins.es_licor === 1 || ins.es_licor === '1' || ins.es_licor === true) &&
+        !/cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ins.nombre || '') &&
+        !/cerveza/i.test(ins.categoria || '');
+      if (esLicorReal && ins.rendimiento_shots > 1) {
         botellas_enteras = Math.floor(ins.stock_actual);
         shots_remanentes = Math.round((ins.stock_actual - botellas_enteras) * ins.rendimiento_shots);
         total_shots_actual = Math.round(ins.stock_actual * ins.rendimiento_shots);

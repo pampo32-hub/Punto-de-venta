@@ -19150,7 +19150,22 @@ function renderTablaInventario(items) {
 
     const unidad = (ins.unidad_medida || 'unidades').toLowerCase();
 
-    if (ins.es_licor) {
+    const esCerveza = Boolean(
+      /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ins.nombre || '') ||
+      /cerveza/i.test(ins.categoria || '') ||
+      unidad === 'botellas_350' || unidad === 'latas_350' || unidad === 'latas_473' ||
+      (Number(ins.rendimiento_shots) <= 1 && !/whisky|ron|vodka|tequila|guaro|gin|licor|destilado/i.test(ins.nombre || '') && !/licor/i.test(ins.categoria || ''))
+    );
+
+    const esLicorActivo = (ins.es_licor === 1 || ins.es_licor === '1' || ins.es_licor === true) && !esCerveza;
+
+    if (esCerveza) {
+      const cap = ins.capacidad_ml || 355;
+      const esLata = unidad.includes('lata') || /lata/i.test(ins.nombre || '');
+      nombreHtml += ` <span class="licor-tag" style="background:#1e293b; border-color:#eab308; color:#fde047;">${esLata ? '🥫' : '🍺'} ${cap}ml</span>`;
+      stockExtraHtml = `<span class="licor-shots-pill" style="background:#1e293b; border-color:#eab308; color:#fde047;">${esLata ? '🥫' : '🍺'} ${Math.floor(ins.stock_actual || 0)} bot.</span>`;
+      costoExtraHtml = '';
+    } else if (esLicorActivo) {
       if (unidad === 'kg' || unidad === 'kilogramos') {
         const pesoEmpaque = ins.capacidad_ml || 1000;
         const tamPorcion = ins.medida_shot_ml || 200;
@@ -19567,24 +19582,24 @@ window.guardarNuevoInsumo = async function() {
 
   if (unidad_medida === 'botellas_350') {
     unidad_medida = 'botellas';
-    es_licor = 1;
-    capacidad_ml = 355;
-    medida_shot_ml = 355;
+    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 355;
+    medida_shot_ml = medida_shot_ml || 355;
   } else if (unidad_medida === 'latas_350') {
     unidad_medida = 'unidades';
-    es_licor = 1;
-    capacidad_ml = 350;
-    medida_shot_ml = 350;
+    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 350;
+    medida_shot_ml = medida_shot_ml || 350;
   } else if (unidad_medida === 'latas_473') {
     unidad_medida = 'unidades';
-    es_licor = 1;
-    capacidad_ml = 473;
-    medida_shot_ml = 473;
+    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 473;
+    medida_shot_ml = medida_shot_ml || 473;
   } else if (unidad_medida === 'personalizada') {
     unidad_medida = 'unidades';
-    es_licor = 1;
-    capacidad_ml = 355;
-    medida_shot_ml = 355;
+    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 355;
+    medida_shot_ml = medida_shot_ml || 355;
   }
 
   if (es_licor) {
@@ -19681,12 +19696,25 @@ window.abrirModalEditarInsumo = async function(insumoId) {
   const elCos = document.getElementById('txtEditarInsumoCosto');
   const chkLicor = document.getElementById('chkEditarInsumoEsLicor');
 
+  const esCervezaInsumo = Boolean(
+    /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ins.nombre || '') ||
+    /cerveza/i.test(ins.categoria || '')
+  );
+
   if (elId) elId.value = ins.id;
   if (elNom) elNom.value = ins.nombre || '';
-  if (selUni) selUni.value = ins.unidad_medida || 'unidades';
+  if (selUni) {
+    if (esCervezaInsumo && (ins.unidad_medida === 'botellas' || ins.unidad_medida === 'unidades')) {
+      selUni.value = 'botellas_350';
+    } else {
+      selUni.value = ins.unidad_medida || 'unidades';
+    }
+  }
   if (elMin) elMin.value = ins.stock_minimo !== undefined ? ins.stock_minimo : 5;
   if (elCos) elCos.value = ins.costo_unitario !== undefined ? ins.costo_unitario : 0;
-  if (chkLicor) chkLicor.checked = Boolean(ins.es_licor);
+  if (chkLicor) {
+    chkLicor.checked = esCervezaInsumo ? false : (ins.es_licor === 1 || ins.es_licor === '1' || ins.es_licor === true);
+  }
 
   if (selCat) {
     const categorias = [...new Set((estado.inventario || []).map(i => i.categoria).filter(Boolean))];
@@ -19701,7 +19729,7 @@ window.abrirModalEditarInsumo = async function(insumoId) {
     txtCatManual.style.display = 'none';
   }
 
-  window.toggleConfigFraccionable('editar', Boolean(ins.es_licor));
+  window.toggleConfigFraccionable('editar', chkLicor ? chkLicor.checked : false);
   window.onCambioUnidadInsumo('editar');
 
   const modal = document.getElementById('modalEditarInsumo');
@@ -19736,24 +19764,24 @@ window.guardarEdicionInsumo = async function() {
 
   if (unidad_medida === 'botellas_350') {
     unidad_medida = 'botellas';
-    es_licor = 1;
-    capacidad_ml = 355;
-    medida_shot_ml = 355;
+    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 355;
+    medida_shot_ml = medida_shot_ml || 355;
   } else if (unidad_medida === 'latas_350') {
     unidad_medida = 'unidades';
-    es_licor = 1;
-    capacidad_ml = 350;
-    medida_shot_ml = 350;
+    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 350;
+    medida_shot_ml = medida_shot_ml || 350;
   } else if (unidad_medida === 'latas_473') {
     unidad_medida = 'unidades';
-    es_licor = 1;
-    capacidad_ml = 473;
-    medida_shot_ml = 473;
+    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 473;
+    medida_shot_ml = medida_shot_ml || 473;
   } else if (unidad_medida === 'personalizada') {
     unidad_medida = 'unidades';
-    es_licor = 1;
-    capacidad_ml = 355;
-    medida_shot_ml = 355;
+    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
+    capacidad_ml = capacidad_ml || 355;
+    medida_shot_ml = medida_shot_ml || 355;
   }
 
   if (es_licor) {
@@ -19836,30 +19864,30 @@ window.onCambioUnidadInsumo = function(modo) {
   if (u === 'botellas_350') {
     selCap.innerHTML = '<option value="355" selected>Botella Cerveza (355 ml / Estándar)</option><option value="350">Botella Cerveza (350 ml)</option><option value="330">Botella Cerveza (330 ml)</option><option value="custom">Personalizado (ml)</option>';
     selShot.innerHTML = '<option value="355" selected>1 Botella Completa (355 ml)</option><option value="350">1 Botella Completa (350 ml)</option><option value="177.5">1/2 Botella (Media)</option><option value="custom">Personalizado (ml)</option>';
-    if (chkLicor && !chkLicor.checked) {
-      chkLicor.checked = true;
-      window.toggleConfigFraccionable(modo, true);
+    if (chkLicor && modo === 'nuevo') {
+      chkLicor.checked = false;
+      window.toggleConfigFraccionable(modo, false);
     }
   } else if (u === 'latas_350') {
     selCap.innerHTML = '<option value="350" selected>Lata Cerveza (350 ml)</option><option value="355">Lata Cerveza (355 ml)</option><option value="custom">Personalizado (ml)</option>';
     selShot.innerHTML = '<option value="350" selected>1 Lata Completa (350 ml)</option><option value="175">1/2 Lata (Media)</option><option value="custom">Personalizado (ml)</option>';
-    if (chkLicor && !chkLicor.checked) {
-      chkLicor.checked = true;
-      window.toggleConfigFraccionable(modo, true);
+    if (chkLicor && modo === 'nuevo') {
+      chkLicor.checked = false;
+      window.toggleConfigFraccionable(modo, false);
     }
   } else if (u === 'latas_473') {
     selCap.innerHTML = '<option value="473" selected>Lata Grande (473 ml / 16 oz)</option><option value="500">Lata Medio Litro (500 ml)</option><option value="custom">Personalizado (ml)</option>';
     selShot.innerHTML = '<option value="473" selected>1 Lata Completa (473 ml)</option><option value="236.5">1/2 Lata (Media)</option><option value="custom">Personalizado (ml)</option>';
-    if (chkLicor && !chkLicor.checked) {
-      chkLicor.checked = true;
-      window.toggleConfigFraccionable(modo, true);
+    if (chkLicor && modo === 'nuevo') {
+      chkLicor.checked = false;
+      window.toggleConfigFraccionable(modo, false);
     }
   } else if (u === 'personalizada') {
     selCap.innerHTML = '<option value="custom" selected>Personalizado (ml / oz / g)</option><option value="355">355 ml</option><option value="350">350 ml</option><option value="473">473 ml</option><option value="750">750 ml</option><option value="1000">1000 ml / 1 Kg</option>';
     selShot.innerHTML = '<option value="custom" selected>Personalizado</option><option value="355">355 ml (1 Unidad)</option><option value="350">350 ml</option><option value="473">473 ml</option><option value="30">30 ml (1 oz)</option>';
-    if (chkLicor && !chkLicor.checked) {
-      chkLicor.checked = true;
-      window.toggleConfigFraccionable(modo, true);
+    if (chkLicor && modo === 'nuevo') {
+      chkLicor.checked = false;
+      window.toggleConfigFraccionable(modo, false);
     }
   } else if (u === 'kg') {
     selCap.innerHTML = '<option value="1000">1 Kg (1000 g)</option><option value="500">500 g (1/2 Kg)</option><option value="2000">2 Kg (2000 g)</option><option value="custom">Personalizado (g)</option>';
