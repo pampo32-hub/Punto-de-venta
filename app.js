@@ -3844,6 +3844,20 @@ window.cargarAuditoriaDev = async function() {
         userDevDisplay += `<div style="font-size:0.72rem; color:#34d399; font-weight:700; margin-top:2px;">🔑 Autorizó: @${escapeHtml(l.autorizado_por)}</div>`;
       }
 
+      let montoDev = Number(l.monto) || 0;
+      if (montoDev === 0 && l.detalle) {
+        const matchM = l.detalle.match(/[₡$]\s*([\d\s.,\u00a0]+)/);
+        if (matchM && matchM[1]) {
+          const numE = parseFloat(matchM[1].replace(/[\s\u00a0.]/g, '').replace(',', '.'));
+          if (!isNaN(numE) && numE > 0) montoDev = numE;
+        }
+      }
+      let motivoDev = l.motivo;
+      if (!motivoDev && l.detalle) {
+        const matchMot = l.detalle.match(/:\s*([^•|()]+)$/);
+        if (matchMot && matchMot[1] && matchMot[1].trim().length > 1) motivoDev = matchMot[1].trim();
+      }
+
       return `
         <tr style="border-bottom:1px solid #1f2937;">
           <td style="padding:10px 16px; font-size:0.8rem; color:#94a3b8; white-space:nowrap;">${fecha}</td>
@@ -3851,7 +3865,11 @@ window.cargarAuditoriaDev = async function() {
           <td style="padding:10px 16px; color:#cbd5e1; font-size:0.82rem;">${l.modulo || '-'}</td>
           <td style="padding:10px 16px;">${tagTipo}</td>
           <td style="padding:10px 16px; font-weight:600; color:#38bdf8;">${l.accion || '-'}</td>
-          <td style="padding:10px 16px; color:#e2e8f0; font-size:0.85rem;">${l.detalle || ''} ${l.motivo ? `<em style="color:#9ca3af; display:block; font-size:0.75rem;">Motivo: ${l.motivo}</em>` : ''}</td>
+          <td style="padding:10px 16px; color:#e2e8f0; font-size:0.85rem;">
+            ${escapeHtml(l.detalle || '')}
+            ${montoDev > 0 ? `<div style="margin-top:3px;"><span style="display:inline-block; font-weight:700; color:#38bdf8; font-size:0.8rem; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.4); padding:1px 6px; border-radius:4px;">💰 ${formatCRC(montoDev)}</span></div>` : ''}
+            ${motivoDev ? `<em style="color:#fbbf24; display:block; font-size:0.75rem; margin-top:3px;">Motivo: ${escapeHtml(motivoDev)}</em>` : ''}
+          </td>
         </tr>
       `;
     }).join('');
@@ -22221,14 +22239,36 @@ function renderTablaAuditoria(eventos) {
       userDisplay += `<div style="font-size:0.75rem; color:#34d399; margin-top:3px; font-weight:700; display:flex; align-items:center; gap:4px;"><span style="font-size:0.8rem;">🔑</span> Autorizó: @${escapeHtml(ev.autorizado_por)}</div>`;
     }
 
+    let montoDisplay = '—';
+    const montoVal = Number(ev.monto) || 0;
+    if (montoVal > 0) {
+      montoDisplay = formatCRC(montoVal);
+    } else if (ev.detalle) {
+      const matchMonto = ev.detalle.match(/[₡$]\s*([\d\s.,\u00a0]+)/);
+      if (matchMonto && matchMonto[1]) {
+        const numExt = parseFloat(matchMonto[1].replace(/[\s\u00a0.]/g, '').replace(',', '.'));
+        if (!isNaN(numExt) && numExt > 0) {
+          montoDisplay = formatCRC(numExt);
+        }
+      }
+    }
+
+    let motivoDisplay = ev.motivo;
+    if (!motivoDisplay || motivoDisplay === '—' || String(motivoDisplay).trim() === '') {
+      const matchMotivo = ev.detalle ? ev.detalle.match(/:\s*([^•|()]+)$/) : null;
+      if (matchMotivo && matchMotivo[1] && matchMotivo[1].trim().length > 1) {
+        motivoDisplay = matchMotivo[1].trim();
+      }
+    }
+
     tr.innerHTML = `
       <td><span style="color:#9ca3af; font-size:0.8rem;">${fecha}</span></td>
       <td>${userDisplay}</td>
       <td><span class="audit-action-badge ${badgeClass}">${escapeHtml((ev.accion || '').replace(/_/g, ' '))}</span></td>
       <td><span style="color:#60a5fa; font-weight:600; text-transform:uppercase; font-size:0.75rem;">${escapeHtml(ev.modulo || 'general')}</span></td>
       <td>${escapeHtml(ev.detalle || '')}</td>
-      <td><em style="color:#fbbf24;">${escapeHtml(ev.motivo || '—')}</em></td>
-      <td><strong>${ev.monto > 0 ? formatCRC(ev.monto) : '—'}</strong></td>
+      <td><em style="color:#fbbf24;">${escapeHtml(motivoDisplay || '—')}</em></td>
+      <td><strong style="color:${montoDisplay !== '—' ? '#38bdf8' : '#64748b'}; font-size:0.9rem;">${montoDisplay}</strong></td>
     `;
     tbody.appendChild(tr);
   });

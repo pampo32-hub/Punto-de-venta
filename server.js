@@ -7035,7 +7035,8 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
       accion: 'reasignacion_turno_caja',
       tipoEvento: 'operativo',
       modulo: 'caja',
-      detalle: detalleAudit
+      detalle: detalleAudit,
+      motivo: motivo || 'Reasignación de turno de caja'
     });
 
     io.emit('caja_actualizada');
@@ -7177,7 +7178,9 @@ app.post('/api/caja/movimiento', async (req, res) => {
       accion: tipo === 'entrada' ? 'entrada_efectivo' : 'salida_gasto_menor',
       tipoEvento: 'operativo',
       modulo: 'caja',
-      detalle: `${tipo === 'entrada' ? 'Ingreso' : 'Egreso'} de efectivo por ₡${montoNum.toLocaleString('es-CR')} en ${caja.caja_nombre || 'Caja #' + caja.id}: ${conceptoLimpio}`
+      detalle: `${tipo === 'entrada' ? 'Ingreso' : 'Egreso'} de efectivo por ₡${montoNum.toLocaleString('es-CR')} en ${caja.caja_nombre || 'Caja #' + caja.id}: ${conceptoLimpio}`,
+      motivo: conceptoLimpio,
+      monto: montoNum
     });
 
     io.emit('caja_actualizada');
@@ -7467,7 +7470,9 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       accion: 'cierre_z',
       tipoEvento: 'financiero',
       modulo: 'caja',
-      detalle: `Cierre Z Turno #${caja.id} (${caja.caja_nombre || 'Caja'}). Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Esp USD: $${dolaresEsperadoUSD} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} + $${dolaresRealUSD} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`
+      detalle: `Cierre Z Turno #${caja.id} (${caja.caja_nombre || 'Caja'}). Ventas: ₡${totalVentas.toLocaleString('es-CR')} | Esp CRC: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')} | Esp USD: $${dolaresEsperadoUSD} | Contado: ₡${efectivoRealCRC.toLocaleString('es-CR')} + $${dolaresRealUSD} (${estadoCuadre}: ₡${Math.abs(diferenciaTotal).toLocaleString('es-CR')})`,
+      motivo: `Cierre Z de turno (${estadoCuadre})`,
+      monto: totalVentas
     });
 
     io.emit('caja_actualizada');
@@ -7625,7 +7630,9 @@ app.post('/api/caja/abrir', async (req, res) => {
       accion: 'apertura_caja',
       tipoEvento: 'operativo',
       modulo: 'caja',
-      detalle: `Apertura de turno #${r.lastID} en ${cajaNombre || 'Caja'} (Cajero: ${nombreCajero}) con fondo inicial: ₡${montoNum.toLocaleString('es-CR')}`
+      detalle: `Apertura de turno #${r.lastID} en ${cajaNombre || 'Caja'} (Cajero: ${nombreCajero}) con fondo inicial: ₡${montoNum.toLocaleString('es-CR')}`,
+      motivo: 'Fondo inicial de apertura de caja',
+      monto: montoNum
     });
 
     io.emit('caja_actualizada');
@@ -7782,11 +7789,32 @@ async function registrarAuditoria({
     const autorizadorFinal = (autorizado_por || autorizadoPor || '').trim() || null;
     let usuarioRegistro = String(usuarioNombre || 'Sistema').trim();
 
+    // Auto-detección y extracción robusta de monto si no fue pasado explícitamente
+    let montoFinal = Number(monto) || 0;
+    if (montoFinal === 0 && detalle) {
+      const matchMonto = String(detalle).match(/[₡$]\s*([\d\s.,\u00a0]+)/);
+      if (matchMonto && matchMonto[1]) {
+        const numExt = parseFloat(matchMonto[1].replace(/[\s\u00a0.]/g, '').replace(',', '.'));
+        if (!isNaN(numExt) && numExt > 0) {
+          montoFinal = numExt;
+        }
+      }
+    }
+
+    // Auto-detección de motivo si no fue provisto
+    let motivoFinal = motivo ? String(motivo).trim() : null;
+    if (!motivoFinal && detalle) {
+      const matchMotivo = String(detalle).match(/:\s*([^•|()]+)$/);
+      if (matchMotivo && matchMotivo[1] && matchMotivo[1].trim().length > 1) {
+        motivoFinal = matchMotivo[1].trim();
+      }
+    }
+
     try {
       await dbRun(
         `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, autorizado_por, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nid, usuarioId, usuarioRegistro, autorizadorFinal, accion, tipoEvento, modulo, detalle, motivo, monto, (pinAutorizado || autorizadorFinal) ? 1 : 0, ahora]
+        [nid, usuarioId, usuarioRegistro, autorizadorFinal, accion, tipoEvento, modulo, detalle, motivoFinal, montoFinal, (pinAutorizado || autorizadorFinal) ? 1 : 0, ahora]
       );
     } catch (_) {
       // Fallback si la base no tiene aún la columna autorizado_por
@@ -7796,7 +7824,7 @@ async function registrarAuditoria({
       await dbRun(
         `INSERT INTO Auditoria (negocio_id, usuario_id, usuario_nombre, accion, tipo_evento, modulo, detalle, motivo, monto, pin_autorizado, fecha_hora)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nid, usuarioId, usuarioRegistro, accion, tipoEvento, modulo, detalle, motivo, monto, (pinAutorizado || autorizadorFinal) ? 1 : 0, ahora]
+        [nid, usuarioId, usuarioRegistro, accion, tipoEvento, modulo, detalle, motivoFinal, montoFinal, (pinAutorizado || autorizadorFinal) ? 1 : 0, ahora]
       );
     }
   } catch (e) {
