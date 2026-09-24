@@ -475,6 +475,7 @@ function initDb() {
     // 10. Auditoría de Anulaciones
     db.run(`CREATE TABLE IF NOT EXISTS Anulaciones (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       orden_id INTEGER,
       detalle_id INTEGER,
       mesa TEXT,
@@ -486,10 +487,12 @@ function initDb() {
       autorizado_por TEXT DEFAULT 'Supervisor',
       fecha_hora TEXT NOT NULL
     )`);
+    db.run("ALTER TABLE Anulaciones ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
     // 11. Facturación Electrónica Express
     db.run(`CREATE TABLE IF NOT EXISTS FacturasElectronicas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       orden_id INTEGER,
       tipo_documento TEXT DEFAULT 'FE',
       clave TEXT NOT NULL,
@@ -505,6 +508,7 @@ function initDb() {
       total REAL NOT NULL,
       estado_hacienda TEXT DEFAULT 'aceptado'
     )`);
+    db.run("ALTER TABLE FacturasElectronicas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
     // 12. Usuarios del Sistema con Género y Roles
     db.run(`CREATE TABLE IF NOT EXISTS Usuarios (
@@ -553,6 +557,7 @@ function initDb() {
     // 13. Historial de Uniones de Mesas (Snapshots para Separación Exacta)
     db.run(`CREATE TABLE IF NOT EXISTS TableMerges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       mesa_principal_id INTEGER NOT NULL,
       mesa_secundaria_id INTEGER NOT NULL,
       orden_principal_id INTEGER,
@@ -563,6 +568,7 @@ function initDb() {
       creado_en TEXT,
       activo INTEGER DEFAULT 1
     )`);
+    db.run("ALTER TABLE TableMerges ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
 
     // 14. Inventario & Control de Stock de Insumos
     db.run(`CREATE TABLE IF NOT EXISTS Inventario (
@@ -628,6 +634,9 @@ function initDb() {
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id)
     )`);
     db.run("ALTER TABLE Auditoria ADD COLUMN autorizado_por TEXT", () => {});
+    db.run("ALTER TABLE Auditoria ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Inventario ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE InventarioMovimientos ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
     db.run("ALTER TABLE Anulaciones ADD COLUMN solicitado_por TEXT", () => {});
 
     // Sembrar Insumos Iniciales si no existen

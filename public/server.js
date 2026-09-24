@@ -23,17 +23,25 @@ const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'gamma_pos_jwt_secret_key_prod_2026_secured';
 
 // ============================================================================
-// ESTADO EN MEMORIA: HAPPY HOUR
+// ESTADO EN MEMORIA: HAPPY HOUR (MULTI-NEGOCIO AISLADO)
 // ============================================================================
-let happyHourModificadoManualmente = false;
-let happyHourEstado = {
-  activo: false,
-  horaInicio: '16:00', // HH:MM (24h)
-  horaFin: '19:00',    // HH:MM (24h)
-  autoActivar: true,
-  dias: '1,2,3,4,5,6,0', // 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab, 0=Dom
-  modoDefecto: 'estricto' // 'estricto' | 'flexible'
-};
+const happyHourPorNegocio = new Map();
+
+function obtenerEstadoHappyHour(negocioId = 1) {
+  const nid = Number(negocioId) || 1;
+  if (!happyHourPorNegocio.has(nid)) {
+    happyHourPorNegocio.set(nid, {
+      activo: false,
+      horaInicio: '16:00', // HH:MM (24h)
+      horaFin: '19:00',    // HH:MM (24h)
+      autoActivar: true,
+      dias: '1,2,3,4,5,6,0', // 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab, 0=Dom
+      modoDefecto: 'estricto', // 'estricto' | 'flexible'
+      modificadoManualmente: false
+    });
+  }
+  return happyHourPorNegocio.get(nid);
+}
 
 // Cargar config HH desde la BD al iniciar
 db.serialize(() => {
@@ -56,16 +64,24 @@ db.serialize(() => {
   db.run("INSERT OR IGNORE INTO ConfigNegocio (clave, valor) VALUES ('update_commit_date', '')");
 
   db.all("SELECT clave, valor FROM ConfigNegocio WHERE clave LIKE 'hh_%'", [], (err, rows) => {
-    if (!err && rows && !happyHourModificadoManualmente) {
+    if (!err && rows) {
       rows.forEach(r => {
-        if (r.clave === 'hh_activo') happyHourEstado.activo = r.valor === 'true';
-        if (r.clave === 'hh_hora_inicio') happyHourEstado.horaInicio = r.valor;
-        if (r.clave === 'hh_hora_fin') happyHourEstado.horaFin = r.valor;
-        if (r.clave === 'hh_auto_activar') happyHourEstado.autoActivar = r.valor !== 'false';
-        if (r.clave === 'hh_dias') happyHourEstado.dias = r.valor;
-        if (r.clave === 'hh_modo_defecto') happyHourEstado.modoDefecto = r.valor;
+        const match = r.clave.match(/^hh_([a-z_]+?)(?:_negocio_(\d+))?$/);
+        if (match) {
+          const campo = match[1];
+          const nid = match[2] ? Number(match[2]) : 1;
+          const estado = obtenerEstadoHappyHour(nid);
+          if (!estado.modificadoManualmente) {
+            if (campo === 'activo') estado.activo = r.valor === 'true';
+            else if (campo === 'hora_inicio') estado.horaInicio = r.valor;
+            else if (campo === 'hora_fin') estado.horaFin = r.valor;
+            else if (campo === 'auto_activar') estado.autoActivar = r.valor !== 'false';
+            else if (campo === 'dias') estado.dias = r.valor;
+            else if (campo === 'modo_defecto') estado.modoDefecto = r.valor;
+          }
+        }
       });
-      console.log(`🍸 Happy Hour cargado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}, auto=${happyHourEstado.autoActivar}`);
+      console.log(`🍸 Happy Hour inicializado para ${happyHourPorNegocio.size} comercio(s).`);
     }
   });
 
@@ -73,6 +89,9 @@ db.serialize(() => {
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_numero TEXT", () => {});
   db.run("ALTER TABLE DetalleOrden ADD COLUMN origen_mesa_id INTEGER", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN unida_a_mesa_id INTEGER", () => {});
+  db.run("ALTER TABLE TableMerges ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+  db.run("ALTER TABLE FacturasElectronicas ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+  db.run("ALTER TABLE Anulaciones ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN unida_con TEXT", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN grupo_mesas TEXT", () => {});
   db.run("ALTER TABLE Mesas ADD COLUMN transferida_de TEXT", () => {});
@@ -213,8 +232,8 @@ function getInicioFinHoyCR() {
   };
 }
 
-// Auto-gestión de Happy Hour según horario y días programados en Costa Rica (revisa cada 30 segundos)
-setInterval(() => {
+// Auto-gestión de Happy Hour según horario y días programados en Costa Rica (revisa cada 30 segundos, Multi-Comercio)
+setInterval(async () => {
   if (process.env.NODE_ENV === 'test') return;
   
   const ahora = new Date();
@@ -223,38 +242,59 @@ setInterval(() => {
   const [hActual, mActual] = (horaStrCR || '00:00').split(':').map(Number);
   const minutosActuales = (hActual || 0) * 60 + (mActual || 0);
 
-  const [hInicio, mInicio] = (happyHourEstado.horaInicio || '16:00').split(':').map(Number);
-  const minutosInicio = (hInicio || 0) * 60 + (mInicio || 0);
-
-  const [hFin, mFin] = (happyHourEstado.horaFin || '19:00').split(':').map(Number);
-  const minutosFin = (hFin || 0) * 60 + (mFin || 0);
-
   // Obtener día de la semana en Costa Rica (0=Dom, 1=Lun, ..., 6=Sab)
   const diaSemana = new Date(ahora.toLocaleString('en-US', optionsCR)).getDay();
-  const diasPermitidos = (happyHourEstado.dias || '1,2,3,4,5,6,0').split(',').map(d => Number(d.trim()));
-  const hoyAplica = diasPermitidos.includes(diaSemana);
 
-  if (happyHourEstado.autoActivar !== false && hoyAplica) {
-    if (minutosActuales >= minutosInicio && minutosActuales < minutosFin) {
-      if (!happyHourEstado.activo) {
-        happyHourEstado.activo = true;
-        db.run("UPDATE ConfigNegocio SET valor = 'true' WHERE clave = 'hh_activo'");
-        console.log(`🍸 Happy Hour AUTO-ACTIVADO por horario programado (${happyHourEstado.horaInicio}–${happyHourEstado.horaFin})`);
-        io.emit('happy_hour_cambio', { ...happyHourEstado });
-      }
-    } else {
-      if (happyHourEstado.activo) {
-        happyHourEstado.activo = false;
-        db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
-        console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado (Costa Rica).');
-        io.emit('happy_hour_cambio', { ...happyHourEstado });
+  // Asegurar que revisamos todos los comercios activos
+  let comerciosIds = Array.from(happyHourPorNegocio.keys());
+  if (comerciosIds.length === 0) comerciosIds = [1];
+  try {
+    const rowsNegs = await dbAll('SELECT id FROM Negocios WHERE activo = 1');
+    if (rowsNegs && rowsNegs.length > 0) {
+      for (const rn of rowsNegs) {
+        if (!comerciosIds.includes(Number(rn.id))) comerciosIds.push(Number(rn.id));
       }
     }
-  } else if (happyHourEstado.activo && minutosActuales >= minutosFin) {
-    happyHourEstado.activo = false;
-    db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
-    console.log('🍸 Happy Hour AUTO-DESACTIVADO por horario programado.');
-    io.emit('happy_hour_cambio', { ...happyHourEstado });
+  } catch (_) {}
+
+  for (const nid of comerciosIds) {
+    const hhEstado = obtenerEstadoHappyHour(nid);
+    const [hInicio, mInicio] = (hhEstado.horaInicio || '16:00').split(':').map(Number);
+    const minutosInicio = (hInicio || 0) * 60 + (mInicio || 0);
+
+    const [hFin, mFin] = (hhEstado.horaFin || '19:00').split(':').map(Number);
+    const minutosFin = (hFin || 0) * 60 + (mFin || 0);
+
+    const diasPermitidos = (hhEstado.dias || '1,2,3,4,5,6,0').split(',').map(d => Number(d.trim()));
+    const hoyAplica = diasPermitidos.includes(diaSemana);
+
+    const claveActivo = `hh_activo_negocio_${nid}`;
+
+    if (hhEstado.autoActivar !== false && hoyAplica) {
+      if (minutosActuales >= minutosInicio && minutosActuales < minutosFin) {
+        if (!hhEstado.activo) {
+          hhEstado.activo = true;
+          db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, 'true')", [claveActivo]);
+          if (nid === 1) db.run("UPDATE ConfigNegocio SET valor = 'true' WHERE clave = 'hh_activo'");
+          console.log(`🍸 Happy Hour AUTO-ACTIVADO para negocio ${nid} (${hhEstado.horaInicio}–${hhEstado.horaFin})`);
+          io.emit('happy_hour_cambio', { negocio_id: nid, ...hhEstado });
+        }
+      } else {
+        if (hhEstado.activo) {
+          hhEstado.activo = false;
+          db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, 'false')", [claveActivo]);
+          if (nid === 1) db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
+          console.log(`🍸 Happy Hour AUTO-DESACTIVADO para negocio ${nid} (Costa Rica).`);
+          io.emit('happy_hour_cambio', { negocio_id: nid, ...hhEstado });
+        }
+      }
+    } else if (hhEstado.activo && minutosActuales >= minutosFin) {
+      hhEstado.activo = false;
+      db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, 'false')", [claveActivo]);
+      if (nid === 1) db.run("UPDATE ConfigNegocio SET valor = 'false' WHERE clave = 'hh_activo'");
+      console.log(`🍸 Happy Hour AUTO-DESACTIVADO para negocio ${nid}.`);
+      io.emit('happy_hour_cambio', { negocio_id: nid, ...hhEstado });
+    }
   }
 }, 30 * 1000);
 
@@ -2856,6 +2896,12 @@ app.put('/api/productos/:id/visual', async (req, res) => {
     const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El producto pertenece a otro comercio.' });
+    }
+
     let finalImg = prod.imagen_url;
     if (eliminar_imagen || imagen_url === '__borrar__') {
       finalImg = null;
@@ -2869,7 +2915,7 @@ app.put('/api/productos/:id/visual', async (req, res) => {
     );
 
     const actualizado = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
-    io.emit('producto_visual_cambiado', actualizado);
+    io.emit('producto_visual_cambiado', { ...actualizado, negocio_id: prodNid });
     res.json({ message: 'Apariencia del botón actualizada con éxito', producto: actualizado });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3178,6 +3224,7 @@ app.get('/api/mesas', async (req, res) => {
       try {
         await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
+          negocio_id INTEGER DEFAULT 1,
           mesa_principal_id INTEGER NOT NULL,
           mesa_secundaria_id INTEGER NOT NULL,
           orden_principal_id INTEGER,
@@ -3188,7 +3235,7 @@ app.get('/api/mesas', async (req, res) => {
           creado_en TEXT,
           activo INTEGER DEFAULT 1
         )`);
-        activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1');
+        activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [negocioId, negocioId]);
       } catch (_) {}
 
       const mergeActivo = activeMerges.find(
@@ -3293,16 +3340,22 @@ app.get('/api/mesas', async (req, res) => {
 app.post('/api/mesas/posiciones', async (req, res) => {
   try {
     const { posiciones, negocio_id } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || reqNid || 1);
+    if (req.usuario && req.usuario.rol !== 'developer' && negocioId !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
     if (Array.isArray(posiciones)) {
       for (const pos of posiciones) {
-        await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto), piso = COALESCE(?, piso) WHERE id = ?', [
+        await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto), piso = COALESCE(?, piso) WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [
           pos.x,
           pos.y,
           pos.ancho || null,
           pos.alto || null,
           pos.piso || null,
-          pos.id
+          pos.id,
+          negocioId,
+          negocioId
         ]);
       }
     }
@@ -3317,15 +3370,21 @@ app.post('/api/mesas/posiciones', async (req, res) => {
 app.post('/api/mesas/posiciones/auto', async (req, res) => {
   try {
     const { id, x, y, ancho, alto, piso, negocio_id } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || reqNid || 1);
+    if (req.usuario && req.usuario.rol !== 'developer' && negocioId !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
     if (id != null && x != null && y != null) {
-      await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto), piso = COALESCE(?, piso) WHERE id = ?', [
+      await dbRun('UPDATE Mesas SET x = ?, y = ?, ancho = COALESCE(?, ancho), alto = COALESCE(?, alto), piso = COALESCE(?, piso) WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [
         x,
         y,
         ancho || null,
         alto || null,
         piso || null,
-        id
+        id,
+        negocioId,
+        negocioId
       ]);
 
       io.emit('mesas_reorganizadas', { mesaId: id, x, y, ancho, alto, piso, negocio_id: negocioId });
@@ -3408,13 +3467,18 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+
     const ahora = new Date().toISOString();
-    const negocioId = Number(mesa.negocio_id || obtenerNegocioIdReq(req) || 1);
+    const negocioId = Number(mesa.negocio_id || reqNid || 1);
 
     // 1. Obtener todas las órdenes activas asociadas a la mesa
     const ordenesActivas = await dbAll(
-      "SELECT id, total FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
-      [mesaId]
+      "SELECT id, total FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [mesaId, negocioId, negocioId]
     );
 
     const totalPendiente = (ordenesActivas || []).reduce((acc, o) => acc + (Number(o.total) || 0), 0);
@@ -3476,10 +3540,11 @@ app.post('/api/mesas/:id/reset', verificarAdmin, async (req, res) => {
       total: 0,
       mesero: null,
       transferida_de: null,
-      mesas_unidas: []
+      mesas_unidas: [],
+      negocio_id: negocioId
     });
-    io.emit('comanda_anulada', { mesaId: Number(mesaId), ordenesIds });
-    io.emit('kds_actualizado');
+    io.emit('comanda_anulada', { mesaId: Number(mesaId), ordenesIds, negocio_id: negocioId });
+    io.emit('kds_actualizado', { negocio_id: negocioId });
 
     res.json({
       success: true,
@@ -3502,7 +3567,12 @@ app.delete('/api/mesas/:id', async (req, res) => {
     const esAdmin = rol === 'admin' || rol === 'developer';
 
     const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    const mesaNegocioId = mesaRow ? Number(mesaRow.negocio_id || 1) : 1;
+    if (!mesaRow) return res.status(404).json({ error: 'Mesa no encontrada' });
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesaRow.negocio_id && Number(mesaRow.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+    const mesaNegocioId = Number(mesaRow.negocio_id || reqNid || 1);
 
     // Verificar si la mesa tiene orden activa con consumos
     const ordenesActivas = await dbAll("SELECT id, total FROM Ordenes WHERE (mesa_id = ? OR mesa_id = ?) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [mesaId, Number(mesaId) || mesaId]);
@@ -3635,6 +3705,11 @@ app.put('/api/mesas/:id/capacidad', async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada.' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+
     await dbRun('UPDATE Mesas SET capacidad = ? WHERE id = ?', [numCap, mesaId]);
     const mesaActualizada = await dbGet(`
       SELECT m.*, z.nombre as zonaNombre 
@@ -3643,8 +3718,9 @@ app.put('/api/mesas/:id/capacidad', async (req, res) => {
       WHERE m.id = ?
     `, [mesaId]);
 
-    io.emit('mesa_capacidad_cambiada', { id: Number(mesaId), capacidad: numCap, negocio_id: mesa.negocio_id || 1 });
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), capacidad: numCap, negocio_id: mesa.negocio_id || 1 });
+    const mesaNid = Number(mesa.negocio_id || reqNid || 1);
+    io.emit('mesa_capacidad_cambiada', { id: Number(mesaId), capacidad: numCap, negocio_id: mesaNid });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), capacidad: numCap, negocio_id: mesaNid });
 
     res.json({ message: `Capacidad de ${mesa.numero} actualizada a ${numCap} personas`, mesa: mesaActualizada });
   } catch (e) {
@@ -3665,7 +3741,12 @@ const handleRenombrarMesa = async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa o silla no encontrada.' });
 
-    const negId = mesa.negocio_id || 1;
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+
+    const negId = Number(mesa.negocio_id || reqNid || 1);
     // Validar que no exista otra mesa con el mismo nombre dentro del mismo negocio
     const duplicada = await dbGet('SELECT * FROM Mesas WHERE LOWER(numero) = LOWER(?) AND id != ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nuevoNombre, mesaId, negId, negId]);
     if (duplicada) {
@@ -3693,9 +3774,16 @@ app.post('/api/mesas/:id/cliente', async (req, res) => {
     const { cliente = '' } = req.body;
     const clienteLimpio = String(cliente || '').trim();
     const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    const negId = mesaRow ? (mesaRow.negocio_id || 1) : 1;
+    if (!mesaRow) return res.status(404).json({ error: 'Mesa no encontrada.' });
+
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesaRow.negocio_id && Number(mesaRow.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+
+    const negId = Number(mesaRow.negocio_id || reqNid || 1);
     await dbRun('UPDATE Mesas SET cliente = ? WHERE id = ?', [clienteLimpio || null, mesaId]);
-    await dbRun("UPDATE Ordenes SET cliente = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [clienteLimpio || 'Cliente General', mesaId]);
+    await dbRun("UPDATE Ordenes SET cliente = ? WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [clienteLimpio || 'Cliente General', mesaId, negId, negId]);
     io.emit('mesa_actualizada', { mesaId: Number(mesaId), cliente: clienteLimpio || null, negocio_id: negId });
     res.json({ ok: true, cliente: clienteLimpio });
   } catch (e) {
@@ -3816,10 +3904,15 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+
     // 1. Obtener órdenes activas de la mesa para verificar si hay saldo pendiente
     const ordenesActivas = await dbAll(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
-      [mesaId]
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [mesaId, Number(mesa.negocio_id || reqNid || 1), Number(mesa.negocio_id || reqNid || 1)]
     );
 
     let totalPendiente = 0;
@@ -3835,7 +3928,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     }
 
     const ahora = new Date().toISOString();
-    const negocioId = Number(mesa.negocio_id || obtenerNegocioIdReq(req) || 1);
+    const negocioId = Number(mesa.negocio_id || reqNid || 1);
     const exigirPin = await negocioTieneModulo(negocioId, 'pedir_pin_liberar_con_saldo');
 
     const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
@@ -3895,8 +3988,8 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
 
     // 3. Cerrar cualquier orden remanente ya pagada o sin saldo
     await dbRun(
-      "UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
-      [ahora, mesaId]
+      "UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [ahora, mesaId, negocioId, negocioId]
     );
 
     // 4. Liberar mesa completamente
@@ -3913,12 +4006,12 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     );
 
     await dbRun(
-      "UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE mesa_id = ?) AND estado_comanda IN ('pendiente', 'preparando')",
-      [mesaId]
+      "UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))) AND estado_comanda IN ('pendiente', 'preparando')",
+      [mesaId, negocioId, negocioId]
     );
-    io.emit('kds_actualizado');
+    io.emit('kds_actualizado', { negocio_id: negocioId });
 
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioId });
     io.emit('reserva_actualizada', { negocio_id: negocioId });
 
     res.json({
@@ -3934,7 +4027,12 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
 // Liberar todas las mesas masivamente (Developer / Admin)
 app.post('/api/mesas/liberar-todas', async (req, res) => {
   try {
-    const negocioId = Number(req.body.negocio_id || req.headers['x-negocio-id'] || obtenerNegocioIdReq(req) || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const bodyNid = req.body.negocio_id || req.headers['x-negocio-id'];
+    const negocioId = Number(bodyNid || reqNid || 1);
+    if (req.usuario && req.usuario.rol !== 'developer' && negocioId !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
     const ahora = new Date().toISOString();
 
     // 1. Cerrar cualquier orden abierta de este negocio
@@ -3963,7 +4061,7 @@ app.post('/api/mesas/liberar-todas', async (req, res) => {
       );
     } catch (_) {}
 
-    io.emit('mesas_actualizadas');
+    io.emit('mesas_actualizadas', { negocio_id: negocioId });
     io.emit('reserva_actualizada', { negocio_id: negocioId });
 
     res.json({
@@ -3981,6 +4079,17 @@ app.post('/api/mesas/mover', async (req, res) => {
     const mesaOrig = await dbGet('SELECT * FROM Mesas WHERE id = ?', [origenMesaId]);
     const mesaDest = await dbGet('SELECT * FROM Mesas WHERE id = ?', [destinoMesaId]);
     if (!mesaOrig || !mesaDest) return res.status(404).json({ error: 'Mesa no encontrada' });
+
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer') {
+      if (mesaOrig.negocio_id && Number(mesaOrig.negocio_id) !== Number(reqNid)) {
+        return res.status(403).json({ error: 'Acceso denegado: La mesa de origen pertenece a otro comercio.' });
+      }
+    }
+    if (Number(mesaOrig.negocio_id || 1) !== Number(mesaDest.negocio_id || 1)) {
+      return res.status(400).json({ error: 'No se pueden mover órdenes entre mesas de comercios distintos.' });
+    }
+    const tenantId = Number(mesaOrig.negocio_id || 1);
 
     const orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')", [origenMesaId]);
     if (!orden) return res.status(400).json({ error: 'La mesa de origen no tiene una orden activa' });
@@ -4005,13 +4114,13 @@ app.post('/api/mesas/mover', async (req, res) => {
 
     // 4. Deactivate any prior table merges involving Table A
     await dbRun(
-      'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-      [origenMesaId, origenMesaId]
+      'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+      [origenMesaId, origenMesaId, tenantId, tenantId]
     );
 
-    io.emit('mesa_transferida', { origenMesaId, destinoMesaId, ordenId: orden.id, transferida_de: origenLabel });
-    io.emit('mesa_actualizada', { mesaId: origenMesaId, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
-    io.emit('mesa_actualizada', { mesaId: destinoMesaId, estado: mesaOrig.estado, total: orden.total || 0, transferida_de: origenLabel, mesas_unidas: [origenLabel] });
+    io.emit('mesa_transferida', { origenMesaId, destinoMesaId, ordenId: orden.id, transferida_de: origenLabel, negocio_id: tenantId });
+    io.emit('mesa_actualizada', { mesaId: origenMesaId, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: tenantId });
+    io.emit('mesa_actualizada', { mesaId: destinoMesaId, estado: mesaOrig.estado, total: orden.total || 0, transferida_de: origenLabel, mesas_unidas: [origenLabel], negocio_id: tenantId });
 
     res.json({ message: `Orden transferida con éxito de ${mesaOrig.numero} a ${mesaDest.numero}`, transferida_de: origenLabel });
   } catch (e) {
@@ -4032,7 +4141,17 @@ app.post('/api/mesas/unir', async (req, res) => {
       return res.status(404).json({ error: 'Mesa no encontrada' });
     }
 
-    const negocioId = mesaPrincipal.negocio_id || req.headers['x-negocio-id'] || 1;
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer') {
+      if (mesaPrincipal.negocio_id && Number(mesaPrincipal.negocio_id) !== Number(reqNid)) {
+        return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+      }
+    }
+    if (Number(mesaPrincipal.negocio_id || 1) !== Number(mesaSecundaria.negocio_id || 1)) {
+      return res.status(400).json({ error: 'No se pueden unir mesas de comercios diferentes.' });
+    }
+
+    const negocioId = Number(mesaPrincipal.negocio_id || 1);
     const neg = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId]);
     if (neg) {
       let feats = neg.caracteristicas_activas || 'all';
@@ -4093,6 +4212,7 @@ app.post('/api/mesas/unir', async (req, res) => {
 
     await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       mesa_principal_id INTEGER NOT NULL,
       mesa_secundaria_id INTEGER NOT NULL,
       orden_principal_id INTEGER,
@@ -4105,10 +4225,10 @@ app.post('/api/mesas/unir', async (req, res) => {
     )`);
 
     await dbRun(`INSERT INTO TableMerges (
-      mesa_principal_id, mesa_secundaria_id, orden_principal_id, orden_secundaria_id,
+      negocio_id, mesa_principal_id, mesa_secundaria_id, orden_principal_id, orden_secundaria_id,
       snapshot_a, snapshot_b, items_transferidos_ids, creado_en, activo
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`, [
-      mesaPrincipal.id, mesaSecundaria.id, orden1.id, orden2.id,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`, [
+      negocioId, mesaPrincipal.id, mesaSecundaria.id, orden1.id, orden2.id,
       snapshotA, snapshotB, JSON.stringify(itemsA.map(i => i.id)), new Date().toISOString()
     ]);
 
@@ -4129,9 +4249,9 @@ app.post('/api/mesas/unir', async (req, res) => {
     // La Mesa B (principal) recibe el estado y total combinado y queda marcada con unida_con
     await dbRun("UPDATE Mesas SET estado = ?, unida_con = ?, mesero = ? WHERE id = ?", [nuevoEstadoUnido, mesaSecundaria.numero, meseroAsignado, mesaPrincipalId]);
 
-    io.emit('mesas_unidas', { mesaPrincipalId, mesaSecundariaId, ordenPrincipalId: orden1.id });
-    io.emit('mesa_actualizada', { mesaId: mesaPrincipalId, estado: nuevoEstadoUnido, total });
-    io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'libre', total: 0 });
+    io.emit('mesas_unidas', { mesaPrincipalId, mesaSecundariaId, ordenPrincipalId: orden1.id, negocio_id: negocioId });
+    io.emit('mesa_actualizada', { mesaId: mesaPrincipalId, estado: nuevoEstadoUnido, total, negocio_id: negocioId });
+    io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'libre', total: 0, negocio_id: negocioId });
 
     res.json({ message: `Mesas unidas correctamente (${mesaPrincipal.numero} + ${mesaSecundaria.numero})`, ordenId: orden1.id, total });
   } catch (e) {
@@ -4156,7 +4276,18 @@ app.post('/api/mesas/agrupar', async (req, res) => {
       return res.status(404).json({ error: 'Mesa no encontrada' });
     }
 
-    const negocioId = mesa1.negocio_id || req.headers['x-negocio-id'] || 1;
+    const m1Nid = Number(mesa1.negocio_id || 1);
+    const m2Nid = Number(mesa2.negocio_id || 1);
+    if (m1Nid !== m2Nid) {
+      return res.status(400).json({ error: 'No se pueden agrupar mesas de distintos comercios.' });
+    }
+
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && m1Nid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
+
+    const negocioId = m1Nid;
     const neg = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId]);
     if (neg) {
       let feats = neg.caracteristicas_activas || 'all';
@@ -4172,9 +4303,9 @@ app.post('/api/mesas/agrupar', async (req, res) => {
     const grupoNombre = mesa1.grupo_mesas || mesa2.grupo_mesas || `Grupo ${mesa1.numero} + ${mesa2.numero}`;
     await dbRun('UPDATE Mesas SET grupo_mesas = ? WHERE id IN (?, ?)', [grupoNombre, mesa1Id, mesa2Id]);
 
-    io.emit('mesas_agrupadas', { grupo: grupoNombre, mesas: [mesa1Id, mesa2Id] });
-    io.emit('mesa_actualizada', { mesaId: mesa1Id });
-    io.emit('mesa_actualizada', { mesaId: mesa2Id });
+    io.emit('mesas_agrupadas', { grupo: grupoNombre, mesas: [mesa1Id, mesa2Id], negocio_id: negocioId });
+    io.emit('mesa_actualizada', { mesaId: mesa1Id, negocio_id: negocioId });
+    io.emit('mesa_actualizada', { mesaId: mesa2Id, negocio_id: negocioId });
 
     res.json({ message: `Mesas agrupadas visualmente con éxito (${grupoNombre})`, grupo: grupoNombre });
   } catch (e) {
@@ -4182,39 +4313,7 @@ app.post('/api/mesas/agrupar', async (req, res) => {
   }
 });
 
-// Restaurar mesas: elimina solo el grupo y restaura cada mesa a su estado original sin recalcular ni repartir productos
-app.post('/api/mesas/restaurar', async (req, res) => {
-  try {
-    const { mesaId } = req.body;
-    if (!mesaId) return res.status(400).json({ error: 'ID de mesa requerido' });
-
-    const mesaTarget = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    if (!mesaTarget) return res.status(404).json({ error: 'Mesa no encontrada' });
-
-    if (mesaTarget.grupo_mesas) {
-      const grupo = mesaTarget.grupo_mesas;
-      const mesasEnGrupo = await dbAll('SELECT * FROM Mesas WHERE grupo_mesas = ?', [grupo]);
-      await dbRun('UPDATE Mesas SET grupo_mesas = NULL WHERE grupo_mesas = ?', [grupo]);
-
-      for (const m of mesasEnGrupo) {
-        io.emit('mesa_actualizada', { mesaId: m.id });
-      }
-      io.emit('mesas_restauradas', { grupo, mesas: mesasEnGrupo.map(m => m.id) });
-      io.emit('mesas_separadas', { grupo, mesaPrincipalId: mesaTarget.id });
-
-      return res.json({
-        message: 'Grupo de mesas eliminado. Cada mesa conservó sus productos, totales y observaciones intactas.',
-        mesasRestauradas: mesasEnGrupo.map(m => ({ id: m.id, numero: m.numero }))
-      });
-    }
-
-    return await separarMesasFusionadas(mesaTarget, res);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Separar mesas previamente unidas (deshacer fusión restaurando cuentas originales)
+// Separar o restaurar mesas previamente unidas (deshacer fusión restaurando cuentas originales)
 async function procesarSepararMesas(req, res) {
   try {
     const { mesaId, destinoMesaId } = req.body;
@@ -4223,16 +4322,22 @@ async function procesarSepararMesas(req, res) {
     const mesaTarget = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesaTarget) return res.status(404).json({ error: 'Mesa no encontrada' });
 
+    const targetNid = Number(mesaTarget.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && targetNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
+
     if (mesaTarget.grupo_mesas) {
       const grupo = mesaTarget.grupo_mesas;
-      const mesasEnGrupo = await dbAll('SELECT * FROM Mesas WHERE grupo_mesas = ?', [grupo]);
-      await dbRun('UPDATE Mesas SET grupo_mesas = NULL WHERE grupo_mesas = ?', [grupo]);
+      const mesasEnGrupo = await dbAll('SELECT * FROM Mesas WHERE grupo_mesas = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [grupo, targetNid, targetNid]);
+      await dbRun('UPDATE Mesas SET grupo_mesas = NULL WHERE grupo_mesas = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [grupo, targetNid, targetNid]);
 
       for (const m of mesasEnGrupo) {
-        io.emit('mesa_actualizada', { mesaId: m.id });
+        io.emit('mesa_actualizada', { mesaId: m.id, negocio_id: targetNid });
       }
-      io.emit('mesas_restauradas', { grupo, mesas: mesasEnGrupo.map(m => m.id) });
-      io.emit('mesas_separadas', { grupo, mesaPrincipalId: mesaTarget.id });
+      io.emit('mesas_restauradas', { grupo, mesas: mesasEnGrupo.map(m => m.id), negocio_id: targetNid });
+      io.emit('mesas_separadas', { grupo, mesaPrincipalId: mesaTarget.id, negocio_id: targetNid });
 
       return res.json({
         message: 'Grupo de mesas eliminado. Cada mesa conservó sus productos, totales y observaciones intactas.',
@@ -4251,8 +4356,10 @@ app.post('/api/mesas/restaurar', procesarSepararMesas);
 
 async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
   try {
+    const targetNid = Number(mesaTarget.negocio_id || 1);
     await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      negocio_id INTEGER DEFAULT 1,
       mesa_principal_id INTEGER NOT NULL,
       mesa_secundaria_id INTEGER NOT NULL,
       orden_principal_id INTEGER,
@@ -4266,8 +4373,8 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 
     // 1. Buscar si existe un snapshot de TableMerges activo para esta mesa
     const activeMerge = await dbGet(
-      'SELECT * FROM TableMerges WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1 ORDER BY id DESC LIMIT 1',
-      [mesaTarget.id, mesaTarget.id]
+      'SELECT * FROM TableMerges WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND activo = 1 ORDER BY id DESC LIMIT 1',
+      [mesaTarget.id, mesaTarget.id, targetNid, targetNid]
     );
 
     if (activeMerge) {
@@ -4276,16 +4383,16 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
       const transferIds = JSON.parse(activeMerge.items_transferidos_ids || '[]');
 
       // Verificar si la mesa original de A (snapA.mesa_id) está actualmente ocupada
-      const mesaOriginalA = await dbGet('SELECT * FROM Mesas WHERE id = ?', [snapA.mesa_id]);
+      const mesaOriginalA = await dbGet('SELECT * FROM Mesas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [snapA.mesa_id, targetNid, targetNid]);
       const estaOcupadaOriginal = mesaOriginalA && mesaOriginalA.estado !== 'libre';
 
       let targetDestinoMesaId = snapA.mesa_id;
       let targetDestinoNumero = snapA.mesa_numero;
 
       if (destinoMesaId) {
-        const mesaDestinoElegida = await dbGet('SELECT * FROM Mesas WHERE id = ?', [destinoMesaId]);
+        const mesaDestinoElegida = await dbGet('SELECT * FROM Mesas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [destinoMesaId, targetNid, targetNid]);
         if (!mesaDestinoElegida) {
-          return res.status(404).json({ error: 'La mesa seleccionada no existe.' });
+          return res.status(404).json({ error: 'La mesa seleccionada no existe o pertenece a otro comercio.' });
         }
         if (mesaDestinoElegida.estado !== 'libre') {
           return res.status(400).json({ error: 'La mesa de destino seleccionada está ocupada. Por favor selecciona una mesa libre.' });
@@ -4385,9 +4492,9 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
       // Desactivar merge
       await dbRun('UPDATE TableMerges SET activo = 0 WHERE id = ?', [activeMerge.id]);
 
-      io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: targetDestinoMesaId });
-      io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB, unida_con: null, es_mesa_unida: false, mesas_unidas: [] });
-      io.emit('mesa_actualizada', { mesaId: targetDestinoMesaId, estado: snapA.mesa_estado || 'abierta', total: snapA.total, unida_con: null, es_mesa_unida: false, mesas_unidas: [] });
+      io.emit('mesas_separadas', { mesaPrincipalId: snapB.mesa_id, mesaSecundariaId: targetDestinoMesaId, negocio_id: targetNid });
+      io.emit('mesa_actualizada', { mesaId: snapB.mesa_id, estado: estB, total: totB, unida_con: null, es_mesa_unida: false, mesas_unidas: [], negocio_id: targetNid });
+      io.emit('mesa_actualizada', { mesaId: targetDestinoMesaId, estado: snapA.mesa_estado || 'abierta', total: snapA.total, unida_con: null, es_mesa_unida: false, mesas_unidas: [], negocio_id: targetNid });
 
       return res.json({
         message: `Mesas separadas con éxito. Se restauraron Mesa ${snapB.mesa_numero} y Mesa ${targetDestinoNumero} con sus productos, totales y observaciones exactas.`,
@@ -4401,12 +4508,16 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
     const mesaId = mesaTarget.id;
     // Determinar mesa principal (si mesaTarget es secundaria, su principal es unida_a_mesa_id)
     let mesaPrincipalId = mesaTarget.unida_a_mesa_id || mesaTarget.id;
-    let mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaPrincipalId]);
+    let mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [mesaPrincipalId, targetNid, targetNid]);
+    if (!mesaPrincipal) {
+      mesaPrincipal = mesaTarget;
+      mesaPrincipalId = mesaTarget.id;
+    }
 
     // Buscar orden activa en la mesa principal
     let ordenPrincipal = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
-      [mesaPrincipal.id]
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [mesaPrincipal.id, targetNid, targetNid]
     );
 
     // Si no tiene orden directa, buscar si hay orden con consumos de esta mesa
@@ -4415,13 +4526,14 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
         `SELECT o.* FROM Ordenes o 
          JOIN DetalleOrden d ON d.orden_id = o.id 
          WHERE (d.origen_mesa_numero = ? OR d.origen_mesa_id = ?) 
+           AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
            AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') 
          LIMIT 1`,
-        [mesaTarget.numero, mesaTarget.id]
+        [mesaTarget.numero, mesaTarget.id, targetNid, targetNid]
       );
       if (ordenConConsumos) {
         ordenPrincipal = ordenConConsumos;
-        mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ?', [ordenPrincipal.mesa_id]);
+        mesaPrincipal = await dbGet('SELECT * FROM Mesas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [ordenPrincipal.mesa_id, targetNid, targetNid]);
         mesaPrincipalId = mesaPrincipal.id;
       }
     }
@@ -4430,8 +4542,8 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 
     // Buscar mesas secundarias vinculadas
     const mesasSecundariasEnBD = await dbAll(
-      'SELECT * FROM Mesas WHERE unida_a_mesa_id = ? OR id = ?',
-      [mesaPrincipal.id, mesaTarget.id !== mesaPrincipal.id ? mesaTarget.id : 0]
+      'SELECT * FROM Mesas WHERE (unida_a_mesa_id = ? OR id = ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+      [mesaPrincipal.id, mesaTarget.id !== mesaPrincipal.id ? mesaTarget.id : 0, targetNid, targetNid]
     );
 
     let itemsOrden = [];
@@ -4452,8 +4564,8 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
     ];
 
     for (const origenNum of origenesSecundariosNums) {
-      let mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero = ?', [origenNum]);
-      if (!mesaSec) mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero LIKE ?', [`%${origenNum}%`]);
+      let mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [origenNum, targetNid, targetNid]);
+      if (!mesaSec) mesaSec = await dbGet('SELECT * FROM Mesas WHERE numero LIKE ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [`%${origenNum}%`, targetNid, targetNid]);
       if (!mesaSec || mesaSec.id === mesaPrincipal.id) continue;
 
       const itemsDeEstaSecundaria = itemsOrden.filter(it => 
@@ -4465,16 +4577,16 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
 
       if (itemsDeEstaSecundaria.length > 0) {
         let ordenSec = await dbGet(
-          "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado = 'fusionada' ORDER BY id DESC LIMIT 1",
-          [mesaSec.id]
+          "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'fusionada' ORDER BY id DESC LIMIT 1",
+          [mesaSec.id, targetNid, targetNid]
         );
 
         const ahora = new Date().toISOString();
         if (!ordenSec) {
           const numOrden = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
           const r = await dbRun(
-            "INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado) VALUES (?, ?, ?, ?, ?, 'abierta')",
-            [numOrden, mesaSec.id, 'Cliente General', mesaPrincipal.mesero || 'Juan Jival', ahora]
+            "INSERT INTO Ordenes (numero_orden, mesa_id, cliente, mesero, fecha_apertura, estado, negocio_id) VALUES (?, ?, ?, ?, ?, 'abierta', ?)",
+            [numOrden, mesaSec.id, 'Cliente General', mesaPrincipal.mesero || 'Juan Jival', ahora, targetNid]
           );
           ordenSec = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [r.lastID]);
         }
@@ -4499,7 +4611,7 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
         [estadoSec, estadoSec === 'libre' ? null : (mesaPrincipal.mesero || 'Juan Jival'), mesaSec.id]
       );
 
-      io.emit('mesa_actualizada', { mesaId: mesaSec.id, estado: estadoSec, total: totSec });
+      io.emit('mesa_actualizada', { mesaId: mesaSec.id, estado: estadoSec, total: totSec, negocio_id: targetNid });
       mesasRestauradas.push({ id: mesaSec.id, numero: mesaSec.numero, total: totSec, estado: estadoSec });
     }
 
@@ -4528,8 +4640,8 @@ async function separarMesasFusionadas(mesaTarget, res, destinoMesaId = null) {
       [estadoPrinc, mesaPrincipal.id]
     );
 
-    io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id });
-    io.emit('mesa_actualizada', { mesaId: mesaPrincipal.id, estado: estadoPrinc, total: totPrinc });
+    io.emit('mesas_separadas', { mesaPrincipalId: mesaPrincipal.id, negocio_id: targetNid });
+    io.emit('mesa_actualizada', { mesaId: mesaPrincipal.id, estado: estadoPrinc, total: totPrinc, negocio_id: targetNid });
 
     res.json({
       message: `Mesas separadas con éxito. Se restauraron ${mesasRestauradas.length} mesa(s).`,
@@ -4573,7 +4685,12 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    const ordenNegocioId = Number(orden.negocio_id) || negocioId || 1;
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && orden.negocio_id && Number(orden.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La orden pertenece a otro comercio.' });
+    }
+
+    const ordenNegocioId = Number(orden.negocio_id) || reqNid || 1;
     const moduloActivo = await negocioTieneModulo(ordenNegocioId, 'descuentos_cortesias_pin');
     if (!moduloActivo) {
       return res.status(403).json({ error: 'El módulo de Descuentos & Cortesías no está habilitado para este restaurante.' });
@@ -4679,9 +4796,9 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 
     const ordenActualizada = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
 
-    io.emit('orden_actualizada', { ordenId, mesaId: orden.mesa_id, total: totalFinal, descuento: descuentoMonto });
+    io.emit('orden_actualizada', { ordenId, mesaId: orden.mesa_id, total: totalFinal, descuento: descuentoMonto, negocio_id: ordenNegocioId });
     if (orden.mesa_id) {
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: totalFinal, descuento: descuentoMonto });
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: totalFinal, descuento: descuentoMonto, negocio_id: ordenNegocioId });
     }
 
     res.json({
@@ -4706,7 +4823,10 @@ app.get('/api/menu', async (req, res) => {
         p.*,
         COALESCE(SUM(d.cantidad), 0) AS total_vendidos
       FROM Productos p
-      LEFT JOIN DetalleOrden d ON (
+      LEFT JOIN (
+        DetalleOrden d 
+        JOIN Ordenes o ON d.orden_id = o.id AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+      ) ON (
         (CAST(d.producto_id AS TEXT) = CAST(p.id AS TEXT) OR (d.producto_id IS NULL AND LOWER(d.nombre_producto) = LOWER(p.nombre)))
         AND d.estado_comanda != 'anulado'
       )
@@ -4714,7 +4834,7 @@ app.get('/api/menu', async (req, res) => {
         AND (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
       GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
       ORDER BY p.categoria_id ASC, total_vendidos DESC, p.id ASC
-    `, [negocioId, negocioId]);
+    `, [negocioId, negocioId, negocioId, negocioId]);
     const productos = rawProductos.map(p => ({
       ...p,
       id: Number(p.id),
@@ -4736,7 +4856,11 @@ app.get('/api/menu', async (req, res) => {
 const handlerCrearCategoria = async (req, res) => {
   try {
     const { nombre, icono, destino, negocio_id } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || reqNid || 1);
+    if (req.usuario && req.usuario.rol !== 'developer' && negocioId !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
     const nombreLimpio = (nombre || '').trim();
     if (!nombreLimpio) {
       return res.status(400).json({ error: 'El nombre de la categoría es obligatorio.' });
@@ -4754,8 +4878,8 @@ const handlerCrearCategoria = async (req, res) => {
       [negocioId, nombreLimpio, iconoLimpio, destinoLimpio]
     );
     const nuevaCat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [result.lastID]);
-    io.emit('categoria_creada', nuevaCat);
-    io.emit('menu_actualizado');
+    io.emit('categoria_creada', { ...nuevaCat, negocio_id: negocioId });
+    io.emit('menu_actualizado', { negocio_id: negocioId });
 
     res.status(201).json({ message: 'Categoría creada exitosamente', categoria: nuevaCat });
   } catch (e) {
@@ -4771,7 +4895,6 @@ const handlerEditarCategoria = async (req, res) => {
   try {
     const catId = Number(req.params.id);
     const { nombre, icono, destino, negocio_id } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const nombreLimpio = (nombre || '').trim();
     if (!nombreLimpio) {
       return res.status(400).json({ error: 'El nombre de la categoría es obligatorio.' });
@@ -4784,14 +4907,20 @@ const handlerEditarCategoria = async (req, res) => {
       return res.status(404).json({ error: 'Categoría no encontrada.' });
     }
 
+    const catNid = Number(cat.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && catNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La categoría pertenece a otro comercio.' });
+    }
+
     await dbRun(
       'UPDATE Categorias SET nombre = ?, icono = ?, destino = ? WHERE id = ?',
       [nombreLimpio, iconoLimpio, destinoLimpio, catId]
     );
 
     const catActualizada = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
-    io.emit('categoria_actualizada', catActualizada);
-    io.emit('menu_actualizado');
+    io.emit('categoria_actualizada', { ...catActualizada, negocio_id: catNid });
+    io.emit('menu_actualizado', { negocio_id: catNid });
 
     res.json({ ok: true, message: 'Categoría actualizada exitosamente', categoria: catActualizada });
   } catch (e) {
@@ -4811,21 +4940,27 @@ const handlerEliminarCategoria = async (req, res) => {
       return res.status(404).json({ error: 'Categoría no encontrada.' });
     }
 
-    const otraCat = await dbGet('SELECT id FROM Categorias WHERE id != ? ORDER BY id ASC LIMIT 1', [catId]);
+    const catNid = Number(cat.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && catNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La categoría pertenece a otro comercio.' });
+    }
+
+    const otraCat = await dbGet('SELECT id FROM Categorias WHERE id != ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1', [catId, catNid, catNid]);
     const fallbackCatId = otraCat ? otraCat.id : null;
 
     if (req.body && (req.body.eliminar_productos === true || req.body.eliminarProductos === true)) {
-      await dbRun('UPDATE Productos SET activo = 0 WHERE categoria_id = ?', [catId]);
+      await dbRun('UPDATE Productos SET activo = 0 WHERE categoria_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catId, catNid, catNid]);
     } else if (fallbackCatId) {
-      await dbRun('UPDATE Productos SET categoria_id = ? WHERE categoria_id = ?', [fallbackCatId, catId]);
+      await dbRun('UPDATE Productos SET categoria_id = ? WHERE categoria_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [fallbackCatId, catId, catNid, catNid]);
     } else {
-      await dbRun('UPDATE Productos SET categoria_id = NULL WHERE categoria_id = ?', [catId]);
+      await dbRun('UPDATE Productos SET categoria_id = NULL WHERE categoria_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catId, catNid, catNid]);
     }
 
     await dbRun('DELETE FROM Categorias WHERE id = ?', [catId]);
 
-    io.emit('categoria_eliminada', { id: catId, nombre: cat.nombre });
-    io.emit('menu_actualizado');
+    io.emit('categoria_eliminada', { id: catId, nombre: cat.nombre, negocio_id: catNid });
+    io.emit('menu_actualizado', { negocio_id: catNid });
 
     res.json({
       ok: true,
@@ -4856,7 +4991,11 @@ app.post('/api/productos', async (req, res) => {
       cantidad_descuento,
       negocio_id
     } = req.body;
-    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || reqNid || 1);
+    if (req.usuario && req.usuario.rol !== 'developer' && negocioId !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
     const nombreLimpio = (nombre || '').trim();
     const precioNum = parseFloat(precio);
 
@@ -4898,7 +5037,7 @@ app.post('/api/productos', async (req, res) => {
 
     // Vinculación opcional al Kárdex
     if (kardex_tipo === 'shot' && insumo_id) {
-      const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
+      const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [insumo_id, negocioId, negocioId]);
       if (insumo) {
         const ml = Number(ml_shot) || Number(insumo.medida_shot_ml) || 30;
         const capacidad = Number(insumo.capacidad_ml) || 750;
@@ -4909,16 +5048,19 @@ app.post('/api/productos', async (req, res) => {
         );
       }
     } else if (kardex_tipo === 'unidad' && insumo_id) {
-      const cant = Number(cantidad_descuento) || 1;
-      await dbRun(
-        'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
-        [prodId, insumo_id, cant]
-      );
-      await dbRun('UPDATE Inventario SET producto_id = ? WHERE id = ?', [prodId, insumo_id]);
+      const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [insumo_id, negocioId, negocioId]);
+      if (insumo) {
+        const cant = Number(cantidad_descuento) || 1;
+        await dbRun(
+          'INSERT INTO InventarioRecetas (producto_id, insumo_id, cantidad, merma_porcentaje) VALUES (?, ?, ?, 0)',
+          [prodId, insumo_id, cant]
+        );
+        await dbRun('UPDATE Inventario SET producto_id = ? WHERE id = ?', [prodId, insumo_id]);
+      }
     }
 
-    io.emit('producto_creado', nuevoProd);
-    io.emit('menu_actualizado');
+    io.emit('producto_creado', { ...nuevoProd, negocio_id: negocioId });
+    io.emit('menu_actualizado', { negocio_id: negocioId });
 
     res.status(201).json({ message: 'Producto agregado exitosamente', producto: nuevoProd });
   } catch (e) {
@@ -4930,13 +5072,22 @@ app.post('/api/productos', async (req, res) => {
 app.get('/api/productos/:id/kardex-link', async (req, res) => {
   try {
     const prodId = req.params.id;
+    const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El producto pertenece a otro comercio.' });
+    }
+
     const receta = await dbGet(`
       SELECT r.*, i.nombre as insumo_nombre, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots, i.stock_actual, i.stock_minimo, i.unidad_medida, i.costo_unitario, i.categoria as insumo_categoria
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-      WHERE r.producto_id = ?
+      WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
       LIMIT 1
-    `, [prodId]);
+    `, [prodId, prodNid, prodNid]);
 
     if (receta) {
       const esShot = receta.es_licor && receta.cantidad < 1;
@@ -4960,7 +5111,7 @@ app.get('/api/productos/:id/kardex-link', async (req, res) => {
       });
     }
 
-    const insumoDirecto = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [prodId]);
+    const insumoDirecto = await dbGet('SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [prodId, prodNid, prodNid]);
     if (insumoDirecto) {
       return res.json({
         vinculado: true,
@@ -4993,6 +5144,12 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     const prodId = req.params.id;
     const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El producto pertenece a otro comercio.' });
+    }
 
     const {
       nombre,
@@ -5049,10 +5206,10 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     // Actualizar vinculación Kárdex si se especificó kardex_tipo
     if (kardex_tipo !== undefined) {
       await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
-      await dbRun('UPDATE Inventario SET producto_id = NULL WHERE producto_id = ?', [prodId]);
+      await dbRun('UPDATE Inventario SET producto_id = NULL WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [prodId, prodNid, prodNid]);
 
       if (kardex_tipo === 'shot' && insumo_id) {
-        const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
+        const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [insumo_id, prodNid, prodNid]);
         if (insumo) {
           const capMlActual = insumo_capacidad_ml !== undefined && !isNaN(Number(insumo_capacidad_ml)) ? Number(insumo_capacidad_ml) : (Number(insumo.capacidad_ml) || 750);
           const shotMlActual = insumo_medida_shot_ml !== undefined && !isNaN(Number(insumo_medida_shot_ml)) ? Number(insumo_medida_shot_ml) : (Number(ml_shot) || Number(insumo.medida_shot_ml) || 30);
@@ -5075,11 +5232,10 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
           if (insumo_stock_actual !== undefined && Math.abs(nuevoStock - insumo.stock_actual) > 0.0001) {
             const diff = Math.abs(nuevoStock - insumo.stock_actual);
             const tipoMov = nuevoStock > insumo.stock_actual ? 'ajuste' : 'merma';
-            const insNId = Number(insumo.negocio_id || 1);
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [insNId, insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
+              [prodNid, insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
             );
           }
 
@@ -5093,7 +5249,7 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
           huboCambiosKardex = true;
         }
       } else if (kardex_tipo === 'unidad' && insumo_id) {
-        const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [insumo_id]);
+        const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [insumo_id, prodNid, prodNid]);
         if (insumo) {
           const cant = Number(cantidad_descuento) || 1;
           await dbRun(
@@ -5111,11 +5267,10 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
           if (insumo_stock_actual !== undefined && Math.abs(nuevoStock - insumo.stock_actual) > 0.0001) {
             const diff = Math.abs(nuevoStock - insumo.stock_actual);
             const tipoMov = nuevoStock > insumo.stock_actual ? 'ajuste' : 'merma';
-            const insNId = Number(insumo.negocio_id || 1);
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [insNId, insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
+              [prodNid, insumo.id, tipoMov, diff, insumo.stock_actual, nuevoStock, `Ajuste desde edición de producto: ${nombreLimpio}`, usuarioNombre, Math.round(diff * nuevoCosto), ahora]
             );
           }
 
@@ -5129,10 +5284,10 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     }
 
     const actualizado = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
-    io.emit('producto_actualizado', actualizado);
-    io.emit('menu_actualizado');
+    io.emit('producto_actualizado', { ...actualizado, negocio_id: prodNid });
+    io.emit('menu_actualizado', { negocio_id: prodNid });
     if (huboCambiosKardex) {
-      io.emit('inventario_actualizado');
+      io.emit('inventario_actualizado', { negocio_id: prodNid });
     }
 
     res.json({ message: 'Producto y Kárdex actualizados exitosamente', producto: actualizado });
@@ -5148,13 +5303,19 @@ app.delete('/api/productos/:id', verificarAdmin, async (req, res) => {
     const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El producto pertenece a otro comercio.' });
+    }
+
     // Desactivación segura para preservar integridad histórica de órdenes
     await dbRun('UPDATE Productos SET activo = 0 WHERE id = ?', [prodId]);
     await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
-    await dbRun('UPDATE Inventario SET producto_id = NULL WHERE producto_id = ?', [prodId]);
+    await dbRun('UPDATE Inventario SET producto_id = NULL WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [prodId, prodNid, prodNid]);
 
-    io.emit('producto_eliminado', { id: Number(prodId), nombre: prod.nombre });
-    io.emit('menu_actualizado');
+    io.emit('producto_eliminado', { id: Number(prodId), nombre: prod.nombre, negocio_id: prodNid });
+    io.emit('menu_actualizado', { negocio_id: prodNid });
 
     res.json({ success: true, message: `Producto "${prod.nombre}" retirado del menú`, id: prodId });
   } catch (e) {
@@ -5168,11 +5329,17 @@ app.post('/api/productos/:id/toggle-86', async (req, res) => {
     const prod = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El producto pertenece a otro comercio.' });
+    }
+
     const nuevoAgotado = prod.agotado ? 0 : 1;
     await dbRun('UPDATE Productos SET agotado = ? WHERE id = ?', [nuevoAgotado, prodId]);
 
-    io.emit('producto_agotado_cambiado', { id: Number(prodId), agotado: Boolean(nuevoAgotado), nombre: prod.nombre });
-    res.json({ id: Number(prodId), agotado: Boolean(nuevoAgotado), nombre: prod.nombre });
+    io.emit('producto_agotado_cambiado', { id: Number(prodId), agotado: Boolean(nuevoAgotado), nombre: prod.nombre, negocio_id: prodNid });
+    res.json({ id: Number(prodId), agotado: Boolean(nuevoAgotado), nombre: prod.nombre, negocio_id: prodNid });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -5243,11 +5410,13 @@ app.get('/api/ordenes/:id', async (req, res) => {
 });
 
 // ============================================================================
-// HAPPY HOUR — ESTADO Y CONFIGURACIÓN
+// HAPPY HOUR — ESTADO Y CONFIGURACIÓN (MULTI-COMERCIO)
 // ============================================================================
-// GET: Retorna el estado actual de Happy Hour
+// GET: Retorna el estado actual de Happy Hour para el negocio del solicitante
 app.get('/api/happy-hour', (req, res) => {
-  res.json({ ...happyHourEstado });
+  const negocioId = obtenerNegocioIdReq(req);
+  const estado = obtenerEstadoHappyHour(negocioId);
+  res.json({ negocio_id: negocioId, ...estado });
 });
 
 // POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas) - Protegido por rol/PIN
@@ -5265,27 +5434,38 @@ app.post('/api/happy-hour', async (req, res) => {
     return res.status(403).json({ error: 'Permiso denegado: solo Administrador o Cajero autorizado pueden modificar el Happy Hour.' });
   }
 
-  happyHourModificadoManualmente = true;
+  const estado = obtenerEstadoHappyHour(negocioId);
+  estado.modificadoManualmente = true;
   const { activo, horaInicio, horaFin, autoActivar, dias, modoDefecto } = req.body || {};
 
-  if (horaInicio !== undefined) happyHourEstado.horaInicio = horaInicio;
-  if (horaFin !== undefined) happyHourEstado.horaFin = horaFin;
-  if (activo !== undefined) happyHourEstado.activo = Boolean(activo);
-  if (autoActivar !== undefined) happyHourEstado.autoActivar = Boolean(autoActivar);
-  if (dias !== undefined) happyHourEstado.dias = String(dias);
-  if (modoDefecto !== undefined) happyHourEstado.modoDefecto = String(modoDefecto);
+  if (horaInicio !== undefined) estado.horaInicio = horaInicio;
+  if (horaFin !== undefined) estado.horaFin = horaFin;
+  if (activo !== undefined) estado.activo = Boolean(activo);
+  if (autoActivar !== undefined) estado.autoActivar = Boolean(autoActivar);
+  if (dias !== undefined) estado.dias = String(dias);
+  if (modoDefecto !== undefined) estado.modoDefecto = String(modoDefecto);
 
-  // Persistir en BD
-  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_activo', ?)", [String(happyHourEstado.activo)], r));
-  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_inicio', ?)", [happyHourEstado.horaInicio], r));
-  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_fin', ?)", [happyHourEstado.horaFin], r));
-  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_auto_activar', ?)", [String(happyHourEstado.autoActivar)], r));
-  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_dias', ?)", [happyHourEstado.dias], r));
-  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_modo_defecto', ?)", [happyHourEstado.modoDefecto], r));
+  // Persistir en BD para este comercio
+  const sufijo = `_negocio_${negocioId}`;
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)", [`hh_activo${sufijo}`, String(estado.activo)], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)", [`hh_hora_inicio${sufijo}`, estado.horaInicio], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)", [`hh_hora_fin${sufijo}`, estado.horaFin], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)", [`hh_auto_activar${sufijo}`, String(estado.autoActivar)], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)", [`hh_dias${sufijo}`, estado.dias], r));
+  await new Promise(r => db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES (?, ?)", [`hh_modo_defecto${sufijo}`, estado.modoDefecto], r));
 
-  console.log(`🍸 Happy Hour actualizado: activo=${happyHourEstado.activo}, ${happyHourEstado.horaInicio}–${happyHourEstado.horaFin}, auto=${happyHourEstado.autoActivar}, dias=${happyHourEstado.dias}, modo=${happyHourEstado.modoDefecto}`);
-  io.emit('happy_hour_cambio', { ...happyHourEstado });
-  res.json({ ...happyHourEstado });
+  if (negocioId === 1) {
+    db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_activo', ?)", [String(estado.activo)]);
+    db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_inicio', ?)", [estado.horaInicio]);
+    db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_hora_fin', ?)", [estado.horaFin]);
+    db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_auto_activar', ?)", [String(estado.autoActivar)]);
+    db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_dias', ?)", [estado.dias]);
+    db.run("INSERT OR REPLACE INTO ConfigNegocio (clave, valor) VALUES ('hh_modo_defecto', ?)", [estado.modoDefecto]);
+  }
+
+  console.log(`🍸 Happy Hour actualizado (negocio ${negocioId}): activo=${estado.activo}, ${estado.horaInicio}–${estado.horaFin}, auto=${estado.autoActivar}, dias=${estado.dias}, modo=${estado.modoDefecto}`);
+  io.emit('happy_hour_cambio', { negocio_id: negocioId, ...estado });
+  res.json({ negocio_id: negocioId, ...estado });
 });
 
 // Endpoint de heartbeat para monitoreo de conectividad de clientes
@@ -5467,10 +5647,11 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     let curso = it.curso;
 
     let prodDb = null;
+    const itemNegocioId = Number(negocioId || 1);
     if (prodId) {
-      prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+      prodDb = await dbGet('SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [prodId, itemNegocioId, itemNegocioId]);
     } else if (nombre) {
-      prodDb = await dbGet('SELECT * FROM Productos WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?', [nombre, `%${nombre}%`]);
+      prodDb = await dbGet('SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nombre, `%${nombre}%`, itemNegocioId, itemNegocioId]);
     }
 
     if (prodDb) {
@@ -5488,7 +5669,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     let catDb = null;
     const catIdToCheck = prodDb?.categoria_id || it.categoria_id || it.catId;
     if (catIdToCheck) {
-      catDb = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catIdToCheck]);
+      catDb = await dbGet('SELECT * FROM Categorias WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catIdToCheck, itemNegocioId, itemNegocioId]);
     }
 
     const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro|cacique|pacha|cuarta|centenario|chivas|johnny|buchanans|jagermeister|baileys|kahlua|malibu|amaretto|campari|aperol|fernet|anis|absolut|bacardi|morgan|havana|cuervo|don\s*julio|herradura|patron|tanqueray|bombay|beefeater|red\s*bull|monster|gatorade|tropical|chelada|michelada|mojito|margarita|daiquiri|caipiriña|piña\s*colada|cuba\s*libre)\b/i.test(nombre || '') || /rock\s*ice/i.test(nombre || '');
@@ -5521,9 +5702,10 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       it.catId === 4 ||
       /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(nombre || '')
     );
+    const hhEstadoItem = obtenerEstadoHappyHour(itemNegocioId);
     const itemEnHH = (it.en_happy_hour !== undefined)
       ? (it.en_happy_hour ? 1 : 0)
-      : (((happyHourEstado.activo || happyHourActivo) && esCervezaOEligible) ? 1 : 0);
+      : (((hhEstadoItem.activo || happyHourActivo) && esCervezaOEligible) ? 1 : 0);
 
     itemsProcesados.push({
       id: prodId,
@@ -5633,9 +5815,10 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
   // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
   const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
+  const comandaNegocioId = Number(negocioId || 1);
   if (comandasCocina.length > 0) {
-    io.emit('nueva_comanda', { mesaId: mesaIdFinal, ordenId, mesaNumero, comandas: comandasCocina, es_para_llevar: esParaLlevar });
-    io.emit('comanda_nueva', { mesaId: mesaIdFinal, ordenId, mesaNumero, mesero, horaPedido: ahora, items: comandasCocina, es_para_llevar: esParaLlevar });
+    io.emit('nueva_comanda', { mesaId: mesaIdFinal, ordenId, mesaNumero, comandas: comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
+    io.emit('comanda_nueva', { mesaId: mesaIdFinal, ordenId, mesaNumero, mesero, horaPedido: ahora, items: comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
   }
 
   // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
@@ -5684,7 +5867,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
 
   // Notificar al salón de mesa actualizada (si aplica mesa física)
   if (mesaIdFinal) {
-    io.emit('mesa_actualizada', { mesaId: mesaIdFinal, estado: nuevoEstadoMesa, total });
+    io.emit('mesa_actualizada', { mesaId: mesaIdFinal, estado: nuevoEstadoMesa, total, negocio_id: comandaNegocioId });
   }
 
   return {
@@ -5781,10 +5964,12 @@ app.post('/api/sync/batch', async (req, res) => {
           const mesaId = accion.payload?.mesaId || accion.endpoint.split('/')[4];
           if (mesaId) {
             const ahora = new Date().toISOString();
+            const mesaRow = await dbGet('SELECT numero, negocio_id FROM Mesas WHERE id = ?', [mesaId]);
+            const mNid = mesaRow ? Number(mesaRow.negocio_id || 1) : 1;
             await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = ? WHERE id = ?", [ahora, mesaId]);
             await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [mesaId]);
-            io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), hora_pidio_cuenta: ahora });
-            io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
+            io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesaRow?.numero, hora_pidio_cuenta: ahora, negocio_id: mNid });
+            io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora, negocio_id: mNid });
           }
         } else if (accion.tipo === 'COBRAR_ORDEN' || (accion.endpoint && accion.endpoint.includes('/cobrar'))) {
           const payload = accion.payload || {};
@@ -5833,7 +6018,9 @@ app.post('/api/comandas/lanzar-fuertes', async (req, res) => {
       [ordenId]
     );
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-    io.emit('lanzar_fuertes', { mesaId, mesaNumero: mesa ? mesa.numero : 'Mesa', ordenId });
+    const orden = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [ordenId]);
+    const negocioId = Number(orden?.negocio_id || mesa?.negocio_id || 1);
+    io.emit('lanzar_fuertes', { mesaId, mesaNumero: mesa ? mesa.numero : 'Mesa', ordenId, negocio_id: negocioId });
     res.json({ message: 'Platos fuertes lanzados a cocina con éxito' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5864,15 +6051,15 @@ app.post('/api/comandas/anular-item', async (req, res) => {
     await dbRun("UPDATE DetalleOrden SET estado_comanda = 'anulado' WHERE id = ?", [detalleId]);
     try {
       await dbRun(
-        `INSERT INTO Anulaciones (orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, autorizado_por, solicitado_por, fecha_hora)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, autorizadorInfo, solicitanteLogin, ahora]
+        `INSERT INTO Anulaciones (negocio_id, orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, autorizado_por, solicitado_por, fecha_hora)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenNegocioId, item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, autorizadorInfo, solicitanteLogin, ahora]
       );
     } catch (_) {
       await dbRun(
-        `INSERT INTO Anulaciones (orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, autorizado_por, fecha_hora)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, autorizadorInfo, ahora]
+        `INSERT INTO Anulaciones (negocio_id, orden_id, detalle_id, mesa, producto_nombre, cantidad, monto, motivo, supervisor_pin, autorizado_por, fecha_hora)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenNegocioId, item.orden_id, detalleId, mesaNumero, item.nombre_producto, item.cantidad, item.subtotal, motivo, supervisorPin, autorizadorInfo, ahora]
       );
     }
 
@@ -5907,10 +6094,10 @@ app.post('/api/comandas/anular-item', async (req, res) => {
     const orden = await dbGet("SELECT * FROM Ordenes WHERE id = ?", [item.orden_id]);
     if (orden && orden.mesa_id) {
       await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [nuevoEstado, orden.mesa_id]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstado, total });
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstado, total, negocio_id: ordenNegocioId });
     }
 
-    io.emit('comanda_anulada', { detalleId, ordenId: item.orden_id, producto: item.nombre_producto, motivo, nuevoEstado });
+    io.emit('comanda_anulada', { detalleId, ordenId: item.orden_id, producto: item.nombre_producto, motivo, nuevoEstado, negocio_id: ordenNegocioId });
     res.json({ message: 'Platillo anulado y registrado en auditoría', ordenId: item.orden_id, total, nuevoEstado });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5973,9 +6160,14 @@ app.get('/api/mesas/:id/espera', async (req, res) => {
     const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
+    }
+
     const orden = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
-      [mesaId]
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      [mesaId, Number(mesa.negocio_id || reqNid || 1), Number(mesa.negocio_id || reqNid || 1)]
     );
 
     if (!orden) {
@@ -6062,36 +6254,40 @@ const handleKdsEstadoUpdate = async (req, res) => {
     let totalEmitido = orden ? orden.total : 0;
 
     if (orden) {
+      const ordenNegocioId = Number(orden.negocio_id || 1);
       if (orden.estado === 'pagada' || orden.estado === 'cerrada') {
         // La orden ya fue cobrada y liquidada. NO reabrir la orden a 'activa'.
         totalEmitido = 0;
         if (orden.mesa_id) {
           estadoFinalMesa = (nuevoEstadoMesa === 'activa' || nuevoEstadoMesa === 'abierta') ? 'ocupada' : nuevoEstadoMesa;
           await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoFinalMesa, orden.mesa_id]);
-          io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente });
+          io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente, negocio_id: ordenNegocioId });
         }
       } else {
         await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [nuevoEstadoMesa, item.orden_id]);
         if (orden.mesa_id) {
           await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [nuevoEstadoMesa, orden.mesa_id]);
-          io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstadoMesa, total: orden.total, cliente: orden.cliente });
+          io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstadoMesa, total: orden.total, cliente: orden.cliente, negocio_id: ordenNegocioId });
         }
       }
     }
 
+    const itemNegocioId = orden ? Number(orden.negocio_id || 1) : 1;
     io.emit('comanda_estado_cambiado', {
       detalleId: Number(detalleId),
       estado,
       ordenId: item.orden_id,
       mesaId: orden ? orden.mesa_id : null,
-      nuevoEstadoMesa: estadoFinalMesa
+      nuevoEstadoMesa: estadoFinalMesa,
+      negocio_id: itemNegocioId
     });
     io.emit('comanda_actualizada', {
       detalleId: Number(detalleId),
       estado,
       ordenId: item.orden_id,
       mesaId: orden ? orden.mesa_id : null,
-      nuevoEstadoMesa: estadoFinalMesa
+      nuevoEstadoMesa: estadoFinalMesa,
+      negocio_id: itemNegocioId
     });
 
     res.json({
@@ -6100,7 +6296,8 @@ const handleKdsEstadoUpdate = async (req, res) => {
       estado,
       nuevoEstadoMesa: estadoFinalMesa,
       ordenId: item.orden_id,
-      mesaId: orden ? orden.mesa_id : null
+      mesaId: orden ? orden.mesa_id : null,
+      negocio_id: itemNegocioId
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -6117,6 +6314,7 @@ app.post('/api/kds/despachar-lote', async (req, res) => {
   try {
     const ids = req.body.detalleIds || req.body.itemIds || [];
     const estado = req.body.estado || 'listo';
+    const batchNegocioId = obtenerNegocioIdReq(req);
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Lista de identificadores de platillos requerida' });
     }
@@ -6145,20 +6343,21 @@ app.post('/api/kds/despachar-lote', async (req, res) => {
       const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordId]);
 
       if (orden) {
+        const ordNid = Number(orden.negocio_id || batchNegocioId);
         if (orden.estado === 'pagada' || orden.estado === 'cerrada') {
           // La orden ya fue cobrada y liquidada. NO reabrir la orden a 'activa'.
           if (orden.mesa_id) {
             mesasAfectadas.add(orden.mesa_id);
             const estadoFinalMesa = (nuevoEstadoMesa === 'activa' || nuevoEstadoMesa === 'abierta') ? 'ocupada' : nuevoEstadoMesa;
             await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoFinalMesa, orden.mesa_id]);
-            io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente });
+            io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente, negocio_id: ordNid });
           }
         } else {
           await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [nuevoEstadoMesa, ordId]);
           if (orden.mesa_id) {
             mesasAfectadas.add(orden.mesa_id);
             await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [nuevoEstadoMesa, orden.mesa_id]);
-            io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstadoMesa, total: orden.total, cliente: orden.cliente });
+            io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: nuevoEstadoMesa, total: orden.total, cliente: orden.cliente, negocio_id: ordNid });
           }
         }
       }
@@ -6168,7 +6367,8 @@ app.post('/api/kds/despachar-lote', async (req, res) => {
       ids,
       estado,
       ordenes: Array.from(ordenesAfectadas),
-      mesas: Array.from(mesasAfectadas)
+      mesas: Array.from(mesasAfectadas),
+      negocio_id: batchNegocioId
     });
 
     res.json({
@@ -6418,6 +6618,7 @@ async function procesarCobroOrden(ordenId, {
       }).catch(err => console.error('Error al despachar comanda cocina:', err.message));
 
       // 2. Notificar a KDS en vivo
+      const directNegocioId = Number(orden.negocio_id || reqNegocioId || 1);
       io.emit('nueva_comanda', {
         mesaId: orden.mesa_id,
         ordenId,
@@ -6425,7 +6626,8 @@ async function procesarCobroOrden(ordenId, {
         mesero,
         horaPedido: ahora,
         pagada: true,
-        comandas: itemsCocina
+        comandas: itemsCocina,
+        negocio_id: directNegocioId
       });
       io.emit('comanda_nueva', {
         ordenId,
@@ -6434,9 +6636,10 @@ async function procesarCobroOrden(ordenId, {
         mesero,
         horaPedido: ahora,
         pagada: true,
-        items: itemsCocina
+        items: itemsCocina,
+        negocio_id: directNegocioId
       });
-      io.emit('kds_actualizado');
+      io.emit('kds_actualizado', { negocio_id: directNegocioId });
     }
 
     if (itemsBarra.length > 0) {
@@ -6463,6 +6666,7 @@ async function procesarCobroOrden(ordenId, {
         io
       }).catch(err => console.error('Error al despachar comanda barra:', err.message));
 
+      const directNegocioId = Number(orden.negocio_id || reqNegocioId || 1);
       io.emit('nueva_comanda_barra', {
         mesaId: orden.mesa_id,
         ordenId,
@@ -6470,7 +6674,8 @@ async function procesarCobroOrden(ordenId, {
         mesero,
         horaPedido: ahora,
         pagada: true,
-        comandas: itemsBarra
+        comandas: itemsBarra,
+        negocio_id: directNegocioId
       });
     }
   }
@@ -6650,7 +6855,7 @@ async function procesarCobroOrden(ordenId, {
           "UPDATE Mesas SET estado = ?, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
           [estadoMesaCobrada, orden.mesa_id]
         );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoMesaCobrada, cliente: orden.cliente, total: 0, transferida_de: null, mesas_unidas: [] });
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoMesaCobrada, cliente: orden.cliente, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioIdFinal });
       } else {
         await dbRun(
           "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
@@ -6660,7 +6865,7 @@ async function procesarCobroOrden(ordenId, {
           'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
           [orden.mesa_id, orden.mesa_id]
         );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioIdFinal });
       }
     }
 
@@ -6674,10 +6879,10 @@ async function procesarCobroOrden(ordenId, {
       monto: totalPagadoAcum
     });
 
-    io.emit('inventario_actualizado');
+    io.emit('inventario_actualizado', { negocio_id: negocioIdFinal });
     io.emit('caja_actualizada', { negocio_id: negocioIdFinal, caja_id: cajaId });
     io.emit('ventas_actualizadas', { negocio_id: negocioIdFinal });
-    io.emit('venta_registrada', { ordenId, total: orden.total });
+    io.emit('venta_registrada', { ordenId, total: orden.total, negocio_id: negocioIdFinal });
 
     return {
       ok: true,
@@ -6828,7 +7033,7 @@ async function procesarCobroOrden(ordenId, {
           'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
           [orden.mesa_id, orden.mesa_id]
         );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, orden_total: 0, transferida_de: null, mesas_unidas: [] });
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, orden_total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioIdFinal });
       }
     } else {
       await dbRun("UPDATE Ordenes SET total = ? WHERE id = ?", [nuevoTotal, ordenId]);
@@ -6836,11 +7041,11 @@ async function procesarCobroOrden(ordenId, {
         const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
         const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
         await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, total_pagado: totalAbonado, estado: estadoMesaActual, negocio_id: orden.negocio_id });
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, total_pagado: totalAbonado, estado: estadoMesaActual, negocio_id: orden.negocio_id || negocioIdFinal });
       }
     }
     if (orden.mesa_id) {
-      io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id });
+      io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id || negocioIdFinal });
     }
 
     await registrarAuditoria({
@@ -6853,10 +7058,10 @@ async function procesarCobroOrden(ordenId, {
       monto: totalPagadoAcum
     });
 
-    io.emit('inventario_actualizado');
+    io.emit('inventario_actualizado', { negocio_id: negocioIdFinal });
     io.emit('caja_actualizada', { negocio_id: negocioIdFinal, caja_id: cajaId });
     io.emit('ventas_actualizadas', { negocio_id: negocioIdFinal });
-    io.emit('venta_registrada', { ordenId, parcial: true });
+    io.emit('venta_registrada', { ordenId, parcial: true, negocio_id: negocioIdFinal });
 
     return {
       message: 'Cobro parcial registrado con éxito',
@@ -6963,7 +7168,7 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
     if (orden.mesa_id) {
       await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = COALESCE(hora_pidio_cuenta, ?) WHERE id = ?", [ahora, orden.mesa_id]);
       await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [ordenId]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
+      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora, negocio_id: Number(orden.negocio_id || 1) });
     }
 
     res.json({
@@ -7087,7 +7292,7 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
     if (orden) {
       await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [orden.id]);
     }
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora, negocio_id: Number(mesa.negocio_id || reqNegocioId || 1) });
 
     res.json({
       ok: true,
@@ -7123,6 +7328,11 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
     const orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && orden.negocio_id && Number(orden.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: La orden pertenece a otro comercio.' });
+    }
+
     await dbRun('UPDATE Ordenes SET modo_happy_hour = ? WHERE id = ?', [modo, ordenId]);
 
     const resultado = await recalcularTotalesOrden(ordenId);
@@ -7132,7 +7342,8 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
         mesaId: Number(orden.mesa_id),
         total: resultado.total,
         descuentoHH: resultado.descuentoHH,
-        modo_happy_hour: modo
+        modo_happy_hour: modo,
+        negocio_id: Number(orden.negocio_id || reqNid || 1)
       });
     }
 
@@ -7235,7 +7446,7 @@ app.post('/api/admin/puntos-cobro', async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, 1, ?)
     `, [negocioId, nombre.trim(), codFinal, (ubicacion || '').trim(), (icono || '💳').trim(), pre_asignado_usuario_id ? Number(pre_asignado_usuario_id) : null, ahora]);
 
-    io.emit('cajas_fisicas_actualizadas');
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: negocioId });
     res.json({ ok: true, message: 'Punto de cobro creado con éxito', id: r.lastID });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7248,6 +7459,12 @@ app.put('/api/admin/puntos-cobro/:id', async (req, res) => {
     const { nombre, codigo, ubicacion, icono, pre_asignado_usuario_id, activo } = req.body;
     const target = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [id]);
     if (!target) return res.status(404).json({ ok: false, error: 'Punto de cobro no encontrado' });
+
+    const puntoNid = Number(target.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && puntoNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El punto de cobro pertenece a otro comercio.' });
+    }
 
     const nombreFinal = nombre !== undefined ? (String(nombre).trim() || target.nombre) : target.nombre;
     const codigoFinal = codigo !== undefined ? (String(codigo).trim() || target.codigo) : target.codigo;
@@ -7271,8 +7488,8 @@ app.put('/api/admin/puntos-cobro/:id', async (req, res) => {
       await dbRun("UPDATE Cajas SET caja_nombre = ? WHERE caja_fisica_id = ? AND estado = 'abierta'", [nombreFinal, id]);
     }
 
-    io.emit('caja_actualizada');
-    io.emit('cajas_fisicas_actualizadas');
+    io.emit('caja_actualizada', { negocio_id: puntoNid });
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: puntoNid });
     res.json({ ok: true, message: 'Punto de cobro actualizado con éxito' });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -7282,12 +7499,21 @@ app.put('/api/admin/puntos-cobro/:id', async (req, res) => {
 app.delete('/api/admin/puntos-cobro/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const turnoAbierto = await dbGet("SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta'", [id]);
+    const target = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [id]);
+    if (!target) return res.status(404).json({ error: 'Punto de cobro no encontrado' });
+
+    const puntoNid = Number(target.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && puntoNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El punto de cobro pertenece a otro comercio.' });
+    }
+
+    const turnoAbierto = await dbGet("SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'abierta'", [id, puntoNid, puntoNid]);
     if (turnoAbierto) {
       return res.status(400).json({ error: `No se puede eliminar la caja física porque tiene un turno abierto activo por ${turnoAbierto.cajero}` });
     }
     await dbRun('UPDATE PuntosDeCobro SET activo = 0 WHERE id = ?', [id]);
-    io.emit('cajas_fisicas_actualizadas');
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: puntoNid });
     res.json({ ok: true, message: 'Punto de cobro desactivado' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7315,16 +7541,6 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'ID de turno / caja requerido' });
     }
 
-    const pinVerificar = adminPin || pin || pinAdmin || req.headers['x-supervisor-pin'];
-    if (!pinVerificar) {
-      return res.status(401).json({ ok: false, error: 'PIN de Administrador requerido para reasignar turnos' });
-    }
-
-    const esValido = await validarPinAdministrador(pinVerificar);
-    if (!esValido) {
-      return res.status(401).json({ ok: false, error: 'PIN de Administrador inválido para reasignar turnos' });
-    }
-
     const turno = await dbGet('SELECT * FROM Cajas WHERE id = ?', [turnoIdTarget]);
     if (!turno) {
       return res.status(404).json({ ok: false, error: 'Turno de caja no encontrado' });
@@ -7333,13 +7549,29 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Solo se pueden reasignar turnos que estén actualmente abiertos' });
     }
 
+    const turnoNid = Number(turno.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && turnoNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El turno pertenece a otro comercio.' });
+    }
+
+    const pinVerificar = adminPin || pin || pinAdmin || req.headers['x-supervisor-pin'];
+    if (!pinVerificar) {
+      return res.status(401).json({ ok: false, error: 'PIN de Administrador requerido para reasignar turnos' });
+    }
+
+    const esValido = await validarPinAdministrador(pinVerificar, turnoNid);
+    if (!esValido) {
+      return res.status(401).json({ ok: false, error: 'PIN de Administrador inválido para reasignar turnos' });
+    }
+
     let finalCajero = turno.cajero;
     let finalCajaFisicaId = turno.caja_fisica_id;
     let finalCajaNombre = turno.caja_nombre;
     let nuevoUsuarioId = nuevo_usuario_id ? Number(nuevo_usuario_id) : null;
 
     if (nuevo_usuario_id) {
-      const u = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [nuevoUsuarioId]);
+      const u = await dbGet('SELECT * FROM Usuarios WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nuevoUsuarioId, turnoNid, turnoNid]);
       if (u) {
         finalCajero = u.nombre_completo || u.usuario;
       }
@@ -7349,14 +7581,14 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
 
     if (nueva_caja_fisica_id && Number(nueva_caja_fisica_id) !== Number(turno.caja_fisica_id)) {
       const nuevoPuntoId = Number(nueva_caja_fisica_id);
-      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [nuevoPuntoId]);
+      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nuevoPuntoId, turnoNid, turnoNid]);
       if (!punto) {
-        return res.status(404).json({ ok: false, error: 'La nueva caja física seleccionada no existe' });
+        return res.status(404).json({ ok: false, error: 'La nueva caja física seleccionada no existe o pertenece a otro comercio' });
       }
 
       const ocupadaPorOtro = await dbGet(
-        "SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND id != ?",
-        [nuevoPuntoId, turnoIdTarget]
+        "SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'abierta' AND id != ?",
+        [nuevoPuntoId, turnoNid, turnoNid, turnoIdTarget]
       );
       if (ocupadaPorOtro) {
         return res.status(409).json({
@@ -7381,7 +7613,7 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
     const detalleAudit = `Reasignación de turno #${turnoIdTarget}: Cajero anterior (${turno.cajero}) -> Nuevo (${finalCajero}), Caja anterior (${turno.caja_nombre || 'N/A'}) -> Nueva (${finalCajaNombre || 'N/A'}). Motivo: ${motivo}`;
 
     await registrarAuditoria({
-      negocioId: turno.negocio_id || 1,
+      negocioId: turnoNid,
       usuarioNombre: usuario_admin || 'Administrador',
       accion: 'reasignacion_turno_caja',
       tipoEvento: 'operativo',
@@ -7390,24 +7622,25 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
       motivo: motivo || 'Reasignación de turno de caja'
     });
 
-    io.emit('caja_actualizada');
-    io.emit('cajas_fisicas_actualizadas');
+    io.emit('caja_actualizada', { negocio_id: turnoNid });
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: turnoNid });
     io.emit('caja_turno_reasignado', {
       turnoId: turnoIdTarget,
       cajero: finalCajero,
       caja_fisica_id: finalCajaFisicaId,
       caja_nombre: finalCajaNombre,
-      motivo
+      motivo,
+      negocio_id: turnoNid
     });
 
     const infoTurno = {
       id: turnoIdTarget,
-      usuario_id: nuevoUsuarioId,
       usuario_id: nuevoUsuarioId !== null ? nuevoUsuarioId : turno.usuario_id,
       cajero: finalCajero,
       caja_fisica_id: finalCajaFisicaId,
       caja_nombre: finalCajaNombre,
-      estado: 'abierta'
+      estado: 'abierta',
+      negocio_id: turnoNid
     };
 
     res.json({
@@ -7429,7 +7662,10 @@ app.get('/api/caja/actual', async (req, res) => {
     let caja = null;
 
     if (caja_id) {
-      caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [Number(caja_id)]);
+      caja = await dbGet(
+        'SELECT * FROM Cajas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+        [Number(caja_id), negocioId, negocioId]
+      );
     } else if (caja_fisica_id) {
       caja = await dbGet(
         "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
@@ -7496,9 +7732,15 @@ app.post('/api/caja/movimiento', async (req, res) => {
 
     let caja = null;
     if (caja_id) {
-      caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+        [Number(caja_id), negocioId, negocioId]
+      );
     } else if (caja_fisica_id) {
-      caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta'", [Number(caja_fisica_id)]);
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId, negocioId]
+      );
     }
 
     if (!caja) {
@@ -7536,7 +7778,7 @@ app.post('/api/caja/movimiento', async (req, res) => {
       monto: montoNum
     });
 
-    io.emit('caja_actualizada');
+    io.emit('caja_actualizada', { negocio_id: caja.negocio_id || negocioId });
     res.json({ ok: true, message: `Movimiento de ${tipo} registrado correctamente`, caja_id: caja.id });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -7559,7 +7801,10 @@ app.get('/api/caja/corte-x', async (req, res) => {
 
     let caja = null;
     if (caja_id) {
-      caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [Number(caja_id)]);
+      caja = await dbGet(
+        'SELECT * FROM Cajas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+        [Number(caja_id), negocioId, negocioId]
+      );
     } else if (caja_fisica_id) {
       caja = await dbGet(
         "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
@@ -7714,7 +7959,10 @@ app.post('/api/caja/corte-x-ciego', async (req, res) => {
 
     let caja = null;
     if (caja_id) {
-      caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+        [Number(caja_id), negocioId, negocioId]
+      );
     } else if (caja_fisica_id) {
       caja = await dbGet(
         "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
@@ -7920,7 +8168,10 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 
     let caja = null;
     if (caja_id) {
-      caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+        [Number(caja_id), negocioId, negocioId]
+      );
     } else if (caja_fisica_id) {
       caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioId, negocioId]);
     }
@@ -8032,8 +8283,8 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       monto: totalVentas
     });
 
-    io.emit('caja_actualizada');
-    io.emit('cajas_fisicas_actualizadas');
+    io.emit('caja_actualizada', { negocio_id: caja.negocio_id || negocioId });
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: caja.negocio_id || negocioId });
 
     const resultadoCierre = {
       tipo: 'Cierre Z (Final)',
@@ -8121,7 +8372,10 @@ app.post('/api/caja/abrir', async (req, res) => {
     let cajaNombre = null;
 
     if (cajaFisicaIdNum) {
-      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ?', [cajaFisicaIdNum]);
+      const punto = await dbGet(
+        'SELECT * FROM PuntosDeCobro WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+        [cajaFisicaIdNum, negocioId, negocioId]
+      );
       if (!punto) {
         return res.status(404).json({ ok: false, error: 'La caja física seleccionada no existe' });
       }
@@ -8192,8 +8446,8 @@ app.post('/api/caja/abrir', async (req, res) => {
       monto: montoNum
     });
 
-    io.emit('caja_actualizada');
-    io.emit('cajas_fisicas_actualizadas');
+    io.emit('caja_actualizada', { negocio_id });
+    io.emit('cajas_fisicas_actualizadas', { negocio_id });
     res.json({
       ok: true,
       message: `Nuevo turno abierto con éxito en ${cajaNombre || 'Caja'}`,
@@ -8233,15 +8487,21 @@ app.post('/api/facturacion/consultar-cliente', (req, res) => {
 
 app.post('/api/facturacion/emitir', async (req, res) => {
   try {
-    const { ordenId, clienteId, clienteNombre, clienteCorreo, subtotal, iva, servicio, total } = req.body;
+    const { ordenId, clienteId, clienteNombre, clienteCorreo, subtotal, iva, servicio, total, negocio_id } = req.body;
+    const reqNid = obtenerNegocioIdReq(req, negocio_id || 1);
+    let negocioId = reqNid;
+    if (ordenId) {
+      const ord = await dbGet('SELECT negocio_id FROM Ordenes WHERE id = ?', [Number(ordenId)]);
+      if (ord && ord.negocio_id) negocioId = ord.negocio_id;
+    }
     const ahora = new Date().toISOString();
     const clave = '506' + Math.floor(10000000000000000000 + Math.random() * 90000000000000000000);
     const consecutivo = '0010000101' + Math.floor(1000000000 + Math.random() * 9000000000);
 
     const r = await dbRun(`
-      INSERT INTO FacturasElectronicas (orden_id, tipo_documento, clave, consecutivo, fecha_emision, cliente_id, cliente_nombre, cliente_correo, subtotal, impuesto, servicio, total, estado_hacienda)
-      VALUES (?, 'FE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aceptado')
-    `, [ordenId || null, clave, consecutivo, ahora, clienteId, clienteNombre, clienteCorreo, subtotal, iva, servicio, total]);
+      INSERT INTO FacturasElectronicas (negocio_id, orden_id, tipo_documento, clave, consecutivo, fecha_emision, cliente_id, cliente_nombre, cliente_correo, subtotal, impuesto, servicio, total, estado_hacienda)
+      VALUES (?, ?, 'FE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aceptado')
+    `, [negocioId, ordenId || null, clave, consecutivo, ahora, clienteId, clienteNombre, clienteCorreo, subtotal, iva, servicio, total]);
 
     res.json({
       message: 'Factura electrónica validada y aceptada por Hacienda',
@@ -8285,8 +8545,9 @@ app.post('/api/cliente/mesa/:id/pedir-cuenta', async (req, res) => {
     await dbRun("UPDATE Mesas SET estado = 'cuenta', pidio_cuenta_qr = 1, hora_pidio_cuenta = ? WHERE id = ?", [ahora, mesaId]);
     await dbRun("UPDATE Ordenes SET estado = 'cuenta_pedida' WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa')", [mesaId]);
 
-    io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesa.numero, hora_pidio_cuenta: ahora });
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora });
+    const mesaNegocioId = Number(mesa.negocio_id || 1);
+    io.emit('cliente_pidio_cuenta', { mesaId: Number(mesaId), mesaNumero: mesa.numero, hora_pidio_cuenta: ahora, negocio_id: mesaNegocioId });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'cuenta', pidio_cuenta_qr: 1, hora_pidio_cuenta: ahora, negocio_id: mesaNegocioId });
 
     res.json({ message: 'Solicitud enviada al mesero', hora_pidio_cuenta: ahora });
   } catch (e) {
@@ -8602,7 +8863,8 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
                   stock_actual: stockNuevo,
                   stock_minimo: insumoEncontrado.stock_minimo,
                   unidad: insumoEncontrado.unidad_medida || 'botellas',
-                  estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+                  estado: stockNuevo <= 0 ? 'agotado' : 'bajo',
+                  negocio_id: insNId
                 });
               }
             }
@@ -8655,7 +8917,8 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
                 stock_actual: stockNuevo,
                 stock_minimo: insumo.stock_minimo,
                 unidad: insumo.unidad_medida || insumo.unidad || 'uds',
-                estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+                estado: stockNuevo <= 0 ? 'agotado' : 'bajo',
+                negocio_id: insNId
               });
             }
           }
@@ -8708,14 +8971,15 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
               stock_actual: stockNuevo,
               stock_minimo: insumo.stock_minimo,
               unidad: insumo.unidad_medida || insumo.unidad || 'uds',
-              estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+              estado: stockNuevo <= 0 ? 'agotado' : 'bajo',
+              negocio_id: insNId
             });
           }
         }
       }
     }
     if (huboCambios) {
-      io.emit('inventario_actualizado');
+      io.emit('inventario_actualizado', { negocio_id: Number(negocioIdFinal) });
     }
   } catch (e) {
     console.error('Error descontando inventario:', e.message);
@@ -8900,6 +9164,11 @@ app.get('/api/admin/inventario/:id', verificarAdmin, async (req, res, next) => {
     const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && insumo.negocio_id && Number(insumo.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El insumo pertenece a otro comercio.' });
+    }
+
     let botellas_enteras = null;
     let shots_remanentes = null;
     let total_shots_actual = null;
@@ -8932,6 +9201,11 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
 
     const insumoActual = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumoActual) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && insumoActual.negocio_id && Number(insumoActual.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El insumo pertenece a otro comercio.' });
+    }
 
     const esLic = es_licor !== undefined ? (es_licor ? 1 : 0) : insumoActual.es_licor;
     let capMl = capacidad_ml !== undefined ? (Number(capacidad_ml) || null) : insumoActual.capacidad_ml;
@@ -8970,7 +9244,7 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
       detalle: `Modificación de insumo ID ${id}: ${nombre || insumoActual.nombre} (${categoria || insumoActual.categoria})`
     });
 
-    if (io) io.emit('inventario_actualizado');
+    if (io) io.emit('inventario_actualizado', { negocio_id: insumoActual.negocio_id || reqNid });
 
     res.json({ message: 'Insumo actualizado con éxito', id, es_licor: esLic, rendimiento_shots: rendShots });
   } catch (e) {
@@ -8984,6 +9258,11 @@ app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) {
       return res.status(404).json({ error: 'Insumo no encontrado' });
+    }
+
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && insumo.negocio_id && Number(insumo.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El insumo pertenece a otro comercio.' });
     }
 
     // Limpiar relaciones en recetas y movimientos de kardex
@@ -9000,7 +9279,7 @@ app.delete('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
       detalle: `Eliminación de insumo ID ${id}: "${insumo.nombre}" (Stock final: ${insumo.stock_actual} ${insumo.unidad_medida})`
     });
 
-    if (io) io.emit('inventario_actualizado');
+    if (io) io.emit('inventario_actualizado', { negocio_id: insumo.negocio_id || reqNid });
 
     res.json({
       success: true,
@@ -9024,6 +9303,11 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
       return res.status(404).json({ error: 'Insumo no encontrado en bodega.' });
     }
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && insumo.negocio_id && Number(insumo.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El insumo pertenece a otro comercio.' });
+    }
+
     const stockPrevio = Number(insumo.stock_actual || insumo.stock || 0);
     const ahora = new Date().toISOString();
 
@@ -9033,8 +9317,8 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
     try {
       await dbRun(
         `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-         VALUES (1, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
-        [id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
+         VALUES (?, ?, 'salida', ?, ?, 0, ?, ?, ?, ?)`,
+        [insumo.negocio_id || reqNid || 1, id, stockPrevio, stockPrevio, `Eliminación total de existencias en bodega: ${motivo}`, usuarioNombre, stockPrevio * (insumo.costo_unitario || 0), ahora]
       );
     } catch (_) {}
 
@@ -9050,7 +9334,7 @@ const handlerEliminarExistenciasBodega = async (req, res) => {
       pinAutorizado: 1
     });
 
-    if (io) io.emit('inventario_actualizado');
+    if (io) io.emit('inventario_actualizado', { negocio_id: insumo.negocio_id || reqNid });
 
     res.json({
       success: true,
@@ -9079,6 +9363,11 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
     const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [id]);
     if (!insumo) return res.status(404).json({ error: 'Insumo no encontrado' });
 
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && insumo.negocio_id && Number(insumo.negocio_id) !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El insumo pertenece a otro comercio.' });
+    }
+
     let nuevoStock = insumo.stock_actual;
     let accionAuditoria = 'ajuste_inventario';
     let tipoEvento = 'operativo';
@@ -9100,7 +9389,7 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 
     const costoTotalAjuste = Math.abs(cantNum) * (insumo.costo_unitario || 0);
 
-    const negocioId = insumo.negocio_id || 1;
+    const negocioId = insumo.negocio_id || reqNid || 1;
     await registrarAuditoria({
       negocioId,
       usuarioNombre,
@@ -9118,7 +9407,7 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
       [negocioId, id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
     );
 
-    io.emit('inventario_actualizado');
+    io.emit('inventario_actualizado', { negocio_id });
 
     res.json({
       message: 'Ajuste de inventario aplicado',
@@ -9134,7 +9423,9 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 // --- RECETAS & ESCANDALLOS ---
 app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
   try {
-    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
     const productos = await dbAll(
       'SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY categoria_id ASC, nombre ASC',
       [negocioId, negocioId]
@@ -9189,8 +9480,14 @@ app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
 app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
   try {
     const prodId = req.params.productoId;
-    const prod = await dbGet('SELECT id, nombre, precio, categoria_id FROM Productos WHERE id = ?', [prodId]);
+    const prod = await dbGet('SELECT id, nombre, precio, categoria_id, negocio_id FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado: El producto pertenece a otro comercio.' });
+    }
 
     const ingredientes = await dbAll(`
       SELECT r.id as receta_id, r.producto_id, r.insumo_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje,
@@ -9198,9 +9495,9 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
              i.costo_unitario, i.stock_actual, i.stock_minimo, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-      WHERE r.producto_id = ?
+      WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
       ORDER BY i.nombre ASC
-    `, [prodId]);
+    `, [prodId, prodNid, prodNid]);
 
     let costoReceta = 0;
     let porcionesDisponibles = ingredientes.length > 0 ? Infinity : 0;
@@ -9332,11 +9629,22 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       return res.status(400).json({ error: 'Insumo y cantidad válida mayor a 0 son requeridos' });
     }
 
-    const prod = await dbGet('SELECT id, nombre FROM Productos WHERE id = ?', [prodId]);
+    const prod = await dbGet('SELECT id, nombre, negocio_id FROM Productos WHERE id = ?', [prodId]);
     if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    const ins = await dbGet('SELECT id, nombre FROM Inventario WHERE id = ?', [insId]);
+    const ins = await dbGet('SELECT id, nombre, negocio_id FROM Inventario WHERE id = ?', [insId]);
     if (!ins) return res.status(404).json({ error: 'Insumo no encontrado' });
+
+    const prodNid = Number(prod.negocio_id || 1);
+    const insNid = Number(ins.negocio_id || 1);
+    if (prodNid !== insNid) {
+      return res.status(400).json({ error: 'No se puede vincular un insumo perteneciente a otro comercio.' });
+    }
+
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
 
     const existente = await dbGet('SELECT id FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
     if (existente) {
@@ -9351,9 +9659,8 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       );
     }
 
-    const prodNegocioId = prod.negocio_id || ins.negocio_id || 1;
     await registrarAuditoria({
-      negocioId: prodNegocioId,
+      negocioId: prodNid,
       usuarioNombre,
       accion: 'modificar_escandallo',
       tipoEvento: 'operativo',
@@ -9361,7 +9668,7 @@ app.post('/api/admin/recetas/:productoId/ingredientes', verificarAdmin, async (r
       detalle: `Ingrediente ${ins.nombre} (${cantNum}) asignado a receta de ${prod.nombre}`
     });
 
-    io.emit('receta_actualizada', { producto_id: prodId });
+    io.emit('receta_actualizada', { producto_id: prodId, negocio_id: prodNid });
     res.json({ ok: true, message: 'Ingrediente guardado en la receta' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -9379,12 +9686,21 @@ app.put('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdmin,
       return res.status(400).json({ error: 'Cantidad válida mayor a 0 requerida' });
     }
 
+    const prod = await dbGet('SELECT id, negocio_id FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
+
     await dbRun(
       'UPDATE InventarioRecetas SET cantidad = ?, merma_porcentaje = ? WHERE producto_id = ? AND insumo_id = ?',
       [cantNum, Number(merma_porcentaje || 0), prodId, insId]
     );
 
-    io.emit('receta_actualizada', { producto_id: prodId });
+    io.emit('receta_actualizada', { producto_id: prodId, negocio_id: prodNid });
     res.json({ ok: true, message: 'Ingrediente actualizado con éxito' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -9396,9 +9712,18 @@ app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdm
     const prodId = Number(req.params.productoId);
     const insId = Number(req.params.insumoId);
 
+    const prod = await dbGet('SELECT id, negocio_id FROM Productos WHERE id = ?', [prodId]);
+    if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    const prodNid = Number(prod.negocio_id || 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    if (req.usuario && req.usuario.rol !== 'developer' && prodNid !== Number(reqNid)) {
+      return res.status(403).json({ error: 'Acceso denegado a este comercio.' });
+    }
+
     await dbRun('DELETE FROM InventarioRecetas WHERE producto_id = ? AND insumo_id = ?', [prodId, insId]);
 
-    io.emit('receta_actualizada', { producto_id: prodId });
+    io.emit('receta_actualizada', { producto_id: prodId, negocio_id: prodNid });
     res.json({ ok: true, message: 'Ingrediente eliminado de la receta' });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -10115,7 +10440,9 @@ app.get('/api/admin/auditoria', verificarAdmin, async (req, res) => {
     let sql = 'SELECT * FROM Auditoria WHERE 1=1';
     const params = [];
 
-    const negocioId = negocio_id ? Number(negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : null);
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = negocio_id ? Number(negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
     if (negocioId) {
       sql += ' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))';
       params.push(negocioId, negocioId);
@@ -10156,7 +10483,9 @@ app.post('/api/admin/auditoria/registrar', async (req, res) => {
 // --- DASHBOARD & MÉTRICAS EN TIEMPO REAL ---
 app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
   try {
-    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
     const { inicioHoyISO, inicioAyerISO, finHoyISO } = getInicioFinHoyCR();
 
     // 1. Ventas de Hoy
@@ -10293,7 +10622,9 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
 // Endpoint detallado de cuentas/comandas cobradas hoy para el modal interactivo del Dashboard
 app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
   try {
-    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
     const { inicioHoyISO } = getInicioFinHoyCR();
 
     const ordenesPagadas = await dbAll(`
@@ -10977,7 +11308,11 @@ app.post('/api/dev/personalizacion-pagina/reset', (req, res) => {
   const { negocio_id = 1 } = req.body;
   const claveNegocio = `custom_page_settings_negocio_${negocio_id}`;
 
-  db.run("DELETE FROM ConfigNegocio WHERE clave = ? OR clave = 'custom_page_settings'", [claveNegocio], (err) => {
+  const sql = Number(negocio_id) === 1
+    ? "DELETE FROM ConfigNegocio WHERE clave = ? OR clave = 'custom_page_settings'"
+    : "DELETE FROM ConfigNegocio WHERE clave = ?";
+
+  db.run(sql, [claveNegocio], (err) => {
     if (err) return res.status(500).json({ error: 'Error al restablecer personalización' });
     io.emit('pagina_personalizacion_actualizada', { config: {}, negocio_id: Number(negocio_id) });
     res.json({ ok: true, message: 'Personalización restablecida a valores originales', negocio_id: Number(negocio_id) });
@@ -11074,12 +11409,12 @@ app.post('/api/developer/purgar-negocio-completo', verificarDeveloper, async (re
     `, [negocioId]).catch(() => {});
 
     // Sockets en tiempo real
-    io.emit('mesas_actualizadas');
-    io.emit('caja_actualizada');
-    io.emit('cajas_fisicas_actualizadas');
-    io.emit('inventario_actualizado');
-    io.emit('ventas_actualizadas');
-    io.emit('comandas_actualizadas');
+    io.emit('mesas_actualizadas', { negocio_id: negocioId });
+    io.emit('caja_actualizada', { negocio_id: negocioId });
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: negocioId });
+    io.emit('inventario_actualizado', { negocio_id: negocioId });
+    io.emit('ventas_actualizadas', { negocio_id: negocioId });
+    io.emit('comandas_actualizadas', { negocio_id: negocioId });
 
     res.json({
       ok: true,
@@ -11103,8 +11438,8 @@ app.post('/api/admin/dashboard/purgar-integral', verificarDeveloper, async (req,
   await dbRun(`DELETE FROM InventarioMovimientos WHERE negocio_id = ?`, [negocioId]).catch(() => {});
   await dbRun(`UPDATE Inventario SET stock_minimo = 0, stock_actual = 0 WHERE negocio_id = ?`, [negocioId]).catch(() => {});
   await dbRun(`UPDATE Mesas SET estado = 'libre', monto_acumulado = 0, mesero_actual = NULL, pedidos_activos = '[]' WHERE negocio_id = ?`, [negocioId]).catch(() => {});
-  io.emit('mesas_actualizadas');
-  io.emit('ventas_actualizadas');
+  io.emit('mesas_actualizadas', { negocio_id: negocioId });
+  io.emit('ventas_actualizadas', { negocio_id: negocioId });
   res.json({ ok: true, message: 'Dashboard purgado exitosamente a ₡0.' });
 });
 
@@ -11116,15 +11451,15 @@ app.post('/api/admin/ventas/purgar-pruebas', verificarDeveloper, async (req, res
   await dbRun(`DELETE FROM VentasDetalle WHERE venta_id IN (SELECT id FROM Ventas WHERE negocio_id = ?)`, [negocioId]).catch(() => {});
   await dbRun(`DELETE FROM Ventas WHERE negocio_id = ?`, [negocioId]).catch(() => {});
   await dbRun(`UPDATE Mesas SET estado = 'libre', monto_acumulado = 0, mesero_actual = NULL, pedidos_activos = '[]' WHERE negocio_id = ?`, [negocioId]).catch(() => {});
-  io.emit('ventas_actualizadas');
-  io.emit('mesas_actualizadas');
+  io.emit('ventas_actualizadas', { negocio_id: negocioId });
+  io.emit('mesas_actualizadas', { negocio_id: negocioId });
   res.json({ ok: true, message: 'Ventas de prueba purgadas.' });
 });
 
 app.post('/api/caja/purgar-historial', verificarDeveloper, async (req, res) => {
   const negocioId = req.body.negocio_id ? Number(req.body.negocio_id) : 1;
   await dbRun(`DELETE FROM Cajas WHERE negocio_id = ?`, [negocioId]).catch(() => {});
-  io.emit('caja_actualizada');
+  io.emit('caja_actualizada', { negocio_id: negocioId });
   res.json({ ok: true, message: 'Historial de cajas purgado a ₡0.' });
 });
 
@@ -11134,7 +11469,7 @@ app.post('/api/admin/inventario/purgar-sugerencias', verificarDeveloper, async (
   if (req.body.limpiarKardex) {
     await dbRun(`DELETE FROM InventarioMovimientos WHERE negocio_id = ?`, [negocioId]).catch(() => {});
   }
-  io.emit('inventario_actualizado');
+  io.emit('inventario_actualizado', { negocio_id: negocioId });
   res.json({ ok: true, message: 'Sugerencias de compra eliminadas.' });
 });
 
@@ -11144,8 +11479,8 @@ app.post('/api/admin/ventas-kardex/purgar', verificarDeveloper, async (req, res)
   await dbRun(`DELETE FROM Pagos WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)`, [negocioId]).catch(() => {});
   await dbRun(`DELETE FROM DetalleOrden WHERE orden_id IN (SELECT id FROM Ordenes WHERE negocio_id = ?)`, [negocioId]).catch(() => {});
   await dbRun(`DELETE FROM Ordenes WHERE negocio_id = ?`, [negocioId]).catch(() => {});
-  io.emit('ventas_actualizadas');
-  io.emit('inventario_actualizado');
+  io.emit('ventas_actualizadas', { negocio_id: negocioId });
+  io.emit('inventario_actualizado', { negocio_id: negocioId });
   res.json({ ok: true, message: 'Ventas y kárdex purgados.' });
 });
 
@@ -11154,7 +11489,7 @@ app.post('/api/kds/purgar-comandas', verificarDeveloper, async (req, res) => {
   await dbRun(`DELETE FROM ComandasDetalle WHERE comanda_id IN (SELECT id FROM Comandas WHERE negocio_id = ?)`, [negocioId]).catch(() => {});
   await dbRun(`DELETE FROM Comandas WHERE negocio_id = ?`, [negocioId]).catch(() => {});
   await dbRun(`DELETE FROM PedidosKDS WHERE negocio_id = ?`, [negocioId]).catch(() => {});
-  io.emit('comandas_actualizadas');
+  io.emit('comandas_actualizadas', { negocio_id: negocioId });
   res.json({ ok: true, message: 'Comandas KDS purgadas.' });
 });
 

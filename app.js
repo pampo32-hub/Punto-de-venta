@@ -1797,6 +1797,8 @@ try {
     socket = io();
     socket.on('connect', () => console.log('✅ WebSockets activo.'));
     socket.on('nueva_comanda', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       sonarCampanaCocina();
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
@@ -1853,7 +1855,11 @@ try {
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarMesasDesdeBackend();
     });
-    socket.on('mesa_transferida', () => cargarMesasDesdeBackend());
+    socket.on('mesa_transferida', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMesasDesdeBackend();
+    });
     socket.on('mesa_reservada', (d) => {
       const currentNid = estado.negocioActual?.id || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
@@ -1875,8 +1881,16 @@ try {
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarMesasDesdeBackend();
     });
-    socket.on('producto_creado', () => cargarMenuDesdeBackend());
-    socket.on('menu_actualizado', () => cargarMenuDesdeBackend());
+    socket.on('producto_creado', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMenuDesdeBackend();
+    });
+    socket.on('menu_actualizado', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMenuDesdeBackend();
+    });
     socket.on('actualizacion_disponible', (d) => {
       if (estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'developer')) {
         mostrarNotificacionCentro(`🔔 ¡Nueva versión disponible (${d.latestSha || ''})! Puedes instalarla en "Actualizaciones".`, 'info');
@@ -1887,41 +1901,59 @@ try {
       setTimeout(() => window.location.reload(), 2000);
     });
     socket.on('cliente_pidio_cuenta', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       sonarCampanaCocina();
       if (typeof mostrarNotificacionCentro === 'function') {
         mostrarNotificacionCentro(`📱 ¡La ${d.mesaNumero || 'Mesa'} ha solicitado la cuenta por QR!`, 'warning');
       }
       cargarMesasDesdeBackend();
     });
-    socket.on('comanda_estado_cambiado', () => {
+    socket.on('comanda_estado_cambiado', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
     });
-    socket.on('comanda_actualizada', () => {
+    socket.on('comanda_actualizada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
     });
     socket.on('lanzar_fuertes', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       sonarCampanaCocina();
       alert(`🚀 ¡ORDEN EN MARCHA!\n\nCocina notificada: Lanzar Platos Fuertes de ${d.mesaNumero}.`);
       cargarKDSDesdeBackend();
     });
-    socket.on('comanda_anulada', () => {
+    socket.on('comanda_anulada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
     });
     socket.on('producto_agotado_cambiado', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       const prod = estado.productos.find(p => p.id === d.id);
       if (prod) prod.agotado = Number(d.agotado) === 1 || d.agotado === true;
       renderGridProductos(estado.productos);
     });
-    socket.on('producto_visual_cambiado', () => cargarMenuDesdeBackend());
+    socket.on('producto_visual_cambiado', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
+      cargarMenuDesdeBackend();
+    });
     socket.on('mesas_reorganizadas', (d) => {
       const currentNid = estado.negocioActual?.id || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       cargarMesasDesdeBackend();
     });
     socket.on('happy_hour_cambio', (data) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (data && data.negocio_id && Number(data.negocio_id) !== Number(currentNid)) return;
       aplicarEstadoHappyHour(data.activo, data.horaInicio, data.horaFin);
     });
     socket.on('negocio_modulos_actualizados', (d) => {
@@ -2045,7 +2077,9 @@ try {
       if (typeof cargarNegociosDev === 'function') cargarNegociosDev();
       if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
     });
-    socket.on('inventario_actualizado', () => {
+    socket.on('inventario_actualizado', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (document.getElementById('view-inventario')?.classList.contains('active')) {
         cargarInventarioAdmin();
         if (window.subTabInventarioActiva === 'recetas') {
@@ -2061,7 +2095,9 @@ try {
       if (typeof window.poblarSelectorKardexInsumos === 'function') window.poblarSelectorKardexInsumos();
       if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
     });
-    socket.on('venta_registrada', () => {
+    socket.on('venta_registrada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
       if (typeof window.consultarVentasProductosServidor === 'function') {
         window.consultarVentasProductosServidor();
@@ -2078,11 +2114,15 @@ try {
         }
       }
     });
-    socket.on('ventas_actualizadas', () => {
+    socket.on('ventas_actualizadas', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
       if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
     });
     socket.on('inventario_alerta_stock', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (typeof mostrarNotificacionCentro === 'function') {
         const nombreInsumo = d.insumo || d.nombre || d.nombre_insumo || 'Insumo';
         const unidad = d.unidad || 'uds';
@@ -2090,7 +2130,9 @@ try {
         mostrarNotificacionCentro(`⚠️ ¡Alerta de Inventario! El insumo "${nombreInsumo}" alcanzó stock crítico (${cant} ${unidad} restantes).`, 'warning');
       }
     });
-    socket.on('receta_actualizada', () => {
+    socket.on('receta_actualizada', (d) => {
+      const currentNid = estado.negocioActual?.id || 1;
+      if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (document.getElementById('view-inventario')?.classList.contains('active') && window.subTabInventarioActiva === 'recetas') {
         if (typeof window.recargarFichaTecnicaActual === 'function') window.recargarFichaTecnicaActual();
       }
@@ -12927,13 +12969,19 @@ document.getElementById('btnCorteZCiego')?.addEventListener('click', () => windo
 document.getElementById('btnReasignarTurnoCaja')?.addEventListener('click', () => window.abrirModalReasignarCajaTurno());
 
 if (typeof socket !== 'undefined' && socket && typeof socket.on === 'function') {
-  socket.on('caja_actualizada', () => {
+  socket.on('caja_actualizada', (d) => {
+    const currentNid = estado.negocioActual?.id || 1;
+    if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
     cargarCajaDesdeBackend();
   });
-  socket.on('cajas_fisicas_actualizadas', () => {
+  socket.on('cajas_fisicas_actualizadas', (d) => {
+    const currentNid = estado.negocioActual?.id || 1;
+    if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
     cargarCajaDesdeBackend();
   });
   socket.on('caja_turno_reasignado', (info) => {
+    const currentNid = estado.negocioActual?.id || 1;
+    if (info && info.negocio_id && Number(info.negocio_id) !== Number(currentNid)) return;
     cargarCajaDesdeBackend();
   });
 }
