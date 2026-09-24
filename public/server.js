@@ -6772,12 +6772,12 @@ async function procesarCobroOrden(ordenId, {
       io
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
-    if (orden.mesa_id) {
-      if (nuevoTotal === 0 && totalAbonado > 0) {
-        await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
-        await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
+    if (nuevoTotal === 0 && totalAbonado > 0) {
+      await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, total = 0, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+      await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
+      if (orden.mesa_id) {
         await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, orden_total = 0 WHERE id = ?",
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
           [orden.mesa_id]
         );
         await dbRun(
@@ -6785,12 +6785,17 @@ async function procesarCobroOrden(ordenId, {
           [orden.mesa_id, orden.mesa_id]
         );
         io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, orden_total: 0, transferida_de: null, mesas_unidas: [] });
-      } else {
+      }
+    } else {
+      await dbRun("UPDATE Ordenes SET total = ? WHERE id = ?", [nuevoTotal, ordenId]);
+      if (orden.mesa_id) {
         const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
         const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
-        await dbRun("UPDATE Mesas SET estado = ?, orden_total = ? WHERE id = ?", [estadoMesaActual, nuevoTotal, orden.mesa_id]);
+        await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
         io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual, negocio_id: orden.negocio_id });
       }
+    }
+    if (orden.mesa_id) {
       io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id });
     }
 
