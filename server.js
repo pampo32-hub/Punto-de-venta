@@ -3027,6 +3027,7 @@ app.get('/api/mesas', async (req, res) => {
 
     const activeOrderIds = mesas.map(m => m.orden_activa_id).filter(Boolean);
     let itemsByOrder = {};
+    let pagosByOrder = {};
     if (activeOrderIds.length > 0) {
       const placeholders = activeOrderIds.map(() => '?').join(',');
       const allItems = await dbAll(
@@ -3037,13 +3038,29 @@ app.get('/api/mesas', async (req, res) => {
         if (!itemsByOrder[it.orden_id]) itemsByOrder[it.orden_id] = [];
         itemsByOrder[it.orden_id].push(it);
       }
+      try {
+        const allPagos = await dbAll(
+          `SELECT orden_id, COALESCE(SUM(monto), 0) as total_pagado FROM Pagos WHERE orden_id IN (${placeholders}) GROUP BY orden_id`,
+          activeOrderIds
+        );
+        for (const p of allPagos) {
+          pagosByOrder[p.orden_id] = Number(p.total_pagado) || 0;
+        }
+      } catch (_) {}
     }
 
     const ahora = Date.now();
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
       if (m.orden_activa_id) {
-        m.orden_total = items.reduce((acc, it) => acc + ((Number(it.precio_unitario) || 0) * (Number(it.cantidad) || 1)), 0);
+        const subtotalItems = items.reduce((acc, it) => acc + ((Number(it.precio_unitario) || 0) * (Number(it.cantidad) || 1)), 0);
+        const totalAbonado = pagosByOrder[m.orden_activa_id] || 0;
+        const saldoRestante = Math.max(0, subtotalItems - totalAbonado);
+        m.orden_total = saldoRestante;
+        m.total = saldoRestante;
+        m.total_pagado = totalAbonado;
+        m.subtotal_consumos = subtotalItems;
+        m.total_original = subtotalItems;
       }
       const cocinaItems = items.filter(
         it => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
@@ -5164,7 +5181,16 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
     if (!orden) return res.json({ orden: null, items: [] });
 
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
-    res.json({ orden, items });
+    let totalAbonado = 0;
+    let pagos = [];
+    try {
+      const rowPagos = await dbGet('SELECT COALESCE(SUM(monto), 0) as total_pagado FROM Pagos WHERE orden_id = ?', [orden.id]);
+      totalAbonado = Number(rowPagos?.total_pagado) || 0;
+      pagos = await dbAll('SELECT * FROM Pagos WHERE orden_id = ? ORDER BY id ASC', [orden.id]);
+    } catch (_) {}
+    orden.total_pagado = totalAbonado;
+    orden.pagos = pagos || [];
+    res.json({ orden, items, total_pagado: totalAbonado, pagos });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -5181,7 +5207,16 @@ app.get('/api/ordenes/:id', async (req, res) => {
     );
     if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
-    res.json({ orden, items });
+    let totalAbonado = 0;
+    let pagos = [];
+    try {
+      const rowPagos = await dbGet('SELECT COALESCE(SUM(monto), 0) as total_pagado FROM Pagos WHERE orden_id = ?', [orden.id]);
+      totalAbonado = Number(rowPagos?.total_pagado) || 0;
+      pagos = await dbAll('SELECT * FROM Pagos WHERE orden_id = ? ORDER BY id ASC', [orden.id]);
+    } catch (_) {}
+    orden.total_pagado = totalAbonado;
+    orden.pagos = pagos || [];
+    res.json({ orden, items, total_pagado: totalAbonado, pagos });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -6714,10 +6749,12 @@ async function procesarCobroOrden(ordenId, {
     // Si es pago monetario o cuota equitativa, deducir los abonos registrados en Pagos
     const rowPagos = await dbGet('SELECT COALESCE(SUM(monto), 0) as total_pagado FROM Pagos WHERE orden_id = ?', [ordenId]);
     const totalAbonado = Number(rowPagos?.total_pagado) || 0;
-    const totalOrdenCompleta = Number(orden.total) || nuevoTotal;
+    const esCuotaEquitativa = Array.isArray(items_pagados) && items_pagados.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'));
     if (totalAbonado > 0) {
-      const saldoRestantePagos = Math.max(0, totalOrdenCompleta - totalAbonado);
-      if (saldoRestantePagos < nuevoTotal || (Array.isArray(items_pagados) && items_pagados.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')))) {
+      const rowConsumoTotal = await dbGet("SELECT COALESCE(SUM(subtotal), 0) as consumo_total FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+      const totalConsumos = Number(rowConsumoTotal?.consumo_total) || nuevoTotal;
+      const saldoRestantePagos = Math.max(0, totalConsumos - totalAbonado);
+      if (esCuotaEquitativa || saldoRestantePagos < nuevoTotal) {
         nuevoTotal = saldoRestantePagos;
       }
     }
@@ -6792,7 +6829,7 @@ async function procesarCobroOrden(ordenId, {
         const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
         const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
         await dbRun("UPDATE Mesas SET estado = ? WHERE id = ?", [estadoMesaActual, orden.mesa_id]);
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual, negocio_id: orden.negocio_id });
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, total_pagado: totalAbonado, estado: estadoMesaActual, negocio_id: orden.negocio_id });
       }
     }
     if (orden.mesa_id) {

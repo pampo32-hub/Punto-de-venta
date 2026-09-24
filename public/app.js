@@ -1823,6 +1823,15 @@ try {
             mesa.orden_total = Number(d.total);
             mesa.total = Number(d.total);
           }
+          if (d.total_pagado !== undefined) {
+            mesa.total_pagado = Number(d.total_pagado);
+          }
+          if (estado.mesaActiva && Number(estado.mesaActiva.id) === Number(d.mesaId)) {
+            estado.mesaActiva.orden_total = mesa.orden_total;
+            estado.mesaActiva.total = mesa.total;
+            if (mesa.total_pagado !== undefined) estado.mesaActiva.total_pagado = mesa.total_pagado;
+            if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
+          }
           if (d.estado) mesa.estado = d.estado;
           if (typeof renderSalón === 'function') renderSalón();
         }
@@ -7904,7 +7913,10 @@ async function cargarMesasDesdeBackend() {
         alto: (m.alto !== null && m.alto !== undefined && !isNaN(Number(m.alto))) ? Number(m.alto) : ((m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 95 : 115),
         forma: (m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))) ? 'silla' : (m.forma || 'square'),
         orden_activa_id: m.orden_activa_id,
-        orden_total: m.orden_total || 0,
+        orden_total: m.orden_total != null ? Number(m.orden_total) : 0,
+        total: m.orden_total != null ? Number(m.orden_total) : 0,
+        total_pagado: Number(m.total_pagado) || 0,
+        total_original: Number(m.total_original || m.subtotal_consumos || m.orden_total) || 0,
         mesero: m.mesero || m.orden_mesero || 'Juan Jival',
         platos_pendientes: m.platos_pendientes || m.items_pendientes || [],
         items_pendientes: m.items_pendientes || m.platos_pendientes || [],
@@ -7947,6 +7959,17 @@ async function cargarMesasDesdeBackend() {
           }
         }
       } catch (eOff) {}
+    }
+
+    if (estado.mesaActiva) {
+      const mesaActualizada = estado.mesas.find(m => Number(m.id) === Number(estado.mesaActiva.id));
+      if (mesaActualizada) {
+        estado.mesaActiva.orden_total = mesaActualizada.orden_total;
+        estado.mesaActiva.total = mesaActualizada.orden_total;
+        estado.mesaActiva.total_pagado = mesaActualizada.total_pagado;
+        estado.mesaActiva.total_original = mesaActualizada.total_original;
+        if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
+      }
     }
 
     renderSalón();
@@ -9920,6 +9943,10 @@ async function abrirComanderoMesa(mesaId) {
         : ('Orden #' + (data.orden.numero_orden || data.orden.id));
       mesa.orden_id = data.orden.id;
       mesa.orden_activa_id = data.orden.id;
+      mesa.total_pagado = Number(data.total_pagado || data.orden.total_pagado || 0);
+      mesa.pagos = data.pagos || data.orden.pagos || [];
+      mesa.orden_total = (data.orden.total !== null && data.orden.total !== undefined) ? Number(data.orden.total) : (mesa.orden_total || 0);
+      mesa.total = mesa.orden_total;
       mesa.modo_happy_hour = data.orden.modo_happy_hour || 'estricto';
       mesa.descuento_monto = data.orden.descuento_monto || 0;
       mesa.descuento_porcentaje = data.orden.descuento_porcentaje || 0;
@@ -11185,11 +11212,35 @@ function recalcularTotalesTicket() {
     }
   }
 
+  const totalAbonado = Number(estado.mesaActiva?.total_pagado) || 0;
+  const saldoPendiente = Math.max(0, total - totalAbonado);
+
+  const rowAbonos = document.getElementById('rowComAbonos');
+  const comAbonos = document.getElementById('comAbonos');
+  const lblComTotal = document.getElementById('lblComTotal');
+  if (rowAbonos && comAbonos) {
+    if (totalAbonado > 0) {
+      rowAbonos.style.display = 'flex';
+      comAbonos.textContent = '-' + formatCRC(totalAbonado);
+      if (lblComTotal) lblComTotal.textContent = 'TOTAL PENDIENTE:';
+    } else {
+      rowAbonos.style.display = 'none';
+      if (lblComTotal) lblComTotal.textContent = 'TOTAL GENERAL:';
+    }
+  }
+
   document.getElementById('comServicio').textContent = formatCRC(servicio);
   document.getElementById('comIva').textContent = formatCRC(iva);
-  document.getElementById('comTotal').textContent = formatCRC(total);
+  document.getElementById('comTotal').textContent = formatCRC(saldoPendiente);
   const mobFloatTotal = document.getElementById('mobFloatingTotal');
-  if (mobFloatTotal) mobFloatTotal.textContent = formatCRC(total);
+  if (mobFloatTotal) mobFloatTotal.textContent = formatCRC(saldoPendiente);
+
+  if (estado.mesaActiva) {
+    estado.mesaActiva.total = saldoPendiente;
+    estado.mesaActiva.orden_total = saldoPendiente;
+    estado.mesaActiva.total_original = total;
+    estado.mesaActiva.total_pagado = totalAbonado;
+  }
 }
 
 window.toggleModoHappyHourActual = async function() {
@@ -15100,6 +15151,7 @@ window.ejecutarCobroFinal = async function() {
         if (estado.mesaActiva) {
           estado.mesaActiva.total = remMesaTot;
           estado.mesaActiva.orden_total = remMesaTot;
+          estado.mesaActiva.total_pagado = (Number(estado.mesaActiva.total_pagado) || 0) + totalNum;
           if (cobroResData?.saldo_restante !== undefined) {
             estado.mesaActiva.total = Number(cobroResData.saldo_restante);
             estado.mesaActiva.orden_total = Number(cobroResData.saldo_restante);
@@ -15118,6 +15170,7 @@ window.ejecutarCobroFinal = async function() {
         if (mesaEnLista && estado.mesaActiva) {
           mesaEnLista.total = estado.mesaActiva.total;
           mesaEnLista.orden_total = estado.mesaActiva.orden_total;
+          mesaEnLista.total_pagado = estado.mesaActiva.total_pagado;
           mesaEnLista.items = [...(estado.mesaActiva.items || [])];
         }
 
@@ -15150,6 +15203,7 @@ window.ejecutarCobroFinal = async function() {
           if (typeof renderSplitPersonaActiva === 'function') renderSplitPersonaActiva();
           if (typeof renderSplitColaPersonas === 'function') renderSplitColaPersonas();
           if (typeof calcularSplitIgual === 'function') calcularSplitIgual();
+          if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
           if (typeof renderSalón === 'function') renderSalón();
           if (typeof cargarMesasDesdeBackend === 'function') cargarMesasDesdeBackend();
 
@@ -15657,6 +15711,9 @@ function initSplitBills() {
         m.classList.remove('active');
         m.style.display = 'none';
       }
+      if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
+      if (typeof renderTicketItems === 'function') renderTicketItems();
+      if (typeof renderSalón === 'function') renderSalón();
       if (typeof window.cargarMesasDesdeBackend === 'function') {
         window.cargarMesasDesdeBackend();
       }
@@ -15670,6 +15727,9 @@ function initSplitBills() {
         m.classList.remove('active');
         m.style.display = 'none';
       }
+      if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
+      if (typeof renderTicketItems === 'function') renderTicketItems();
+      if (typeof renderSalón === 'function') renderSalón();
       if (typeof window.cargarMesasDesdeBackend === 'function') {
         window.cargarMesasDesdeBackend();
       }
@@ -15736,15 +15796,21 @@ function iniciarDivisionCuentas() {
     return;
   }
   const totalItems = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
-  const totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || totalItems || Number(estado.mesaActiva?.total) || Number(estado.mesaActiva?.orden_total) || Number(estado.mesaActiva?.subtotal) || 0;
-  const totalTxt = formatCRCSinDecimales(totalNum);
+  const totalConsumo = Number(estado.mesaActiva?.total_original) || totalItems;
+  const totalAbonado = Number(estado.mesaActiva?.total_pagado) || 0;
+  const saldoPendiente = Math.max(0, totalConsumo - totalAbonado);
+  const totalTxt = formatCRCSinDecimales(totalConsumo);
   const numRaw = String(estado.mesaActiva.numero || '');
   const nomRaw = String(estado.mesaActiva.nombre || '');
   let mesaFinal = nomRaw || numRaw;
   if (!mesaFinal.toLowerCase().startsWith('mesa') && !mesaFinal.toLowerCase().startsWith('barra') && !mesaFinal.toLowerCase().startsWith('terraza')) {
     mesaFinal = `Mesa ${mesaFinal}`;
   }
-  document.getElementById('splitMesaTitulo').textContent = `${mesaFinal} • Total: ${totalTxt}`;
+  if (totalAbonado > 0) {
+    document.getElementById('splitMesaTitulo').textContent = `${mesaFinal} • Total Consumos: ${totalTxt} (Pendiente: ${formatCRCSinDecimales(saldoPendiente)})`;
+  } else {
+    document.getElementById('splitMesaTitulo').textContent = `${mesaFinal} • Total: ${totalTxt}`;
+  }
 
   // Resetear pestañas a modo Por Ítems
   document.querySelectorAll('.split-mode-btn').forEach(b => {
@@ -15868,19 +15934,29 @@ function iniciarDivisionCuentas() {
         curso: it.curso || 2
       }));
 
-    // Inicializar personas
-    splitState.personas = [];
-    for (let i = 1; i <= splitState.numPersonas; i++) {
-      splitState.personas.push({
-        id: i,
-        nombre: `Persona ${i}`,
-        items: [],
-        subtotal: 0,
-        impuestos: 0,
-        total: 0,
-        guardada: false,
-        pagada: false
-      });
+    // Mantener personas si ya existían para esta mesa con cuotas pagadas
+    const mesaIdActual = estado.mesaActiva ? estado.mesaActiva.id : null;
+    const esMismaMesa = (splitState.mesaId === mesaIdActual);
+    splitState.mesaId = mesaIdActual;
+
+    if (!esMismaMesa || !splitState.personas || splitState.personas.length === 0) {
+      splitState.personas = [];
+      const cuotaEst = numInicial > 0 ? Math.round(totalConsumo / numInicial) : 0;
+      const cuotasPagadas = (totalAbonado > 0 && cuotaEst > 0) ? Math.min(numInicial - 1, Math.floor(totalAbonado / cuotaEst)) : 0;
+
+      for (let i = 1; i <= splitState.numPersonas; i++) {
+        const yaPagada = (i <= cuotasPagadas);
+        splitState.personas.push({
+          id: i,
+          nombre: `Persona ${i}`,
+          items: [],
+          subtotal: 0,
+          impuestos: 0,
+          total: cuotaEst,
+          guardada: yaPagada,
+          pagada: yaPagada
+        });
+      }
     }
   }
 
@@ -15918,6 +15994,13 @@ function cambiarCantidadPersonasSplit(delta) {
       pagada: false
     });
   } else if (delta < 0) {
+    const paidCount = (splitState.personas || []).filter(p => p.pagada).length;
+    if (nuevoTotal < paidCount) {
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro(`⚠️ No se puede reducir a menos de ${paidCount} personas porque ya hay cuotas pagadas.`, 'warning');
+      }
+      return;
+    }
     // Quitar última persona: si tenía ítems, devolverlos a la mesa
     const removedPersona = splitState.personas.pop();
     if (removedPersona && removedPersona.items && removedPersona.items.length > 0) {
@@ -16565,7 +16648,7 @@ window.cobrarPersonaSplitEqual = function(personaIndex) {
     return;
   }
   const totalItems = (estado.mesaActiva.items || []).reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
-  const totalMesa = parseCRC(document.getElementById('comTotal')?.textContent || '0') || totalItems || Number(estado.mesaActiva.total) || Number(estado.mesaActiva.orden_total) || 0;
+  const totalMesa = Number(estado.mesaActiva?.total_original) || totalItems;
   const numP = splitState.numPersonas || 2;
   const porPersona = Math.round(totalMesa / numP);
 
@@ -16654,7 +16737,7 @@ window.reimprimirTicketPersonaSplit = function(idx) {
 function calcularSplitIgual() {
   if (!estado.mesaActiva || !estado.mesaActiva.items) return;
   const totalItems = estado.mesaActiva.items.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
-  const total = parseCRC(document.getElementById('comTotal')?.textContent || '0') || totalItems || Number(estado.mesaActiva.total) || Number(estado.mesaActiva.orden_total) || 0;
+  const total = Number(estado.mesaActiva?.total_original) || totalItems;
   const numP = splitState.numPersonas || estado.splitPersonas || 2;
   const porPersona = Math.round(total / numP);
   const el = document.getElementById('splitMontoPorPersona');
