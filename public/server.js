@@ -9761,20 +9761,21 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
 
     const productosDetallados = [];
 
-    // Pre-cargar todas las recetas en una sola consulta batch para eliminar N+1 consultas de red
+    // Pre-cargar todas las recetas del negocio en una sola consulta batch para eliminar N+1 consultas de red
     const todasLasRecetas = await dbAll(`
       SELECT r.producto_id, r.insumo_id, r.cantidad, r.merma_porcentaje,
              i.nombre AS insumo_nombre, i.unidad_medida, i.costo_unitario, i.stock_actual, i.es_licor
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-    `);
+      WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
+    `, [nid, nid]);
     const recetasPorProducto = {};
     for (const r of todasLasRecetas) {
       if (!recetasPorProducto[r.producto_id]) recetasPorProducto[r.producto_id] = [];
       recetasPorProducto[r.producto_id].push(r);
     }
 
-    const todosLosInsumos = await dbAll('SELECT * FROM Inventario');
+    const todosLosInsumos = await dbAll('SELECT * FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
 
     for (const fila of ventasRows) {
       const pId = fila.producto_id;
@@ -9829,17 +9830,18 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
           g.costo_total += costoTotalInsumo;
         }
       } else if (esBaldeItem) {
-        // Balde de 6 cervezas: obtener detalles de notas o desgloses
+        // Balde de 6 cervezas: obtener detalles de notas o desgloses del negocio activo
         const filasBalde = await dbAll(`
           SELECT d.notas, d.cantidad, d.nombre_producto
           FROM DetalleOrden d
           JOIN Ordenes o ON d.orden_id = o.id
-          WHERE (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE '%balde%')
+          WHERE (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR (d.producto_id IS NULL AND LOWER(d.nombre_producto) LIKE '%balde%'))
             AND o.estado = 'pagada'
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-        `, [String(pId || ''), desde, hasta]);
+            AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+        `, [String(pId || ''), desde, hasta, nid, nid]);
 
         const desgloseCervezas = {};
         let totalCervezasContadas = 0;
@@ -9875,7 +9877,7 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             i.nombre.toLowerCase() === nomCerveza.toLowerCase() ||
             i.nombre.toLowerCase().includes(nomCerveza.toLowerCase()) ||
             nomCerveza.toLowerCase().includes(i.nombre.toLowerCase())
-          ) || todosLosInsumos.find(i => i.nombre.toLowerCase().includes('pilsen') || i.nombre.toLowerCase().includes('imperial')) || {
+          ) || {
             id: 'ins_balde_' + nomCerveza,
             nombre: nomCerveza,
             unidad_medida: 'botellas',
