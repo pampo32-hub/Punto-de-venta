@@ -2495,6 +2495,20 @@ app.put('/api/dev/usuarios/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/dev/usuarios/:id', async (req, res) => {
+  try {
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (target.usuario === 'developer' || target.usuario === 'admin') {
+      return res.status(403).json({ error: 'No se puede eliminar el usuario administrador principal del sistema' });
+    }
+    await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
+    res.json({ ok: true, message: 'Usuario eliminado exitosamente' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============================================================================
 // 2.3 MONITOR DE BASE DE DATOS EN TIEMPO REAL (DEVELOPER & SYSADMIN)
 // ============================================================================
@@ -3889,6 +3903,50 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
   }
 });
 
+// Liberar todas las mesas masivamente (Developer / Admin)
+app.post('/api/mesas/liberar-todas', async (req, res) => {
+  try {
+    const negocioId = Number(req.body.negocio_id || req.headers['x-negocio-id'] || obtenerNegocioIdReq(req) || 1);
+    const ahora = new Date().toISOString();
+
+    // 1. Cerrar cualquier orden abierta de este negocio
+    await dbRun(
+      "UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
+      [ahora, negocioId, negocioId]
+    );
+
+    // 2. Cancelar reservas activas
+    await dbRun(
+      "UPDATE Reservas SET estado = 'cancelada' WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('pendiente', 'confirmada')",
+      [negocioId, negocioId]
+    );
+
+    // 3. Restablecer todas las mesas a estado libre
+    await dbRun(
+      "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
+      [negocioId, negocioId]
+    );
+
+    // 4. Desactivar uniones de mesas
+    try {
+      await dbRun(
+        'UPDATE TableMerges SET activo = 0 WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND activo = 1',
+        [negocioId, negocioId]
+      );
+    } catch (_) {}
+
+    io.emit('mesas_actualizadas');
+    io.emit('reserva_actualizada', { negocio_id: negocioId });
+
+    res.json({
+      ok: true,
+      message: 'Todas las mesas han sido liberadas exitosamente y restablecidas.'
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.post('/api/mesas/mover', async (req, res) => {
   try {
     const { origenMesaId, destinoMesaId } = req.body;
@@ -4644,6 +4702,42 @@ const handlerCrearCategoria = async (req, res) => {
 
 app.post('/api/categorias', handlerCrearCategoria);
 app.post('/api/admin/categorias', verificarAdmin, handlerCrearCategoria);
+
+// Editar categoría existente en el menú y sincronizar
+const handlerEditarCategoria = async (req, res) => {
+  try {
+    const catId = Number(req.params.id);
+    const { nombre, icono, destino, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
+    const nombreLimpio = (nombre || '').trim();
+    if (!nombreLimpio) {
+      return res.status(400).json({ error: 'El nombre de la categoría es obligatorio.' });
+    }
+    const iconoLimpio = (icono || '🍽️').trim();
+    const destinoLimpio = (destino === 'barra') ? 'barra' : 'cocina';
+
+    const cat = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+    if (!cat) {
+      return res.status(404).json({ error: 'Categoría no encontrada.' });
+    }
+
+    await dbRun(
+      'UPDATE Categorias SET nombre = ?, icono = ?, destino = ? WHERE id = ?',
+      [nombreLimpio, iconoLimpio, destinoLimpio, catId]
+    );
+
+    const catActualizada = await dbGet('SELECT * FROM Categorias WHERE id = ?', [catId]);
+    io.emit('categoria_actualizada', catActualizada);
+    io.emit('menu_actualizado');
+
+    res.json({ ok: true, message: 'Categoría actualizada exitosamente', categoria: catActualizada });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+};
+
+app.put('/api/categorias/:id', handlerEditarCategoria);
+app.put('/api/admin/categorias/:id', verificarAdmin, handlerEditarCategoria);
 
 // Eliminar categoría del menú
 const handlerEliminarCategoria = async (req, res) => {
@@ -7416,6 +7510,203 @@ app.get('/api/caja/corte-x', async (req, res) => {
       esperado_dolares_usd: ventasDolaresUSD,
       esperado_dolares_crc: ventasDolares,
       total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
+      tip_pool: tipPool,
+      total_propinas: totalPropinas
+    };
+
+    res.json({
+      ok: true,
+      corte: resultadoCorte,
+      ...resultadoCorte
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Corte X a ciegas (Arqueo Parcial Ciego de turno)
+app.post('/api/caja/corte-x-ciego', async (req, res) => {
+  try {
+    const {
+      caja_id,
+      caja_fisica_id,
+      efectivo_declarado_crc,
+      dolares_declarado_usd,
+      tarjeta_declarada,
+      sinpe_declarado,
+      notas = '',
+      usuarioNombre = 'Cajero',
+      adminPin
+    } = req.body;
+
+    const pinVerificar = adminPin || req.headers['x-supervisor-pin'];
+    if (pinVerificar) {
+      const esValido = await validarPinAdministrador(pinVerificar);
+      if (!esValido) {
+        return res.status(401).json({ ok: false, error: 'PIN de Administrador inválido. Corte X a ciegas no autorizado.' });
+      }
+    }
+
+    const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
+
+    let caja = null;
+    if (caja_id) {
+      caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+    } else if (caja_fisica_id) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId, negocioId]
+      );
+    }
+
+    if (!caja) {
+      caja = await dbGet(
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+        [negocioId, negocioId]
+      );
+    }
+    if (!caja) return res.status(404).json({ ok: false, error: 'No hay ninguna caja abierta actualmente para realizar el corte.' });
+
+    const ventas = await dbAll(`
+      SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
+      FROM Pagos p
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      GROUP BY p.metodo
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+
+    let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
+    const desgloseMetodos = {};
+
+    ventas.forEach(v => {
+      const m = (v.metodo || '').toLowerCase();
+      const tot = Number(v.total) || 0;
+      const totUSD = Number(v.total_usd) || 0;
+      desgloseMetodos[v.metodo || 'Otro'] = (desgloseMetodos[v.metodo || 'Otro'] || 0) + tot;
+
+      if (m.includes('efectivo') || m.includes('cash')) {
+        ventasEfectivo += tot;
+      } else if (m.includes('tarjeta') || m.includes('datafono') || m.includes('datáfono') || m.includes('card') || m.includes('credito') || m.includes('crédito') || m.includes('debito') || m.includes('débito')) {
+        ventasTarjeta += tot;
+      } else if (m.includes('sinpe')) {
+        ventasSinpe += tot;
+      } else if (m.includes('dolar') || m.includes('dólar') || m.includes('usd')) {
+        ventasDolares += tot;
+        ventasDolaresUSD += totUSD;
+      } else if (m.includes('transfer')) {
+        ventasTransferencia += tot;
+        ventasSinpe += tot;
+      } else {
+        ventasOtros += tot;
+      }
+    });
+    const totalVentas = ventas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
+
+    const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id ASC', [caja.id]);
+    let totalEntradas = 0, totalSalidas = 0;
+    movimientos.forEach(m => {
+      const mont = Number(m.monto) || 0;
+      if (m.tipo === 'entrada') totalEntradas += mont;
+      if (m.tipo === 'salida') totalSalidas += mont;
+    });
+
+    const fondoInicial = Number(caja.monto_inicial) || 0;
+    const efectivoEsperadoCRC = Math.round((fondoInicial + ventasEfectivo + totalEntradas - totalSalidas) * 100) / 100;
+    const dolaresEsperadoUSD = Math.round(ventasDolaresUSD * 100) / 100;
+    const dolaresEsperadoCRC = Math.round(ventasDolares * 100) / 100;
+    const totalGeneralEsperadoGaveta = Math.round((efectivoEsperadoCRC + dolaresEsperadoCRC) * 100) / 100;
+
+    const efectivoDeclaradoCRC = parseFloat(efectivo_declarado_crc) || 0;
+    const dolaresDeclaradoUSD = parseFloat(dolares_declarado_usd) || 0;
+    const tarjetaDeclarada = parseFloat(tarjeta_declarada) || 0;
+    const sinpeDeclarado = parseFloat(sinpe_declarado) || 0;
+
+    const diferenciaEfectivo = Math.round((efectivoDeclaradoCRC - efectivoEsperadoCRC) * 100) / 100;
+    const diferenciaUSD = Math.round((dolaresDeclaradoUSD - dolaresEsperadoUSD) * 100) / 100;
+
+    let estadoCuadre = 'Cuadrado';
+    if (diferenciaEfectivo > 0) {
+      estadoCuadre = `Sobrante: +₡${Math.round(diferenciaEfectivo).toLocaleString('es-CR')}`;
+    } else if (diferenciaEfectivo < 0) {
+      estadoCuadre = `Faltante: -₡${Math.round(Math.abs(diferenciaEfectivo)).toLocaleString('es-CR')}`;
+    }
+
+    const tipPool = await dbAll(`
+      SELECT 
+        COALESCE(p.mesero, 'Mesero General') as nombre,
+        COUNT(DISTINCT p.orden_id) as mesas,
+        SUM(p.monto) as ventas,
+        SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
+      FROM Pagos p
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      GROUP BY p.mesero
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
+
+    const ordenesCobros = await dbGet(`
+      SELECT COUNT(DISTINCT p.orden_id) as total_ordenes 
+      FROM Pagos p 
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+
+    // Registrar en auditoría si la función existe
+    try {
+      if (typeof registrarAuditoria === 'function') {
+        await registrarAuditoria({
+          negocioId,
+          usuarioId: req.usuario?.id || null,
+          usuarioNombre: usuarioNombre,
+          accion: 'corte_x_ciego',
+          tipoEvento: 'caja',
+          modulo: 'caja',
+          detalle: `Corte X a ciegas realizado por ${usuarioNombre}. Efectivo declarado: ₡${efectivoDeclaradoCRC.toLocaleString('es-CR')} (Esperado: ₡${efectivoEsperadoCRC.toLocaleString('es-CR')}, Dif: ₡${diferenciaEfectivo}). Resultado: ${estadoCuadre}.`,
+          monto: efectivoDeclaradoCRC
+        });
+      }
+    } catch (_) {}
+
+    const resultadoCorte = {
+      tipo: 'Corte X a Ciegas (Arqueo Parcial)',
+      caja_id: caja.id,
+      caja_fisica_id: caja.caja_fisica_id,
+      caja_nombre: caja.caja_nombre,
+      cajero: caja.cajero,
+      fecha_apertura: caja.fecha_apertura,
+      fecha_corte: new Date().toISOString(),
+      fondo_inicial: fondoInicial,
+      declarado: {
+        efectivo_crc: efectivoDeclaradoCRC,
+        dolares_usd: dolaresDeclaradoUSD,
+        tarjeta: tarjetaDeclarada,
+        sinpe: sinpeDeclarado
+      },
+      ventas: {
+        efectivo: ventasEfectivo,
+        tarjeta: ventasTarjeta,
+        sinpe: ventasSinpe,
+        dolares: ventasDolares,
+        dolares_usd: ventasDolaresUSD,
+        transferencia: ventasTransferencia,
+        otros: ventasOtros,
+        desglose_por_metodo: desgloseMetodos,
+        total: totalVentas,
+        ordenes: ordenesCobros?.total_ordenes || 0
+      },
+      movimientos_detalle: movimientos,
+      total_entradas: totalEntradas,
+      total_salidas: totalSalidas,
+      efectivo_esperado: efectivoEsperadoCRC,
+      esperado_efectivo_crc: efectivoEsperadoCRC,
+      esperado_dolares_usd: ventasDolaresUSD,
+      esperado_dolares_crc: ventasDolares,
+      total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
+      diferencia_efectivo_crc: diferenciaEfectivo,
+      diferencia_dolares_usd: diferenciaUSD,
+      estado_cuadre: estadoCuadre,
+      notas,
+      usuarioNombre,
       tip_pool: tipPool,
       total_propinas: totalPropinas
     };
@@ -10664,6 +10955,48 @@ app.post('/api/admin/auditoria/purgar', verificarDeveloper, async (req, res) => 
   const negocioId = req.body.negocio_id ? Number(req.body.negocio_id) : 1;
   await dbRun(`DELETE FROM Auditoria WHERE negocio_id = ?`, [negocioId]).catch(() => {});
   res.json({ ok: true, message: 'Bitácora de auditoría purgada.' });
+});
+
+// Asistente Virtual / Chat IA del POS
+app.post('/api/ia/chat', async (req, res) => {
+  try {
+    const { mensaje, negocio_id } = req.body;
+    const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || (typeof obtenerNegocioIdReq === 'function' ? obtenerNegocioIdReq(req) : 1) || 1);
+    
+    // Verificar si el módulo está habilitado para este comercio
+    const tieneModulo = typeof negocioTieneModulo === 'function' ? await negocioTieneModulo(negocioId, 'asistente_ia') : true;
+    if (!tieneModulo) {
+      return res.status(403).json({
+        ok: false,
+        moduloRequerido: true,
+        error: 'El módulo de Inteligencia Artificial no está activo en este comercio.'
+      });
+    }
+
+    const consulta = (mensaje || '').trim();
+    if (!consulta) {
+      return res.status(400).json({ ok: false, error: 'El mensaje de consulta no puede estar vacío.' });
+    }
+
+    // Respuesta contextual inteligente
+    const lower = consulta.toLowerCase();
+    let respuesta = '👋 ¡Hola! Soy tu asistente inteligente del punto de venta Gamma. Puedo ayudarte con dudas sobre mesas, comandas, recetas, inventario y cortes de caja.';
+    
+    if (lower.includes('caja') || lower.includes('corte') || lower.includes('cierre')) {
+      respuesta = '💰 **Gestión de Caja:** Puedes realizar Cortes X parciales en cualquier momento o hacer un Cierre Z al finalizar el turno desde el menú Caja. También tienes soporte para arqueo a ciegas.';
+    } else if (lower.includes('kardex') || lower.includes('inventario') || lower.includes('stock')) {
+      respuesta = '📦 **Inventario & Kárdex:** Los productos deducen insumos automáticamente al facturar según sus recetas vinculadas (por porción, shots en ml o botella completa). Puedes auditar los movimientos en la pestaña Kárdex.';
+    } else if (lower.includes('mesa') || lower.includes('comanda')) {
+      respuesta = '🍽️ **Mesas & Comandas:** Puedes abrir órdenes en mesas o barra, agregar items, transferir entre mesas y cobrar directamente en efectivo, tarjeta, Sinpe Móvil o dólares.';
+    }
+
+    res.json({
+      ok: true,
+      respuesta
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ============================================================================

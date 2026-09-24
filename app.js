@@ -24157,6 +24157,18 @@ window.toggleModoEdicionGlobal = function(forzarEstado) {
     _modoEdicionGlobalActivo = !_modoEdicionGlobalActivo;
   }
 
+window.activarModoEdicionEnVivo = function() {
+  if (typeof window.toggleModoEdicionGlobal === 'function') {
+    window.toggleModoEdicionGlobal(true);
+  }
+};
+
+window.desactivarModoEdicionEnVivo = function() {
+  if (typeof window.toggleModoEdicionGlobal === 'function') {
+    window.toggleModoEdicionGlobal(false);
+  }
+};
+
   const btnsModo = [
     document.getElementById('btnToggleModoEdicionTop'),
     document.getElementById('btnToggleModoEdicionComandero'),
@@ -25006,8 +25018,8 @@ window.abrirModalNuevaCategoria = function() {
     btnSubmit.style.background = 'linear-gradient(135deg, #10b981, #059669)';
   }
 
-  const nom = document.getElementById('txtNuevaCatNombre');
-  const ico = document.getElementById('txtNuevaCatIcono');
+  const nom = document.getElementById('txtModalCatNombre') || document.getElementById('txtNuevaCatNombre');
+  const ico = document.getElementById('txtModalCatIcono') || document.getElementById('txtNuevaCatIcono');
   const des = document.getElementById('selNuevaCatDestino');
   if (nom) nom.value = '';
   if (ico) ico.value = '🍽️';
@@ -25059,8 +25071,8 @@ window.abrirModalEditarCategoria = function(catId) {
     btnSubmit.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
   }
 
-  const nom = document.getElementById('txtNuevaCatNombre');
-  const ico = document.getElementById('txtNuevaCatIcono');
+  const nom = document.getElementById('txtModalCatNombre') || document.getElementById('txtNuevaCatNombre');
+  const ico = document.getElementById('txtModalCatIcono') || document.getElementById('txtNuevaCatIcono');
   const des = document.getElementById('selNuevaCatDestino');
   if (nom) nom.value = cat.nombre || '';
   if (ico) ico.value = cat.icono || '🍽️';
@@ -25149,8 +25161,10 @@ function renderListaSelectorCategorias(filterText) {
 }
 
 window.guardarNuevaCategoria = async function() {
-  const nombre = document.getElementById('txtNuevaCatNombre')?.value?.trim();
-  const icono = document.getElementById('txtNuevaCatIcono')?.value?.trim() || '🍽️';
+  const inputNom = document.getElementById('txtModalCatNombre') || document.getElementById('txtNuevaCatNombre');
+  const inputIco = document.getElementById('txtModalCatIcono') || document.getElementById('txtNuevaCatIcono');
+  const nombre = inputNom?.value?.trim();
+  const icono = inputIco?.value?.trim() || '🍽️';
   const destino = document.getElementById('selNuevaCatDestino')?.value || 'cocina';
   const editCatId = document.getElementById('txtEditCatId')?.value?.trim();
 
