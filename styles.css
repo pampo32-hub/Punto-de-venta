@@ -583,13 +583,14 @@ body {
   background: var(--bg-card);
   border: 2px solid var(--border);
   border-radius: 14px;
-  padding: 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
   box-shadow: 0 6px 12px rgba(0,0,0,0.3);
   transition: transform 0.15s, border-color 0.15s;
+  box-sizing: border-box;
 }
 
 .mesa-render-card:hover {
@@ -679,22 +680,30 @@ body {
 .m-cliente-tag {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  background: rgba(239, 68, 68, 0.22);
-  border: 1px solid rgba(239, 68, 68, 0.55);
-  color: #fca5a5;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 1px 8px;
-  border-radius: 9999px;
-  max-width: 92%;
+  gap: 3px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  color: #38bdf8;
+  font-size: var(--mesa-sub-size, 0.75rem);
+  font-weight: 800;
+  line-height: 1.25;
+  padding: 2px 7px;
+  border-radius: 6px;
+  max-width: 100%;
+  width: fit-content;
+  box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin: 1px auto 2px auto;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  margin: 2px 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
   z-index: 2;
+}
+
+.m-cliente-tag span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .btn-edit-cliente-header {
@@ -1107,20 +1116,30 @@ body {
 .m-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
 }
 
 .m-num {
   font-weight: 800;
-  font-size: 1.1rem;
+  font-size: var(--mesa-num-size, 0.95rem);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .m-badge {
-  font-size: 0.65rem;
+  font-size: 0.60rem;
   font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
   text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .mesa-render-card.libre .m-badge { background: #064e3b; color: #34d399; }

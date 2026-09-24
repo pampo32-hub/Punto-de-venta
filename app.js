@@ -8231,7 +8231,7 @@ function renderGrillaOrdenada(filtroZona = null) {
         const clienteMesa = m.cliente || m.mesa_cliente;
         let clienteHtml = '';
         if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
-          clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
+          clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 <span>${escapeHtml(clienteMesa)}</span></div>`;
         }
 
         const cap = m.capacidad ? `${m.capacidad}p` : (esSilla ? '1p' : '4p');
@@ -8581,7 +8581,7 @@ function renderSalón(filtroZona = null) {
     let clienteHtml = '';
     const clienteMesa = m.cliente || m.mesa_cliente;
     if (m.estado !== 'libre' && clienteMesa && clienteMesa !== 'Cliente General') {
-      clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 ${escapeHtml(clienteMesa)}</div>`;
+      clienteHtml = `<div class="m-cliente-tag" title="Cliente: ${escapeHtml(clienteMesa)}">👤 <span>${escapeHtml(clienteMesa)}</span></div>`;
     }
 
     let semaforoBadgeHtml = '';
