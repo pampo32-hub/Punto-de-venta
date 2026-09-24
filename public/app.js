@@ -14831,14 +14831,22 @@ window.ejecutarCobroFinal = async function() {
         }];
       }
 
-      // Descontar los productos pagados de estado.mesaActiva.items
-      if (personaCobrada.items && estado.mesaActiva && estado.mesaActiva.items) {
+      // Detectar si estamos en modo partes iguales (split equal)
+      const esModoPartesIguales = Boolean(
+        personaCobrada?.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')) ||
+        (splitState?.personas && splitState.personas.some(p => p.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'))))
+      );
+
+      // Descontar los productos pagados de estado.mesaActiva.items (SOLO en modo Por Ítems, NUNCA en Partes Iguales)
+      if (!esModoPartesIguales && personaCobrada.items && estado.mesaActiva && estado.mesaActiva.items) {
         personaCobrada.items.forEach(pItem => {
           let restante = Number(pItem.cantidad) || 1;
           for (let i = 0; i < estado.mesaActiva.items.length; i++) {
             const mItem = estado.mesaActiva.items[i];
             const coincideComensal = !pItem.comensal || !mItem.comensal || mItem.comensal === pItem.comensal || mItem.comensal === personaCobrada.nombre;
-            if (coincideComensal && (mItem.nombre === pItem.nombre || mItem.id === pItem.producto_id || mItem.producto_id === pItem.producto_id)) {
+            const coincideId = pItem.producto_id && (mItem.id === pItem.producto_id || mItem.producto_id === pItem.producto_id);
+            const coincideNombre = pItem.nombre && mItem.nombre === pItem.nombre;
+            if (coincideComensal && (coincideNombre || coincideId)) {
               if (mItem.cantidad <= restante) {
                 restante -= mItem.cantidad;
                 estado.mesaActiva.items.splice(i, 1);
@@ -14869,12 +14877,6 @@ window.ejecutarCobroFinal = async function() {
           }
         } catch (_) {}
       }
-
-      // Detectar si estamos en modo partes iguales (split equal)
-      const esModoPartesIguales = Boolean(
-        personaCobrada?.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')) ||
-        (splitState?.personas && splitState.personas.some(p => p.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'))))
-      );
 
       // Verificar si quedan productos o cuotas sin pagar en la mesa
       const quedanItemsEnMesaActiva = Boolean(estado.mesaActiva?.items && estado.mesaActiva.items.length > 0);
@@ -15143,19 +15145,17 @@ window.ejecutarCobroFinal = async function() {
           personaCobrada?.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')) ||
           (splitState?.personas && splitState.personas.some(p => p.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'))))
         );
-        let remMesaTot = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const totalConsumoBase = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        let remMesaTot = totalConsumoBase;
         if (esModoPartesIgualesRestante) {
           const totActual = Number(estado.mesaActiva?.orden_total || estado.mesaActiva?.total || 0) || remMesaTot;
           remMesaTot = Math.max(0, totActual - totalNum);
         }
         if (estado.mesaActiva) {
-          estado.mesaActiva.total = remMesaTot;
-          estado.mesaActiva.orden_total = remMesaTot;
+          estado.mesaActiva.total_original = Number(estado.mesaActiva.total_original) || totalConsumoBase;
           estado.mesaActiva.total_pagado = (Number(estado.mesaActiva.total_pagado) || 0) + totalNum;
-          if (cobroResData?.saldo_restante !== undefined) {
-            estado.mesaActiva.total = Number(cobroResData.saldo_restante);
-            estado.mesaActiva.orden_total = Number(cobroResData.saldo_restante);
-          }
+          estado.mesaActiva.total = cobroResData?.saldo_restante !== undefined ? Number(cobroResData.saldo_restante) : remMesaTot;
+          estado.mesaActiva.orden_total = estado.mesaActiva.total;
         }
 
         // Actualizar comensales restantes que aún tengan ítems pendientes
@@ -15171,6 +15171,7 @@ window.ejecutarCobroFinal = async function() {
           mesaEnLista.total = estado.mesaActiva.total;
           mesaEnLista.orden_total = estado.mesaActiva.orden_total;
           mesaEnLista.total_pagado = estado.mesaActiva.total_pagado;
+          mesaEnLista.total_original = estado.mesaActiva.total_original;
           mesaEnLista.items = [...(estado.mesaActiva.items || [])];
         }
 
@@ -15199,6 +15200,8 @@ window.ejecutarCobroFinal = async function() {
           mostrarNotificacionCentro(`✅ ¡Sub-cuenta de ${personaCobrada.nombre} pagada con éxito! Mesa permanece abierta (Saldo restante: ${saldoTxt})`, 'success');
         } else {
           // Re-abrir split modal y refrescar la distribución de solo las personas pendientes
+          if (typeof renderTicketItems === 'function') renderTicketItems();
+          if (typeof recalcularTotalesTicket === 'function') recalcularTotalesTicket();
           if (typeof renderSplitDisponibles === 'function') renderSplitDisponibles();
           if (typeof renderSplitPersonaActiva === 'function') renderSplitPersonaActiva();
           if (typeof renderSplitColaPersonas === 'function') renderSplitColaPersonas();
@@ -16830,7 +16833,7 @@ function calcularSplitIgual() {
     row.innerHTML = `
       <div style="display:flex; flex-direction:column; text-align:left;">
         <span style="font-weight:700; color:#f8fafc; font-size:1rem;">👤 ${p.nombre} ${estadoBadge}</span>
-        <span style="font-size:0.85rem; color:#94a3b8;">Cuota: <strong style="color:${p.pagada ? '#34d399' : '#38bdf8'}; font-size:0.95rem;">${formatCRCSinDecimales(porPersona)}</strong></span>
+        <span style="font-size:0.85rem; color:#94a3b8;">${p.pagada ? 'Pagado:' : 'Cuota a pagar:'} <strong style="color:${p.pagada ? '#34d399' : '#38bdf8'}; font-size:0.95rem;">${formatCRCSinDecimales(p.pagada ? (p.montoPagado || p.total || porPersona) : porPersona)}</strong></span>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
         ${acciones}
