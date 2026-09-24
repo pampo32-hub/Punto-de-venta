@@ -19148,15 +19148,17 @@ function renderTablaInventario(items) {
     let stockExtraHtml = '';
     let costoExtraHtml = '';
 
-    const unidad = (ins.unidad_medida || 'unidades').toLowerCase();
+    const unidad = (ins.unidad_medida || 'unidades').toLowerCase().trim();
 
+    // Detección estricta de Cervezas:
+    // Solo si el nombre contiene marcas de cerveza, la categoría dice cerveza, o la unidad es específicamente cerveza
     const esCerveza = Boolean(
       /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ins.nombre || '') ||
       /cerveza/i.test(ins.categoria || '') ||
-      unidad === 'botellas_350' || unidad === 'latas_350' || unidad === 'latas_473' ||
-      (Number(ins.rendimiento_shots) <= 1 && !/whisky|ron|vodka|tequila|guaro|gin|licor|destilado/i.test(ins.nombre || '') && !/licor/i.test(ins.categoria || ''))
+      unidad === 'botellas_350' || unidad === 'latas_350' || unidad === 'latas_473'
     );
 
+    // Detección de Licores / Destilados fraccionables
     const esLicorActivo = (ins.es_licor === 1 || ins.es_licor === '1' || ins.es_licor === true) && !esCerveza;
 
     if (esCerveza) {
@@ -19191,13 +19193,15 @@ function renderTablaInventario(items) {
           costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cShot)}/shot)</span>`;
         }
       } else {
-        const rend = ins.rendimiento_shots || 1;
-        const totalPorc = Math.round((ins.stock_actual || 0) * rend * 10) / 10;
-        const cPorc = rend > 0 ? Math.round((ins.costo_unitario || 0) / rend) : 0;
-        nombreHtml += ` <span class="licor-tag" style="background:#1e1b4b; border-color:#4338ca; color:#c7d2fe;">🍽️ Rinde ${rend} porc./u</span>`;
-        stockExtraHtml = `<span class="licor-shots-pill">🍽️ ${totalPorc} porciones</span>`;
-        if (cPorc > 0) {
-          costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cPorc)}/porción)</span>`;
+        const rend = Number(ins.rendimiento_shots) || 1;
+        if (rend > 1) {
+          const totalPorc = Math.round((ins.stock_actual || 0) * rend * 10) / 10;
+          const cPorc = rend > 0 ? Math.round((ins.costo_unitario || 0) / rend) : 0;
+          nombreHtml += ` <span class="licor-tag" style="background:#1e1b4b; border-color:#4338ca; color:#c7d2fe;">🍽️ Rinde ${rend} porc./u</span>`;
+          stockExtraHtml = `<span class="licor-shots-pill">🍽️ ${totalPorc} porciones</span>`;
+          if (cPorc > 0) {
+            costoExtraHtml = `<span style="display:block; font-size:0.75rem; color:#a5b4fc;">(${formatCRC(cPorc)}/porción)</span>`;
+          }
         }
       }
     }
@@ -19583,24 +19587,18 @@ window.guardarNuevoInsumo = async function() {
 
   if (unidad_medida === 'botellas_350') {
     unidad_medida = 'botellas';
-    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 350;
-    medida_shot_ml = medida_shot_ml || 350;
+    capacidad_ml = 350;
+    medida_shot_ml = 350;
   } else if (unidad_medida === 'latas_350') {
     unidad_medida = 'unidades';
-    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 350;
-    medida_shot_ml = medida_shot_ml || 350;
+    capacidad_ml = 350;
+    medida_shot_ml = 350;
   } else if (unidad_medida === 'latas_473') {
     unidad_medida = 'unidades';
-    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 473;
-    medida_shot_ml = medida_shot_ml || 473;
+    capacidad_ml = 473;
+    medida_shot_ml = 473;
   } else if (unidad_medida === 'personalizada') {
     unidad_medida = 'unidades';
-    es_licor = document.getElementById('chkNuevoInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 350;
-    medida_shot_ml = medida_shot_ml || 350;
   }
 
   if (es_licor) {
@@ -19765,24 +19763,18 @@ window.guardarEdicionInsumo = async function() {
 
   if (unidad_medida === 'botellas_350') {
     unidad_medida = 'botellas';
-    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 350;
-    medida_shot_ml = medida_shot_ml || 350;
+    capacidad_ml = 350;
+    medida_shot_ml = 350;
   } else if (unidad_medida === 'latas_350') {
     unidad_medida = 'unidades';
-    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 350;
-    medida_shot_ml = medida_shot_ml || 350;
+    capacidad_ml = 350;
+    medida_shot_ml = 350;
   } else if (unidad_medida === 'latas_473') {
     unidad_medida = 'unidades';
-    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 473;
-    medida_shot_ml = medida_shot_ml || 473;
+    capacidad_ml = 473;
+    medida_shot_ml = 473;
   } else if (unidad_medida === 'personalizada') {
     unidad_medida = 'unidades';
-    es_licor = document.getElementById('chkEditarInsumoEsLicor')?.checked ? 1 : 0;
-    capacidad_ml = capacidad_ml || 350;
-    medida_shot_ml = medida_shot_ml || 350;
   }
 
   if (es_licor) {
@@ -19893,9 +19885,22 @@ window.onCambioUnidadInsumo = function(modo) {
   } else if (u === 'kg') {
     selCap.innerHTML = '<option value="1000">1 Kg (1000 g)</option><option value="500">500 g (1/2 Kg)</option><option value="2000">2 Kg (2000 g)</option><option value="custom">Personalizado (g)</option>';
     selShot.innerHTML = '<option value="100">100 g (Porción)</option><option value="150">150 g (Carne/Pescado)</option><option value="200">200 g (Plato Fuerte)</option><option value="50">50 g (Guarnición)</option><option value="custom">Personalizado (g)</option>';
+  } else if (u === 'gramos') {
+    selCap.innerHTML = '<option value="1000">1000 g (1 Kg)</option><option value="500">500 g (1/2 Kg)</option><option value="250">250 g</option><option value="custom">Personalizado (g)</option>';
+    selShot.innerHTML = '<option value="100">100 g (Porción)</option><option value="50">50 g</option><option value="150">150 g</option><option value="200">200 g</option><option value="custom">Personalizado (g)</option>';
   } else if (u === 'litros') {
     selCap.innerHTML = '<option value="1000">1 Litro (1000 ml)</option><option value="2000">2 Litros</option><option value="3000">3 Litros</option><option value="custom">Personalizado (ml)</option>';
     selShot.innerHTML = '<option value="250">250 ml (1 Vaso)</option><option value="350">350 ml (Lata)</option><option value="500">500 ml (Medio Litro)</option><option value="50">50 ml (Chupito)</option><option value="custom">Personalizado (ml)</option>';
+  } else if (u === 'ml') {
+    selCap.innerHTML = '<option value="1000">1000 ml (1 Litro)</option><option value="750">750 ml</option><option value="500">500 ml</option><option value="350">350 ml</option><option value="custom">Personalizado (ml)</option>';
+    selShot.innerHTML = '<option value="30">30 ml (1 oz)</option><option value="50">50 ml</option><option value="100">100 ml</option><option value="250">250 ml (1 Vaso)</option><option value="custom">Personalizado (ml)</option>';
+  } else if (u === 'unidades') {
+    selCap.innerHTML = '<option value="1">1 Unidad / Empaque</option><option value="6">6 Unidades</option><option value="12">12 Unidades (Docena)</option><option value="custom">Personalizado</option>';
+    selShot.innerHTML = '<option value="1">1 Unidad / Porción</option><option value="0.5">Media Unidad (0.5)</option><option value="custom">Personalizado</option>';
+    if (chkLicor && modo === 'nuevo') {
+      chkLicor.checked = false;
+      window.toggleConfigFraccionable(modo, false);
+    }
   } else {
     selCap.innerHTML = '<option value="750">Botella Estándar (750 ml)</option><option value="1000">Botella Litro (1000 ml)</option><option value="350">Media Botella (350 ml)</option><option value="1750">Magnum (1750 ml)</option><option value="custom">Personalizado (ml)</option>';
     selShot.innerHTML = '<option value="30">1 Shot Estándar (30 ml / 1 oz)</option><option value="45">1.5 oz (45 ml / Trago)</option><option value="60">2 oz (60 ml / Doble)</option><option value="custom">Personalizado (ml)</option>';
