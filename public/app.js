@@ -7780,89 +7780,8 @@ window.esCervezaNacionalEligible = function(prod) {
 };
 
 window.verificarOfertaBaldeCerveza = async function(prodId, delta = 1) {
-  if (!estado.mesaActiva || delta <= 0) return;
-  const prod = (estado.productos || []).find(p => p.id === prodId);
-  if (!prod || !window.esCervezaNacionalEligible(prod)) return;
-
-  const mesaId = estado.mesaActiva.id || 'general';
-  const trackerKey = `${mesaId}_${prod.id}`;
-  if (!window._trackerRafagaCervezas[trackerKey]) {
-    window._trackerRafagaCervezas[trackerKey] = { count: 0, startTime: null };
-  }
-
-  const tracker = window._trackerRafagaCervezas[trackerKey];
-  const now = Date.now();
-
-  if (tracker.count === 0 || !tracker.startTime) {
-    tracker.startTime = now;
-    tracker.count = delta;
-  } else {
-    const elapsed = now - tracker.startTime;
-    if (elapsed > 60000) {
-      // Excedió el límite de 1 minuto sin llegar a 6 -> reiniciar nuevo ciclo
-      tracker.startTime = now;
-      tracker.count = delta;
-    } else {
-      tracker.count += delta;
-    }
-  }
-
-  // Si se alcanzan 6 cervezas de la misma marca dentro de la ventana de 1 minuto
-  if (tracker.count >= 6) {
-    const totalElapsed = now - tracker.startTime;
-    if (totalElapsed <= 60000) {
-      // Condición rápida cumplida (< 1 minuto): Detener confirmación y preguntar
-      const nombreMarca = prod.nombre || 'Cerveza';
-      const deseaBalde = await window.confirmarAccion({
-        icono: '🍺',
-        titulo: '¡Oferta de Balde!',
-        subtitulo: 'Detección automática de 6 unidades',
-        mensaje: `Veo que agregaste 6 ${nombreMarca} rápidamente. ¿Deseas convertir en balde?`,
-        txtSi: '🍺 Sí, convertir en balde (₡7.500)',
-        txtNo: 'No, mantener individuales'
-      });
-
-      if (deseaBalde) {
-        // Retirar 6 unidades sueltas no enviadas
-        let restantes = 6;
-        if (estado.mesaActiva && estado.mesaActiva.items) {
-          for (let i = estado.mesaActiva.items.length - 1; i >= 0; i--) {
-            const it = estado.mesaActiva.items[i];
-            if (it.id === prod.id && !it.enviado && !it.es_balde) {
-              if (it.cantidad <= restantes) {
-                restantes -= it.cantidad;
-                estado.mesaActiva.items.splice(i, 1);
-              } else {
-                it.cantidad -= restantes;
-                restantes = 0;
-              }
-              if (restantes <= 0) break;
-            }
-          }
-
-          // Agregar el Balde a ₡7.500
-          estado.mesaActiva.items.push({
-            id: 'balde_' + prod.id + '_' + Date.now(),
-            producto_id: prod.id,
-            nombre: `Balde de ${nombreMarca} (6 unidades)`,
-            precio: 7500,
-            cantidad: 1,
-            notas: 'Balde promo 6 unidades',
-            destino: 'barra',
-            curso: 1,
-            es_balde: true,
-            enviado: false
-          });
-
-          renderTicketItems();
-        }
-      }
-    }
-
-    // Regla de reinicio: Reiniciar contador y reloj para las siguientes adiciones
-    tracker.count = 0;
-    tracker.startTime = null;
-  }
+  // Desactivada oferta automática para permitir seleccionar baldes o cervezas individuales sin interrupciones
+  return;
 };
 
 window.agregarAlTicketOneTap = async function(prodId) {
@@ -7953,7 +7872,6 @@ window.agregarAlTicketOneTap = async function(prodId) {
   if (typeof renderComensalesTabs === 'function') {
     renderComensalesTabs();
   }
-  await window.verificarOfertaBaldeCerveza(prodId, 1);
 };
 
 // ============================================================================
@@ -11079,10 +10997,6 @@ window.modificarCantidadTicket = async function(idx, delta) {
 
   renderTicketItems();
   actualizarBotonEnviarComanda();
-
-  if (delta > 0 && typeof prodId === 'number') {
-    await window.verificarOfertaBaldeCerveza(prodId, delta);
-  }
 };
 
 function recalcularTotalesTicket() {

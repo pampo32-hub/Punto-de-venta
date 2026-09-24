@@ -5436,7 +5436,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   }
 
   // Descontar existencias de inventario en tiempo real
-  await descontarInventarioPorItems(itemsProcesados);
+  await descontarInventarioPorItems(itemsProcesados, negocioIdFinal);
 
   // 7. Recalcular totales de orden respetando Happy Hour inmutable y exención de servicio
   const totalesOrden = await recalcularTotalesOrden(ordenId);
@@ -6134,7 +6134,8 @@ async function procesarCobroOrden(ordenId, {
     }
 
     // Descontar inventario en tiempo real y registrar movimientos en Kárdex
-    await descontarInventarioPorItems(itemsNuevos);
+    const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
+    await descontarInventarioPorItems(itemsNuevos, ordenNegocioId);
 
     // Recalcular totales de orden
     await recalcularTotalesOrden(ordenId);
@@ -7884,8 +7885,9 @@ async function registrarAuditoria({
   }
 }
 
-async function descontarInventarioPorItems(items = []) {
+async function descontarInventarioPorItems(items = [], negocioId = null) {
   try {
+    const negocioIdFinal = Number(negocioId || 1);
     let huboCambios = false;
     for (const it of items) {
       const prodId = it.id || it.producto_id;
@@ -7905,7 +7907,7 @@ async function descontarInventarioPorItems(items = []) {
         }
       }
 
-      const esBalde = Boolean(it.es_balde || desgloseObj || (prodNombre && prodNombre.toLowerCase().includes('balde')));
+      const esBalde = Boolean(it.es_balde || (desgloseObj && Object.keys(desgloseObj).length > 0) || (prodNombre && prodNombre.toLowerCase().includes('balde')));
 
       if (esBalde) {
         let listaCervezas = []; // { prodId, nombre, cant }
@@ -7913,13 +7915,22 @@ async function descontarInventarioPorItems(items = []) {
           for (const [subIdStr, subCantNum] of Object.entries(desgloseObj)) {
             const subCant = Number(subCantNum) * cant;
             if (subCant <= 0) continue;
-            let subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [subIdStr]);
+            let subProd = await dbGet(
+              'SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+              [subIdStr, negocioIdFinal, negocioIdFinal]
+            );
+            if (!subProd) {
+              subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [subIdStr]);
+            }
             let subInsumo = null;
             if (!subProd) {
-              subInsumo = await dbGet('SELECT * FROM Inventario WHERE id = ? OR producto_id = ?', [subIdStr, subIdStr]);
+              subInsumo = await dbGet(
+                'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+                [subIdStr, negocioIdFinal, negocioIdFinal]
+              );
             }
             listaCervezas.push({
-              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id || subInsumo.id : subIdStr),
+              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id : subIdStr),
               nombre: subProd ? subProd.nombre : (subInsumo ? subInsumo.nombre : `Cerveza #${subIdStr}`),
               cant: subCant
             });
@@ -7931,10 +7942,19 @@ async function descontarInventarioPorItems(items = []) {
             if (match) {
               const subCant = Number(match[1]) * cant;
               const subNombre = match[2].trim();
-              const subProd = await dbGet('SELECT * FROM Productos WHERE LOWER(nombre) = LOWER(?) OR LOWER(nombre) LIKE ?', [subNombre, `%${subNombre}%`]);
+              let subProd = await dbGet(
+                'SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+                [subNombre, `%${subNombre}%`, negocioIdFinal, negocioIdFinal, subNombre]
+              );
+              if (!subProd) {
+                subProd = await dbGet(
+                  'SELECT * FROM Productos WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) LIKE ? ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+                  [subNombre, `%${subNombre}%`, subNombre]
+                );
+              }
               listaCervezas.push({
                 prodId: subProd ? subProd.id : null,
-                nombre: subNombre,
+                nombre: subProd ? subProd.nombre : subNombre,
                 cant: subCant
               });
             }
@@ -7946,85 +7966,133 @@ async function descontarInventarioPorItems(items = []) {
             const subProdId = itemCerveza.prodId;
             const subCant = itemCerveza.cant;
             const subNombre = itemCerveza.nombre;
+            if (subCant <= 0) continue;
 
-            let descontado = false;
-            // 1. Revisar recetas
+            let insumoEncontrado = null;
+            let cantidadPorUnidad = 1;
+
+            // Paso 1: Buscar insumo vinculado por producto_id en el negocio con stock > 0
             if (subProdId) {
-              const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [subProdId]);
+              insumoEncontrado = await dbGet(
+                'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND stock_actual > 0 ORDER BY id ASC LIMIT 1',
+                [subProdId, negocioIdFinal, negocioIdFinal]
+              );
+            }
+
+            // Paso 2: Buscar insumo por nombre exacto en el negocio con stock > 0
+            if (!insumoEncontrado && subNombre) {
+              insumoEncontrado = await dbGet(
+                'SELECT * FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) = LOWER(TRIM(?))) AND stock_actual > 0 ORDER BY id ASC LIMIT 1',
+                [negocioIdFinal, negocioIdFinal, subNombre, `Cerveza ${subNombre}`]
+              );
+            }
+
+            // Paso 3: Buscar en recetas vinculadas donde el insumo tenga stock > 0 en el negocio
+            if (!insumoEncontrado && subProdId) {
+              const recetas = await dbAll(
+                'SELECT r.*, i.stock_actual FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) AND i.stock_actual > 0 ORDER BY r.id ASC LIMIT 1',
+                [subProdId, negocioIdFinal, negocioIdFinal]
+              );
               if (recetas && recetas.length > 0) {
-                for (const r of recetas) {
-                  const totalDesc = r.cantidad * subCant;
-                  const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
-                  if (insumo) {
-                    const stockPrevio = insumo.stock_actual;
-                    const stockNuevo = Math.max(0, stockPrevio - totalDesc);
-                    await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, r.insumo_id]);
-                    const costoMov = Math.round(totalDesc * (insumo.costo_unitario || 0));
-                    const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
-                    const insNId = Number(insumo.negocio_id || 1);
-                    await dbRun(
-                      `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                       VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                      [insNId, r.insumo_id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
-                    );
-                    huboCambios = true;
-                    descontado = true;
-                    if (stockNuevo <= insumo.stock_minimo) {
-                      io.emit('inventario_alerta_stock', {
-                        insumoId: insumo.id,
-                        insumo: insumo.nombre,
-                        nombre: insumo.nombre,
-                        stock_actual: stockNuevo,
-                        stock_minimo: insumo.stock_minimo,
-                        unidad: insumo.unidad || 'uds',
-                        estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
-                      });
-                    }
-                  }
+                const r = recetas[0];
+                const ins = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
+                if (ins) {
+                  insumoEncontrado = ins;
+                  cantidadPorUnidad = Number(r.cantidad) || 1;
                 }
               }
             }
 
-            // 2. Si no hubo receta, buscar insumo directo
-            if (!descontado) {
-              let insumo = null;
-              if (subProdId) {
-                insumo = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [subProdId]);
-                if (!insumo) {
-                  insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [subProdId]);
-                }
-              }
-              if (!insumo && subNombre) {
-                insumo = await dbGet(
-                  'SELECT * FROM Inventario WHERE LOWER(nombre) = LOWER(?) OR LOWER(nombre) = LOWER(?) OR LOWER(nombre) LIKE ? ORDER BY CASE WHEN LOWER(nombre) = LOWER(?) THEN 1 WHEN LOWER(nombre) LIKE ? THEN 2 ELSE 3 END LIMIT 1',
-                  [subNombre, `Cerveza ${subNombre}`, `%${subNombre}%`, subNombre, `%${subNombre}%`]
-                );
-              }
+            // Paso 4: Si no hubo con stock > 0, buscar por producto_id en el negocio (aunque stock sea 0)
+            if (!insumoEncontrado && subProdId) {
+              insumoEncontrado = await dbGet(
+                'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1',
+                [subProdId, negocioIdFinal, negocioIdFinal]
+              );
+            }
 
-              if (insumo) {
-                const stockPrevio = insumo.stock_actual;
-                const stockNuevo = Math.max(0, stockPrevio - subCant);
-                await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [stockNuevo, ahora, insumo.id]);
-                const costoMov = Math.round(subCant * (insumo.costo_unitario || 0));
-                const motivoMov = `Consumo comanda (Balde Nacional): ${subNombre} (x${subCant})`;
-                const insNId = Number(insumo.negocio_id || 1);
-                await dbRun(
-                  `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
-                   VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
-                  [insNId, insumo.id, subCant, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
-                );
-                huboCambios = true;
-                if (stockNuevo <= insumo.stock_minimo) {
-                  io.emit('inventario_alerta_stock', {
-                    insumoId: insumo.id,
-                    insumo: insumo.nombre,
-                    nombre: insumo.nombre,
-                    stock_actual: stockNuevo,
-                    stock_minimo: insumo.stock_minimo,
-                    unidad: insumo.unidad || 'uds',
-                    estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
-                  });
+            // Paso 5: Si no hubo por producto_id, buscar por receta en el negocio (aunque stock sea 0)
+            if (!insumoEncontrado && subProdId) {
+              const recetas = await dbAll(
+                'SELECT r.* FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) ORDER BY r.id ASC LIMIT 1',
+                [subProdId, negocioIdFinal, negocioIdFinal]
+              );
+              if (recetas && recetas.length > 0) {
+                const r = recetas[0];
+                const ins = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
+                if (ins) {
+                  insumoEncontrado = ins;
+                  cantidadPorUnidad = Number(r.cantidad) || 1;
                 }
+              }
+            }
+
+            // Paso 6: Búsqueda flexible de nombre (e.g. "Imperial Silver" <-> "Silver", "Imperial Regular" <-> "Regular", etc.)
+            if (!insumoEncontrado && subNombre) {
+              const nombreLimpio = subNombre.replace(/cerveza\s+/i, '').trim();
+              const subSinImperial = nombreLimpio.replace(/imperial\s+/i, '').trim();
+
+              insumoEncontrado = await dbGet(
+                `SELECT * FROM Inventario 
+                 WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) 
+                   AND (
+                     LOWER(TRIM(nombre)) = LOWER(TRIM(?)) 
+                     OR LOWER(TRIM(nombre)) = LOWER(TRIM(?)) 
+                     OR LOWER(TRIM(nombre)) = LOWER(TRIM(?))
+                     OR LOWER(TRIM(nombre)) = LOWER(TRIM(?))
+                     OR LOWER(TRIM(nombre)) LIKE ?
+                   )
+                 ORDER BY 
+                   (stock_actual > 0) DESC,
+                   CASE 
+                     WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1
+                     WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 2
+                     WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 3
+                     ELSE 4 
+                   END,
+                   id ASC 
+                 LIMIT 1`,
+                [
+                  negocioIdFinal, negocioIdFinal,
+                  subNombre, `Cerveza ${subNombre}`, nombreLimpio, subSinImperial,
+                  `%${subSinImperial}%`,
+                  subNombre, nombreLimpio, subSinImperial
+                ]
+              );
+            }
+
+            // Si se encontró el insumo, descontar existencias individuales y registrar movimiento individual en Kárdex
+            if (insumoEncontrado) {
+              const totalDesc = subCant * cantidadPorUnidad;
+              const stockPrevio = Number(insumoEncontrado.stock_actual) || 0;
+              const stockNuevo = Math.max(0, stockPrevio - totalDesc);
+
+              await dbRun(
+                'UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?',
+                [stockNuevo, ahora, insumoEncontrado.id]
+              );
+
+              const costoMov = Math.round(totalDesc * (insumoEncontrado.costo_unitario || 0));
+              const motivoMov = `Consumo comanda (Balde Nacional): ${insumoEncontrado.nombre} (x${subCant})`;
+              const insNId = Number(insumoEncontrado.negocio_id || negocioIdFinal);
+
+              await dbRun(
+                `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
+                 VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
+                [insNId, insumoEncontrado.id, totalDesc, stockPrevio, stockNuevo, motivoMov, costoMov, ahora]
+              );
+              huboCambios = true;
+
+              if (stockNuevo <= (insumoEncontrado.stock_minimo || 0)) {
+                io.emit('inventario_alerta_stock', {
+                  insumoId: insumoEncontrado.id,
+                  insumo: insumoEncontrado.nombre,
+                  nombre: insumoEncontrado.nombre,
+                  stock_actual: stockNuevo,
+                  stock_minimo: insumoEncontrado.stock_minimo,
+                  unidad: insumoEncontrado.unidad_medida || 'botellas',
+                  estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
+                });
               }
             }
           }
@@ -8032,14 +8100,17 @@ async function descontarInventarioPorItems(items = []) {
         }
       }
 
-      // 1. Revisar si hay recetas vinculadas en InventarioRecetas
-      const recetas = await dbAll('SELECT * FROM InventarioRecetas WHERE producto_id = ?', [prodId]);
+      // 1. Revisar si hay recetas vinculadas en InventarioRecetas para el negocio
+      const recetas = await dbAll(
+        'SELECT r.*, i.stock_actual FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) ORDER BY (i.stock_actual > 0) DESC, r.id ASC',
+        [prodId, negocioIdFinal, negocioIdFinal]
+      );
       if (recetas && recetas.length > 0) {
         for (const r of recetas) {
           const totalDesc = r.cantidad * cant;
           const insumo = await dbGet('SELECT * FROM Inventario WHERE id = ?', [r.insumo_id]);
           if (insumo) {
-            const stockPrevio = insumo.stock_actual;
+            const stockPrevio = Number(insumo.stock_actual) || 0;
             const stockNuevo = Math.max(0, stockPrevio - totalDesc);
             await dbRun(
               'UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?',
@@ -8058,7 +8129,7 @@ async function descontarInventarioPorItems(items = []) {
               }
             }
 
-            const insNId = Number(insumo.negocio_id || 1);
+            const insNId = Number(insumo.negocio_id || negocioIdFinal);
             await dbRun(
               `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
                VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
@@ -8072,17 +8143,30 @@ async function descontarInventarioPorItems(items = []) {
                 nombre: insumo.nombre,
                 stock_actual: stockNuevo,
                 stock_minimo: insumo.stock_minimo,
-                unidad: insumo.unidad || 'uds',
+                unidad: insumo.unidad_medida || insumo.unidad || 'uds',
                 estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
               });
             }
           }
         }
       } else {
-        // 2. Si no hay receta, descontar del insumo vinculado directamente al producto
-        const insumo = await dbGet('SELECT * FROM Inventario WHERE producto_id = ?', [prodId]);
+        // 2. Si no hay receta, descontar del insumo vinculado directamente al producto en el negocio
+        let insumo = await dbGet(
+          'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY (stock_actual > 0) DESC, id ASC LIMIT 1',
+          [prodId, negocioIdFinal, negocioIdFinal]
+        );
+        // 3. Fallback: buscar por nombre en el negocio
+        if (!insumo && prodNombre) {
+          insumo = await dbGet(
+            `SELECT * FROM Inventario 
+             WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+               AND (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) LIKE ?)
+             ORDER BY (stock_actual > 0) DESC, CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END, id ASC LIMIT 1`,
+            [negocioIdFinal, negocioIdFinal, prodNombre, `Cerveza ${prodNombre}`, `%${prodNombre}%`, prodNombre]
+          );
+        }
         if (insumo) {
-          const stockPrevio = insumo.stock_actual;
+          const stockPrevio = Number(insumo.stock_actual) || 0;
           const stockNuevo = Math.max(0, stockPrevio - cant);
           await dbRun(
             'UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?',
@@ -8098,7 +8182,7 @@ async function descontarInventarioPorItems(items = []) {
             motivoDirecto = `Consumo directo: ${prodNombre} (-${cant} bot. / -${shotsDeducidos} shots) -> Quedan ${botEnteras} bot. y ${shotsRem} shots`;
           }
 
-          const insNId = Number(insumo.negocio_id || 1);
+          const insNId = Number(insumo.negocio_id || negocioIdFinal);
           await dbRun(
             `INSERT INTO InventarioMovimientos (negocio_id, insumo_id, tipo, cantidad, stock_previo, stock_nuevo, motivo, usuario_nombre, costo_total, fecha_hora)
              VALUES (?, ?, 'venta', ?, ?, ?, ?, 'Comanda Automática', ?, ?)`,
@@ -8112,7 +8196,7 @@ async function descontarInventarioPorItems(items = []) {
               nombre: insumo.nombre,
               stock_actual: stockNuevo,
               stock_minimo: insumo.stock_minimo,
-              unidad: insumo.unidad || 'uds',
+              unidad: insumo.unidad_medida || insumo.unidad || 'uds',
               estado: stockNuevo <= 0 ? 'agotado' : 'bajo'
             });
           }
