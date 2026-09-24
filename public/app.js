@@ -14790,10 +14790,13 @@ window.ejecutarCobroFinal = async function() {
       )
     );
 
+    const nidComanda = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+
     const payloadCobro = {
       ordenId,
       mesaId,
       items: itemsMesa,
+      negocio_id: nidComanda,
       metodo: metodoFinal,
       metodoPago: metodoFinal,
       monto: totalNum,
@@ -14830,15 +14833,29 @@ window.ejecutarCobroFinal = async function() {
           payload: payloadCobro,
           descripcion: `Cobro ${mesaNumero} (${formatCRC(totalNum)} - ${metodoFinal})`
         });
+        if (syncRes && !syncRes.exito && !syncRes.offlineQueued) {
+          console.error('Error al procesar cobro:', syncRes.error);
+          if (typeof mostrarNotificacionCentro === 'function') {
+            mostrarNotificacionCentro(`❌ Error al procesar cobro: ${syncRes.error || 'Error del servidor'}`, 'danger');
+          }
+          return;
+        }
         cobroResData = (syncRes && syncRes.datos) ? syncRes.datos : syncRes;
       } else {
         const res = await fetch(endpointCobro, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
           body: JSON.stringify(payloadCobro)
         });
         if (res.ok) {
           cobroResData = await res.json().catch(() => null);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error('Error del servidor al cobrar orden:', errData);
+          if (typeof mostrarNotificacionCentro === 'function') {
+            mostrarNotificacionCentro(`❌ Error al procesar cobro: ${errData.error || 'Error del servidor'}`, 'danger');
+          }
+          return;
         }
       }
     } catch (errReq) {

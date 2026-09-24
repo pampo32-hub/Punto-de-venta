@@ -6111,12 +6111,43 @@ async function procesarCobroOrden(ordenId, {
 
   if (itemsNuevos.length > 0) {
     const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
-    const comandaNumero = (rowMax && rowMax.maxNum ? rowMax.maxNum : 0) + 1;
+    const comandaNumero = (rowMax && rowMax.maxNum ? Number(rowMax.maxNum) : 0) + 1;
+    const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
+
+    const itemsProcesadosCobro = [];
 
     for (const it of itemsNuevos) {
       const itNombre = it.nombre_producto || it.nombre || 'Producto';
       const cant = Number(it.cantidad) || 1;
       const subtotal = (Number(it.precio) || 0) * cant;
+
+      // Resolver ID numérico válido para producto_id en BD
+      let rawProdId = it.producto_id != null ? it.producto_id : it.id;
+      let prodIdNum = parseInt(rawProdId);
+      let prodId = (!isNaN(prodIdNum) && prodIdNum > 0) ? prodIdNum : null;
+
+      let prodDb = null;
+      if (prodId) {
+        prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
+      } else if (itNombre) {
+        prodDb = await dbGet(
+          'SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+          [itNombre, `%${itNombre}%`, ordenNegocioId, ordenNegocioId, itNombre]
+        );
+        if (!prodDb) {
+          prodDb = await dbGet(
+            'SELECT * FROM Productos WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ? ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+            [itNombre, `%${itNombre}%`, itNombre]
+          );
+        }
+      }
+
+      if (prodDb) {
+        prodId = prodDb.id;
+      } else if (!prodId) {
+        prodId = 1;
+      }
+
       const esBebidaKey = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro)\b/i.test(itNombre) || /rock ice/i.test(itNombre);
       let destItem = it.destino;
       if (esBebidaKey || it.categoria_id === 4 || it.categoria_id === 5 || it.categoria_id === 6 || it.categoria_id === 7 || it.catId === 4 || it.catId === 5 || it.catId === 6 || it.catId === 7) {
@@ -6129,21 +6160,38 @@ async function procesarCobroOrden(ordenId, {
       await dbRun(
         `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour, comensal)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, it.id || it.producto_id, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
+        [ordenId, prodId, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
       );
+
+      const esBalde = Boolean(
+        it.es_balde ||
+        (it.desglose_balde && (typeof it.desglose_balde === 'object' ? Object.keys(it.desglose_balde).length > 0 : String(it.desglose_balde).length > 2)) ||
+        (itNombre && itNombre.toLowerCase().includes('balde'))
+      );
+
+      itemsProcesadosCobro.push({
+        ...it,
+        id: prodId,
+        producto_id: prodId,
+        nombre: itNombre,
+        nombre_producto: itNombre,
+        cantidad: cant,
+        es_balde: esBalde,
+        desglose_balde: it.desglose_balde || null,
+        notas: it.notas || ''
+      });
     }
 
     // Descontar inventario en tiempo real y registrar movimientos en Kárdex
-    const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
-    await descontarInventarioPorItems(itemsNuevos, ordenNegocioId);
+    await descontarInventarioPorItems(itemsProcesadosCobro, ordenNegocioId);
 
     // Recalcular totales de orden
     await recalcularTotalesOrden(ordenId);
     orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
 
     // Si el usuario confirmó enviar a cocina en este cobro directo, despachar a cocina/barra
-    const itemsCocina = itemsNuevos.filter(it => it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3));
-    const itemsBarra = itemsNuevos.filter(it => it.destino === 'barra');
+    const itemsCocina = itemsProcesadosCobro.filter(it => it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3));
+    const itemsBarra = itemsProcesadosCobro.filter(it => it.destino === 'barra');
     const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
     const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : 'Mesa Directa';
 
@@ -6470,17 +6518,19 @@ async function procesarCobroOrden(ordenId, {
     if (Array.isArray(items_pagados) && items_pagados.length > 0) {
       for (const item of items_pagados) {
         const qty = Number(item.cantidad) || 1;
+        const itemProdNum = parseInt(item.producto_id != null ? item.producto_id : item.id);
+        const validItemProdId = (!isNaN(itemProdNum) && itemProdNum > 0) ? itemProdNum : null;
         let detalleItems = [];
         if (item.comensal) {
           detalleItems = await dbAll(
-            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND comensal = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
-            [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto, item.comensal]
+            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND ((? IS NOT NULL AND producto_id = ?) OR nombre_producto = ?) AND comensal = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+            [ordenId, validItemProdId, validItemProdId, item.nombre || item.nombre_producto, item.comensal]
           );
         }
         if (!detalleItems || detalleItems.length === 0) {
           detalleItems = await dbAll(
-            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
-            [ordenId, item.producto_id || item.id, item.nombre || item.nombre_producto]
+            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND ((? IS NOT NULL AND producto_id = ?) OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+            [ordenId, validItemProdId, validItemProdId, item.nombre || item.nombre_producto]
           );
         }
 
@@ -7890,7 +7940,9 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
     const negocioIdFinal = Number(negocioId || 1);
     let huboCambios = false;
     for (const it of items) {
-      const prodId = it.id || it.producto_id;
+      let rawProdId = it.producto_id != null ? it.producto_id : it.id;
+      let prodIdNum = parseInt(rawProdId);
+      let prodId = (!isNaN(prodIdNum) && prodIdNum > 0) ? prodIdNum : null;
       const cant = Number(it.cantidad || 1);
       if ((!prodId && !it.desglose_balde && !it.es_balde) || cant <= 0) continue;
 
@@ -7915,27 +7967,32 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
           for (const [subIdStr, subCantNum] of Object.entries(desgloseObj)) {
             const subCant = Number(subCantNum) * cant;
             if (subCant <= 0) continue;
-            let subProd = await dbGet(
-              'SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-              [subIdStr, negocioIdFinal, negocioIdFinal]
-            );
-            if (!subProd) {
-              subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [subIdStr]);
+            const subProdNum = parseInt(subIdStr);
+            const validSubId = (!isNaN(subProdNum) && subProdNum > 0) ? subProdNum : null;
+            let subProd = null;
+            if (validSubId) {
+              subProd = await dbGet(
+                'SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
+                [validSubId, negocioIdFinal, negocioIdFinal]
+              );
+              if (!subProd) {
+                subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [validSubId]);
+              }
             }
             let subInsumo = null;
-            if (!subProd) {
+            if (!subProd && validSubId) {
               subInsumo = await dbGet(
                 'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-                [subIdStr, negocioIdFinal, negocioIdFinal]
+                [validSubId, negocioIdFinal, negocioIdFinal]
               );
             }
             listaCervezas.push({
-              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id : subIdStr),
+              prodId: subProd ? subProd.id : (subInsumo ? subInsumo.producto_id : validSubId),
               nombre: subProd ? subProd.nombre : (subInsumo ? subInsumo.nombre : `Cerveza #${subIdStr}`),
               cant: subCant
             });
           }
-        } else if (it.notas && it.notas.includes('x ')) {
+        } else if (it.notas && (it.notas.includes('x ') || /\d+\s*x/i.test(it.notas))) {
           const partes = it.notas.split(',').map(s => s.trim());
           for (const parte of partes) {
             const match = parte.match(/^(\d+)\s*x\s*(.+)$/i);
