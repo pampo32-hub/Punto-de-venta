@@ -9211,30 +9211,40 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
         porcionesDisponibles = porcionesIngrediente;
       }
 
-      let medidaAmigable = `${ing.cantidad} ${ing.unidad_medida || 'unidades'}`;
-      let mlCalculados = null;
+      const unidadNorm = String(ing.unidad_medida || 'unidades').toLowerCase().trim();
+      const esUnidadesPuras = unidadNorm === 'unidades' || unidadNorm === 'unidad' || unidadNorm === 'piezas' || unidadNorm === 'porcion' || unidadNorm === 'porciones';
+
       const esCervezaIng = Boolean(
         /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ing.insumo_nombre || '') ||
         /cerveza/i.test(ing.insumo_categoria || ing.categoria || '') ||
         (ing.unidad_medida && ing.unidad_medida.includes('botella') && (ing.capacidad_ml === 350 || ing.capacidad_ml === 355))
       );
 
-      if (ing.es_licor || esCervezaIng) {
-        let capMl = ing.capacidad_ml || (esCervezaIng ? 350 : 750);
+      const esLicorReal = !esUnidadesPuras && (ing.es_licor === 1 || ing.es_licor === '1' || ing.es_licor === true) && !esCervezaIng;
+
+      let medidaAmigable = `${ing.cantidad} ${ing.unidad_medida || 'unidades'}`;
+      let mlCalculados = null;
+
+      if (esCervezaIng) {
+        let capMl = ing.capacidad_ml || 350;
+        if (Number(capMl) === 355) capMl = 350;
+        const mlUsados = Math.round(Number(ing.cantidad) * capMl * 10) / 10;
+        mlCalculados = mlUsados;
+        if (Math.abs(Number(ing.cantidad) - 1) <= 0.01) {
+          medidaAmigable = `1 Botella Cerveza (${capMl} ml)`;
+        } else if (Math.abs(Number(ing.cantidad) - 0.5) <= 0.01) {
+          medidaAmigable = `1/2 Botella Cerveza (${Math.round(capMl * 0.5)} ml)`;
+        } else {
+          medidaAmigable = `${ing.cantidad} bot. Cerveza (${Math.round(mlUsados)} ml)`;
+        }
+      } else if (esLicorReal) {
+        let capMl = ing.capacidad_ml || 750;
         if (Number(capMl) === 355) capMl = 350;
         const mlUsados = Math.round(Number(ing.cantidad) * capMl * 10) / 10;
         mlCalculados = mlUsados;
         const oz = Math.round((mlUsados / 30) * 100) / 100;
         
-        if (esCervezaIng) {
-          if (Math.abs(Number(ing.cantidad) - 1) <= 0.01) {
-            medidaAmigable = `1 Botella Cerveza (${capMl} ml)`;
-          } else if (Math.abs(Number(ing.cantidad) - 0.5) <= 0.01) {
-            medidaAmigable = `1/2 Botella Cerveza (${Math.round(capMl * 0.5)} ml)`;
-          } else {
-            medidaAmigable = `${ing.cantidad} bot. Cerveza (${Math.round(mlUsados)} ml)`;
-          }
-        } else if (Math.abs(oz - 0.25) <= 0.03) {
+        if (Math.abs(oz - 0.25) <= 0.03) {
           medidaAmigable = '1/4 oz (7.5 ml)';
         } else if (Math.abs(oz - 0.5) <= 0.03) {
           medidaAmigable = '1/2 oz (15 ml)';
@@ -9256,6 +9266,16 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
           medidaAmigable = `${oz} oz (~${Math.round(mlUsados)} ml)`;
         } else {
           medidaAmigable = `${ing.cantidad} bot. (~${Math.round(mlUsados)} ml)`;
+        }
+      } else {
+        const u = ing.unidad_medida || 'unidades';
+        const num = Number(ing.cantidad);
+        if (u === 'unidades') {
+          medidaAmigable = num === 1 ? '1 unidad' : `${num} unidades`;
+        } else if (u === 'botellas') {
+          medidaAmigable = num === 1 ? '1 botella' : `${num} botellas`;
+        } else {
+          medidaAmigable = `${num} ${u}`;
         }
       }
 

@@ -20394,17 +20394,21 @@ window.alCambiarInsumoReceta = function() {
     /cerveza/i.test(ins?.categoria || '') ||
     ins?.unidad_medida === 'botellas_350'
   );
+  const esUnidades = String(ins?.unidad_medida || '').toLowerCase().includes('unidad');
+  const esLicorReal = !esUnidades && (ins?.es_licor === 1 || ins?.es_licor === '1' || ins?.es_licor === true) && !esCervezaInsumo;
 
   // Si es cerveza, predeterminar a botella 350ml
   if (esCervezaInsumo) {
     selTipo.value = 'botella_350';
-  } else if (ins && ins.es_licor) {
-    if (selTipo.value === 'estandar') {
+  } else if (esLicorReal) {
+    if (selTipo.value === 'estandar' || selTipo.value === 'unidades') {
       selTipo.value = 'oz';
     }
+  } else if (esUnidades) {
+    selTipo.value = 'unidades';
   } else {
     // Si no es licor y estaba en oz o shots, volver a estandar
-    if (selTipo.value === 'oz' || selTipo.value === 'shots') {
+    if (selTipo.value === 'oz' || selTipo.value === 'shots' || selTipo.value === 'botella_350' || selTipo.value === 'lata_350' || selTipo.value === 'lata_473') {
       selTipo.value = 'estandar';
     }
   }
@@ -20428,7 +20432,9 @@ window.actualizarPlaceholderCantidadReceta = function() {
   const ins = (estado.inventario || []).find(i => Number(i.id) === insId);
   const tipo = selTipo.value;
 
-  if (tipo === 'botella_350') {
+  if (tipo === 'unidades') {
+    txtCant.placeholder = 'Ej: 3 unidades o piezas';
+  } else if (tipo === 'botella_350') {
     txtCant.placeholder = 'Ej: 1 botella (350ml)';
   } else if (tipo === 'lata_350') {
     txtCant.placeholder = 'Ej: 1 lata (350ml)';
@@ -20437,7 +20443,7 @@ window.actualizarPlaceholderCantidadReceta = function() {
   } else if (tipo === 'oz') {
     txtCant.placeholder = 'Ej: 1, 1.5, 2 o 0.25 oz';
   } else if (tipo === 'shots') {
-    if (ins && ins.es_licor && ins.rendimiento_shots > 0) {
+    if (ins && (ins.es_licor === 1 || ins.es_licor === '1' || ins.es_licor === true) && ins.rendimiento_shots > 0) {
       txtCant.placeholder = `Ej: 1 shot (~${ins.medida_shot_ml || 30}ml = ${(1 / ins.rendimiento_shots).toFixed(4)} bot.)`;
     } else {
       txtCant.placeholder = 'Ej: 1 shot / trago';
@@ -20445,7 +20451,7 @@ window.actualizarPlaceholderCantidadReceta = function() {
   } else if (tipo === 'fraccion') {
     txtCant.placeholder = 'Ej: 0.25 (cuarta), 0.5 (media) o 1';
   } else {
-    txtCant.placeholder = ins ? `Ej: 0.5 (${ins.unidad_medida})` : 'Ej: 1';
+    txtCant.placeholder = ins ? `Ej: 1 (${ins.unidad_medida})` : 'Ej: 1';
   }
 };
 
@@ -20524,18 +20530,31 @@ window.recalcularCostoPreviewReceta = function() {
   const costoUnit = parseFloat(ins.costo_unitario || 0);
   const mermaFactor = 1 + (merma / 100);
 
-  if (ins.es_licor) {
+  const unidadNorm = String(ins.unidad_medida || 'unidades').toLowerCase().trim();
+  const esUnidadesPuras = unidadNorm === 'unidades' || unidadNorm === 'unidad' || unidadNorm === 'piezas' || unidadNorm === 'porcion' || unidadNorm === 'porciones' || tipo === 'unidades';
+
+  const esCervezaInsumo = Boolean(
+    /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ins?.nombre || '') ||
+    /cerveza/i.test(ins?.categoria || '') ||
+    tipo === 'botella_350' || tipo === 'lata_350' || tipo === 'lata_473'
+  );
+
+  const esLicorReal = !esUnidadesPuras && (ins.es_licor === 1 || ins.es_licor === '1' || ins.es_licor === true) && !esCervezaInsumo;
+
+  if (esCervezaInsumo && (tipo === 'botella_350' || tipo === 'lata_350' || tipo === 'lata_473')) {
+    const capMl = tipo === 'lata_473' ? 473 : 350;
+    mlDeducidos = Math.round(cantidad * capMl * 10) / 10;
+    fraccionBotella = cantidad;
+    const subtotalCosto = Math.round(fraccionBotella * costoUnit * mermaFactor * 100) / 100;
+    const porcionesStock = fraccionBotella > 0 ? Math.floor(parseFloat(ins.stock_actual || 0) / fraccionBotella) : 0;
+    lblPreview.innerHTML = `
+      🍺 <strong>Descuento calculado:</strong> ${cantidad} bot. (${mlDeducidos} ml) &nbsp;|&nbsp;
+      💰 <strong>Costo estimado:</strong> <span style="color:#4ade80; font-weight:700;">${formatCRC(subtotalCosto)}</span> &nbsp;|&nbsp;
+      📊 <strong>Rendimiento:</strong> rinde aprox. <strong>${porcionesStock} porciones</strong> con stock actual (${ins.stock_actual} bot.)
+    `;
+  } else if (esLicorReal) {
     const capMl = ins.capacidad_ml || 750;
-    if (tipo === 'botella_350') {
-      mlDeducidos = Math.round(cantidad * 350 * 10) / 10;
-      fraccionBotella = (cantidad * 350) / capMl;
-    } else if (tipo === 'lata_350') {
-      mlDeducidos = Math.round(cantidad * 350 * 10) / 10;
-      fraccionBotella = (cantidad * 350) / capMl;
-    } else if (tipo === 'lata_473') {
-      mlDeducidos = Math.round(cantidad * 473 * 10) / 10;
-      fraccionBotella = (cantidad * 473) / capMl;
-    } else if (tipo === 'oz') {
+    if (tipo === 'oz') {
       mlDeducidos = Math.round(cantidad * 30 * 10) / 10;
       fraccionBotella = (cantidad * 30) / capMl;
     } else if (tipo === 'shots') {
@@ -20564,11 +20583,12 @@ window.recalcularCostoPreviewReceta = function() {
     fraccionBotella = cantidad;
     const subtotalCosto = Math.round(fraccionBotella * costoUnit * mermaFactor * 100) / 100;
     const porcionesStock = fraccionBotella > 0 ? Math.floor(parseFloat(ins.stock_actual || 0) / fraccionBotella) : 0;
+    const u = ins.unidad_medida || 'unidades';
 
     lblPreview.innerHTML = `
-      📦 <strong>Descuento calculado:</strong> ${cantidad} ${ins.unidad_medida || 'unidades'} &nbsp;|&nbsp;
+      📦 <strong>Descuento calculado:</strong> ${cantidad} ${u} &nbsp;|&nbsp;
       💰 <strong>Costo estimado:</strong> <span style="color:#4ade80; font-weight:700;">${formatCRC(subtotalCosto)}</span> &nbsp;|&nbsp;
-      📊 <strong>Rendimiento:</strong> rinde aprox. <strong>${porcionesStock} porciones</strong> con stock actual (${ins.stock_actual})
+      📊 <strong>Rendimiento:</strong> rinde aprox. <strong>${porcionesStock} platos</strong> con stock actual (${ins.stock_actual} ${u})
     `;
   }
 };
@@ -20628,21 +20648,26 @@ window.guardarIngredienteReceta = async function() {
   const insumo = (estado.inventario || []).find(i => Number(i.id) === parseInt(insumoId));
   let cantidadDeducir = cantidad;
 
-  if (insumo && insumo.es_licor) {
+  const unidadNorm = String(insumo?.unidad_medida || 'unidades').toLowerCase().trim();
+  const esUnidadesPuras = unidadNorm === 'unidades' || unidadNorm === 'unidad' || unidadNorm === 'piezas' || unidadNorm === 'porcion' || unidadNorm === 'porciones' || unidadTipo === 'unidades';
+
+  const esCervezaInsumo = Boolean(
+    /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(insumo?.nombre || '') ||
+    /cerveza/i.test(insumo?.categoria || '') ||
+    unidadTipo === 'botella_350' || unidadTipo === 'lata_350' || unidadTipo === 'lata_473'
+  );
+
+  const esLicorReal = !esUnidadesPuras && (insumo?.es_licor === 1 || insumo?.es_licor === '1' || insumo?.es_licor === true) && !esCervezaInsumo;
+
+  if (esLicorReal) {
     const capMl = insumo.capacidad_ml || 750;
-    if (unidadTipo === 'botella_350') {
-      cantidadDeducir = parseFloat(((cantidad * 350) / capMl).toFixed(4));
-    } else if (unidadTipo === 'lata_350') {
-      cantidadDeducir = parseFloat(((cantidad * 350) / capMl).toFixed(4));
-    } else if (unidadTipo === 'lata_473') {
-      cantidadDeducir = parseFloat(((cantidad * 473) / capMl).toFixed(4));
-    } else if (unidadTipo === 'oz') {
+    if (unidadTipo === 'oz') {
       // 1 oz = 30ml -> Fracción = (cantidad * 30) / capMl
       cantidadDeducir = parseFloat(((cantidad * 30) / capMl).toFixed(4));
     } else if (unidadTipo === 'shots') {
       const rend = insumo.rendimiento_shots > 0 ? insumo.rendimiento_shots : (capMl / (insumo.medida_shot_ml || 30));
       cantidadDeducir = parseFloat((cantidad / rend).toFixed(4));
-    } else if (unidadTipo === 'fraccion' || unidadTipo === 'estandar') {
+    } else if (unidadTipo === 'fraccion' || unidadTipo === 'estandar' || unidadTipo === 'unidades') {
       cantidadDeducir = parseFloat(cantidad.toFixed(4));
     }
   } else {

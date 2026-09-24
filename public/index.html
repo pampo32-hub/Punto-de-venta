@@ -1688,6 +1688,7 @@
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <label style="font-size:0.75rem; color:#9ca3af; font-weight:700;">Cantidad en Receta:</label>
                     <select id="selNuevoIngredienteUnidadTipo" style="background:#0f172a; color:#38bdf8; border:1px solid #374151; font-size:0.72rem; border-radius:4px; padding:2px 6px;" onchange="actualizarPlaceholderCantidadReceta()">
+                      <option value="unidades">📦 En Unidades / Piezas</option>
                       <option value="estandar">Unidad estándar (botella / kg / unidad)</option>
                       <option value="botella_350">🍺 1 Botella Cerveza (350ml)</option>
                       <option value="lata_350">🥫 1 Lata Cerveza (350ml)</option>
@@ -1697,7 +1698,7 @@
                       <option value="fraccion">🍾 Fracción Botella (1/4, 1/2...)</option>
                     </select>
                   </div>
-                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" value="1" placeholder="Ej: 1 shot o 0.04" oninput="onInputCantidadManualReceta()" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
+                  <input type="number" id="txtNuevoIngredienteCant" min="0.001" step="any" value="1" placeholder="Ej: 3 unidades" oninput="onInputCantidadManualReceta()" style="width:100%; padding:9px; background:#1f2937; border:1px solid #374151; color:#fff; border-radius:8px; font-weight:700;" />
                 </div>
                 <div>
                   <label style="font-size:0.75rem; color:#9ca3af; display:block; margin-bottom:4px; font-weight:700;">Merma (%) [Opcional]:</label>
@@ -1713,6 +1714,12 @@
               <!-- Píldoras / Botones Rápidos de Medida para Coctelería y Botellas -->
               <div id="boxMedidasRapidasReceta" style="margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
                 <span style="font-size:0.75rem; color:#9ca3af; margin-right:4px;">⚡ Medidas rápidas:</span>
+                <button type="button" class="chip-medida" data-medida="1-unidad" onclick="seleccionarMedidaRapidaReceta('unidades', 1, this)">📦 1 u.</button>
+                <button type="button" class="chip-medida" data-medida="2-unidad" onclick="seleccionarMedidaRapidaReceta('unidades', 2, this)">📦 2 u.</button>
+                <button type="button" class="chip-medida" data-medida="3-unidad" onclick="seleccionarMedidaRapidaReceta('unidades', 3, this)">📦 3 u.</button>
+                <button type="button" class="chip-medida" data-medida="4-unidad" onclick="seleccionarMedidaRapidaReceta('unidades', 4, this)">📦 4 u.</button>
+                <button type="button" class="chip-medida" data-medida="6-unidad" onclick="seleccionarMedidaRapidaReceta('unidades', 6, this)">📦 6 u.</button>
+                <span style="display:inline-block; width:1px; height:18px; background:#374151; margin:0 4px;"></span>
                 <button type="button" class="chip-medida" data-medida="1-botella350" onclick="seleccionarMedidaRapidaReceta('botella_350', 1, this)">🍺 1 Botella Cerveza (350ml)</button>
                 <button type="button" class="chip-medida" data-medida="1-lata350" onclick="seleccionarMedidaRapidaReceta('lata_350', 1, this)">🥫 1 Lata 350ml</button>
                 <button type="button" class="chip-medida" data-medida="1-lata473" onclick="seleccionarMedidaRapidaReceta('lata_473', 1, this)">🥫 1 Lata 473ml</button>
