@@ -2051,6 +2051,7 @@ try {
       if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
     });
     socket.on('venta_registrada', () => {
+      if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
       if (typeof window.consultarVentasProductosServidor === 'function') {
         window.consultarVentasProductosServidor();
       }
@@ -2065,6 +2066,10 @@ try {
           if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
         }
       }
+    });
+    socket.on('ventas_actualizadas', () => {
+      if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
+      if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
     });
     socket.on('inventario_alerta_stock', (d) => {
       if (typeof mostrarNotificacionCentro === 'function') {
@@ -14892,6 +14897,8 @@ window.ejecutarCobroFinal = async function() {
       enviarCocina: Boolean(estado.enviarCocinaEnCobro),
       tipo_orden: esParaLlevarCobro ? 'para_llevar' : 'mesa',
       es_para_llevar: esParaLlevarCobro,
+      caja_id: window._cajaVisualFiltroId || (window._cajaActivaData?.caja?.id) || undefined,
+      caja_fisica_id: (window._cajaActivaData?.caja?.caja_fisica_id) || undefined,
       idempotencyKey
     };
 

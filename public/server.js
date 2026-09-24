@@ -101,6 +101,15 @@ db.serialize(() => {
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_usd REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN total_ventas_transferencia REAL DEFAULT 0", () => {});
   db.run("ALTER TABLE Cajas ADD COLUMN monto_final_dolares REAL DEFAULT 0", () => {});
+  db.run(`
+    UPDATE Pagos 
+    SET caja_id = (
+      SELECT id FROM Cajas 
+      WHERE Cajas.estado = 'abierta' 
+      ORDER BY id DESC LIMIT 1
+    ) 
+    WHERE caja_id IS NULL AND (SELECT id FROM Cajas WHERE estado = 'abierta' LIMIT 1) IS NOT NULL
+  `, () => {});
   db.run(`CREATE TABLE IF NOT EXISTS InventarioMovimientos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     negocio_id INTEGER DEFAULT 1,
@@ -6005,6 +6014,8 @@ async function procesarCobroOrden(ordenId, {
   referencia = null,
   tipo_cambio = 1,
   monto_usd = 0,
+  caja_id = null,
+  caja_fisica_id = null,
   pagos = [],
   desglose = null,
   liquidar_total = true,
@@ -6257,8 +6268,16 @@ async function procesarCobroOrden(ordenId, {
   }
 
 
-  const negocioIdFinal = orden.negocio_id || 1;
-  let caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
+  const negocioIdFinal = Number(orden.negocio_id || reqNegocioId || 1);
+  let caja = null;
+  if (caja_id) {
+    caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
+  } else if (caja_fisica_id) {
+    caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioIdFinal, negocioIdFinal]);
+  }
+  if (!caja) {
+    caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
+  }
   if (!caja) {
     const ahoraApertura = new Date().toISOString();
     const rCaja = await dbRun(`
@@ -6420,7 +6439,19 @@ async function procesarCobroOrden(ordenId, {
       }
     }
 
+    await registrarAuditoria({
+      negocioId: negocioIdFinal,
+      usuarioNombre: mesero || 'Cajero',
+      accion: 'cobro_orden',
+      tipoEvento: 'operativo',
+      modulo: 'caja',
+      detalle: `Cobro completo de ${mesaNumero} por ₡${totalPagadoAcum.toLocaleString('es-CR')} (${metodoFinalTicket})${listaPagos.length > 1 ? ' [Mixto]' : ''}`,
+      monto: totalPagadoAcum
+    });
+
     io.emit('inventario_actualizado');
+    io.emit('caja_actualizada', { negocio_id: negocioIdFinal, caja_id: cajaId });
+    io.emit('ventas_actualizadas', { negocio_id: negocioIdFinal });
     io.emit('venta_registrada', { ordenId, total: orden.total });
 
     return {
@@ -6510,7 +6541,19 @@ async function procesarCobroOrden(ordenId, {
       io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id });
     }
 
+    await registrarAuditoria({
+      negocioId: negocioIdFinal,
+      usuarioNombre: mesero || 'Cajero',
+      accion: 'cobro_orden',
+      tipoEvento: 'operativo',
+      modulo: 'caja',
+      detalle: `Cobro parcial (${persona_nombre || 'Cliente'}) de ${mesaNumero} por ₡${totalPagadoAcum.toLocaleString('es-CR')} (${metodoFinalTicket})${listaPagos.length > 1 ? ' [Mixto]' : ''}`,
+      monto: totalPagadoAcum
+    });
+
     io.emit('inventario_actualizado');
+    io.emit('caja_actualizada', { negocio_id: negocioIdFinal, caja_id: cajaId });
+    io.emit('ventas_actualizadas', { negocio_id: negocioIdFinal });
     io.emit('venta_registrada', { ordenId, parcial: true });
 
     return {
@@ -7108,9 +7151,10 @@ app.get('/api/caja/actual', async (req, res) => {
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
-      WHERE p.caja_id = ?
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
       GROUP BY p.metodo
-    `, [caja.id]);
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id DESC', [caja.id]);
 
@@ -7121,9 +7165,10 @@ app.get('/api/caja/actual', async (req, res) => {
         SUM(p.monto) as ventas,
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
-      WHERE p.caja_id = ?
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
       GROUP BY p.mesero
-    `, [caja.id]);
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
 
     res.json({ ok: true, caja, cajasAbiertas: turnosAbiertos || [], turnos_abiertos: turnosAbiertos || [], ventas, movimientos, tipPool });
   } catch (e) {
@@ -7226,9 +7271,10 @@ app.get('/api/caja/corte-x', async (req, res) => {
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
-      WHERE p.caja_id = ?
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
       GROUP BY p.metodo
-    `, [caja.id]);
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
@@ -7276,15 +7322,19 @@ app.get('/api/caja/corte-x', async (req, res) => {
         SUM(p.monto) as ventas,
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
-      WHERE p.caja_id = ?
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
       GROUP BY p.mesero
-    `, [caja.id]);
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
 
     const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
 
     const ordenesCobros = await dbGet(`
-      SELECT COUNT(DISTINCT orden_id) as total_ordenes FROM Pagos WHERE caja_id = ?
-    `, [caja.id]);
+      SELECT COUNT(DISTINCT p.orden_id) as total_ordenes 
+      FROM Pagos p 
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
 
     const resultadoCorte = {
       tipo: 'Corte X (Parcial)',
@@ -7381,9 +7431,10 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     const ventas = await dbAll(`
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
-      WHERE p.caja_id = ?
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
       GROUP BY p.metodo
-    `, [caja.id]);
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
@@ -7442,9 +7493,10 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         SUM(p.monto) as ventas,
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
-      WHERE p.caja_id = ?
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
       GROUP BY p.mesero
-    `, [caja.id]);
+    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
     const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
 
     const ahora = new Date().toISOString();
