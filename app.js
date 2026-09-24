@@ -4995,9 +4995,10 @@ window.negocioTieneCaracteristica = function(flagId) {
       if (s) neg = JSON.parse(s);
     } catch (_) {}
   }
-  if (!neg) return true;
+  if (!neg) return false;
   const flags = neg.caracteristicas_activas;
-  if (!flags || flags === 'all') return true;
+  if (!flags) return false;
+  if (flags === 'all') return true;
 
   if (Array.isArray(flags)) {
     return flags.includes(flagId);
@@ -5010,7 +5011,7 @@ window.negocioTieneCaracteristica = function(flagId) {
     const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
     return splitArr.includes(String(flagId).toLowerCase());
   }
-  return true;
+  return false;
 };
 
 window.cargarTabCaracteristicasDev = async function(negocioId) {
@@ -10608,8 +10609,8 @@ window.imprimirSubcuentaComensal = function(comensalNombre) {
   }
 
   const subtotal = itemsComensal.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
   const esParaLlevar = Boolean(mesa.es_para_llevar);
   const aplicaServicio = tieneServicio10 && !esParaLlevar;
 
@@ -10719,8 +10720,8 @@ window.cobrarSubcuentaDirecta = function(comensalNombre) {
   }
 
   const subtotal = itemsComensal.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
   const esParaLlevar = Boolean(mesa.es_para_llevar);
   const aplicaServicio = tieneServicio10 && !esParaLlevar;
 
@@ -11089,8 +11090,8 @@ function recalcularTotalesTicket() {
     )
   );
 
-  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+  const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+  const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
   const preciosConImpuestos = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('precios_con_impuestos') : true;
 
   const aplicaServicio = tieneServicio10 && !esParaLlevar;
@@ -13938,8 +13939,8 @@ window.solicitarPreFacturaMesa = async function(mesaId = null, ordenId = null) {
       const descHH = Number(mesaActiva?.descuento_happy_hour || 0);
       const descEsp = Number(mesaActiva?.descuento_monto || 0);
       const baseImp = Math.max(0, subtotal - descHH - descEsp);
-      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-      const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+      const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
       const iva = tieneIva13 ? Math.round(baseImp * 0.13) : 0;
       const servicio = tieneServ10 ? Math.round(baseImp * 0.10) : 0;
       const total = baseImp + iva + servicio;
@@ -15153,8 +15154,8 @@ window.ejecutarCobroFinal = async function() {
       }
 
       // Disparar automáticamente la impresión del tiquete final de cliente
-      const tieneServ10Cobro = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-      const tieneIva13Cobro = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+      const tieneServ10Cobro = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+      const tieneIva13Cobro = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
       const tienePreciosConImp = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('precios_con_impuestos') : true;
 
       const aplicaServCobro = tieneServ10Cobro && !esParaLlevarCobro;
@@ -15683,8 +15684,8 @@ function iniciarDivisionCuentas() {
     splitState.personas = [];
     splitState.itemsDisponibles = [];
 
-    const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-    const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+    const tieneServicio10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+    const tieneIVA13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
     const esParaLlevar = Boolean(estado.mesaActiva?.es_para_llevar);
     const aplicaServicio = tieneServicio10 && !esParaLlevar;
 
@@ -22393,8 +22394,8 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       ticketData.tipo_orden === 'para_llevar' ||
       (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar')))
     );
-    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
 
     let servNum = 0;
     if (tieneServ10 && !esParaLlevarTicket) {
@@ -22414,7 +22415,7 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       }
     }
 
-    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0 && (!tieneServ10 || servNum > 0) && (!tieneIva13 || ivaNum > 0))
+    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && !isNaN(Number(ticketData.total)))
       ? Math.round(Number(ticketData.total))
       : (baseImp + servNum + ivaNum);
 
@@ -23038,8 +23039,8 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       ticketData.tipo_orden === 'para_llevar' ||
       (typeof ticketData.mesa === 'string' && (ticketData.mesa.toLowerCase().includes('para llevar') || ticketData.mesa.toLowerCase().includes('llevar')))
     );
-    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : true;
-    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : true;
+    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
 
     let servNum = 0;
     if (tieneServ10 && !esParaLlevarTicket) {
@@ -23059,7 +23060,7 @@ window.mostrarVisorTicketTermico = function(ticketData, autoImprimir = false, fo
       }
     }
 
-    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && Number(ticketData.total) > 0 && (!tieneServ10 || servNum > 0) && (!tieneIva13 || ivaNum > 0))
+    const totalNum = (ticketData.total !== undefined && ticketData.total !== null && !isNaN(Number(ticketData.total)))
       ? Math.round(Number(ticketData.total))
       : (baseImp + servNum + ivaNum);
     const montoRec = Number(ticketData.recibido) > 0 ? Math.round(Number(ticketData.recibido)) : totalNum;

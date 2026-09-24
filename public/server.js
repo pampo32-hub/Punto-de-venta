@@ -4588,10 +4588,45 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
     descuentoMonto = Number(descuentoMonto) || 0;
     descuentoPorcentaje = Number(descuentoPorcentaje) || 0;
 
-    const subtotalNeto = Math.max(0, (subtotalBruto || 0) - descuentoMonto);
-    const servicio10 = Math.round(subtotalNeto * 0.10) || 0;
-    const iva13 = Math.round(subtotalNeto * 0.13) || 0;
-    const totalFinal = (subtotalNeto + servicio10 + iva13) || 0;
+    const totalFinal = Math.max(0, (subtotalBruto || 0) - descuentoMonto);
+
+    const negocio = ordenNegocioId ? await dbGet('SELECT * FROM Negocios WHERE id = ?', [ordenNegocioId]) : null;
+
+    const tieneServicio10 = negocio ? (
+      Boolean(negocio.caracteristicas_activas) &&
+      negocio.caracteristicas_activas !== 'all' &&
+      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
+    ) : false;
+
+    const tieneIVA13 = negocio ? (
+      Boolean(negocio.caracteristicas_activas) &&
+      negocio.caracteristicas_activas !== 'all' &&
+      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
+    ) : false;
+
+    const esParaLlevar = Boolean(orden.es_para_llevar || orden.tipo_orden === 'para_llevar');
+    const aplicaServicio = tieneServicio10 && !esParaLlevar;
+    const aplicaIVA = tieneIVA13;
+
+    let subtotalNeto, servicio10, iva13;
+
+    if (aplicaServicio && aplicaIVA) {
+      subtotalNeto = Math.round(totalFinal / 1.23);
+      servicio10 = Math.round(subtotalNeto * 0.10);
+      iva13 = totalFinal - subtotalNeto - servicio10;
+    } else if (!aplicaServicio && aplicaIVA) {
+      subtotalNeto = Math.round(totalFinal / 1.13);
+      servicio10 = 0;
+      iva13 = totalFinal - subtotalNeto;
+    } else if (aplicaServicio && !aplicaIVA) {
+      subtotalNeto = Math.round(totalFinal / 1.10);
+      servicio10 = totalFinal - subtotalNeto;
+      iva13 = 0;
+    } else {
+      subtotalNeto = totalFinal;
+      servicio10 = 0;
+      iva13 = 0;
+    }
 
     await dbRun(
       `UPDATE Ordenes 
@@ -5264,21 +5299,22 @@ async function recalcularTotalesOrden(ordenId) {
   }
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
-  const total = Math.max(0, totalBruto - descuentoHH);
+  const descManual = Number(orden?.descuento_monto) || 0;
+  const total = Math.max(0, totalBruto - descuentoHH - descManual);
   
   const negocio = orden?.negocio_id ? await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id]) : null;
 
   const tieneServicio10 = negocio ? (
-    !negocio.caracteristicas_activas ||
-    negocio.caracteristicas_activas === 'all' ||
+    Boolean(negocio.caracteristicas_activas) &&
+    negocio.caracteristicas_activas !== 'all' &&
     (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
-  ) : true;
+  ) : false;
 
   const tieneIVA13 = negocio ? (
-    !negocio.caracteristicas_activas ||
-    negocio.caracteristicas_activas === 'all' ||
+    Boolean(negocio.caracteristicas_activas) &&
+    negocio.caracteristicas_activas !== 'all' &&
     (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
-  ) : true;
+  ) : false;
 
   const aplicaServicio = tieneServicio10 && !esParaLlevar;
   const aplicaIVA = tieneIVA13;
@@ -6533,6 +6569,9 @@ async function procesarCobroOrden(ordenId, {
       metodoPago: metodoFinalTicket,
       subtotal: orden.subtotal,
       descuentoHH: orden.descuento_happy_hour,
+      descuentoMonto: orden.descuento_monto || 0,
+      descuentoPorcentaje: orden.descuento_porcentaje || 0,
+      descuentoMotivo: orden.descuento_motivo || '',
       servicio: orden.servicio_10,
       iva: orden.iva_13,
       total: orden.total,
@@ -6792,6 +6831,9 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       cliente: orden.cliente || 'Cliente General',
       subtotal: orden.subtotal || 0,
       descuentoHH: orden.descuento_happy_hour || 0,
+      descuentoMonto: orden.descuento_monto || 0,
+      descuentoPorcentaje: orden.descuento_porcentaje || 0,
+      descuentoMotivo: orden.descuento_motivo || '',
       servicio: orden.servicio_10 || 0,
       iva: orden.iva_13 || 0,
       total: orden.total || 0,
@@ -6913,6 +6955,9 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
       cliente: clienteNombre,
       subtotal,
       descuentoHH,
+      descuentoMonto: (orden && orden.descuento_monto) || 0,
+      descuentoPorcentaje: (orden && orden.descuento_porcentaje) || 0,
+      descuentoMotivo: (orden && orden.descuento_motivo) || '',
       servicio,
       iva,
       total,

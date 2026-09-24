@@ -67,9 +67,10 @@ const ESCPOS = {
 };
 
 function negocioTieneCaracteristica(negocio, flagId) {
-  if (!negocio) return true;
+  if (!negocio) return false;
   const flags = negocio.caracteristicas_activas;
-  if (!flags || flags === 'all') return true;
+  if (!flags) return false;
+  if (flags === 'all') return true;
   if (Array.isArray(flags)) return flags.includes(flagId);
   if (typeof flags === 'string') {
     try {
@@ -79,7 +80,7 @@ function negocioTieneCaracteristica(negocio, flagId) {
     const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
     return splitArr.includes(String(flagId).toLowerCase());
   }
-  return true;
+  return false;
 }
 
 /**
@@ -251,6 +252,9 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     metodoPago,
     subtotal,
     descuentoHH,
+    descuentoMonto,
+    descuentoPorcentaje,
+    descuentoMotivo,
     servicio,
     iva,
     total,
@@ -301,7 +305,10 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
 
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
-  const baseImponible = Math.max(0, subNum - descHHNum);
+  const descMontoNum = Math.round(Number(descuentoMonto || datos.descuento || datos.descuento_monto) || 0);
+  const descPorcNum = Number(descuentoPorcentaje || datos.descuento_porcentaje) || 0;
+  const descMotivoTxt = descuentoMotivo || datos.descuento_motivo || '';
+  const baseImponible = Math.max(0, subNum - descHHNum - descMontoNum);
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
@@ -309,8 +316,8 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     (servicio !== undefined && servicio !== null && Number(servicio) === 0)
   );
 
-  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : true;
-  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : true;
+  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
+  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
 
   let servNum = 0;
   if (tieneServicio10 && !esParaLlevarTicket) {
@@ -330,7 +337,7 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     }
   }
 
-  const totNum = (total !== undefined && total !== null && Number(total) > 0 && (!tieneServicio10 || servNum > 0) && (!tieneIVA13 || ivaNum > 0))
+  const totNum = (total !== undefined && total !== null && !isNaN(Number(total)))
     ? Math.round(Number(total))
     : (baseImponible + servNum + ivaNum);
   const montoRecibido = Number(recibido) > 0 ? Math.round(Number(recibido)) : totNum;
@@ -365,9 +372,13 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
 
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
+  raw += formatearLinea2Col('Subtotal Productos:', formatMontoTermica(subNum)) + '\n';
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
+  }
+  if (descMontoNum > 0) {
+    const lblDesc = descMotivoTxt ? `Descuento (${descMotivoTxt}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col(lblDesc, `-${formatMontoTermica(descMontoNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
   if (servNum > 0 && tieneServicio10) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
@@ -440,8 +451,13 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
     cliente: cliente || 'Cliente General',
     fechaHora: fechaStr,
     items: itemsNormalizados,
+    subtotalProductos: subNum,
     subtotal: subNum,
     descuentoHH: descHHNum,
+    descuentoMonto: descMontoNum,
+    descuentoPorcentaje: descPorcNum,
+    descuentoMotivo: descMotivoTxt,
+    descuento: descMontoNum,
     servicio: servNum,
     iva: ivaNum,
     total: totNum,
@@ -470,6 +486,9 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     cliente,
     subtotal,
     descuentoHH,
+    descuentoMonto,
+    descuentoPorcentaje,
+    descuentoMotivo,
     servicio,
     iva,
     total,
@@ -517,7 +536,10 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
 
   const subNum = Math.round(Number(subtotal) || subCalculado || 0);
   const descHHNum = Math.round(Number(descuentoHH) || 0);
-  const baseImponible = Math.max(0, subNum - descHHNum);
+  const descMontoNum = Math.round(Number(descuentoMonto || datos.descuento || datos.descuento_monto) || 0);
+  const descPorcNum = Number(descuentoPorcentaje || datos.descuento_porcentaje) || 0;
+  const descMotivoTxt = descuentoMotivo || datos.descuento_motivo || '';
+  const baseImponible = Math.max(0, subNum - descHHNum - descMontoNum);
   const esParaLlevarTicket = Boolean(
     datos?.es_para_llevar ||
     datos?.tipo_orden === 'para_llevar' ||
@@ -525,8 +547,8 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     (servicio !== undefined && servicio !== null && Number(servicio) === 0)
   );
 
-  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : true;
-  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : true;
+  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
+  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
 
   let servNum = 0;
   if (tieneServicio10 && !esParaLlevarTicket) {
@@ -546,7 +568,7 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     }
   }
 
-  const totNum = (total !== undefined && total !== null && Number(total) > 0 && (!tieneServicio10 || servNum > 0) && (!tieneIVA13 || ivaNum > 0))
+  const totNum = (total !== undefined && total !== null && !isNaN(Number(total)))
     ? Math.round(Number(total))
     : (baseImponible + servNum + ivaNum);
   const prop10 = Math.round(subNum * 0.10);
@@ -583,9 +605,13 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
 
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
-  raw += formatearLinea2Col('Subtotal (Base Imponible):', formatMontoTermica(subNum)) + '\n';
+  raw += formatearLinea2Col('Subtotal Productos:', formatMontoTermica(subNum)) + '\n';
   if (descHHNum > 0) {
     raw += ESCPOS.BOLD_ON + formatearLinea2Col('Descuento Happy Hour 2x1:', `-${formatMontoTermica(descHHNum)}`) + '\n' + ESCPOS.BOLD_OFF;
+  }
+  if (descMontoNum > 0) {
+    const lblDesc = descMotivoTxt ? `Descuento (${descMotivoTxt}):` : (descPorcNum > 0 ? `Descuento (${descPorcNum}%):` : 'Descuento Aplicado:');
+    raw += ESCPOS.BOLD_ON + formatearLinea2Col(lblDesc, `-${formatMontoTermica(descMontoNum)}`) + '\n' + ESCPOS.BOLD_OFF;
   }
   if (servNum > 0 && tieneServicio10) {
     raw += formatearLinea2Col('10% Servicio (Ley):', formatMontoTermica(servNum)) + '\n';
@@ -620,8 +646,13 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
     cliente: cliente || 'Cliente General',
     fechaHora: fechaStr,
     items: itemsNormalizados,
+    subtotalProductos: subNum,
     subtotal: subNum,
     descuentoHH: descHHNum,
+    descuentoMonto: descMontoNum,
+    descuentoPorcentaje: descPorcNum,
+    descuentoMotivo: descMotivoTxt,
+    descuento: descMontoNum,
     servicio: servNum,
     iva: ivaNum,
     total: totNum
