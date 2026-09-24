@@ -6555,6 +6555,7 @@ async function procesarCobroOrden(ordenId, {
 
   if (liquidar_total) {
     await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+    await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
 
     // Consultar todos los ítems de la orden para el tiquete final
     const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
@@ -6653,18 +6654,35 @@ async function procesarCobroOrden(ordenId, {
         const qty = Number(item.cantidad) || 1;
         const itemProdNum = parseInt(item.producto_id != null ? item.producto_id : item.id);
         const validItemProdId = (!isNaN(itemProdNum) && itemProdNum > 0) ? itemProdNum : null;
+        const itemNombre = item.nombre || item.nombre_producto || '';
         let detalleItems = [];
-        if (item.comensal) {
-          detalleItems = await dbAll(
-            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND ((? IS NOT NULL AND producto_id = ?) OR nombre_producto = ?) AND comensal = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
-            [ordenId, validItemProdId, validItemProdId, item.nombre || item.nombre_producto, item.comensal]
-          );
-        }
-        if (!detalleItems || detalleItems.length === 0) {
-          detalleItems = await dbAll(
-            "SELECT * FROM DetalleOrden WHERE orden_id = ? AND ((? IS NOT NULL AND producto_id = ?) OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
-            [ordenId, validItemProdId, validItemProdId, item.nombre || item.nombre_producto]
-          );
+
+        if (validItemProdId) {
+          if (item.comensal) {
+            detalleItems = await dbAll(
+              "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND comensal = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+              [ordenId, validItemProdId, itemNombre, item.comensal]
+            );
+          }
+          if (!detalleItems || detalleItems.length === 0) {
+            detalleItems = await dbAll(
+              "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (producto_id = ? OR nombre_producto = ?) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+              [ordenId, validItemProdId, itemNombre]
+            );
+          }
+        } else if (itemNombre) {
+          if (item.comensal) {
+            detalleItems = await dbAll(
+              "SELECT * FROM DetalleOrden WHERE orden_id = ? AND nombre_producto = ? AND comensal = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+              [ordenId, itemNombre, item.comensal]
+            );
+          }
+          if (!detalleItems || detalleItems.length === 0) {
+            detalleItems = await dbAll(
+              "SELECT * FROM DetalleOrden WHERE orden_id = ? AND nombre_producto = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC",
+              [ordenId, itemNombre]
+            );
+          }
         }
 
         let restanteADescontar = qty;
@@ -6691,10 +6709,47 @@ async function procesarCobroOrden(ordenId, {
 
     // Recalcular subtotal y total de la orden con los ítems activos no pagados usando el motor oficial
     const infoTotales = await recalcularTotalesOrden(ordenId);
-    const nuevoTotal = Number(infoTotales?.total) || 0;
+    let nuevoTotal = Number(infoTotales?.total) || 0;
 
-    const subParcial = (items_pagados || []).reduce((acc, it) => acc + ((Number(it.precio) || 0) * (Number(it.cantidad) || 1)), 0);
-    const impParcial = Math.round(subParcial * 0.23);
+    // Si es pago monetario o cuota equitativa, deducir los abonos registrados en Pagos
+    const rowPagos = await dbGet('SELECT COALESCE(SUM(monto), 0) as total_pagado FROM Pagos WHERE orden_id = ?', [ordenId]);
+    const totalAbonado = Number(rowPagos?.total_pagado) || 0;
+    const totalOrdenCompleta = Number(orden.total) || nuevoTotal;
+    if (totalAbonado > 0) {
+      const saldoRestantePagos = Math.max(0, totalOrdenCompleta - totalAbonado);
+      if (saldoRestantePagos < nuevoTotal || (Array.isArray(items_pagados) && items_pagados.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')))) {
+        nuevoTotal = saldoRestantePagos;
+      }
+    }
+
+    const montoParcialNum = Number(monto) || totalPagadoAcum || 0;
+    const tieneServicio10 = negocio ? (
+      Boolean(negocio.caracteristicas_activas) &&
+      negocio.caracteristicas_activas !== 'all' &&
+      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
+    ) : false;
+    const tieneIVA13 = negocio ? (
+      Boolean(negocio.caracteristicas_activas) &&
+      negocio.caracteristicas_activas !== 'all' &&
+      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
+    ) : false;
+    const esParaLlevarTicket = Boolean(orden.es_para_llevar || orden.tipo_orden === 'para_llevar');
+    const aplicaServ = tieneServicio10 && !esParaLlevarTicket;
+
+    let subParcial, impParcial = 0;
+    if (aplicaServ && tieneIVA13) {
+      subParcial = Math.round(montoParcialNum / 1.23);
+      impParcial = montoParcialNum - subParcial;
+    } else if (!aplicaServ && tieneIVA13) {
+      subParcial = Math.round(montoParcialNum / 1.13);
+      impParcial = montoParcialNum - subParcial;
+    } else if (aplicaServ && !tieneIVA13) {
+      subParcial = Math.round(montoParcialNum / 1.10);
+      impParcial = montoParcialNum - subParcial;
+    } else {
+      subParcial = montoParcialNum;
+      impParcial = 0;
+    }
 
     const tInfoParcial = printerService.generarTicketPagoParcial({
       negocio,
@@ -6718,10 +6773,24 @@ async function procesarCobroOrden(ordenId, {
     }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
 
     if (orden.mesa_id) {
-      const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
-      const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
-      await dbRun("UPDATE Mesas SET estado = ?, orden_total = ? WHERE id = ?", [estadoMesaActual, nuevoTotal, orden.mesa_id]);
-      io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual, negocio_id: orden.negocio_id });
+      if (nuevoTotal === 0 && totalAbonado > 0) {
+        await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
+        await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
+        await dbRun(
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, orden_total = 0 WHERE id = ?",
+          [orden.mesa_id]
+        );
+        await dbRun(
+          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+          [orden.mesa_id, orden.mesa_id]
+        );
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, orden_total: 0, transferida_de: null, mesas_unidas: [] });
+      } else {
+        const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]);
+        const estadoMesaActual = (mesaRow && mesaRow.estado && mesaRow.estado !== 'libre') ? mesaRow.estado : 'ocupada';
+        await dbRun("UPDATE Mesas SET estado = ?, orden_total = ? WHERE id = ?", [estadoMesaActual, nuevoTotal, orden.mesa_id]);
+        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, total: nuevoTotal, orden_total: nuevoTotal, estado: estadoMesaActual, negocio_id: orden.negocio_id });
+      }
       io.emit('mesas_actualizadas', { negocio_id: orden.negocio_id });
     }
 

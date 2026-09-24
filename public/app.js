@@ -9888,9 +9888,20 @@ async function abrirComanderoMesa(mesaId) {
     if (data && (data.orden || (data.items && data.items.length > 0))) {
       if (!data.orden) {
         const tot = data.items.reduce((acc, it) => acc + (Number(it.precio_unitario != null ? it.precio_unitario : it.precio) * (Number(it.cantidad) || 1)), 0);
-        const sub = Math.round(tot / 1.23);
-        const serv = Math.round(sub * 0.10);
-        const iva = tot - sub - serv;
+        const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+        const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+        let sub = tot, serv = 0, iva = 0;
+        if (tieneServ10 && tieneIva13) {
+          sub = Math.round(tot / 1.23);
+          serv = Math.round(sub * 0.10);
+          iva = tot - sub - serv;
+        } else if (!tieneServ10 && tieneIva13) {
+          sub = Math.round(tot / 1.13);
+          iva = tot - sub;
+        } else if (tieneServ10 && !tieneIva13) {
+          sub = Math.round(tot / 1.10);
+          serv = tot - sub;
+        }
         data.orden = {
           id: 'offline_' + mesa.id,
           numero_orden: 'OFFLINE-' + (mesa.numero || mesa.id),
@@ -11580,9 +11591,21 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     });
 
     const tot = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-    const sub = esParaLlevarActiva ? Math.round(tot / 1.13) : Math.round(tot / 1.23);
-    const serv = esParaLlevarActiva ? 0 : Math.round(sub * 0.10);
-    const iva = tot - sub - serv;
+    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+    const aplicaServ = tieneServ10 && !esParaLlevarActiva;
+    let sub = tot, serv = 0, iva = 0;
+    if (aplicaServ && tieneIva13) {
+      sub = Math.round(tot / 1.23);
+      serv = Math.round(sub * 0.10);
+      iva = tot - sub - serv;
+    } else if (!aplicaServ && tieneIva13) {
+      sub = Math.round(tot / 1.13);
+      iva = tot - sub;
+    } else if (aplicaServ && !tieneIva13) {
+      sub = Math.round(tot / 1.10);
+      serv = tot - sub;
+    }
 
     estado.mesaActiva.estado = tieneNuevosCocina ? 'esperando' : 'abierta';
     estado.mesaActiva.orden_total = tot;
@@ -14714,20 +14737,46 @@ window.ejecutarCobroFinal = async function() {
 
     const ordenId = estado.mesaActiva ? (estado.mesaActiva.orden_id || estado.mesaActiva.orden_activa_id) : null;
     const mesaNumero = estado.mesaActiva ? (estado.mesaActiva.numero || estado.mesaActiva.nombre || 'Mesa') : 'Mesa';
+    const esParaLlevarCobro = Boolean(
+      estado.mesaActiva && (
+        estado.mesaActiva.es_para_llevar ||
+        estado.mesaActiva.tipo_orden === 'para_llevar' ||
+        String(estado.mesaActiva.id).startsWith('para_llevar') ||
+        estado.mesaActiva.id === 'para_llevar'
+      )
+    );
 
     if (esCobroSplitPersona) {
+      personaCobrada.pagada = true;
+      personaCobrada.pagado = true;
       personaCobrada.metodoPago = metodoFinal;
       personaCobrada.montoPagado = totalNum;
       personaCobrada.recibido = recibido;
       personaCobrada.cambio = cambio;
       personaCobrada.fechaPago = new Date().toISOString();
 
+      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+      const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+      const aplicaServ = tieneServ10 && !esParaLlevarCobro;
+      let subCuota = totalNum;
+      let impCuota = 0;
+      if (aplicaServ && tieneIva13) {
+        subCuota = Math.round(totalNum / 1.23);
+        impCuota = totalNum - subCuota;
+      } else if (!aplicaServ && tieneIva13) {
+        subCuota = Math.round(totalNum / 1.13);
+        impCuota = totalNum - subCuota;
+      } else if (aplicaServ && !tieneIva13) {
+        subCuota = Math.round(totalNum / 1.10);
+        impCuota = totalNum - subCuota;
+      }
+
       if (!personaCobrada.items || personaCobrada.items.length === 0) {
         personaCobrada.items = [{
           nombre: `Cuota Equitativa (${personaCobrada.nombre})`,
-          precio: Math.round(totalNum / 1.23),
+          precio: subCuota,
           cantidad: 1,
-          subtotal: Math.round(totalNum / 1.23)
+          subtotal: subCuota
         }];
       }
 
@@ -14770,26 +14819,28 @@ window.ejecutarCobroFinal = async function() {
         } catch (_) {}
       }
 
+      // Detectar si estamos en modo partes iguales (split equal)
+      const esModoPartesIguales = Boolean(
+        personaCobrada?.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')) ||
+        (splitState?.personas && splitState.personas.some(p => p.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'))))
+      );
+
       // Verificar si quedan productos o cuotas sin pagar en la mesa
       const quedanItemsEnMesaActiva = Boolean(estado.mesaActiva?.items && estado.mesaActiva.items.length > 0);
       const personasSinPagar = (splitState?.personas || []).filter(p => !p.pagada && ((p.items && p.items.length > 0) || (p.total && p.total > 0)));
       const itemsEnMesaSinAsignar = (splitState?.itemsDisponibles || []).filter(it => it.cantidad > 0);
       const hayPersonasSinPagar = (splitState?.personas || []).some(p => !p.pagada);
 
-      esLiquidacionFinal = !quedanItemsEnMesaActiva && (personasSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0 && (!hayPersonasSinPagar || (estado.mesaActiva?.items?.length === 0)));
+      if (esModoPartesIguales) {
+        esLiquidacionFinal = (personasSinPagar.length === 0);
+      } else {
+        esLiquidacionFinal = !quedanItemsEnMesaActiva && (personasSinPagar.length === 0 && itemsEnMesaSinAsignar.length === 0 && (!hayPersonasSinPagar || (estado.mesaActiva?.items?.length === 0)));
+      }
     }
 
     const mesaId = estado.mesaActiva ? estado.mesaActiva.id : null;
     const itemsMesa = (estado.mesaActiva && estado.mesaActiva.items) ? estado.mesaActiva.items : [];
     const idempotencyKey = 'pay_' + (mesaId || '0') + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    const esParaLlevarCobro = Boolean(
-      estado.mesaActiva && (
-        estado.mesaActiva.es_para_llevar ||
-        estado.mesaActiva.tipo_orden === 'para_llevar' ||
-        String(estado.mesaActiva.id).startsWith('para_llevar') ||
-        estado.mesaActiva.id === 'para_llevar'
-      )
-    );
 
     const nidComanda = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
 
@@ -14886,10 +14937,35 @@ window.ejecutarCobroFinal = async function() {
             notas: ''
           }];
 
-      const subPersona = esParaLlevarCobro ? Math.round(totalNum / 1.13) : Math.round(totalNum / 1.23);
-      const servPersona = esParaLlevarCobro ? 0 : Math.round(subPersona * 0.10);
-      const ivaPersona = totalNum - subPersona - servPersona;
-      const saldoRestanteMesa = esLiquidacionFinal ? 0 : Math.max(0, (estado.mesaActiva?.items || []).reduce((a, b) => a + (b.precio * b.cantidad), 0));
+      const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+      const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+      const aplicaServ = tieneServ10 && !esParaLlevarCobro;
+      let subPersona = totalNum, servPersona = 0, ivaPersona = 0;
+      if (aplicaServ && tieneIva13) {
+        subPersona = Math.round(totalNum / 1.23);
+        servPersona = Math.round(subPersona * 0.10);
+        ivaPersona = totalNum - subPersona - servPersona;
+      } else if (!aplicaServ && tieneIva13) {
+        subPersona = Math.round(totalNum / 1.13);
+        ivaPersona = totalNum - subPersona;
+      } else if (aplicaServ && !tieneIva13) {
+        subPersona = Math.round(totalNum / 1.10);
+        servPersona = totalNum - subPersona;
+      }
+
+      const esModoPartesIgualesTicket = Boolean(
+        personaCobrada?.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')) ||
+        (splitState?.personas && splitState.personas.some(p => p.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'))))
+      );
+      let saldoRestanteMesa = 0;
+      if (!esLiquidacionFinal) {
+        if (esModoPartesIgualesTicket) {
+          const totActual = Number(estado.mesaActiva?.orden_total || estado.mesaActiva?.total || 0) || (estado.mesaActiva?.items || []).reduce((a, b) => a + (b.precio * b.cantidad), 0);
+          saldoRestanteMesa = Math.max(0, totActual - totalNum);
+        } else {
+          saldoRestanteMesa = Math.max(0, (estado.mesaActiva?.items || []).reduce((a, b) => a + (b.precio * b.cantidad), 0));
+        }
+      }
 
       const ticketPersona = (cobroResData && cobroResData.ticket) ? cobroResData.ticket : {
         tipo: 'pago_parcial',
@@ -15012,7 +15088,15 @@ window.ejecutarCobroFinal = async function() {
         if (typeof cargarKDSDesdeBackend === 'function') cargarKDSDesdeBackend();
       } else {
         // Quedan personas o productos pendientes
-        const remMesaTot = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        const esModoPartesIgualesRestante = Boolean(
+          personaCobrada?.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa')) ||
+          (splitState?.personas && splitState.personas.some(p => p.items?.some(it => String(it.nombre || it.nombre_producto || '').includes('Cuota Equitativa'))))
+        );
+        let remMesaTot = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+        if (esModoPartesIgualesRestante) {
+          const totActual = Number(estado.mesaActiva?.orden_total || estado.mesaActiva?.total || 0) || remMesaTot;
+          remMesaTot = Math.max(0, totActual - totalNum);
+        }
         if (estado.mesaActiva) {
           estado.mesaActiva.total = remMesaTot;
           estado.mesaActiva.orden_total = remMesaTot;
@@ -15037,12 +15121,15 @@ window.ejecutarCobroFinal = async function() {
           mesaEnLista.items = [...(estado.mesaActiva.items || [])];
         }
 
-        // Si se usaba el modal de dividir cuenta, purgar a las personas pagadas
+        // Si se usaba el modal de dividir cuenta:
+        // En partes iguales NO filtramos a las personas pagadas para que se mantengan visualmente con su estado (Pagado) y botón de factura
         if (typeof splitState !== 'undefined' && splitState && splitState.personas) {
-          splitState.personas = splitState.personas.filter(p => !p.pagada);
-          splitState.numPersonas = Math.max(1, splitState.personas.length);
-          if (splitState.personaActivaIndex >= splitState.personas.length) {
-            splitState.personaActivaIndex = Math.max(0, splitState.personas.length - 1);
+          if (!esModoPartesIgualesRestante) {
+            splitState.personas = splitState.personas.filter(p => !p.pagada);
+            splitState.numPersonas = Math.max(1, splitState.personas.length);
+            if (splitState.personaActivaIndex >= splitState.personas.length) {
+              splitState.personaActivaIndex = Math.max(0, splitState.personas.length - 1);
+            }
           }
         }
 
@@ -15648,7 +15735,8 @@ function iniciarDivisionCuentas() {
     alert('⚠️ El módulo de División de Cuentas (Split Bills) no está contratado en este restaurante.');
     return;
   }
-  const totalNum = estado.mesaActiva.total || (estado.mesaActiva.subtotal ? estado.mesaActiva.subtotal * 1.23 : 0);
+  const totalItems = (estado.mesaActiva?.items || []).reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
+  const totalNum = parseCRC(document.getElementById('comTotal')?.textContent || '0') || totalItems || Number(estado.mesaActiva?.total) || Number(estado.mesaActiva?.orden_total) || Number(estado.mesaActiva?.subtotal) || 0;
   const totalTxt = formatCRCSinDecimales(totalNum);
   const numRaw = String(estado.mesaActiva.numero || '');
   const nomRaw = String(estado.mesaActiva.nombre || '');
@@ -16029,8 +16117,20 @@ function devolverItemAMesa(assignedItemIndex) {
 function recalcularPersona(p) {
   if (!p) return;
   const tot = p.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
-  const sub = Math.round(tot / 1.23);
-  const imp = tot - sub;
+  const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+  const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+  let sub = tot;
+  let imp = 0;
+  if (tieneServ10 && tieneIva13) {
+    sub = Math.round(tot / 1.23);
+    imp = tot - sub;
+  } else if (!tieneServ10 && tieneIva13) {
+    sub = Math.round(tot / 1.13);
+    imp = tot - sub;
+  } else if (tieneServ10 && !tieneIva13) {
+    sub = Math.round(tot / 1.10);
+    imp = tot - sub;
+  }
   p.subtotal = sub;
   p.impuestos = imp;
   p.total = tot;
@@ -16366,9 +16466,21 @@ window.imprimirPrefacturaPersonaSplit = function(personaIndex) {
         notas: ''
       }];
 
-  const subPersona = esParaLlevarCobro ? Math.round(totalNum / 1.13) : Math.round(totalNum / 1.23);
-  const servPersona = esParaLlevarCobro ? 0 : Math.round(subPersona * 0.10);
-  const ivaPersona = totalNum - subPersona - servPersona;
+  const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+  const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+  const aplicaServ = tieneServ10 && !esParaLlevarCobro;
+  let subPersona = totalNum, servPersona = 0, ivaPersona = 0;
+  if (aplicaServ && tieneIva13) {
+    subPersona = Math.round(totalNum / 1.23);
+    servPersona = Math.round(subPersona * 0.10);
+    ivaPersona = totalNum - subPersona - servPersona;
+  } else if (!aplicaServ && tieneIva13) {
+    subPersona = Math.round(totalNum / 1.13);
+    ivaPersona = totalNum - subPersona;
+  } else if (aplicaServ && !tieneIva13) {
+    subPersona = Math.round(totalNum / 1.10);
+    servPersona = totalNum - subPersona;
+  }
   const prop10 = Math.round(subPersona * 0.10);
   const prop15 = Math.round(subPersona * 0.15);
 
@@ -16452,7 +16564,8 @@ window.cobrarPersonaSplitEqual = function(personaIndex) {
     mostrarNotificacionCentro('⚠️ No hay consumos en esta mesa para cobrar.', 'warning');
     return;
   }
-  const totalMesa = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  const totalItems = (estado.mesaActiva.items || []).reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
+  const totalMesa = parseCRC(document.getElementById('comTotal')?.textContent || '0') || totalItems || Number(estado.mesaActiva.total) || Number(estado.mesaActiva.orden_total) || 0;
   const numP = splitState.numPersonas || 2;
   const porPersona = Math.round(totalMesa / numP);
 
@@ -16478,14 +16591,29 @@ window.cobrarPersonaSplitEqual = function(personaIndex) {
     return;
   }
 
+  const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+  const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+  let subPorPersona = porPersona;
+  let impPorPersona = 0;
+  if (tieneServ10 && tieneIva13) {
+    subPorPersona = Math.round(porPersona / 1.23);
+    impPorPersona = porPersona - subPorPersona;
+  } else if (!tieneServ10 && tieneIva13) {
+    subPorPersona = Math.round(porPersona / 1.13);
+    impPorPersona = porPersona - subPorPersona;
+  } else if (tieneServ10 && !tieneIva13) {
+    subPorPersona = Math.round(porPersona / 1.10);
+    impPorPersona = porPersona - subPorPersona;
+  }
+
   p.total = porPersona;
-  p.subtotal = Math.round(porPersona / 1.23);
-  p.impuestos = porPersona - p.subtotal;
+  p.subtotal = subPorPersona;
+  p.impuestos = impPorPersona;
   p.items = [{
     nombre: `Cuota Equitativa (1/${numP} de ${estado.mesaActiva.numero || 'Mesa'})`,
-    precio: p.subtotal,
+    precio: subPorPersona,
     cantidad: 1,
-    subtotal: p.subtotal
+    subtotal: subPorPersona
   }];
 
   estado.cobroSplitPersonaIndex = personaIndex;
@@ -16525,24 +16653,53 @@ window.reimprimirTicketPersonaSplit = function(idx) {
 
 function calcularSplitIgual() {
   if (!estado.mesaActiva || !estado.mesaActiva.items) return;
-  const total = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  const totalItems = estado.mesaActiva.items.reduce((acc, it) => acc + ((Number(it.precio || it.precio_unitario || 0)) * (Number(it.cantidad) || 1)), 0);
+  const total = parseCRC(document.getElementById('comTotal')?.textContent || '0') || totalItems || Number(estado.mesaActiva.total) || Number(estado.mesaActiva.orden_total) || 0;
   const numP = splitState.numPersonas || estado.splitPersonas || 2;
   const porPersona = Math.round(total / numP);
   const el = document.getElementById('splitMontoPorPersona');
   if (el) el.textContent = formatCRCSinDecimales(porPersona);
 
+  const notaEl = document.getElementById('splitMontoPorPersonaNota');
+  if (notaEl) {
+    const tieneServ10 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('servicio_10') : false;
+    const tieneIva13 = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('desglose_iva_13') : false;
+    if (tieneServ10 && tieneIva13) {
+      notaEl.textContent = 'Incluye 10% servicio y 13% IVA';
+    } else if (tieneServ10) {
+      notaEl.textContent = 'Incluye 10% servicio';
+    } else if (tieneIva13) {
+      notaEl.textContent = 'Incluye 13% IVA';
+    } else {
+      notaEl.textContent = 'Monto neto por persona (Sin recargos adicionales)';
+    }
+  }
+
   const container = document.getElementById('splitEqualPersonsList');
   if (!container) return;
 
+  if (!splitState.personas) splitState.personas = [];
+  while (splitState.personas.length < numP) {
+    const id = splitState.personas.length + 1;
+    splitState.personas.push({
+      id,
+      nombre: `Persona ${id}`,
+      items: [],
+      subtotal: 0,
+      impuestos: 0,
+      total: porPersona,
+      guardada: false,
+      pagada: false,
+      prefacturaEmitida: false
+    });
+  }
+
   container.innerHTML = '';
   for (let i = 0; i < numP; i++) {
-    const p = splitState.personas[i] || {
-      id: i + 1,
-      nombre: `Persona ${i + 1}`,
-      pagada: false,
-      prefacturaEmitida: false,
-      total: porPersona
-    };
+    const p = splitState.personas[i];
+    if (!p.pagada) {
+      p.total = porPersona;
+    }
     const row = document.createElement('div');
     row.className = `equal-person-row ${p.pagada ? 'paid' : ''}`;
     row.style.cssText = `

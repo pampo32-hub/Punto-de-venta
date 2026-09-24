@@ -733,7 +733,9 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   raw += '-'.repeat(48) + '\n';
   raw += ESCPOS.ALIGN_RIGHT;
   raw += formatearLinea2Col('Subtotal Consumo:', formatMontoTermica(subNum)) + '\n';
-  raw += formatearLinea2Col('10% Serv + 13% IVA:', formatMontoTermica(impNum)) + '\n';
+  if (impNum > 0) {
+    raw += formatearLinea2Col('10% Serv + 13% IVA:', formatMontoTermica(impNum)) + '\n';
+  }
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + ESCPOS.ALIGN_LEFT + 'TOTAL PAGADO:\n' + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + ESCPOS.ALIGN_RIGHT + `${formatMontoTermica(totNum)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
