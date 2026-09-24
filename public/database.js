@@ -753,7 +753,7 @@ function initDb() {
         // Sembrar Zonas para Beta Tester
         const zonasBeta = [
           { id: 101, nombre: 'Salón Principal' },
-          { id: 102, nombre: 'Barra & Lounge' },
+          { id: 102, nombre: 'Barra' },
           { id: 103, nombre: 'Terraza' },
           { id: 104, nombre: 'VIP' },
           { id: 105, nombre: 'Segundo Piso' }
@@ -919,8 +919,8 @@ function initDb() {
           { numero: 'Barra 2', zona_id: 2, capacidad: 1, forma: 'silla', x: 635, y: 25, ancho: 85, alto: 95 },
           { numero: 'Barra 3', zona_id: 2, capacidad: 1, forma: 'silla', x: 740, y: 25, ancho: 85, alto: 95 },
           { numero: 'Barra 4', zona_id: 2, capacidad: 1, forma: 'silla', x: 845, y: 25, ancho: 85, alto: 95 },
-          { numero: 'Silla Barra 7', zona_id: 2, capacidad: 1, forma: 'silla', x: 950, y: 25, ancho: 85, alto: 95 },
-          { numero: 'Silla Barra 6', zona_id: 2, capacidad: 1, forma: 'silla', x: 1055, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Barra 5', zona_id: 2, capacidad: 1, forma: 'silla', x: 950, y: 25, ancho: 85, alto: 95 },
+          { numero: 'Barra 6', zona_id: 2, capacidad: 1, forma: 'silla', x: 1055, y: 25, ancho: 85, alto: 95 },
           { numero: 'Mesa VIP', zona_id: 4, capacidad: 8, forma: 'square', x: 530, y: 165, ancho: 200, alto: 130 },
           { numero: 'Terraza 1', zona_id: 3, capacidad: 4, forma: 'square', x: 25, y: 325, ancho: 140, alto: 120 },
           { numero: 'Terraza 2', zona_id: 3, capacidad: 4, forma: 'square', x: 195, y: 325, ancho: 140, alto: 120 }

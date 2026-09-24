@@ -8068,7 +8068,7 @@ window.cargarMesas = cargarMesasDesdeBackend;
 function aplicarEscalaTextoMesa(el, w, h, esSilla) {
   if (!el) return;
   const minDim = Math.min(w || 100, h || 100);
-  const numFontSize = Math.max(9, Math.min(22, Math.round(minDim * 0.13))) + 'px';
+  const numFontSize = Math.max(esSilla ? 11 : 9, Math.min(22, Math.round(minDim * 0.13))) + 'px';
   const subFontSize = Math.max(8, Math.min(13, Math.round(minDim * 0.088))) + 'px';
   const totalFontSize = Math.max(9, Math.min(18, Math.round(minDim * 0.115))) + 'px';
   const iconFontSize = Math.max(12, Math.min(28, Math.round(minDim * 0.18))) + 'px';
@@ -17468,7 +17468,7 @@ window.abrirModalCrearMesa = function(formaInicial = 'square') {
     selectZona.innerHTML = '';
     const zonas = (estado.zonas && estado.zonas.length > 0) ? estado.zonas : [
       { id: 1, nombre: 'Salón Principal' },
-      { id: 2, nombre: 'Barra / Bar' },
+      { id: 2, nombre: 'Barra' },
       { id: 3, nombre: 'Terraza' },
       { id: 4, nombre: 'Área VIP' },
       { id: 5, nombre: 'Segundo Piso' }
@@ -17614,7 +17614,7 @@ function generarSugerenciaNombreMesa() {
 
   if (forma === 'silla' || zLow.includes('barra') || zLow.includes('bar')) {
     const countBarras = mesas.filter(m => m.forma === 'silla' || (m.numero && m.numero.toLowerCase().includes('barra'))).length + 1;
-    txtNum.value = piso === 2 ? `Barra P2-${countBarras}` : `Silla Barra ${countBarras}`;
+    txtNum.value = piso === 2 ? `Barra P2-${countBarras}` : `Barra ${countBarras}`;
   } else if (zLow.includes('terraza')) {
     const countTerraza = mesas.filter(m => m.numero && m.numero.toLowerCase().includes('terraza')).length + 1;
     txtNum.value = `Terraza ${countTerraza}`;
