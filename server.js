@@ -3098,12 +3098,11 @@ app.get('/api/mesas', async (req, res) => {
           dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
           dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
         }
-      } else if (m.estado === 'ocupada' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
         const rowsPend = ultimaOrden ? await dbAll(
-          "SELECT d.nombre_producto, d.hora_pedido, d.creado_en FROM DetalleOrden d WHERE d.orden_id = ? AND d.destino = 'cocina' AND d.estado_comanda IN ('pendiente', 'preparando')",
+          "SELECT d.nombre_producto, d.hora_pedido, d.creado_en FROM DetalleOrden d WHERE d.orden_id = ? AND (d.destino = 'cocina' OR (d.destino IS NULL AND (d.curso IS NULL OR d.curso NOT IN (1, 5, 6)))) AND d.estado_comanda IN ('pendiente', 'preparando')",
           [ultimaOrden.id]
         ) : [];
         if (rowsPend.length > 0) {
@@ -3119,6 +3118,9 @@ app.get('/api/mesas', async (req, res) => {
           m.platos_pendientes = [];
           m.items_pendientes = [];
           m.minutos_espera = 0;
+        }
+        if (ultimaOrden) {
+          m.orden_activa_id = m.orden_activa_id || ultimaOrden.id;
         }
         m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
@@ -3909,6 +3911,12 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
       'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
       [mesaId, mesaId]
     );
+
+    await dbRun(
+      "UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id IN (SELECT id FROM Ordenes WHERE mesa_id = ?) AND estado_comanda IN ('pendiente', 'preparando')",
+      [mesaId]
+    );
+    io.emit('kds_actualizado');
 
     io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [] });
     io.emit('reserva_actualizada', { negocio_id: negocioId });
@@ -5177,13 +5185,22 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
   try {
     const mesaId = req.params.mesaId;
     const negocioId = obtenerNegocioIdReq(req);
-    const orden = await dbGet(
+    let orden = await dbGet(
       "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') ORDER BY id DESC LIMIT 1",
       [mesaId, negocioId, negocioId]
     );
+    if (!orden) {
+      const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
+      if (mesa && (mesa.estado === 'esperando' || mesa.estado === 'ocupada' || mesa.estado === 'abierta')) {
+        orden = await dbGet(
+          "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'pagada' ORDER BY id DESC LIMIT 1",
+          [mesaId, negocioId, negocioId]
+        );
+      }
+    }
     if (!orden) return res.json({ orden: null, items: [] });
 
-    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY id ASC", [orden.id]);
+    const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
     let totalAbonado = 0;
     let pagos = [];
     try {
@@ -6346,7 +6363,9 @@ async function procesarCobroOrden(ordenId, {
         cantidad: cant,
         es_balde: esBalde,
         desglose_balde: it.desglose_balde || null,
-        notas: it.notas || ''
+        notas: it.notas || '',
+        destino: destItem,
+        curso: it.curso || (destItem === 'barra' ? 1 : 2)
       });
     }
 
@@ -6356,23 +6375,34 @@ async function procesarCobroOrden(ordenId, {
     // Recalcular totales de orden
     await recalcularTotalesOrden(ordenId);
     orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
+  }
 
-    // Si el usuario confirmó enviar a cocina en este cobro directo, despachar a cocina/barra
-    const itemsCocina = itemsProcesadosCobro.filter(it => it.destino === 'cocina' || (!it.destino && it.curso && it.curso <= 3));
-    const itemsBarra = itemsProcesadosCobro.filter(it => it.destino === 'barra');
+  // Si el usuario confirmó enviar a cocina en este cobro directo, despachar a cocina/barra
+  if (debeEnviarCocina) {
+    const rowMaxComanda = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
+    const comandaNumeroFinal = (rowMaxComanda && rowMaxComanda.maxNum ? Number(rowMaxComanda.maxNum) : 1);
+
+    const itemsCocina = await dbAll(
+      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND (destino = 'cocina' OR (destino IS NULL AND (curso IS NULL OR curso NOT IN (1, 5, 6)))) AND estado_comanda IN ('pendiente', 'preparando')",
+      [ordenId]
+    );
+    const itemsBarra = await dbAll(
+      "SELECT * FROM DetalleOrden WHERE orden_id = ? AND destino = 'barra' AND estado_comanda IN ('pendiente', 'preparando')",
+      [ordenId]
+    );
     const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
-    const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : 'Mesa Directa';
+    const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : (orden.tipo_orden === 'para_llevar' || !orden.mesa_id ? '🛍️ Para Llevar' : 'Mesa Directa');
 
-    if (debeEnviarCocina && itemsCocina.length > 0) {
+    if (itemsCocina.length > 0) {
       // 1. Imprimir comanda de cocina térmica (marcada como PAGADA / DIRECTO)
       const tInfoCocina = printerService.generarTicketComanda({
         ordenId,
-        comandaNumero,
+        comandaNumero: comandaNumeroFinal,
         mesaNumero: mesaNumeroTxt,
         mesero,
         items: itemsCocina.map(it => ({
           cantidad: it.cantidad,
-          nombre: it.nombre || it.nombre_producto,
+          nombre: it.nombre_producto || it.nombre,
           notas: it.notas || '',
           curso: it.curso || 2,
           origen_mesa_numero: it.origen_mesa_numero || null
@@ -6409,18 +6439,18 @@ async function procesarCobroOrden(ordenId, {
       io.emit('kds_actualizado');
     }
 
-    if (debeEnviarCocina && itemsBarra.length > 0) {
+    if (itemsBarra.length > 0) {
       // Imprimir comanda de barra térmica (marcada como PAGADA / DIRECTO)
       const tInfoBarra = printerService.generarTicketComanda({
         ordenId,
-        comandaNumero,
+        comandaNumero: comandaNumeroFinal,
         mesaNumero: mesaNumeroTxt,
         mesero,
         items: itemsBarra.map(it => ({
           cantidad: it.cantidad,
-          nombre: it.nombre || it.nombre_producto,
+          nombre: it.nombre_producto || it.nombre,
           notas: it.notas || '',
-          curso: it.curso || 2,
+          curso: it.curso || 1,
           origen_mesa_numero: it.origen_mesa_numero || null
         })),
         destino: 'barra',
@@ -6432,55 +6462,16 @@ async function procesarCobroOrden(ordenId, {
         ticketInfo: tInfoBarra,
         io
       }).catch(err => console.error('Error al despachar comanda barra:', err.message));
-    }
-  } else if (debeEnviarCocina) {
-    // Si no habían items nuevos pero debeEnviarCocina es true, buscar platillos en DetalleOrden para despachar
-    const detallesCocina = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' AND (destino = 'cocina' OR destino IS NULL)", [ordenId]);
-    if (detallesCocina && detallesCocina.length > 0) {
-      const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
-      const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : 'Mesa Directa';
 
-      const tInfoCocina = printerService.generarTicketComanda({
-        ordenId,
-        comandaNumero: 1,
-        mesaNumero: mesaNumeroTxt,
-        mesero,
-        items: detallesCocina.map(it => ({
-          cantidad: it.cantidad,
-          nombre: it.nombre_producto || it.nombre,
-          notas: it.notas || '',
-          curso: it.curso || 2,
-          origen_mesa_numero: it.origen_mesa_numero || null
-        })),
-        destino: 'cocina',
-        pagada: true,
-        fechaHora: ahora
-      });
-      printerService.procesarImpresion({
-        destinoImpresora: 'cocina',
-        ticketInfo: tInfoCocina,
-        io
-      }).catch(err => console.error('Error al despachar comanda cocina:', err.message));
-
-      io.emit('nueva_comanda', {
+      io.emit('nueva_comanda_barra', {
         mesaId: orden.mesa_id,
         ordenId,
         mesaNumero: mesaNumeroTxt,
         mesero,
         horaPedido: ahora,
         pagada: true,
-        comandas: detallesCocina
+        comandas: itemsBarra
       });
-      io.emit('comanda_nueva', {
-        ordenId,
-        mesaId: orden.mesa_id,
-        mesaNumero: mesaNumeroTxt,
-        mesero,
-        horaPedido: ahora,
-        pagada: true,
-        items: detallesCocina
-      });
-      io.emit('kds_actualizado');
     }
   }
 
@@ -6593,7 +6584,20 @@ async function procesarCobroOrden(ordenId, {
 
   if (liquidar_total) {
     await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
-    await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
+    if (debeEnviarCocina) {
+      // Platillos de cocina/barra deben mantener 'pendiente' (o preparando) para KDS y cocina
+      await dbRun(
+        "UPDATE DetalleOrden SET estado_comanda = 'pendiente' WHERE orden_id = ? AND (destino = 'cocina' OR destino = 'barra' OR (destino IS NULL AND (curso IS NULL OR curso NOT IN (1, 5, 6)))) AND estado_comanda NOT IN ('preparando', 'listo', 'entregado', 'anulado')",
+        [ordenId]
+      );
+      // Los productos que no son de cocina/barra se marcan como 'pagado'
+      await dbRun(
+        "UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (destino NOT IN ('cocina', 'barra') OR (destino IS NULL AND curso IN (1, 5, 6))) AND estado_comanda NOT IN ('pendiente', 'preparando', 'listo', 'entregado', 'anulado')",
+        [ordenId]
+      );
+    } else {
+      await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
+    }
 
     // Consultar todos los ítems de la orden para el tiquete final
     const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
@@ -6629,7 +6633,7 @@ async function procesarCobroOrden(ordenId, {
 
     if (orden.mesa_id) {
       const itemsPendientesCocina = await dbAll(
-        "SELECT id FROM DetalleOrden WHERE orden_id = ? AND destino = 'cocina' AND estado_comanda IN ('pendiente', 'preparando')",
+        "SELECT id FROM DetalleOrden WHERE orden_id = ? AND (destino = 'cocina' OR (destino IS NULL AND (curso IS NULL OR curso NOT IN (1, 5, 6)))) AND estado_comanda IN ('pendiente', 'preparando')",
         [ordenId]
       );
       const tieneItemsCocinaPendientes = itemsPendientesCocina.length > 0;
