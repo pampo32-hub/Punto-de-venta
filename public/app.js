@@ -2958,8 +2958,8 @@ function aplicarEnrutamientoPorRol() {
       perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(Admin)</small>`;
     }
   } else {
-    // Si no es admin, permitimos que adminTools esté accesible con PIN para no bloquear al usuario
-    if (adminTools) adminTools.style.display = 'flex';
+    // Si es salonero o cajero (no admin), ocultamos por completo el botón de Admin de la barra superior
+    if (adminTools) adminTools.style.display = 'none';
     if (btnComanderoEditar) btnComanderoEditar.style.display = 'none';
     if (btnComanderoEditarCat) btnComanderoEditarCat.style.display = 'none';
     if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'none';
@@ -3042,9 +3042,10 @@ window.irAPuntoDeVentaAdmin = function() {
   if (perfilBadge && estado.usuarioActual) {
     perfilBadge.textContent = estado.usuarioActual.perfilVisual || `${estado.usuarioActual.nombre} (${estado.usuarioActual.rol === 'developer' ? 'Desarrollador' : estado.usuarioActual.rol})`;
   }
+  const esAdmin = estado.usuarioActual?.rol === 'admin' || estado.usuarioActual?.rol === 'superadmin' || estado.usuarioActual?.rol === 'developer';
   const adminTools = document.getElementById('adminExtraActions');
-  if (adminTools) adminTools.style.display = 'flex';
-  document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
+  if (adminTools) adminTools.style.display = esAdmin ? 'flex' : 'none';
+  document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = esAdmin ? 'inline-flex' : 'none');
 
   const btnComanderoEditar = document.getElementById('btnComanderoEditarProd');
   if (btnComanderoEditar) btnComanderoEditar.style.display = 'inline-flex';
@@ -3415,9 +3416,9 @@ window.abrirModuloAdmin = async function(modulo) {
 
   document.getElementById('developerPortalView')?.classList.remove('active');
   document.getElementById('posMainView')?.classList.add('active');
-  document.body.classList.add('is-admin');
+  document.body.classList.toggle('is-admin', esAdmin);
   const adminTools = document.getElementById('adminExtraActions');
-  if (adminTools) adminTools.style.display = 'flex';
+  if (adminTools) adminTools.style.display = esAdmin ? 'flex' : 'none';
   if (typeof window.actualizarVisibilidadBotonesPurgaDev === 'function') {
     window.actualizarVisibilidadBotonesPurgaDev();
   }

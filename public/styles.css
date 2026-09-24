@@ -7384,6 +7384,13 @@ body.is-admin .admin-only-tab {
    PANEL CENTRAL DE ADMINISTRACIÓN (ADMIN & DEVELOPER)
    ============================================================================ */
 
+/* Ocultar botón de panel Admin para roles no autorizados (saloneros y cajeros) */
+body:not(.is-admin) #adminExtraActions,
+body:not(.is-admin) .admin-extra-actions,
+body:not(.is-admin) #btnAbrirPanelAdmin {
+  display: none !important;
+}
+
 .btn-admin-panel-trigger {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.28)) !important;
   color: #fbbf24 !important;
