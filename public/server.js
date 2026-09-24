@@ -94,7 +94,9 @@ db.serialize(() => {
   db.run("ALTER TABLE Inventario ADD COLUMN medida_shot_ml REAL DEFAULT 30", () => {});
   db.run("ALTER TABLE Inventario ADD COLUMN rendimiento_shots REAL DEFAULT 25", () => {});
   db.run("UPDATE Inventario SET es_licor = 1, capacidad_ml = 750, medida_shot_ml = 30, rendimiento_shots = 25 WHERE es_licor = 0 AND (categoria LIKE '%licor%' OR LOWER(nombre) LIKE '%ron %' OR LOWER(nombre) LIKE '%tequila%' OR LOWER(nombre) LIKE '%gin %' OR LOWER(nombre) LIKE '%whisky%' OR LOWER(nombre) LIKE '%vodka%')", () => {});
-  db.run("UPDATE Inventario SET es_licor = 0, capacidad_ml = CASE WHEN LOWER(nombre) LIKE '%lata%' OR LOWER(nombre) LIKE '%350%' THEN 350 ELSE 355 END, medida_shot_ml = CASE WHEN LOWER(nombre) LIKE '%lata%' OR LOWER(nombre) LIKE '%350%' THEN 350 ELSE 355 END, rendimiento_shots = 1 WHERE (LOWER(nombre) LIKE '%cerveza%' OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%heineken%' OR LOWER(nombre) LIKE '%corona%') AND (rendimiento_shots > 1 OR es_licor = 1 OR es_licor = '1')", () => {});
+  db.run("UPDATE Inventario SET es_licor = 0, capacidad_ml = 350, medida_shot_ml = 350, rendimiento_shots = 1 WHERE (LOWER(nombre) LIKE '%cerveza%' OR LOWER(nombre) LIKE '%imperial%' OR LOWER(nombre) LIKE '%pilsen%' OR LOWER(nombre) LIKE '%bavaria%' OR LOWER(nombre) LIKE '%heineken%' OR LOWER(nombre) LIKE '%corona%')", () => {});
+  db.run("UPDATE Inventario SET capacidad_ml = 350 WHERE capacidad_ml = 355", () => {});
+  db.run("UPDATE Inventario SET medida_shot_ml = 350 WHERE medida_shot_ml = 355", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN referencia TEXT", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN tipo_cambio REAL DEFAULT 1", () => {});
   db.run("ALTER TABLE Pagos ADD COLUMN monto_usd REAL DEFAULT 0", () => {});
@@ -8843,9 +8845,11 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
 
     const finalNegocioId = Number(req.negocioId || negocio_id || nIdReq || req.headers['x-negocio-id'] || 1);
     const esLic = es_licor ? 1 : 0;
-    const capMl = esLic ? (Number(capacidad_ml) || 750) : null;
-    const shotMl = esLic ? (Number(medida_shot_ml) || 30) : null;
-    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 10) / 10 : null;
+    let capMl = Number(capacidad_ml) || (esLic ? 750 : null);
+    if (Number(capMl) === 355) capMl = 350;
+    let shotMl = esLic ? (Number(medida_shot_ml) || 30) : (capMl || null);
+    if (Number(shotMl) === 355) shotMl = 350;
+    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 10) / 10 : (capMl ? 1 : null);
 
     const ahora = new Date().toISOString();
     const result = await dbRun(
@@ -8926,9 +8930,11 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     if (!insumoActual) return res.status(404).json({ error: 'Insumo no encontrado' });
 
     const esLic = es_licor !== undefined ? (es_licor ? 1 : 0) : insumoActual.es_licor;
-    const capMl = esLic ? (Number(capacidad_ml) || insumoActual.capacidad_ml || (unidad_medida === 'kg' ? 1000 : 750)) : null;
-    const shotMl = esLic ? (Number(medida_shot_ml) || insumoActual.medida_shot_ml || (unidad_medida === 'kg' ? 200 : 30)) : null;
-    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 100) / 100 : null;
+    let capMl = capacidad_ml !== undefined ? (Number(capacidad_ml) || null) : insumoActual.capacidad_ml;
+    if (Number(capMl) === 355) capMl = 350;
+    let shotMl = medida_shot_ml !== undefined ? (Number(medida_shot_ml) || null) : insumoActual.medida_shot_ml;
+    if (Number(shotMl) === 355) shotMl = 350;
+    const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 100) / 100 : (capMl ? 1 : null);
 
     await dbRun(
       `UPDATE Inventario SET 
@@ -9207,13 +9213,28 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
 
       let medidaAmigable = `${ing.cantidad} ${ing.unidad_medida || 'unidades'}`;
       let mlCalculados = null;
-      if (ing.es_licor) {
-        const capMl = ing.capacidad_ml || 750;
+      const esCervezaIng = Boolean(
+        /cerveza|imperial|pilsen|bavaria|heineken|corona|stella|budweiser|miller|rock\s*ice|smirnoff\s*ice/i.test(ing.insumo_nombre || '') ||
+        /cerveza/i.test(ing.insumo_categoria || ing.categoria || '') ||
+        (ing.unidad_medida && ing.unidad_medida.includes('botella') && (ing.capacidad_ml === 350 || ing.capacidad_ml === 355))
+      );
+
+      if (ing.es_licor || esCervezaIng) {
+        let capMl = ing.capacidad_ml || (esCervezaIng ? 350 : 750);
+        if (Number(capMl) === 355) capMl = 350;
         const mlUsados = Math.round(Number(ing.cantidad) * capMl * 10) / 10;
         mlCalculados = mlUsados;
         const oz = Math.round((mlUsados / 30) * 100) / 100;
         
-        if (Math.abs(oz - 0.25) <= 0.03) {
+        if (esCervezaIng) {
+          if (Math.abs(Number(ing.cantidad) - 1) <= 0.01) {
+            medidaAmigable = `1 Botella Cerveza (${capMl} ml)`;
+          } else if (Math.abs(Number(ing.cantidad) - 0.5) <= 0.01) {
+            medidaAmigable = `1/2 Botella Cerveza (${Math.round(capMl * 0.5)} ml)`;
+          } else {
+            medidaAmigable = `${ing.cantidad} bot. Cerveza (${Math.round(mlUsados)} ml)`;
+          }
+        } else if (Math.abs(oz - 0.25) <= 0.03) {
           medidaAmigable = '1/4 oz (7.5 ml)';
         } else if (Math.abs(oz - 0.5) <= 0.03) {
           medidaAmigable = '1/2 oz (15 ml)';
