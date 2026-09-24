@@ -8532,12 +8532,17 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 // --- RECETAS & ESCANDALLOS ---
 app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
   try {
-    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
+    const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
+    const productos = await dbAll(
+      'SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY categoria_id ASC, nombre ASC',
+      [negocioId, negocioId]
+    );
     const recetas = await dbAll(`
       SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-    `);
+      WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
+    `, [negocioId, negocioId]);
 
     const costosMap = {};
     const cantIngredientesMap = {};
@@ -8758,51 +8763,6 @@ app.delete('/api/admin/recetas/:productoId/ingredientes/:insumoId', verificarAdm
 
     io.emit('receta_actualizada', { producto_id: prodId });
     res.json({ ok: true, message: 'Ingrediente eliminado de la receta' });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
-  try {
-    const productos = await dbAll('SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 ORDER BY categoria_id ASC, nombre ASC');
-    const recetas = await dbAll(`
-      SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
-      FROM InventarioRecetas r
-      JOIN Inventario i ON r.insumo_id = i.id
-    `);
-
-    const costosMap = {};
-    const cantIngredientesMap = {};
-    recetas.forEach(r => {
-      const mermaFactor = 1 + (Number(r.merma_porcentaje) / 100);
-      const subtotal = Number(r.cantidad) * Number(r.costo_unitario) * mermaFactor;
-      costosMap[r.producto_id] = (costosMap[r.producto_id] || 0) + subtotal;
-      cantIngredientesMap[r.producto_id] = (cantIngredientesMap[r.producto_id] || 0) + 1;
-    });
-
-    const resumen = productos.map(p => {
-      const costo = Math.round((costosMap[p.id] || 0) * 100) / 100;
-      const pvp = Number(p.precio || 0);
-      const margenBruto = Math.round((pvp - costo) * 100) / 100;
-      const margenPorc = pvp > 0 ? Math.round((margenBruto / pvp) * 1000) / 10 : 0;
-      const foodCostPorc = pvp > 0 ? Math.round((costo / pvp) * 1000) / 10 : 0;
-
-      return {
-        id: p.id,
-        nombre: p.nombre,
-        categoria_id: p.categoria_id,
-        precio_venta: pvp,
-        costo_receta: costo,
-        margen_bruto: margenBruto,
-        margen_porcentaje: margenPorc,
-        food_cost_porcentaje: foodCostPorc,
-        total_ingredientes: cantIngredientesMap[p.id] || 0,
-        tiene_receta: Boolean(cantIngredientesMap[p.id])
-      };
-    });
-
-    res.json(resumen);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -1227,14 +1227,13 @@ window.guardarNuevoProducto = async function() {
     // Recargar catálogo y menú
     await cargarMenuDesdeBackend();
     if (typeof cargarInventarioAdmin === 'function') {
-      cargarInventarioAdmin();
       try { await cargarInventarioAdmin(); } catch(e) {}
+    }
+    if (typeof inicializarPanelRecetas === 'function') {
+      try { await inicializarPanelRecetas(); } catch(e) {}
     }
 
     if (fueDesdeReceta) {
-      if (typeof inicializarPanelRecetas === 'function') {
-        try { await inicializarPanelRecetas(); } catch(e) {}
-      }
       const nuevoId = data.producto?.id || data.id || (isEditing ? prodId : null);
       if (nuevoId) {
         const selectProd = document.getElementById('selectProductoEscandallo');
@@ -1285,7 +1284,10 @@ window.eliminarProductoDesdeModal = async function() {
     mostrarNotificacionCentro(`🗑️ Producto "${nombre}" desactivado del menú`, 'info');
     await cargarMenuDesdeBackend();
     if (typeof cargarInventarioAdmin === 'function') {
-      cargarInventarioAdmin();
+      try { await cargarInventarioAdmin(); } catch(e) {}
+    }
+    if (typeof inicializarPanelRecetas === 'function') {
+      try { await inicializarPanelRecetas(); } catch(e) {}
     }
   } catch (e) {
     alert('❌ Error al desactivar producto: ' + e.message);
@@ -19854,14 +19856,23 @@ window.renderOpcionesProductosReceta = function(lista, valorSeleccionado = null)
   const badgeConteo = document.getElementById('badgeConteoRecetas');
   if (!selectProd) return;
 
-  if (!lista || lista.length === 0) {
+  // Deduplicar productos por ID para máxima seguridad
+  const vistos = new Set();
+  const listaUnica = (lista || []).filter(r => {
+    const pid = String(r.producto_id || r.id);
+    if (!pid || vistos.has(pid)) return false;
+    vistos.add(pid);
+    return true;
+  });
+
+  if (listaUnica.length === 0) {
     selectProd.innerHTML = '<option value="">⚠️ No se encontraron platillos o bebidas</option>';
     if (badgeConteo) badgeConteo.textContent = '(0 encontrados)';
     return;
   }
 
   // Ordenar lista alfabéticamente de la A a la Z
-  const listaOrdenada = [...lista].sort((a, b) => {
+  const listaOrdenada = [...listaUnica].sort((a, b) => {
     const nomA = (a.producto_nombre || a.nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const nomB = (b.producto_nombre || b.nombre || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     return nomA.localeCompare(nomB, 'es', { sensitivity: 'base' });
