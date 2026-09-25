@@ -8446,8 +8446,8 @@ app.post('/api/caja/abrir', async (req, res) => {
       monto: montoNum
     });
 
-    io.emit('caja_actualizada', { negocio_id });
-    io.emit('cajas_fisicas_actualizadas', { negocio_id });
+    io.emit('caja_actualizada', { negocio_id: negocioId });
+    io.emit('cajas_fisicas_actualizadas', { negocio_id: negocioId });
     res.json({
       ok: true,
       message: `Nuevo turno abierto con éxito en ${cajaNombre || 'Caja'}`,
@@ -9407,7 +9407,7 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
       [negocioId, id, tipo, Math.abs(cantNum), insumo.stock_actual, nuevoStock, motivo, usuarioNombre, costoTotalAjuste, ahora]
     );
 
-    io.emit('inventario_actualizado', { negocio_id });
+    io.emit('inventario_actualizado', { negocio_id: negocioId });
 
     res.json({
       message: 'Ajuste de inventario aplicado',
