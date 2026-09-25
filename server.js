@@ -9053,6 +9053,9 @@ async function verificarAdmin(req, res, next) {
 // --- INVENTARIO ---
 app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
     const insumos = await dbAll(`
       SELECT i.*, p.nombre as producto_vinculado_nombre
@@ -9142,6 +9145,7 @@ app.post('/api/admin/inventario', verificarAdmin, async (req, res) => {
       modulo: 'inventario',
       detalle: `Creación de nuevo insumo "${nombre}" (${unidad_medida})${esLic ? ` [Botella ${capMl}ml, Shot ${shotMl}ml, Rinde ${rendShots} shots]` : ''}`
     });
+    if (io) io.emit('inventario_actualizado', { negocio_id: finalNegocioId });
 
     res.status(201).json({
       id: result.lastID,
@@ -9854,6 +9858,7 @@ app.put('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async (r
         if (diferencia !== 0) {
           const nuevoStock = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + diferencia) * 1000) / 1000);
           await dbRun('UPDATE Inventario SET stock_actual = ? WHERE id = ?', [nuevoStock, insumo.id]);
+          if (io) io.emit('inventario_actualizado', { negocio_id: Number(insumo.negocio_id || 1) });
         }
       }
     }
@@ -9921,6 +9926,7 @@ app.delete('/api/admin/inventario/kardex/movimientos/:id', verificarAdmin, async
         if (ajusteReversion !== 0) {
           const nuevoStock = Math.max(0, Math.round(((Number(insumo.stock_actual) || 0) + ajusteReversion) * 1000) / 1000);
           await dbRun('UPDATE Inventario SET stock_actual = ? WHERE id = ?', [nuevoStock, insumo.id]);
+          if (io) io.emit('inventario_actualizado', { negocio_id: Number(insumo.negocio_id || 1) });
         }
       }
     }

@@ -1797,11 +1797,17 @@ try {
     socket = io();
     socket.on('connect', () => console.log('✅ WebSockets activo.'));
     socket.on('nueva_comanda', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
+      const currentNid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       sonarCampanaCocina();
       cargarKDSDesdeBackend();
       cargarMesasDesdeBackend();
+      if (document.getElementById('view-inventario')?.classList.contains('active')) {
+        if (typeof cargarInventarioAdmin === 'function') cargarInventarioAdmin();
+      }
+      if (document.getElementById('devTabInventario')?.classList.contains('active')) {
+        if (typeof cargarInventarioDev === 'function') cargarInventarioDev();
+      }
     });
     socket.on('mesa_actualizada', (d) => {
       const currentNid = estado.negocioActual?.id || 1;
@@ -2078,25 +2084,31 @@ try {
       if (typeof poblarSelectorNegociosDev === 'function') poblarSelectorNegociosDev();
     });
     socket.on('inventario_actualizado', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
+      const currentNid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
-      if (document.getElementById('view-inventario')?.classList.contains('active')) {
+      if (typeof cargarInventarioAdmin === 'function') {
         cargarInventarioAdmin();
-        if (window.subTabInventarioActiva === 'recetas') {
-          if (typeof window.recargarFichaTecnicaActual === 'function') window.recargarFichaTecnicaActual();
-        } else if (window.subTabInventarioActiva === 'compras') {
-          if (typeof window.cargarSugerenciaCompras === 'function') window.cargarSugerenciaCompras();
-        } else if (window.subTabInventarioActiva === 'ventas') {
-          if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
-        } else if (window.subTabInventarioActiva === 'kardex') {
-          if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
-        }
+      }
+      if (document.getElementById('devTabInventario')?.classList.contains('active')) {
+        if (typeof cargarInventarioDev === 'function') cargarInventarioDev();
+      }
+      if (window.subTabInventarioActiva === 'recetas') {
+        if (typeof window.recargarFichaTecnicaActual === 'function') window.recargarFichaTecnicaActual();
+      } else if (window.subTabInventarioActiva === 'compras') {
+        if (typeof window.cargarSugerenciaCompras === 'function') window.cargarSugerenciaCompras();
+      } else if (window.subTabInventarioActiva === 'ventas') {
+        if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
+      } else if (window.subTabInventarioActiva === 'kardex') {
+        if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
       }
       if (typeof window.poblarSelectorKardexInsumos === 'function') window.poblarSelectorKardexInsumos();
       if (typeof window.cargarSugerenciaComprasBadge === 'function') window.cargarSugerenciaComprasBadge();
+      if (document.getElementById('modalAjusteInventario')?.classList.contains('active')) {
+        if (typeof actualizarEtiquetaUnidadAjuste === 'function') actualizarEtiquetaUnidadAjuste();
+      }
     });
     socket.on('venta_registrada', (d) => {
-      const currentNid = estado.negocioActual?.id || 1;
+      const currentNid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
       if (typeof window.consultarVentasProductosServidor === 'function') {
@@ -2105,13 +2117,16 @@ try {
       if (document.getElementById('modalCuentasCobradas')?.classList.contains('active')) {
         if (typeof window.recargarCuentasCobradasHoy === 'function') window.recargarCuentasCobradasHoy();
       }
-      if (document.getElementById('view-inventario')?.classList.contains('active')) {
+      if (typeof cargarInventarioAdmin === 'function') {
         cargarInventarioAdmin();
-        if (window.subTabInventarioActiva === 'ventas') {
-          if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
-        } else if (window.subTabInventarioActiva === 'kardex') {
-          if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
-        }
+      }
+      if (document.getElementById('devTabInventario')?.classList.contains('active')) {
+        if (typeof cargarInventarioDev === 'function') cargarInventarioDev();
+      }
+      if (window.subTabInventarioActiva === 'ventas') {
+        if (typeof window.consultarVentasProductosServidor === 'function') window.consultarVentasProductosServidor();
+      } else if (window.subTabInventarioActiva === 'kardex') {
+        if (typeof window.cargarKardexGeneral === 'function') window.cargarKardexGeneral();
       }
     });
     socket.on('ventas_actualizadas', (d) => {
@@ -3774,11 +3789,12 @@ window.cargarMetricasDev = async function() {
 };
 
 window.cargarInventarioDev = async function() {
-  const nid = estado.negocioActual?.id || 1;
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
   const rol = estado.usuarioActual?.rol || 'developer';
   try {
-    const res = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
-      headers: { 'x-user-rol': rol }
+    const res = await fetch(`/api/admin/inventario?negocio_id=${nid}&_t=${Date.now()}`, {
+      headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) },
+      cache: 'no-store'
     });
     if (!res.ok) throw new Error('Error al obtener inventario');
     const insumos = await res.json();
@@ -18750,6 +18766,9 @@ window.cambiarSubTabInventario = function(tab) {
     document.getElementById('tabBtnInvExistencias')?.classList.add('active');
     const panel = document.getElementById('invPanelExistencias');
     if (panel) panel.style.display = 'block';
+    if (typeof cargarInventarioAdmin === 'function') {
+      cargarInventarioAdmin();
+    }
   } else if (tab === 'recetas') {
     document.getElementById('tabBtnInvRecetas')?.classList.add('active');
     const panel = document.getElementById('invPanelRecetas');
@@ -19153,9 +19172,17 @@ window.ejecutarEliminarKardexConfirmado = async function(revertirStock) {
 async function cargarInventarioAdmin() {
   try {
     const rol = estado.usuarioActual ? estado.usuarioActual.rol : 'admin';
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/admin/inventario?negocio_id=${nid}`, {
-      headers: { 'x-user-rol': rol, 'x-negocio-id': String(nid) }
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
+    const headers = { 
+      'x-user-rol': rol, 
+      'x-negocio-id': String(nid) 
+    };
+    const pin = window._pinSupervisorActivo || sessionStorage.getItem('pos_supervisor_pin') || '';
+    if (pin) headers['x-supervisor-pin'] = pin;
+
+    const res = await fetch(`/api/admin/inventario?negocio_id=${nid}&_t=${Date.now()}`, {
+      headers,
+      cache: 'no-store'
     });
     if (!res.ok) throw new Error('Error al consultar inventario');
     estado.inventario = await res.json();
@@ -19181,31 +19208,43 @@ async function cargarInventarioAdmin() {
     if (elBajo) elBajo.textContent = totalBajos;
     if (elAgotado) elAgotado.textContent = totalAgotados;
 
-    // Llenar categorías en filtro
+    // Llenar categorías en filtro preservando selección
     const catSelect = document.getElementById('selectFiltroCatInventario');
     if (catSelect) {
+      const prevCat = catSelect.value || 'todas';
       const categorias = [...new Set(estado.inventario.map(i => i.categoria))].filter(Boolean);
       catSelect.innerHTML = '<option value="todas">Todas las Categorías</option>';
       categorias.forEach(c => {
         catSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
       });
+      catSelect.value = prevCat;
     }
 
     // Llenar select del modal de ajuste
     const ajusteSelect = document.getElementById('selectAjusteInsumo');
     if (ajusteSelect) {
+      const selVal = ajusteSelect.value;
       ajusteSelect.innerHTML = '';
       estado.inventario.forEach(i => {
-        ajusteSelect.innerHTML += `<option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>`;
+        ajusteSelect.innerHTML += `<option value="${i.id}" data-unidad="${escapeHtml(i.unidad_medida)}" data-stock="${i.stock_actual}" data-cat="${escapeHtml(i.categoria || '')}">${escapeHtml(i.nombre)} (Stock: ${i.stock_actual} ${i.unidad_medida})</option>`;
       });
+      if (selVal) ajusteSelect.value = selVal;
+      if (typeof actualizarEtiquetaUnidadAjuste === 'function') {
+        actualizarEtiquetaUnidadAjuste();
+      }
     }
 
-    renderTablaInventario(estado.inventario);
+    if (typeof filtrarTablaInventario === 'function') {
+      filtrarTablaInventario();
+    } else {
+      renderTablaInventario(estado.inventario);
+    }
     cargarSugerenciaComprasBadge();
   } catch (e) {
     console.error(e);
   }
 }
+window.cargarInventarioAdmin = cargarInventarioAdmin;
 
 function renderTablaInventario(items) {
   const tbody = document.getElementById('tbodyInventario');
@@ -19559,6 +19598,19 @@ window.guardarAjusteInventario = async function() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error al guardar ajuste');
+
+    if (data && data.nuevo_stock !== undefined && Array.isArray(estado.inventario)) {
+      const insItem = estado.inventario.find(i => Number(i.id) === Number(insumoId));
+      if (insItem) {
+        insItem.stock_actual = data.nuevo_stock;
+        insItem.estado_stock = data.nuevo_stock <= 0 ? 'agotado' : (data.nuevo_stock <= (insItem.stock_minimo || 0) ? 'bajo' : 'normal');
+        if (typeof filtrarTablaInventario === 'function') {
+          filtrarTablaInventario();
+        } else if (typeof renderTablaInventario === 'function') {
+          renderTablaInventario(estado.inventario);
+        }
+      }
+    }
 
     mostrarNotificacionCentro(`✅ Movimiento de inventario aplicado. Stock nuevo: ${data.nuevo_stock}`, 'success');
     if (typeof cerrarModalAjusteInventario === 'function') cerrarModalAjusteInventario();
@@ -25780,6 +25832,19 @@ window.ejecutarEliminarExistenciasBodegaConfirmado = async function() {
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error al eliminar existencias');
+
+    if (Array.isArray(estado.inventario)) {
+      const insItem = estado.inventario.find(i => Number(i.id) === Number(insumoId));
+      if (insItem) {
+        insItem.stock_actual = 0;
+        insItem.estado_stock = 'agotado';
+        if (typeof filtrarTablaInventario === 'function') {
+          filtrarTablaInventario();
+        } else if (typeof renderTablaInventario === 'function') {
+          renderTablaInventario(estado.inventario);
+        }
+      }
+    }
 
     cerrarModalEliminarExistenciasBodega();
     if (typeof mostrarNotificacionCentro === 'function') {
