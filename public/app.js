@@ -2598,7 +2598,19 @@ window.cargarUsuariosPublicosLogin = async function() {
       'sofia': '2222',
       'admin_beta': '1234',
       'mesero_beta': '1111',
-      'super_juan': '1234'
+      'super_juan': '1234',
+      'jival': '1234',
+      'Clon': '1234',
+      'salonero1': '1234',
+      'George': '1234'
+    };
+
+    const metaNegocios = {
+      1: { icono: '🍔', color: '#f59e0b' },
+      2: { icono: '🛠️', color: '#eab308' },
+      14: { icono: '🧪', color: '#38bdf8' },
+      16: { icono: '🍸', color: '#a855f7' },
+      18: { icono: '📦', color: '#10b981' }
     };
 
     // Agrupar usuarios por negocio
@@ -2607,10 +2619,11 @@ window.cargarUsuariosPublicosLogin = async function() {
       const nId = Number(u.negocio_id) || 1;
       const nNombre = u.negocio_nombre || (nId === 3 ? 'Bistro & Grill La Terraza' : 'La Terrazita');
       if (!porNegocio[nId]) {
+        const meta = metaNegocios[nId] || { icono: '🏬', color: '#38bdf8' };
         porNegocio[nId] = {
           nombre: nNombre,
-          icono: nId === 3 ? '🌴' : '🍔',
-          color: nId === 3 ? '#38bdf8' : '#f59e0b',
+          icono: meta.icono,
+          color: meta.color,
           usuarios: []
         };
       }
@@ -24590,14 +24603,6 @@ window.marcarCambiosPendientes = function(hayCambios) {
   });
 };
 
-// Alterna o fuerza el Modo Edición en la barra superior y en modales
-window.toggleModoEdicionGlobal = function(forzarEstado) {
-  if (forzarEstado !== undefined) {
-    _modoEdicionGlobalActivo = !!forzarEstado;
-  } else {
-    _modoEdicionGlobalActivo = !_modoEdicionGlobalActivo;
-  }
-
 window.activarModoEdicionEnVivo = function() {
   if (typeof window.toggleModoEdicionGlobal === 'function') {
     window.toggleModoEdicionGlobal(true);
@@ -24609,6 +24614,18 @@ window.desactivarModoEdicionEnVivo = function() {
     window.toggleModoEdicionGlobal(false);
   }
 };
+
+// Alterna o fuerza el Modo Edición en la barra superior y en modales
+window.toggleModoEdicionGlobal = function(forzarEstado) {
+  const previo = _modoEdicionGlobalActivo;
+  if (forzarEstado !== undefined) {
+    _modoEdicionGlobalActivo = !!forzarEstado;
+  } else {
+    _modoEdicionGlobalActivo = !_modoEdicionGlobalActivo;
+  }
+  if (previo === _modoEdicionGlobalActivo && forzarEstado !== undefined) {
+    return;
+  }
 
   const btnsModo = [
     document.getElementById('btnToggleModoEdicionTop'),

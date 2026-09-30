@@ -3098,6 +3098,11 @@ app.get('/api/mesas', async (req, res) => {
       } catch (_) {}
     }
 
+    let activeMerges = [];
+    try {
+      activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [negocioId, negocioId]);
+    } catch (_) {}
+
     const ahora = Date.now();
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
@@ -3146,27 +3151,21 @@ app.get('/api/mesas', async (req, res) => {
         }
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
-        const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
-        const rowsPend = ultimaOrden ? await dbAll(
-          "SELECT d.nombre_producto, d.hora_pedido, d.creado_en FROM DetalleOrden d WHERE d.orden_id = ? AND (d.destino = 'cocina' OR (d.destino IS NULL AND (d.curso IS NULL OR d.curso NOT IN (1, 5, 6)))) AND d.estado_comanda IN ('pendiente', 'preparando')",
-          [ultimaOrden.id]
-        ) : [];
+        const rowsPend = pendientes.filter(d => (d.destino === 'cocina' || (!d.destino && (!d.curso || ![1, 5, 6].includes(d.curso)))));
         if (rowsPend.length > 0) {
           m.estado = 'esperando';
           m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
           m.items_pendientes = m.platos_pendientes;
-          if (rowsPend[0].hora_pedido) {
-            m.primera_comanda_hora = rowsPend[0].hora_pedido;
-            m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(rowsPend[0].hora_pedido).getTime()) / 60000));
+          const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
+          if (firstHora) {
+            m.primera_comanda_hora = firstHora;
+            m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
           }
         } else {
           m.estado = 'ocupada';
           m.platos_pendientes = [];
           m.items_pendientes = [];
           m.minutos_espera = 0;
-        }
-        if (ultimaOrden) {
-          m.orden_activa_id = m.orden_activa_id || ultimaOrden.id;
         }
         m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
@@ -3220,24 +3219,6 @@ app.get('/api/mesas', async (req, res) => {
       });
 
       // Detectar si la mesa tiene una fusión activa en TableMerges
-      let activeMerges = [];
-      try {
-        await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          negocio_id INTEGER DEFAULT 1,
-          mesa_principal_id INTEGER NOT NULL,
-          mesa_secundaria_id INTEGER NOT NULL,
-          orden_principal_id INTEGER,
-          orden_secundaria_id INTEGER,
-          snapshot_a TEXT,
-          snapshot_b TEXT,
-          items_transferidos_ids TEXT,
-          creado_en TEXT,
-          activo INTEGER DEFAULT 1
-        )`);
-        activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [negocioId, negocioId]);
-      } catch (_) {}
-
       const mergeActivo = activeMerges.find(
         am => Number(am.mesa_principal_id) === Number(m.id) || Number(am.mesa_secundaria_id) === Number(m.id)
       );

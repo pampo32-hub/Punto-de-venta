@@ -13125,7 +13125,6 @@ body.theme-capsula-elegance .btn-prefactura-split {
 /* ELEMENTOS OCULTOS DE ACCESO RÁPIDO & PÁGINA WEB (RESTAURABLES) */
 /* ============================================================= */
 .btn-ver-pagina-top,
-.btn-ver-pagina-box,
-.demo-accounts-box {
+.btn-ver-pagina-box {
   display: none !important;
 }

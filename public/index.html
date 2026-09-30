@@ -117,13 +117,13 @@
 
         <form id="formLogin" onsubmit="event.preventDefault(); ejecutarLogin();">
           <div class="field-group">
-            <label>Usuario:</label>
-            <input type="text" id="loginUsuario" placeholder="Ej: dev, admin, carlos, sofia..." required autocomplete="username" />
+            <label>Usuario o PIN:</label>
+            <input type="text" id="loginUsuario" placeholder="Ej: dev, admin, o tu PIN de 4 dígitos..." autocomplete="username" />
           </div>
 
           <div class="field-group">
-            <label>Contraseña:</label>
-            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password" />
+            <label>Contraseña / PIN:</label>
+            <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
           </div>
 
           <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
@@ -138,9 +138,9 @@
           </a>
         </div>
 
-        <!-- SELECTOR RÁPIDO DE ACCESOS DIRECTOS (Oculto temporalmente) -->
-        <div class="demo-accounts-box" style="display:none !important;">
-          <span class="demo-title">⚡ Usuarios Disponibles (Toca para seleccionar):</span>
+        <!-- SELECTOR RÁPIDO DE ACCESOS DIRECTOS -->
+        <div class="demo-accounts-box">
+          <span class="demo-title">⚡ Comercios y Cuentas Disponibles (Toca para ingresar directo):</span>
           <div id="loginUsuariosDisponiblesGrid">
             <div class="negocio-login-group" style="margin-bottom: 12px;">
               <div style="font-size: 0.76rem; font-weight: 700; color: #f59e0b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
