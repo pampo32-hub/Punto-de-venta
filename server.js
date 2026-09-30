@@ -5618,7 +5618,33 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     };
   }
 
-  // 2. Procesar y normalizar detalles de productos nuevos
+  // 2. Procesar y normalizar detalles de productos nuevos (Pre-carga optimizada en lote)
+  const itemNegocioId = Number(negocioId || 1);
+  const idsProdBuscar = [...new Set(nuevosItems.map(it => parseInt(it.producto_id || it.id)).filter(id => !isNaN(id) && id > 0))];
+  const prodsCacheMap = new Map();
+  if (idsProdBuscar.length > 0) {
+    const placeholders = idsProdBuscar.map(() => '?').join(',');
+    const prodsFound = await dbAll(
+      `SELECT * FROM Productos WHERE id IN (${placeholders}) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
+      [...idsProdBuscar, itemNegocioId, itemNegocioId]
+    );
+    prodsFound.forEach(p => prodsCacheMap.set(Number(p.id), p));
+  }
+
+  const idsCatBuscar = [...new Set(nuevosItems.map(it => {
+    const pDb = prodsCacheMap.get(Number(it.producto_id || it.id));
+    return parseInt(pDb?.categoria_id || it.categoria_id || it.catId);
+  }).filter(id => !isNaN(id) && id > 0))];
+  const catsCacheMap = new Map();
+  if (idsCatBuscar.length > 0) {
+    const catPlaceholders = idsCatBuscar.map(() => '?').join(',');
+    const catsFound = await dbAll(
+      `SELECT * FROM Categorias WHERE id IN (${catPlaceholders}) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
+      [...idsCatBuscar, itemNegocioId, itemNegocioId]
+    );
+    catsFound.forEach(c => catsCacheMap.set(Number(c.id), c));
+  }
+
   const itemsProcesados = [];
   for (const it of nuevosItems) {
     let prodId = it.producto_id || it.id;
@@ -5627,11 +5653,10 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     let destino = it.destino;
     let curso = it.curso;
 
-    let prodDb = null;
-    const itemNegocioId = Number(negocioId || 1);
-    if (prodId) {
+    let prodDb = prodId ? prodsCacheMap.get(Number(prodId)) : null;
+    if (!prodDb && prodId) {
       prodDb = await dbGet('SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [prodId, itemNegocioId, itemNegocioId]);
-    } else if (nombre) {
+    } else if (!prodDb && nombre) {
       prodDb = await dbGet('SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nombre, `%${nombre}%`, itemNegocioId, itemNegocioId]);
     }
 
@@ -5647,9 +5672,9 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
-    let catDb = null;
     const catIdToCheck = prodDb?.categoria_id || it.categoria_id || it.catId;
-    if (catIdToCheck) {
+    let catDb = catIdToCheck ? catsCacheMap.get(Number(catIdToCheck)) : null;
+    if (!catDb && catIdToCheck) {
       catDb = await dbGet('SELECT * FROM Categorias WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catIdToCheck, itemNegocioId, itemNegocioId]);
     }
 
@@ -6481,6 +6506,13 @@ async function procesarCobroOrden(ordenId, {
     const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
 
     const itemsProcesadosCobro = [];
+    const cobroProdIds = [...new Set(itemsNuevos.map(it => parseInt(it.producto_id != null ? it.producto_id : it.id)).filter(id => !isNaN(id) && id > 0))];
+    const cobroProdsMap = new Map();
+    if (cobroProdIds.length > 0) {
+      const pl = cobroProdIds.map(() => '?').join(',');
+      const prodsFound = await dbAll(`SELECT * FROM Productos WHERE id IN (${pl})`, cobroProdIds);
+      prodsFound.forEach(p => cobroProdsMap.set(Number(p.id), p));
+    }
 
     for (const it of itemsNuevos) {
       const itNombre = it.nombre_producto || it.nombre || 'Producto';
@@ -6492,10 +6524,10 @@ async function procesarCobroOrden(ordenId, {
       let prodIdNum = parseInt(rawProdId);
       let prodId = (!isNaN(prodIdNum) && prodIdNum > 0) ? prodIdNum : null;
 
-      let prodDb = null;
-      if (prodId) {
+      let prodDb = prodId ? cobroProdsMap.get(Number(prodId)) : null;
+      if (!prodDb && prodId) {
         prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
-      } else if (itNombre) {
+      } else if (!prodDb && itNombre) {
         prodDb = await dbGet(
           'SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
           [itNombre, `%${itNombre}%`, ordenNegocioId, ordenNegocioId, itNombre]

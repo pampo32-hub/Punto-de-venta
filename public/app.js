@@ -1800,8 +1800,16 @@ try {
       const currentNid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
       if (d && d.negocio_id && Number(d.negocio_id) !== Number(currentNid)) return;
       sonarCampanaCocina();
-      cargarKDSDesdeBackend();
-      cargarMesasDesdeBackend();
+      if (typeof cargarKDSDesdeBackendDebounced === 'function') {
+        cargarKDSDesdeBackendDebounced(250);
+      } else {
+        cargarKDSDesdeBackend();
+      }
+      if (typeof cargarMesasDesdeBackendDebounced === 'function') {
+        cargarMesasDesdeBackendDebounced(250);
+      } else {
+        cargarMesasDesdeBackend();
+      }
       if (document.getElementById('view-inventario')?.classList.contains('active')) {
         if (typeof cargarInventarioAdmin === 'function') cargarInventarioAdmin();
       }
@@ -7956,15 +7964,37 @@ window.agregarAlTicketOneTap = async function(prodId) {
 };
 
 // ============================================================================
-// 6. MESAS, COMANDERO & KDS
+// 6. MESAS, COMANDERO & KDS (Optimización con In-Flight Deduplication & Debounce)
 // ============================================================================
-async function cargarMesasDesdeBackend() {
-  try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/mesas?negocio_id=${nid}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
-    const data = await res.json();
+let _inFlightCargarMesas = null;
+let _timerDebounceCargarMesas = null;
+
+window.cargarMesasDesdeBackendDebounced = function(delay = 200) {
+  if (_timerDebounceCargarMesas) clearTimeout(_timerDebounceCargarMesas);
+  _timerDebounceCargarMesas = setTimeout(() => {
+    cargarMesasDesdeBackend(true);
+  }, delay);
+};
+
+let _inFlightCargarKDS = null;
+let _timerDebounceCargarKDS = null;
+
+window.cargarKDSDesdeBackendDebounced = function(delay = 200) {
+  if (_timerDebounceCargarKDS) clearTimeout(_timerDebounceCargarKDS);
+  _timerDebounceCargarKDS = setTimeout(() => {
+    cargarKDSDesdeBackend(true);
+  }, delay);
+};
+
+async function cargarMesasDesdeBackend(force = false) {
+  if (_inFlightCargarMesas && !force) return _inFlightCargarMesas;
+  _inFlightCargarMesas = (async () => {
+    try {
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const res = await fetch(`/api/mesas?negocio_id=${nid}`, {
+        headers: { 'x-negocio-id': String(nid) }
+      });
+      const data = await res.json();
     estado.zonas = data.zonas || [];
     estado.mesas = (data.mesas || []).map(m => {
       const zonaObj = estado.zonas.find(z => z.id === m.zona_id);
@@ -8076,7 +8106,11 @@ async function cargarMesasDesdeBackend() {
         }
       } catch (errDb) {}
     }
+  } finally {
+    _inFlightCargarMesas = null;
   }
+  })();
+  return _inFlightCargarMesas;
 }
 window.cargarMesas = cargarMesasDesdeBackend;
 
@@ -11804,46 +11838,48 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     }
   };
 
-  try {
-    if (window.PosOfflineSync) {
-      const resSync = await window.PosOfflineSync.ejecutarConRespaldo({
-        tipo: 'ENVIAR_COMANDA',
-        endpoint: '/api/comandas/enviar',
-        metodo: 'POST',
-        payload: payloadComanda,
-        descripcion: `Comanda ${estado.mesaActiva.numero || ('Mesa ' + estado.mesaActiva.id)} (${estado.mesaActiva.items.length} productos)`,
-        optimistaFn: aplicarExitoLocal
+  // ⚡ RESPUESTA OPTIMISTA INMEDIATA (0 ms)
+  aplicarExitoLocal();
+
+  // Despacho de red en segundo plano (asíncrono, sin congelar la interfaz)
+  (async () => {
+    try {
+      if (window.PosOfflineSync) {
+        const resSync = await window.PosOfflineSync.ejecutarConRespaldo({
+          tipo: 'ENVIAR_COMANDA',
+          endpoint: '/api/comandas/enviar',
+          metodo: 'POST',
+          payload: payloadComanda,
+          descripcion: `Comanda ${estado.mesaActiva?.numero || ('Mesa ' + estado.mesaActiva?.id)} (${(payloadComanda.items || []).length} productos)`,
+          optimistaFn: () => {}
+        });
+        if (resSync && !resSync.exito && !resSync.offlineQueued) {
+          console.warn('Error al procesar la comanda en backend:', resSync.error);
+        }
+        return;
+      }
+
+      // Fallback directo
+      const res = await fetch('/api/comandas/enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
+        body: JSON.stringify(payloadComanda)
       });
-
-      if (resSync && (resSync.exito || resSync.offlineQueued)) {
-        aplicarExitoLocal();
-        return;
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn('Error en respuesta de comanda:', errJson.error);
       }
-      if (resSync && !resSync.exito) {
-        alert('Error al procesar la comanda: ' + (resSync.error || 'Intenta de nuevo'));
-        btn.disabled = false;
-        btn.innerHTML = textoOriginal;
-        return;
+    } catch (e) {
+      console.warn('Error enviando comanda en segundo plano:', e);
+    } finally {
+      if (typeof cargarMesasDesdeBackendDebounced === 'function') {
+        cargarMesasDesdeBackendDebounced(300);
+      }
+      if (typeof cargarKDSDesdeBackendDebounced === 'function') {
+        cargarKDSDesdeBackendDebounced(300);
       }
     }
-
-    // Fallback directo
-    const res = await fetch('/api/comandas/enviar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
-      body: JSON.stringify(payloadComanda)
-    });
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || 'Error al enviar comanda al servidor');
-    }
-    aplicarExitoLocal();
-  } catch (e) {
-    console.warn('Error enviando comanda, aplicando respaldo local:', e);
-    aplicarExitoLocal();
-  } finally {
-    actualizarBotonEnviarComanda();
-  }
+  })();
 });
 
 
@@ -11864,20 +11900,27 @@ if (btnLanzarFuertesEl) btnLanzarFuertesEl.addEventListener('click', async () =>
   }
 });
 
-// KDS
-async function cargarKDSDesdeBackend() {
-  try {
-    const activeTab = document.querySelector('.kds-tab.active');
-    const dest = activeTab ? activeTab.dataset.kdsDest : 'cocina';
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const res = await fetch(`/api/kds?destino=${dest}&negocio_id=${nid}`, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
-    estado.comandasKDS = await res.json();
-    renderKDS();
-    const counter = document.getElementById('kdsCounter');
-    if (counter) counter.textContent = Array.isArray(estado.comandasKDS) ? estado.comandasKDS.length : 0;
-  } catch (e) {}
+// KDS (Optimizado con In-Flight Guard)
+async function cargarKDSDesdeBackend(force = false) {
+  if (_inFlightCargarKDS && !force) return _inFlightCargarKDS;
+  _inFlightCargarKDS = (async () => {
+    try {
+      const activeTab = document.querySelector('.kds-tab.active');
+      const dest = activeTab ? activeTab.dataset.kdsDest : 'cocina';
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const res = await fetch(`/api/kds?destino=${dest}&negocio_id=${nid}`, {
+        headers: { 'x-negocio-id': String(nid) }
+      });
+      estado.comandasKDS = await res.json();
+      renderKDS();
+      const counter = document.getElementById('kdsCounter');
+      if (counter) counter.textContent = Array.isArray(estado.comandasKDS) ? estado.comandasKDS.length : 0;
+    } catch (e) {
+    } finally {
+      _inFlightCargarKDS = null;
+    }
+  })();
+  return _inFlightCargarKDS;
 }
 
 
@@ -12247,17 +12290,25 @@ window.resetearEstadoFinancieroCero = function() {
   if (rowTotalUSD) rowTotalUSD.style.display = aceptaUSD ? 'flex' : 'none';
 };
 
-async function cargarCajaDesdeBackend(cajaIdFiltro = null) {
-  try {
-    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
-    const urlCaja = cajaIdFiltro 
-      ? `/api/caja/actual?negocio_id=${nid}&caja_id=${cajaIdFiltro}`
-      : (window._cajaVisualFiltroId ? `/api/caja/actual?negocio_id=${nid}&caja_id=${window._cajaVisualFiltroId}` : `/api/caja/actual?negocio_id=${nid}`);
+let _inFlightCargarCaja = null;
+async function cargarCajaDesdeBackend(cajaIdFiltro = null, force = false) {
+  // Si la vista de caja no está visible en pantalla y no se fuerza, marcar pendiente y ahorrar petición
+  if (!force && !document.getElementById('view-caja')?.classList.contains('active')) {
+    window._cajaRequiereRefresco = true;
+    return;
+  }
+  if (_inFlightCargarCaja && !force) return _inFlightCargarCaja;
+  _inFlightCargarCaja = (async () => {
+    try {
+      const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
+      const urlCaja = cajaIdFiltro 
+        ? `/api/caja/actual?negocio_id=${nid}&caja_id=${cajaIdFiltro}`
+        : (window._cajaVisualFiltroId ? `/api/caja/actual?negocio_id=${nid}&caja_id=${window._cajaVisualFiltroId}` : `/api/caja/actual?negocio_id=${nid}`);
 
-    const res = await fetch(urlCaja, {
-      headers: { 'x-negocio-id': String(nid) }
-    });
-    const data = await res.json();
+      const res = await fetch(urlCaja, {
+        headers: { 'x-negocio-id': String(nid) }
+      });
+      const data = await res.json();
 
     // Actualizar selector de turnos activos múltiples si existen
     const selTurnos = document.getElementById('selCambiarVistaCajaTurno');
@@ -12431,7 +12482,11 @@ async function cargarCajaDesdeBackend(cajaIdFiltro = null) {
     renderTipPoolTable();
   } catch (e) {
     console.warn('Error cargando caja:', e);
+  } finally {
+    _inFlightCargarCaja = null;
   }
+  })();
+  return _inFlightCargarCaja;
 }
 
 window.cambiarTurnoCajaVisual = function(cajaId) {
@@ -15200,9 +15255,17 @@ window.ejecutarCobroFinal = async function() {
 
         mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
 
-        if (typeof cargarMesasDesdeBackend === 'function') await cargarMesasDesdeBackend();
+        if (typeof cargarMesasDesdeBackendDebounced === 'function') {
+          cargarMesasDesdeBackendDebounced(250);
+        } else if (typeof cargarMesasDesdeBackend === 'function') {
+          cargarMesasDesdeBackend();
+        }
         if (typeof cargarCajaDesdeBackend === 'function') cargarCajaDesdeBackend();
-        if (typeof cargarKDSDesdeBackend === 'function') cargarKDSDesdeBackend();
+        if (typeof cargarKDSDesdeBackendDebounced === 'function') {
+          cargarKDSDesdeBackendDebounced(250);
+        } else if (typeof cargarKDSDesdeBackend === 'function') {
+          cargarKDSDesdeBackend();
+        }
       } else {
         // Quedan personas o productos pendientes
         const esModoPartesIgualesRestante = Boolean(
@@ -15390,13 +15453,17 @@ window.ejecutarCobroFinal = async function() {
       sessionStorage.setItem('pos_active_view', 'salon');
       localStorage.setItem('pos_active_view', 'salon');
 
-      if (typeof cargarMesasDesdeBackend === 'function') {
-        await cargarMesasDesdeBackend();
+      if (typeof cargarMesasDesdeBackendDebounced === 'function') {
+        cargarMesasDesdeBackendDebounced(250);
+      } else if (typeof cargarMesasDesdeBackend === 'function') {
+        cargarMesasDesdeBackend();
       }
       if (typeof cargarCajaDesdeBackend === 'function') {
         cargarCajaDesdeBackend();
       }
-      if (typeof cargarKDSDesdeBackend === 'function') {
+      if (typeof cargarKDSDesdeBackendDebounced === 'function') {
+        cargarKDSDesdeBackendDebounced(250);
+      } else if (typeof cargarKDSDesdeBackend === 'function') {
         cargarKDSDesdeBackend();
       }
 

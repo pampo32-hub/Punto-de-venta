@@ -3098,6 +3098,11 @@ app.get('/api/mesas', async (req, res) => {
       } catch (_) {}
     }
 
+    let activeMerges = [];
+    try {
+      activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [negocioId, negocioId]);
+    } catch (_) {}
+
     const ahora = Date.now();
     for (const m of mesas) {
       const items = itemsByOrder[m.orden_activa_id] || [];
@@ -3146,27 +3151,21 @@ app.get('/api/mesas', async (req, res) => {
         }
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
-        const ultimaOrden = await dbGet('SELECT id FROM Ordenes WHERE mesa_id = ? ORDER BY id DESC LIMIT 1', [m.id]);
-        const rowsPend = ultimaOrden ? await dbAll(
-          "SELECT d.nombre_producto, d.hora_pedido, d.creado_en FROM DetalleOrden d WHERE d.orden_id = ? AND (d.destino = 'cocina' OR (d.destino IS NULL AND (d.curso IS NULL OR d.curso NOT IN (1, 5, 6)))) AND d.estado_comanda IN ('pendiente', 'preparando')",
-          [ultimaOrden.id]
-        ) : [];
+        const rowsPend = pendientes.filter(d => (d.destino === 'cocina' || (!d.destino && (!d.curso || ![1, 5, 6].includes(d.curso)))));
         if (rowsPend.length > 0) {
           m.estado = 'esperando';
           m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
           m.items_pendientes = m.platos_pendientes;
-          if (rowsPend[0].hora_pedido) {
-            m.primera_comanda_hora = rowsPend[0].hora_pedido;
-            m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(rowsPend[0].hora_pedido).getTime()) / 60000));
+          const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
+          if (firstHora) {
+            m.primera_comanda_hora = firstHora;
+            m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
           }
         } else {
           m.estado = 'ocupada';
           m.platos_pendientes = [];
           m.items_pendientes = [];
           m.minutos_espera = 0;
-        }
-        if (ultimaOrden) {
-          m.orden_activa_id = m.orden_activa_id || ultimaOrden.id;
         }
         m.orden_total = m.orden_total || 0;
         m.cliente = clientePreservado;
@@ -3220,24 +3219,6 @@ app.get('/api/mesas', async (req, res) => {
       });
 
       // Detectar si la mesa tiene una fusión activa en TableMerges
-      let activeMerges = [];
-      try {
-        await dbRun(`CREATE TABLE IF NOT EXISTS TableMerges (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          negocio_id INTEGER DEFAULT 1,
-          mesa_principal_id INTEGER NOT NULL,
-          mesa_secundaria_id INTEGER NOT NULL,
-          orden_principal_id INTEGER,
-          orden_secundaria_id INTEGER,
-          snapshot_a TEXT,
-          snapshot_b TEXT,
-          items_transferidos_ids TEXT,
-          creado_en TEXT,
-          activo INTEGER DEFAULT 1
-        )`);
-        activeMerges = await dbAll('SELECT * FROM TableMerges WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [negocioId, negocioId]);
-      } catch (_) {}
-
       const mergeActivo = activeMerges.find(
         am => Number(am.mesa_principal_id) === Number(m.id) || Number(am.mesa_secundaria_id) === Number(m.id)
       );
@@ -5637,7 +5618,33 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     };
   }
 
-  // 2. Procesar y normalizar detalles de productos nuevos
+  // 2. Procesar y normalizar detalles de productos nuevos (Pre-carga optimizada en lote)
+  const itemNegocioId = Number(negocioId || 1);
+  const idsProdBuscar = [...new Set(nuevosItems.map(it => parseInt(it.producto_id || it.id)).filter(id => !isNaN(id) && id > 0))];
+  const prodsCacheMap = new Map();
+  if (idsProdBuscar.length > 0) {
+    const placeholders = idsProdBuscar.map(() => '?').join(',');
+    const prodsFound = await dbAll(
+      `SELECT * FROM Productos WHERE id IN (${placeholders}) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
+      [...idsProdBuscar, itemNegocioId, itemNegocioId]
+    );
+    prodsFound.forEach(p => prodsCacheMap.set(Number(p.id), p));
+  }
+
+  const idsCatBuscar = [...new Set(nuevosItems.map(it => {
+    const pDb = prodsCacheMap.get(Number(it.producto_id || it.id));
+    return parseInt(pDb?.categoria_id || it.categoria_id || it.catId);
+  }).filter(id => !isNaN(id) && id > 0))];
+  const catsCacheMap = new Map();
+  if (idsCatBuscar.length > 0) {
+    const catPlaceholders = idsCatBuscar.map(() => '?').join(',');
+    const catsFound = await dbAll(
+      `SELECT * FROM Categorias WHERE id IN (${catPlaceholders}) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
+      [...idsCatBuscar, itemNegocioId, itemNegocioId]
+    );
+    catsFound.forEach(c => catsCacheMap.set(Number(c.id), c));
+  }
+
   const itemsProcesados = [];
   for (const it of nuevosItems) {
     let prodId = it.producto_id || it.id;
@@ -5646,11 +5653,10 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     let destino = it.destino;
     let curso = it.curso;
 
-    let prodDb = null;
-    const itemNegocioId = Number(negocioId || 1);
-    if (prodId) {
+    let prodDb = prodId ? prodsCacheMap.get(Number(prodId)) : null;
+    if (!prodDb && prodId) {
       prodDb = await dbGet('SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [prodId, itemNegocioId, itemNegocioId]);
-    } else if (nombre) {
+    } else if (!prodDb && nombre) {
       prodDb = await dbGet('SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nombre, `%${nombre}%`, itemNegocioId, itemNegocioId]);
     }
 
@@ -5666,9 +5672,9 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       prodId = 1;
     }
 
-    let catDb = null;
     const catIdToCheck = prodDb?.categoria_id || it.categoria_id || it.catId;
-    if (catIdToCheck) {
+    let catDb = catIdToCheck ? catsCacheMap.get(Number(catIdToCheck)) : null;
+    if (!catDb && catIdToCheck) {
       catDb = await dbGet('SELECT * FROM Categorias WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [catIdToCheck, itemNegocioId, itemNegocioId]);
     }
 
@@ -6500,6 +6506,13 @@ async function procesarCobroOrden(ordenId, {
     const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
 
     const itemsProcesadosCobro = [];
+    const cobroProdIds = [...new Set(itemsNuevos.map(it => parseInt(it.producto_id != null ? it.producto_id : it.id)).filter(id => !isNaN(id) && id > 0))];
+    const cobroProdsMap = new Map();
+    if (cobroProdIds.length > 0) {
+      const pl = cobroProdIds.map(() => '?').join(',');
+      const prodsFound = await dbAll(`SELECT * FROM Productos WHERE id IN (${pl})`, cobroProdIds);
+      prodsFound.forEach(p => cobroProdsMap.set(Number(p.id), p));
+    }
 
     for (const it of itemsNuevos) {
       const itNombre = it.nombre_producto || it.nombre || 'Producto';
@@ -6511,10 +6524,10 @@ async function procesarCobroOrden(ordenId, {
       let prodIdNum = parseInt(rawProdId);
       let prodId = (!isNaN(prodIdNum) && prodIdNum > 0) ? prodIdNum : null;
 
-      let prodDb = null;
-      if (prodId) {
+      let prodDb = prodId ? cobroProdsMap.get(Number(prodId)) : null;
+      if (!prodDb && prodId) {
         prodDb = await dbGet('SELECT * FROM Productos WHERE id = ?', [prodId]);
-      } else if (itNombre) {
+      } else if (!prodDb && itNombre) {
         prodDb = await dbGet(
           'SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
           [itNombre, `%${itNombre}%`, ordenNegocioId, ordenNegocioId, itNombre]
