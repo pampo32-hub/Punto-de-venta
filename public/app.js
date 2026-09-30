@@ -15262,7 +15262,7 @@ window.ejecutarCobroFinal = async function() {
           mesaEnLista.estado = estadoFinalMesa;
           mesaEnLista.orden_total = 0;
           mesaEnLista.total = 0;
-          mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(estado.mesaActiva?.orden_total) || 0);
+          mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(totalNum) || Number(estado.mesaActiva?.orden_total) || 0);
           mesaEnLista.pidio_cuenta_qr = 0;
           mesaEnLista.platos_pendientes = itemsPendientesCocina.map(it => it.nombre_producto || it.nombre);
           mesaEnLista.items_pendientes = mesaEnLista.platos_pendientes;
@@ -15464,7 +15464,7 @@ window.ejecutarCobroFinal = async function() {
           mesaEnLista.estado = estadoFinalMesa;
           mesaEnLista.orden_total = 0;
           mesaEnLista.total = 0;
-          mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(monto) || Number(montoTotalCobrar) || 0);
+          mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(totalNum) || 0);
           mesaEnLista.pidio_cuenta_qr = 0;
           mesaEnLista.platos_pendientes = itemsPendientesCocina.map(it => it.nombre_producto || it.nombre);
           mesaEnLista.items_pendientes = mesaEnLista.platos_pendientes;
