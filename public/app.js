@@ -10059,23 +10059,28 @@ async function abrirComanderoMesa(mesaId) {
       mesa.descuento_autorizado_por = data.orden.descuento_autorizado_por || '';
       const esOrdenCompletamentePagada = (data.orden.estado === 'pagada');
       mesa.items = (data.items || [])
-        .filter(it => it.estado_comanda !== 'anulado' && (esOrdenCompletamentePagada || (it.estado_comanda !== 'pagado' && !it.pagado)))
-        .map(it => ({
-          id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
-          id: it.producto_id || it.id,
-          nombre: it.nombre_producto || it.nombre,
-          precio: Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0,
-          cantidad: Number(it.cantidad) || 1,
-          notas: it.notas || '',
-          curso: it.curso || 2,
-          destino: it.destino || 'cocina',
-          comensal: it.comensal || 'General',
-          origen_mesa_numero: it.origen_mesa_numero || null,
-          enviado: it.enviado !== false,
-          offlinePendiente: Boolean(it.offlinePendiente),
-          en_happy_hour: Boolean(it.en_happy_hour),
-          pagado: esOrdenCompletamentePagada || it.estado_comanda === 'pagado'
-        }));
+        .filter(it => it.estado_comanda !== 'anulado')
+        .map(it => {
+          const estaPagado = Boolean(esOrdenCompletamentePagada || it.pagado || it.estado_comanda === 'pagado');
+          return {
+            id_detalle_existente: it.id_detalle_existente || (it.offlinePendiente ? null : it.id),
+            id: it.producto_id || it.id,
+            nombre: it.nombre_producto || it.nombre,
+            precio: Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0,
+            cantidad: Number(it.cantidad) || 1,
+            notas: it.notas || '',
+            curso: it.curso || 2,
+            destino: it.destino || 'cocina',
+            comensal: it.comensal || 'General',
+            origen_mesa_numero: it.origen_mesa_numero || null,
+            enviado: it.enviado !== false,
+            offlinePendiente: Boolean(it.offlinePendiente),
+            en_happy_hour: Boolean(it.en_happy_hour),
+            pagado: estaPagado,
+            ya_pagado: estaPagado,
+            estado_comanda: it.estado_comanda
+          };
+        });
 
       // Si la mesa tenía pedidos offline, asegurar que el estado visual de la mesa refleje consumo
       if (mesa.items.length > 0 && mesa.estado === 'libre') {
@@ -10984,11 +10989,13 @@ function renderTicketItems() {
       ? `<span class="hh-promo-badge">🍸 2x1</span>`
       : '';
 
-    const estadoEnvioBadge = it.enviado 
-      ? (it.offlinePendiente 
-          ? '<small style="color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.15); padding:1px 6px; border-radius:4px;">🟡 Guardado offline</small>' 
-          : '<small style="color:#10b981;">✓ Enviado</small>')
-      : '';
+    const estadoEnvioBadge = (it.pagado || it.ya_pagado)
+      ? '<small style="color:#10b981; font-weight:700; background:rgba(16,185,129,0.18); padding:1px 6px; border-radius:4px; border:1px solid rgba(16,185,129,0.35);">✓ Pagado</small>'
+      : (it.enviado 
+          ? (it.offlinePendiente 
+              ? '<small style="color:#f59e0b; font-weight:700; background:rgba(245,158,11,0.15); padding:1px 6px; border-radius:4px;">🟡 Guardado offline</small>' 
+              : '<small style="color:#10b981;">✓ Enviado</small>')
+          : '');
 
     const comensalTag = (it.comensal && it.comensal !== 'General' && !hayMultiplesComensales)
       ? `<span class="badge-comensal-tag">👤 ${it.comensal}</span>`
@@ -12044,11 +12051,20 @@ function renderKDS() {
       ? `<span class="badge-para-llevar" style="background:rgba(236,72,153,0.22); color:#f472b6; border:1px solid rgba(236,72,153,0.45); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">🛍️ PARA LLEVAR</span>`
       : '';
 
+    const esPagadaKds = Boolean(
+      t.pagada ||
+      t.items.some(i => i.pagado || i.orden_estado === 'pagada' || (i.orden_total_pagado > 0 && i.orden_total_pagado >= i.orden_total))
+    );
+    const badgePagadaHtml = esPagadaKds
+      ? `<span class="badge-kds-pagado" style="background:rgba(34,197,94,0.22); color:#4ade80; border:1px solid rgba(34,197,94,0.45); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">🟢 PAGADO</span>`
+      : '';
+
     card.innerHTML = `
       <div class="kds-top">
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="kds-mesa-label">${escapeHtml(t.mesaNumero)}</span>
           ${badgeParaLlevarHtml}
+          ${badgePagadaHtml}
           <span class="badge-comanda-num" style="background:rgba(59,130,246,0.18); color:#60a5fa; border:1px solid rgba(59,130,246,0.35); font-size:0.72rem; font-weight:800; padding:1px 6px; border-radius:4px;">Comanda #${t.comandaNumero}</span>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -15227,34 +15243,36 @@ window.ejecutarCobroFinal = async function() {
       estado.cobroSplitPersonaIndex = null;
 
       if (esLiquidacionFinal) {
-        // Todas las cuentas liquidadas: liberar mesa, limpiar comanda y volver al salón
+        // Todas las cuentas liquidadas de la mesa
         const mesaIdCerrada = estado.mesaActiva?.id;
+        const mesaEnLista = mesaIdCerrada ? (estado.mesas || []).find(m => Number(m.id) === Number(mesaIdCerrada)) : null;
+        const itemsMesa = (mesaEnLista?.items || estado.mesaActiva?.items || []);
+        
+        // Marcar items como pagados
+        itemsMesa.forEach(it => { it.pagado = true; it.ya_pagado = true; });
+
+        const itemsPendientesCocina = itemsMesa.filter(
+          it => (it.destino === 'cocina' || (!it.destino && (!it.curso || ![1, 5, 6].includes(it.curso)))) &&
+                (it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando' || (!it.estado_comanda && it.enviado))
+        );
+        const tienePendientes = itemsPendientesCocina.length > 0;
+        const estadoFinalMesa = tienePendientes ? 'esperando' : 'ocupada';
+
+        if (mesaEnLista) {
+          mesaEnLista.estado = estadoFinalMesa;
+          mesaEnLista.orden_total = 0;
+          mesaEnLista.total = 0;
+          mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(estado.mesaActiva?.orden_total) || 0);
+          mesaEnLista.pidio_cuenta_qr = 0;
+          mesaEnLista.platos_pendientes = itemsPendientesCocina.map(it => it.nombre_producto || it.nombre);
+          mesaEnLista.items_pendientes = mesaEnLista.platos_pendientes;
+        }
         if (estado.mesaActiva) {
-          try { if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) { window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {}); } } catch (_) {}
-          estado.mesaActiva.estado = 'libre';
-          estado.mesaActiva.cliente = null;
-          estado.mesaActiva.mesa_cliente = null;
-          estado.mesaActiva.items = [];
-          estado.mesaActiva.platos_pendientes = [];
-          estado.mesaActiva.items_pendientes = [];
-          estado.mesaActiva.orden_id = null;
-          estado.mesaActiva.orden_activa_id = null;
+          estado.mesaActiva.estado = estadoFinalMesa;
           estado.mesaActiva.orden_total = 0;
+          estado.mesaActiva.total = 0;
           estado.mesaActiva.pidio_cuenta_qr = 0;
           estado.mesaActiva.cuenta_pedida = false;
-        }
-        if (mesaIdCerrada) {
-          const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(mesaIdCerrada));
-          if (mesaEnLista) {
-            mesaEnLista.cliente = null;
-            mesaEnLista.mesa_cliente = null;
-            mesaEnLista.estado = 'libre';
-            mesaEnLista.orden_total = 0;
-            mesaEnLista.orden_activa_id = null;
-            mesaEnLista.items = [];
-            mesaEnLista.platos_pendientes = [];
-            mesaEnLista.items_pendientes = [];
-          }
         }
 
         // Limpiar comanda activa
@@ -15428,32 +15446,35 @@ window.ejecutarCobroFinal = async function() {
           sonarCampanaCocina();
         }
       } else {
+        const mesaIdCerrada = mesaIdCobrada || estado.mesaActiva?.id;
+        const mesaEnLista = mesaIdCerrada ? (estado.mesas || []).find(m => Number(m.id) === Number(mesaIdCerrada)) : null;
+        const itemsMesa = (mesaEnLista?.items || estado.mesaActiva?.items || []);
+
+        // Marcar items como pagados
+        itemsMesa.forEach(it => { it.pagado = true; it.ya_pagado = true; });
+
+        const itemsPendientesCocina = itemsMesa.filter(
+          it => (it.destino === 'cocina' || (!it.destino && (!it.curso || ![1, 5, 6].includes(it.curso)))) &&
+                (it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando' || (!it.estado_comanda && it.enviado))
+        );
+        const tienePendientes = itemsPendientesCocina.length > 0;
+        const estadoFinalMesa = tienePendientes ? 'esperando' : 'ocupada';
+
+        if (mesaEnLista) {
+          mesaEnLista.estado = estadoFinalMesa;
+          mesaEnLista.orden_total = 0;
+          mesaEnLista.total = 0;
+          mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(monto) || Number(montoTotalCobrar) || 0);
+          mesaEnLista.pidio_cuenta_qr = 0;
+          mesaEnLista.platos_pendientes = itemsPendientesCocina.map(it => it.nombre_producto || it.nombre);
+          mesaEnLista.items_pendientes = mesaEnLista.platos_pendientes;
+        }
         if (estado.mesaActiva) {
-          try { if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) { window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {}); } } catch (_) {}
-          estado.mesaActiva.estado = 'libre';
-          estado.mesaActiva.cliente = null;
-          estado.mesaActiva.mesa_cliente = null;
-          estado.mesaActiva.items = [];
-          estado.mesaActiva.platos_pendientes = [];
-          estado.mesaActiva.items_pendientes = [];
-          estado.mesaActiva.orden_id = null;
-          estado.mesaActiva.orden_activa_id = null;
+          estado.mesaActiva.estado = estadoFinalMesa;
           estado.mesaActiva.orden_total = 0;
+          estado.mesaActiva.total = 0;
           estado.mesaActiva.pidio_cuenta_qr = 0;
           estado.mesaActiva.cuenta_pedida = false;
-        }
-        if (mesaIdCobrada) {
-          const mesaEnLista = (estado.mesas || []).find(m => Number(m.id) === Number(mesaIdCobrada));
-          if (mesaEnLista) {
-            mesaEnLista.cliente = null;
-            mesaEnLista.mesa_cliente = null;
-            mesaEnLista.estado = 'libre';
-            mesaEnLista.orden_total = 0;
-            mesaEnLista.orden_activa_id = null;
-            mesaEnLista.items = [];
-            mesaEnLista.platos_pendientes = [];
-            mesaEnLista.items_pendientes = [];
-          }
         }
       }
 

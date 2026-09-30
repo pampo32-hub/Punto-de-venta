@@ -3065,7 +3065,15 @@ app.get('/api/mesas', async (req, res) => {
              o.transferida_de as orden_transferida_de
       FROM Mesas m
       LEFT JOIN Zonas z ON m.zona_id = z.id
-      LEFT JOIN Ordenes o ON m.id = o.mesa_id AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1)) AND o.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+      LEFT JOIN Ordenes o ON o.id = (
+        SELECT MAX(o2.id) FROM Ordenes o2 
+        WHERE o2.mesa_id = m.id 
+          AND (o2.negocio_id = ? OR (o2.negocio_id IS NULL AND ? = 1))
+          AND (
+            o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+            OR (o2.estado = 'pagada' AND m.estado IN ('esperando', 'ocupada', 'activa'))
+          )
+      )
       WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
       ORDER BY m.id ASC
     `, [negocioId, negocioId, negocioId, negocioId]);
@@ -3080,7 +3088,7 @@ app.get('/api/mesas', async (req, res) => {
     if (activeOrderIds.length > 0) {
       const placeholders = activeOrderIds.map(() => '?').join(',');
       const allItems = await dbAll(
-        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' AND estado_comanda != 'pagado' ORDER BY hora_pedido ASC, id ASC`,
+        `SELECT * FROM DetalleOrden WHERE orden_id IN (${placeholders}) AND estado_comanda != 'anulado' ORDER BY hora_pedido ASC, id ASC`,
         activeOrderIds
       );
       for (const it of allItems) {
@@ -3116,6 +3124,7 @@ app.get('/api/mesas', async (req, res) => {
         m.subtotal_consumos = subtotalItems;
         m.total_original = subtotalItems;
       }
+      m.items = items;
       const cocinaItems = items.filter(
         it => it.destino === 'cocina' && it.estado_comanda !== 'anulado'
       );
@@ -3143,12 +3152,45 @@ app.get('/api/mesas', async (req, res) => {
           dbRun("UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [new Date().toISOString(), m.id]).catch(() => {});
         }
       } else if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta') {
-        const estadoCalculado = evaluarEstadoMesaKDS(items);
-        if (m.estado !== estadoCalculado) {
-          m.estado = estadoCalculado;
-          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
-          dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
+        const rowsPend = pendientes.filter(d => (d.destino === 'cocina' || (!d.destino && (!d.curso || ![1, 5, 6].includes(d.curso)))));
+        if (m.orden_total === 0 && (m.total_pagado || 0) > 0) {
+          // Orden ya liquidada / pagada por adelantado:
+          // Si la comida sigue en preparación en cocina: 'esperando' (naranja con saldo ₡0)
+          // Si la comida ya fue despachada: 'ocupada' (azul comiendo con saldo ₡0)
+          const nuevoEstadoPagada = rowsPend.length > 0 ? 'esperando' : 'ocupada';
+          m.estado = nuevoEstadoPagada;
+          if (rowsPend.length > 0) {
+            m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
+            m.items_pendientes = m.platos_pendientes;
+            const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
+            if (firstHora) {
+              m.primera_comanda_hora = firstHora;
+              m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
+            }
+          } else {
+            m.platos_pendientes = [];
+            m.items_pendientes = [];
+            m.minutos_espera = 0;
+          }
+          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [nuevoEstadoPagada, m.id]).catch(() => {});
+        } else {
+          const estadoCalculado = evaluarEstadoMesaKDS(items);
+          if (m.estado !== estadoCalculado) {
+            m.estado = estadoCalculado;
+            dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
+            dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
+          }
+          if (rowsPend.length > 0) {
+            m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
+            m.items_pendientes = m.platos_pendientes;
+            const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
+            if (firstHora) {
+              m.primera_comanda_hora = firstHora;
+              m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
+            }
+          }
         }
+        m.cliente = clientePreservado;
       } else if (m.estado === 'ocupada' || m.estado === 'abierta' || m.estado === 'esperando' || m.estado === 'esperando_parcial') {
         // Mesa ocupada (comensales comiendo tras haber pagado de antemano o en espera de comanda en cocina)
         const rowsPend = pendientes.filter(d => (d.destino === 'cocina' || (!d.destino && (!d.curso || ![1, 5, 6].includes(d.curso)))));
@@ -3177,20 +3219,24 @@ app.get('/api/mesas', async (req, res) => {
         m.minutos_espera = 0;
         m.cliente = m.cliente_reserva || clientePreservado;
       } else if (!m.orden_activa_id) {
-        m.estado = 'libre';
-        m.pidio_cuenta_qr = 0;
-        m.hora_pidio_cuenta = null;
-        m.cliente = clientePreservado;
-        dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
-        m.transferida_de = null;
-        m.unida_con = null;
-        m.mesas_unidas = [];
-        m.es_mesa_unida = false;
-        m.orden_total = 0;
-        m.orden_activa_id = null;
-        m.platos_pendientes = [];
-        m.items_pendientes = [];
-        m.minutos_espera = 0;
+        if (m.estado === 'ocupada' || m.estado === 'esperando') {
+          m.cliente = clientePreservado;
+        } else {
+          m.estado = 'libre';
+          m.pidio_cuenta_qr = 0;
+          m.hora_pidio_cuenta = null;
+          m.cliente = clientePreservado;
+          dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
+          m.transferida_de = null;
+          m.unida_con = null;
+          m.mesas_unidas = [];
+          m.es_mesa_unida = false;
+          m.orden_total = 0;
+          m.orden_activa_id = null;
+          m.platos_pendientes = [];
+          m.items_pendientes = [];
+          m.minutos_espera = 0;
+        }
       }
 
       let primeraComandaHora = null;
@@ -5760,9 +5806,18 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   let orden = null;
   if (!esParaLlevar && mesaIdFinal) {
     orden = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') ORDER BY id DESC LIMIT 1",
       [mesaIdFinal, negocioIdFinal, negocioIdFinal]
     );
+    if (!orden && mesa && (mesa.estado === 'esperando' || mesa.estado === 'ocupada' || mesa.estado === 'activa')) {
+      orden = await dbGet(
+        "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'pagada' ORDER BY id DESC LIMIT 1",
+        [mesaIdFinal, negocioIdFinal, negocioIdFinal]
+      );
+      if (orden) {
+        await dbRun("UPDATE Ordenes SET estado = 'abierta' WHERE id = ?", [orden.id]);
+      }
+    }
   }
   const ahora = new Date().toISOString();
   let ordenId;
@@ -6143,7 +6198,8 @@ app.get('/api/kds', async (req, res) => {
     const destino = req.query.destino || 'cocina';
     const negocioId = obtenerNegocioIdReq(req);
     let query = `
-      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar,
+      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar, o.estado as orden_estado, o.total as orden_total,
+        COALESCE((SELECT SUM(monto) FROM Pagos WHERE orden_id = o.id), 0) as orden_total_pagado,
         COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
@@ -6170,7 +6226,8 @@ app.get('/api/comandas/activas', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
     const comandas = await dbAll(`
-      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar,
+      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar, o.estado as orden_estado, o.total as orden_total,
+        COALESCE((SELECT SUM(monto) FROM Pagos WHERE orden_id = o.id), 0) as orden_total_pagado,
         COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
@@ -6197,7 +6254,7 @@ app.get('/api/mesas/:id/espera', async (req, res) => {
     }
 
     const orden = await dbGet(
-      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida')",
+      "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'pagada') ORDER BY id DESC LIMIT 1",
       [mesaId, Number(mesa.negocio_id || reqNid || 1), Number(mesa.negocio_id || reqNid || 1)]
     );
 
@@ -6528,12 +6585,12 @@ async function procesarCobroOrden(ordenId, {
     }
   }
 
+  let itemsProcesadosCobro = [];
   if (itemsNuevos.length > 0) {
     const rowMax = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
     const comandaNumero = (rowMax && rowMax.maxNum ? Number(rowMax.maxNum) : 0) + 1;
     const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
 
-    const itemsProcesadosCobro = [];
     const cobroProdIds = [...new Set(itemsNuevos.map(it => parseInt(it.producto_id != null ? it.producto_id : it.id)).filter(id => !isNaN(id) && id > 0))];
     const cobroProdsMap = new Map();
     if (cobroProdIds.length > 0) {
@@ -6582,11 +6639,12 @@ async function procesarCobroOrden(ordenId, {
         destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
       }
       const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
-      const estadoComanda = (debeEnviarCocina && esParaCocinaOBarra) ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
+      const estadoComanda = esParaCocinaOBarra ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
+      const itemPagado = liquidar_total ? 1 : 0;
       await dbRun(
-        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, hora_pedido, creado_en, comanda_numero, en_happy_hour, comensal)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, prodId, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
+        `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, pagado, hora_pedido, creado_en, comanda_numero, en_happy_hour, comensal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ordenId, prodId, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, itemPagado, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
       );
 
       const esBalde = Boolean(
@@ -6618,8 +6676,11 @@ async function procesarCobroOrden(ordenId, {
     orden = await dbGet('SELECT * FROM Ordenes WHERE id = ?', [ordenId]);
   }
 
-  // Si el usuario confirmó enviar a cocina en este cobro directo, despachar a cocina/barra
-  if (debeEnviarCocina) {
+  const hayItemsCocinaOBarra = itemsProcesadosCobro.some(it => it.destino === 'cocina' || it.destino === 'barra');
+  const debeDespacharComanda = debeEnviarCocina || hayItemsCocinaOBarra;
+
+  // Si el usuario confirmó enviar a cocina O si se agregaron productos de cocina/barra en cobro directo:
+  if (debeDespacharComanda) {
     const rowMaxComanda = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [ordenId]);
     const comandaNumeroFinal = (rowMaxComanda && rowMaxComanda.maxNum ? Number(rowMaxComanda.maxNum) : 1);
 
@@ -6830,20 +6891,11 @@ async function procesarCobroOrden(ordenId, {
 
   if (liquidar_total) {
     await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
-    if (debeEnviarCocina) {
-      // Platillos de cocina/barra deben mantener 'pendiente' (o preparando) para KDS y cocina
-      await dbRun(
-        "UPDATE DetalleOrden SET estado_comanda = 'pendiente' WHERE orden_id = ? AND (destino = 'cocina' OR destino = 'barra' OR (destino IS NULL AND (curso IS NULL OR curso NOT IN (1, 5, 6)))) AND estado_comanda NOT IN ('preparando', 'listo', 'entregado', 'anulado')",
-        [ordenId]
-      );
-      // Los productos que no son de cocina/barra se marcan como 'pagado'
-      await dbRun(
-        "UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (destino NOT IN ('cocina', 'barra') OR (destino IS NULL AND curso IN (1, 5, 6))) AND estado_comanda NOT IN ('pendiente', 'preparando', 'listo', 'entregado', 'anulado')",
-        [ordenId]
-      );
-    } else {
-      await dbRun("UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)", [ordenId]);
-    }
+    await dbRun("UPDATE DetalleOrden SET pagado = 1 WHERE orden_id = ?", [ordenId]);
+    await dbRun(
+      "UPDATE DetalleOrden SET estado_comanda = 'pagado' WHERE orden_id = ? AND (destino NOT IN ('cocina', 'barra') OR estado_comanda NOT IN ('pendiente', 'preparando', 'listo')) AND (estado_comanda != 'anulado' OR estado_comanda IS NULL)",
+      [ordenId]
+    );
 
     // Consultar todos los ítems de la orden para el tiquete final
     const itemsOrden = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
@@ -6889,25 +6941,24 @@ async function procesarCobroOrden(ordenId, {
         [ahora, orden.mesa_id]
       );
 
-      if (tieneItemsCocinaPendientes || debeEnviarCocina) {
-        // La comanda se envió a cocina y fue cobrada de antemano: la mesa queda ocupada (en espera o comiendo) con cuenta en 0
-        const estadoMesaCobrada = tieneItemsCocinaPendientes ? 'esperando' : 'ocupada';
-        await dbRun(
-          "UPDATE Mesas SET estado = ?, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
-          [estadoMesaCobrada, orden.mesa_id]
-        );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoMesaCobrada, cliente: orden.cliente, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioIdFinal });
-      } else {
-        await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
-          [orden.mesa_id]
-        );
-        await dbRun(
-          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
-          [orden.mesa_id, orden.mesa_id]
-        );
-        io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioIdFinal });
-      }
+      // Decisión de diseño: La mesa física NO se libera automáticamente al cobrar.
+      // Queda ocupada con saldo en ₡0 (en 'esperando' si la comida sigue en cocina, o en 'ocupada' si ya salió/comiendo).
+      // Solo se libera cuando el personal presiona explícitamente "Liberar Mesa (₡0)" en el Salón.
+      const estadoMesaCobrada = tieneItemsCocinaPendientes ? 'esperando' : 'ocupada';
+      await dbRun(
+        "UPDATE Mesas SET estado = ?, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+        [estadoMesaCobrada, orden.mesa_id]
+      );
+      io.emit('mesa_actualizada', {
+        mesaId: orden.mesa_id,
+        estado: estadoMesaCobrada,
+        cliente: orden.cliente,
+        total: 0,
+        total_pagado: totalPagadoAcum,
+        transferida_de: null,
+        mesas_unidas: [],
+        negocio_id: negocioIdFinal
+      });
     }
 
     await registrarAuditoria({

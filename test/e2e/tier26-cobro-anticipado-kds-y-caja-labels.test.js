@@ -82,6 +82,7 @@ describe('Tier 26: Cobro Anticipado con KDS, Protección Doble Cobro y Rótulos 
         enviar_cocina: true
       });
 
+      console.log('DEBUG rCobro response:', rCobro.status, rCobro.body);
       assert.strictEqual(rCobro.status, 200, 'Cobro directo debe ser exitoso');
       assert.ok(rCobro.body.ordenId, 'Debe devolver ID de orden');
       const ordenId = rCobro.body.ordenId;
