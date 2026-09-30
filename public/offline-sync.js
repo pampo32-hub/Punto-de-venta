@@ -145,16 +145,21 @@
      * Ejecuta una petición. Si no hay conexión o falla la red, la encola en IndexedDB
      * y ejecuta optimistaFn para que el usuario no se detenga.
      */
-    ejecutarConRespaldo: async function ({ tipo, endpoint, metodo = 'POST', payload = {}, descripcion = '', optimistaFn }) {
+    ejecutarConRespaldo: async function ({ tipo, endpoint, metodo = 'POST', payload = {}, headers = {}, descripcion = '', optimistaFn }) {
       // Intentar siempre llamada en vivo primero si el navegador reporta red disponible
       if (navigator.onLine !== false) {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+          const reqHeaders = { 'Content-Type': 'application/json', ...headers };
+          if (payload && payload.negocio_id && !reqHeaders['x-negocio-id']) {
+            reqHeaders['x-negocio-id'] = String(payload.negocio_id);
+          }
+
           const res = await fetch(endpoint, {
             method: metodo,
-            headers: { 'Content-Type': 'application/json' },
+            headers: reqHeaders,
             body: JSON.stringify(payload),
             signal: controller.signal
           });

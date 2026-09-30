@@ -5598,7 +5598,30 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   }
 
   // 1. Identificar items nuevos no enviados previamente
-  const nuevosItems = items.filter(it => !it.id_detalle_existente && !it.enviado);
+  let nuevosItems = items.filter(it => !it.enviado);
+  if (nuevosItems.length === 0 && items.length > 0) {
+    // Si ningún item vino con enviado: false, pero hay items sin id_detalle_existente,
+    // significa que son items agregados recientemente que la UI marcó localmente
+    nuevosItems = items.filter(it => !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado);
+    if (nuevosItems.length === 0 && mesaIdFinal) {
+      // Verificar si la orden en BD tiene detalles guardados
+      const ordExist = await dbGet(
+        "SELECT id FROM Ordenes WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida') ORDER BY id DESC LIMIT 1",
+        [mesaIdFinal]
+      );
+      if (ordExist) {
+        const rowC = await dbGet("SELECT COUNT(*) as c FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordExist.id]);
+        if (!rowC || Number(rowC.c) === 0) {
+          nuevosItems = items;
+        }
+      } else {
+        nuevosItems = items;
+      }
+    } else if (nuevosItems.length === 0 && esParaLlevar) {
+      nuevosItems = items;
+    }
+  }
+
   if (!nuevosItems.length && items.length > 0) {
     let ordenExistente = null;
     if (mesaIdFinal) {
@@ -5819,12 +5842,14 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   const iva = totalesOrden.iva;
   const total = totalesOrden.total;
 
-  // 8. Sockets: Notificar a cocina ÚNICAMENTE si hay items de cocina
+  // 8. Sockets: Notificar comanda nueva a cocina, barra y salón
   const comandasCocina = nuevasComandas.filter(c => c.destino === 'cocina');
   const comandaNegocioId = Number(negocioId || 1);
-  if (comandasCocina.length > 0) {
-    io.emit('nueva_comanda', { mesaId: mesaIdFinal, ordenId, mesaNumero, comandas: comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
-    io.emit('comanda_nueva', { mesaId: mesaIdFinal, ordenId, mesaNumero, mesero, horaPedido: ahora, items: comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
+  if (nuevasComandas.length > 0) {
+    io.emit('nueva_comanda', { mesaId: mesaIdFinal, ordenId, mesaNumero, comandas: nuevasComandas, comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
+    if (comandasCocina.length > 0) {
+      io.emit('comanda_nueva', { mesaId: mesaIdFinal, ordenId, mesaNumero, mesero, horaPedido: ahora, items: comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
+    }
   }
 
   // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
@@ -6489,7 +6514,10 @@ async function procesarCobroOrden(ordenId, {
   // Manejar items nuevos de la comanda no enviados previamente (para que queden en DetalleOrden y se descuenten de Kárdex)
   let itemsNuevos = [];
   if (Array.isArray(items) && items.length > 0) {
-    const itemsNoEnviados = items.filter(it => !it.enviado);
+    let itemsNoEnviados = items.filter(it => !it.enviado);
+    if (itemsNoEnviados.length === 0) {
+      itemsNoEnviados = items.filter(it => !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado);
+    }
     if (itemsNoEnviados.length > 0) {
       itemsNuevos = itemsNoEnviados;
     } else {

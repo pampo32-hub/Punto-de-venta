@@ -11708,7 +11708,7 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     mesaId: estado.mesaActiva.id,
     mesero: (estado.usuarioActual && estado.usuarioActual.nombre) || (estado.usuario && estado.usuario.nombre) || 'Personal de Turno',
     cliente: clienteActivoComanda,
-    items: estado.mesaActiva.items,
+    items: JSON.parse(JSON.stringify(estado.mesaActiva.items)),
     happyHourActivo: estado.happyHourActivo,
     negocio_id: nidComanda,
     tipo_orden: esParaLlevarActiva ? 'para_llevar' : 'mesa',
@@ -11753,6 +11753,16 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     estado.mesaActiva.estado = tieneNuevosCocina ? 'esperando' : 'abierta';
     estado.mesaActiva.orden_total = tot;
 
+    // Actualizar mesa en array global de mesas para que el salón refleje el cambio instantáneo
+    const mesaEnArray = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva.id));
+    if (mesaEnArray) {
+      mesaEnArray.estado = estado.mesaActiva.estado;
+      mesaEnArray.orden_total = tot;
+      mesaEnArray.total = tot;
+      mesaEnArray.platos_pendientes = itemsCocinaNuevos.map(i => i.nombre);
+      mesaEnArray.items_pendientes = mesaEnArray.platos_pendientes;
+    }
+
     // Guardar copia local de la orden en IndexedDB para persistencia ante reingresos
     if (window.PosOfflineDB) {
       window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, {
@@ -11771,8 +11781,6 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
     renderTicketItems();
     actualizarBotonEnviarComanda();
     renderSalón();
-    cargarMesasDesdeBackend();
-    cargarKDSDesdeBackend();
 
     // Disparar impresión térmica directa de Comanda para los productos nuevos
     // NOTA: Cuando el servidor está ONLINE, backend (POST /api/comandas/enviar -> ejecutarComanda) YA despacha
@@ -11844,39 +11852,70 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
   // Despacho de red en segundo plano (asíncrono, sin congelar la interfaz)
   (async () => {
     try {
+      let resData = null;
       if (window.PosOfflineSync) {
         const resSync = await window.PosOfflineSync.ejecutarConRespaldo({
           tipo: 'ENVIAR_COMANDA',
           endpoint: '/api/comandas/enviar',
           metodo: 'POST',
           payload: payloadComanda,
+          headers: { 'x-negocio-id': String(nidComanda) },
           descripcion: `Comanda ${estado.mesaActiva?.numero || ('Mesa ' + estado.mesaActiva?.id)} (${(payloadComanda.items || []).length} productos)`,
           optimistaFn: () => {}
         });
-        if (resSync && !resSync.exito && !resSync.offlineQueued) {
+        if (resSync && resSync.exito) {
+          resData = resSync.datos;
+        } else if (resSync && !resSync.exito && !resSync.offlineQueued) {
           console.warn('Error al procesar la comanda en backend:', resSync.error);
         }
-        return;
+      } else {
+        // Fallback directo
+        const res = await fetch('/api/comandas/enviar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
+          body: JSON.stringify(payloadComanda)
+        });
+        if (res.ok) {
+          resData = await res.json();
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          console.warn('Error en respuesta de comanda:', errJson.error);
+        }
       }
 
-      // Fallback directo
-      const res = await fetch('/api/comandas/enviar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-negocio-id': String(nidComanda) },
-        body: JSON.stringify(payloadComanda)
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        console.warn('Error en respuesta de comanda:', errJson.error);
+      if (resData && resData.ordenId && estado.mesaActiva && (Number(estado.mesaActiva.id) === Number(payloadComanda.mesaId))) {
+        estado.mesaActiva.orden_id = resData.ordenId;
+        estado.mesaActiva.orden_activa_id = resData.ordenId;
+        if (resData.estado) {
+          estado.mesaActiva.estado = resData.estado;
+        }
+        if (resData.total !== undefined) {
+          estado.mesaActiva.orden_total = resData.total;
+          estado.mesaActiva.total = resData.total;
+        }
+        const mArr = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva.id));
+        if (mArr) {
+          mArr.orden_activa_id = resData.ordenId;
+          if (resData.estado) mArr.estado = resData.estado;
+          if (resData.total !== undefined) {
+            mArr.orden_total = resData.total;
+            mArr.total = resData.total;
+          }
+        }
       }
     } catch (e) {
       console.warn('Error enviando comanda en segundo plano:', e);
     } finally {
+      actualizarBotonEnviarComanda();
       if (typeof cargarMesasDesdeBackendDebounced === 'function') {
-        cargarMesasDesdeBackendDebounced(300);
+        cargarMesasDesdeBackendDebounced(250);
+      } else if (typeof cargarMesasDesdeBackend === 'function') {
+        cargarMesasDesdeBackend();
       }
       if (typeof cargarKDSDesdeBackendDebounced === 'function') {
-        cargarKDSDesdeBackendDebounced(300);
+        cargarKDSDesdeBackendDebounced(250);
+      } else if (typeof cargarKDSDesdeBackend === 'function') {
+        cargarKDSDesdeBackend();
       }
     }
   })();
