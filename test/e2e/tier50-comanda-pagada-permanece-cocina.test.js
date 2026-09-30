@@ -173,4 +173,33 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo
     const mesa3 = listaMesas.find(m => Number(m.id) === 3);
     assert.strictEqual(mesa3.estado, 'libre', 'Mesa 3 debe quedar completamente libre');
   });
+
+  it('T50.4: Cobro de cuenta regular sin comida pendiente en cocina -> La mesa se libera automáticamente a "libre"', async () => {
+    // 1. Pedir solo bebidas o platillos sin destino de cocina
+    const resCmd = await req('/api/comandas/enviar', 'POST', {
+      mesaId: 3,
+      mesero: 'Mesero Test',
+      cliente: 'Cliente Bebidas',
+      items: [
+        { id: 1, nombre: 'Imperial Regular', precio: 2000, cantidad: 2, destino: 'barra', curso: 1 }
+      ]
+    });
+    assert.strictEqual(resCmd.status, 200);
+    const ordenId = resCmd.body.ordenId;
+
+    // 2. Cobrar la orden por completo
+    const resCobro = await req(`/api/ordenes/${ordenId}/cobrar`, 'POST', {
+      metodo: 'Efectivo',
+      monto: 4000,
+      liquidar_total: true,
+      mesero: 'Cajero Test'
+    });
+    assert.strictEqual(resCobro.status, 200);
+
+    // 3. Como no hay comida pendiente en cocina, la mesa debe liberarse automáticamente
+    const resMesas = await req('/api/mesas');
+    const listaMesas = resMesas.body.mesas || resMesas.body;
+    const mesa3 = listaMesas.find(m => Number(m.id) === 3);
+    assert.strictEqual(mesa3.estado, 'libre', 'Mesa 3 debe liberarse automáticamente al pagar si no hay comida pendiente en cocina');
+  });
 });

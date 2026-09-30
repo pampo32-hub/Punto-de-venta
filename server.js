@@ -6941,24 +6941,42 @@ async function procesarCobroOrden(ordenId, {
         [ahora, orden.mesa_id]
       );
 
-      // Decisión de diseño: La mesa física NO se libera automáticamente al cobrar.
-      // Queda ocupada con saldo en ₡0 (en 'esperando' si la comida sigue en cocina, o en 'ocupada' si ya salió/comiendo).
-      // Solo se libera cuando el personal presiona explícitamente "Liberar Mesa (₡0)" en el Salón.
-      const estadoMesaCobrada = tieneItemsCocinaPendientes ? 'esperando' : 'ocupada';
-      await dbRun(
-        "UPDATE Mesas SET estado = ?, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
-        [estadoMesaCobrada, orden.mesa_id]
-      );
-      io.emit('mesa_actualizada', {
-        mesaId: orden.mesa_id,
-        estado: estadoMesaCobrada,
-        cliente: orden.cliente,
-        total: 0,
-        total_pagado: totalPagadoAcum,
-        transferida_de: null,
-        mesas_unidas: [],
-        negocio_id: negocioIdFinal
-      });
+      if (tieneItemsCocinaPendientes) {
+        // La comida sigue en preparación en cocina: la mesa queda en espera con saldo ₡0 ligada a sus platillos
+        await dbRun(
+          "UPDATE Mesas SET estado = 'esperando', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+          [orden.mesa_id]
+        );
+        io.emit('mesa_actualizada', {
+          mesaId: orden.mesa_id,
+          estado: 'esperando',
+          cliente: orden.cliente,
+          total: 0,
+          total_pagado: totalPagadoAcum,
+          transferida_de: null,
+          mesas_unidas: [],
+          negocio_id: negocioIdFinal
+        });
+      } else {
+        // No hay comida pendiente en cocina (cuenta normal o bebidas): LIBERAR LA MESA INMEDIATAMENTE
+        await dbRun(
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+          [orden.mesa_id]
+        );
+        await dbRun(
+          'UPDATE TableMerges SET activo = 0 WHERE (mesa_principal_id = ? OR mesa_secundaria_id = ?) AND activo = 1',
+          [orden.mesa_id, orden.mesa_id]
+        );
+        io.emit('mesa_actualizada', {
+          mesaId: orden.mesa_id,
+          estado: 'libre',
+          cliente: null,
+          total: 0,
+          transferida_de: null,
+          mesas_unidas: [],
+          negocio_id: negocioIdFinal
+        });
+      }
     }
 
     await registrarAuditoria({
