@@ -2,7 +2,7 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 
-describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo Cero', () => {
+describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Se Libera Inmediatamente Al Cobrar', () => {
   let serverInstance;
   let baseUrl;
 
@@ -68,7 +68,7 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo
     }
   });
 
-  it('T50.1: Guardar comanda con comida y bebida -> Cobrar cuenta -> La comida permanece en KDS y mesa queda esperando con saldo ₡0', async () => {
+  it('T50.1: Guardar comanda con comida y bebida -> Cobrar cuenta -> La comida permanece en KDS y mesa se libera inmediatamente', async () => {
     try {
     // 1. Enviar comanda con comida de cocina y bebida de barra
     const resCmd = await req('/api/comandas/enviar', 'POST', {
@@ -103,14 +103,13 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo
     assert.strictEqual(Number(itemsCocinaKds[0].pagado), 1, 'El ítem en KDS debe estar marcado como pagado = 1');
     assert.strictEqual(itemsCocinaKds[0].orden_estado, 'pagada', 'El estado de la orden en KDS debe ser pagada');
 
-    // 4. Verificar que en el Salón, Mesa 3 sigue OCUPADA en estado "esperando" (naranja) y saldo en ₡0
+    // 4. Verificar que en el Salón, Mesa 3 SE LIBERA INMEDIATAMENTE a 'libre' sin delay
     const resMesas = await req('/api/mesas');
     const listaMesas = resMesas.body.mesas || resMesas.body;
     const mesa3 = listaMesas.find(m => Number(m.id) === 3);
     assert.ok(mesa3, 'Mesa 3 debe existir');
-    assert.strictEqual(mesa3.estado, 'esperando', 'Mesa 3 debe estar en estado esperando');
+    assert.strictEqual(mesa3.estado, 'libre', 'Mesa 3 debe liberarse inmediatamente al cobrar');
     assert.strictEqual(Number(mesa3.orden_total), 0, 'El saldo pendiente de Mesa 3 debe ser 0');
-    assert.ok(mesa3.platos_pendientes.length > 0, 'Debe listar los platillos pendientes en cocina');
 
     // 5. En KDS, cocina marca la hamburguesa como 'listo'
     const detalleId = itemsCocinaKds[0].id;
@@ -119,11 +118,11 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo
     });
     assert.strictEqual(resListo.status, 200, 'KDS debe actualizar estado a listo');
 
-    // 6. Verificar que Mesa 3 pasó automáticamente a 'ocupada' (azul, comiendo) con saldo ₡0
+    // 6. Verificar que la comanda en KDS se actualizó y la mesa sigue libre
     const resMesasListo = await req('/api/mesas');
     const listaMesasListo = resMesasListo.body.mesas || resMesasListo.body;
     const mesa3Listo = listaMesasListo.find(m => Number(m.id) === 3);
-    assert.strictEqual(mesa3Listo.estado, 'ocupada', 'Mesa 3 debe pasar a ocupada cuando la comida sale de cocina');
+    assert.strictEqual(mesa3Listo.estado, 'libre', 'Mesa 3 debe permanecer libre');
     assert.strictEqual(Number(mesa3Listo.orden_total), 0, 'El saldo de Mesa 3 debe seguir en 0');
     } catch (err) {
       console.error('ERROR EN T50.1:', err);
@@ -131,7 +130,7 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo
     }
   });
 
-  it('T50.2: Cobro Directo sin guardar comanda previa -> La comida llega a cocina y mesa queda esperando con saldo ₡0', async () => {
+  it('T50.2: Cobro Directo sin guardar comanda previa -> La comida llega a cocina y mesa queda liberada', async () => {
     // Liberar mesa 3 para el siguiente test
     await req('/api/mesas/3/liberar', 'POST', { pin: '1234' });
 
@@ -156,11 +155,11 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Ocupada Saldo
     assert.strictEqual(itemsCocinaKds[0].estado_comanda, 'pendiente', 'Debe estar en estado pendiente');
     assert.strictEqual(Number(itemsCocinaKds[0].pagado), 1, 'Debe estar pagado = 1');
 
-    // La mesa debe quedar en esperando con saldo en 0
+    // La mesa debe quedar libre inmediatamente
     const resMesas = await req('/api/mesas');
     const listaMesas = resMesas.body.mesas || resMesas.body;
     const mesa3 = listaMesas.find(m => Number(m.id) === 3);
-    assert.strictEqual(mesa3.estado, 'esperando', 'Mesa debe quedar en esperando');
+    assert.strictEqual(mesa3.estado, 'libre', 'Mesa debe quedar libre inmediatamente al cobrar');
     assert.strictEqual(Number(mesa3.orden_total), 0, 'Saldo debe ser 0');
   });
 

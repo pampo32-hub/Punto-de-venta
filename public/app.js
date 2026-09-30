@@ -15251,61 +15251,36 @@ window.ejecutarCobroFinal = async function() {
         // Marcar items como pagados
         itemsMesa.forEach(it => { it.pagado = true; it.ya_pagado = true; });
 
-        const itemsPendientesCocina = itemsMesa.filter(
-          it => (it.destino === 'cocina' || (!it.destino && (!it.curso || ![1, 5, 6].includes(it.curso)))) &&
-                (it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando' || (!it.estado_comanda && it.enviado))
-        );
-        const tienePendientes = itemsPendientesCocina.length > 0;
-
-        if (tienePendientes) {
-          if (mesaEnLista) {
-            mesaEnLista.estado = 'esperando';
-            mesaEnLista.orden_total = 0;
-            mesaEnLista.total = 0;
-            mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(totalNum) || Number(estado.mesaActiva?.orden_total) || 0);
-            mesaEnLista.pidio_cuenta_qr = 0;
-            mesaEnLista.platos_pendientes = itemsPendientesCocina.map(it => it.nombre_producto || it.nombre);
-            mesaEnLista.items_pendientes = mesaEnLista.platos_pendientes;
-          }
-          if (estado.mesaActiva) {
-            estado.mesaActiva.estado = 'esperando';
-            estado.mesaActiva.orden_total = 0;
-            estado.mesaActiva.total = 0;
-            estado.mesaActiva.pidio_cuenta_qr = 0;
-            estado.mesaActiva.cuenta_pedida = false;
-          }
-        } else {
-          // No hay comida pendiente en cocina: LIBERAR LA MESA INMEDIATAMENTE
-          if (mesaEnLista) {
-            mesaEnLista.cliente = null;
-            mesaEnLista.mesa_cliente = null;
-            mesaEnLista.estado = 'libre';
-            mesaEnLista.orden_total = 0;
-            mesaEnLista.total = 0;
-            mesaEnLista.orden_activa_id = null;
-            mesaEnLista.items = [];
-            mesaEnLista.platos_pendientes = [];
-            mesaEnLista.items_pendientes = [];
-          }
-          if (estado.mesaActiva) {
-            try {
-              if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) {
-                window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
-              }
-            } catch (_) {}
-            estado.mesaActiva.estado = 'libre';
-            estado.mesaActiva.cliente = null;
-            estado.mesaActiva.mesa_cliente = null;
-            estado.mesaActiva.items = [];
-            estado.mesaActiva.platos_pendientes = [];
-            estado.mesaActiva.items_pendientes = [];
-            estado.mesaActiva.orden_id = null;
-            estado.mesaActiva.orden_activa_id = null;
-            estado.mesaActiva.orden_total = 0;
-            estado.mesaActiva.total = 0;
-            estado.mesaActiva.pidio_cuenta_qr = 0;
-            estado.mesaActiva.cuenta_pedida = false;
-          }
+        // Liberar la mesa inmediatamente al liquidar
+        if (mesaEnLista) {
+          mesaEnLista.cliente = null;
+          mesaEnLista.mesa_cliente = null;
+          mesaEnLista.estado = 'libre';
+          mesaEnLista.orden_total = 0;
+          mesaEnLista.total = 0;
+          mesaEnLista.orden_activa_id = null;
+          mesaEnLista.items = [];
+          mesaEnLista.platos_pendientes = [];
+          mesaEnLista.items_pendientes = [];
+        }
+        if (estado.mesaActiva) {
+          try {
+            if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) {
+              window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
+            }
+          } catch (_) {}
+          estado.mesaActiva.estado = 'libre';
+          estado.mesaActiva.cliente = null;
+          estado.mesaActiva.mesa_cliente = null;
+          estado.mesaActiva.items = [];
+          estado.mesaActiva.platos_pendientes = [];
+          estado.mesaActiva.items_pendientes = [];
+          estado.mesaActiva.orden_id = null;
+          estado.mesaActiva.orden_activa_id = null;
+          estado.mesaActiva.orden_total = 0;
+          estado.mesaActiva.total = 0;
+          estado.mesaActiva.pidio_cuenta_qr = 0;
+          estado.mesaActiva.cuenta_pedida = false;
         }
 
         // Limpiar comanda activa
@@ -15342,6 +15317,9 @@ window.ejecutarCobroFinal = async function() {
         if (viewSalonEl) viewSalonEl.classList.add('active');
         sessionStorage.setItem('pos_active_view', 'salon');
         localStorage.setItem('pos_active_view', 'salon');
+
+        // Renderizar salón de inmediato sin delay
+        if (typeof renderSalón === 'function') renderSalón();
 
         mostrarNotificacionCentro(`✅ ¡Cuenta de ${mesaNumero} liquidada con éxito! Mesa liberada.`, 'success');
 
@@ -15486,61 +15464,36 @@ window.ejecutarCobroFinal = async function() {
         // Marcar items como pagados
         itemsMesa.forEach(it => { it.pagado = true; it.ya_pagado = true; });
 
-        const itemsPendientesCocina = itemsMesa.filter(
-          it => (it.destino === 'cocina' || (!it.destino && (!it.curso || ![1, 5, 6].includes(it.curso)))) &&
-                (it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando' || (!it.estado_comanda && it.enviado))
-        );
-        const tienePendientes = itemsPendientesCocina.length > 0;
-
-        if (tienePendientes) {
-          if (mesaEnLista) {
-            mesaEnLista.estado = 'esperando';
-            mesaEnLista.orden_total = 0;
-            mesaEnLista.total = 0;
-            mesaEnLista.total_pagado = (mesaEnLista.total_pagado || 0) + (Number(totalNum) || 0);
-            mesaEnLista.pidio_cuenta_qr = 0;
-            mesaEnLista.platos_pendientes = itemsPendientesCocina.map(it => it.nombre_producto || it.nombre);
-            mesaEnLista.items_pendientes = mesaEnLista.platos_pendientes;
-          }
-          if (estado.mesaActiva) {
-            estado.mesaActiva.estado = 'esperando';
-            estado.mesaActiva.orden_total = 0;
-            estado.mesaActiva.total = 0;
-            estado.mesaActiva.pidio_cuenta_qr = 0;
-            estado.mesaActiva.cuenta_pedida = false;
-          }
-        } else {
-          // No hay comida pendiente en cocina: LIBERAR LA MESA INMEDIATAMENTE
-          if (mesaEnLista) {
-            mesaEnLista.cliente = null;
-            mesaEnLista.mesa_cliente = null;
-            mesaEnLista.estado = 'libre';
-            mesaEnLista.orden_total = 0;
-            mesaEnLista.total = 0;
-            mesaEnLista.orden_activa_id = null;
-            mesaEnLista.items = [];
-            mesaEnLista.platos_pendientes = [];
-            mesaEnLista.items_pendientes = [];
-          }
-          if (estado.mesaActiva) {
-            try {
-              if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) {
-                window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
-              }
-            } catch (_) {}
-            estado.mesaActiva.estado = 'libre';
-            estado.mesaActiva.cliente = null;
-            estado.mesaActiva.mesa_cliente = null;
-            estado.mesaActiva.items = [];
-            estado.mesaActiva.platos_pendientes = [];
-            estado.mesaActiva.items_pendientes = [];
-            estado.mesaActiva.orden_id = null;
-            estado.mesaActiva.orden_activa_id = null;
-            estado.mesaActiva.orden_total = 0;
-            estado.mesaActiva.total = 0;
-            estado.mesaActiva.pidio_cuenta_qr = 0;
-            estado.mesaActiva.cuenta_pedida = false;
-          }
+        // LIBERAR LA MESA INMEDIATAMENTE AL COBRAR
+        if (mesaEnLista) {
+          mesaEnLista.cliente = null;
+          mesaEnLista.mesa_cliente = null;
+          mesaEnLista.estado = 'libre';
+          mesaEnLista.orden_total = 0;
+          mesaEnLista.total = 0;
+          mesaEnLista.orden_activa_id = null;
+          mesaEnLista.items = [];
+          mesaEnLista.platos_pendientes = [];
+          mesaEnLista.items_pendientes = [];
+        }
+        if (estado.mesaActiva) {
+          try {
+            if (window.PosOfflineDB && typeof window.PosOfflineDB.limpiarOrdenMesa === 'function' && estado.mesaActiva?.id) {
+              window.PosOfflineDB.limpiarOrdenMesa(estado.mesaActiva.id).catch(() => {});
+            }
+          } catch (_) {}
+          estado.mesaActiva.estado = 'libre';
+          estado.mesaActiva.cliente = null;
+          estado.mesaActiva.mesa_cliente = null;
+          estado.mesaActiva.items = [];
+          estado.mesaActiva.platos_pendientes = [];
+          estado.mesaActiva.items_pendientes = [];
+          estado.mesaActiva.orden_id = null;
+          estado.mesaActiva.orden_activa_id = null;
+          estado.mesaActiva.orden_total = 0;
+          estado.mesaActiva.total = 0;
+          estado.mesaActiva.pidio_cuenta_qr = 0;
+          estado.mesaActiva.cuenta_pedida = false;
         }
       }
 
@@ -15578,6 +15531,9 @@ window.ejecutarCobroFinal = async function() {
       if (viewSalonEl) viewSalonEl.classList.add('active');
       sessionStorage.setItem('pos_active_view', 'salon');
       localStorage.setItem('pos_active_view', 'salon');
+
+      // Renderizar salón de inmediato sin delay
+      if (typeof renderSalón === 'function') renderSalón();
 
       if (typeof cargarMesasDesdeBackendDebounced === 'function') {
         cargarMesasDesdeBackendDebounced(250);
