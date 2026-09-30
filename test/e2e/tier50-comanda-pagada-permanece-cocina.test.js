@@ -84,11 +84,12 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Se Libera Inm
     const ordenId = resCmd.body.ordenId;
     assert.ok(ordenId, 'Debe crearse ordenId');
 
-    // 2. Cobrar la cuenta por completo en caja
+    // 2. Cobrar la cuenta por completo en caja con liberación de mesa (cliente pidió la cuenta y se retira)
     const resCobro = await req(`/api/ordenes/${ordenId}/cobrar`, 'POST', {
       metodo: 'Tarjeta',
       monto: 6500,
       liquidar_total: true,
+      liberar_mesa: true,
       mesero: 'Cajero Test'
     });
     assert.strictEqual(resCobro.status, 200, 'Cobro debe procesarse exitosamente');
@@ -108,7 +109,7 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Se Libera Inm
     const listaMesas = resMesas.body.mesas || resMesas.body;
     const mesa3 = listaMesas.find(m => Number(m.id) === 3);
     assert.ok(mesa3, 'Mesa 3 debe existir');
-    assert.strictEqual(mesa3.estado, 'libre', 'Mesa 3 debe liberarse inmediatamente al cobrar');
+    assert.strictEqual(mesa3.estado, 'libre', 'Mesa 3 debe liberarse inmediatamente al cobrar cuando se liquida');
     assert.strictEqual(Number(mesa3.orden_total), 0, 'El saldo pendiente de Mesa 3 debe ser 0');
 
     // 5. En KDS, cocina marca la hamburguesa como 'listo'
@@ -130,11 +131,11 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Se Libera Inm
     }
   });
 
-  it('T50.2: Cobro Directo sin guardar comanda previa -> La comida llega a cocina y mesa queda liberada', async () => {
+  it('T50.2: Cobro Directo de comida sin pedir cuenta -> La comida llega a cocina y la mesa permanece ocupada en naranja ("esperando") con saldo ₡0', async () => {
     // Liberar mesa 3 para el siguiente test
     await req('/api/mesas/3/liberar', 'POST', { pin: '1234' });
 
-    // Cliente pide platillo y paga de una vez ("Cobro Directo" sin guardar comanda previa)
+    // Cliente pide platillo y paga de una vez ("Cobro Directo" / pago adelantado sin pedir la cuenta)
     const resDirecto = await req('/api/ordenes/directo/cobrar', 'POST', {
       mesaId: 3,
       items: [
@@ -155,12 +156,13 @@ describe('Tier 50: Comanda Pagada Permanece en Cocina / KDS y Mesa Se Libera Inm
     assert.strictEqual(itemsCocinaKds[0].estado_comanda, 'pendiente', 'Debe estar en estado pendiente');
     assert.strictEqual(Number(itemsCocinaKds[0].pagado), 1, 'Debe estar pagado = 1');
 
-    // La mesa debe quedar libre inmediatamente
+    // La mesa DEBE QUEDAR OCUPADA EN NARANJA ('esperando') con saldo ₡0 esperando la comida
     const resMesas = await req('/api/mesas');
     const listaMesas = resMesas.body.mesas || resMesas.body;
     const mesa3 = listaMesas.find(m => Number(m.id) === 3);
-    assert.strictEqual(mesa3.estado, 'libre', 'Mesa debe quedar libre inmediatamente al cobrar');
-    assert.strictEqual(Number(mesa3.orden_total), 0, 'Saldo debe ser 0');
+    assert.strictEqual(mesa3.estado, 'esperando', 'Mesa debe quedar en estado esperando (naranja) con la comida en preparación');
+    assert.strictEqual(Number(mesa3.orden_total), 0, 'Saldo debe ser ₡0 porque ya fue pagada');
+    assert.ok(mesa3.platos_pendientes && mesa3.platos_pendientes.length > 0, 'Debe incluir los platos pendientes');
   });
 
   it('T50.3: Liberar Mesa con saldo ₡0 es permitido sin exigir PIN', async () => {

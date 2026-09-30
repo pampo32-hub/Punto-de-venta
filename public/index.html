@@ -5212,6 +5212,13 @@
             </button>
           </div>
         </div>
+        <div id="rowDestinoMesaCobro" style="display:none; margin:10px 0 14px 0; padding:8px 12px; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid rgba(255,255,255,0.08); align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <span style="font-size:0.85rem; color:#94a3b8; font-weight:600;">Estado de la mesa al cobrar:</span>
+          <div style="display:flex; gap:6px;">
+            <button type="button" id="btnDestinoMesaEsperando" onclick="setModoDestinoMesaCobro('esperando')" class="btn-sm" style="background:#f59e0b; color:#fff; border:none; border-radius:6px; font-weight:700; padding:4px 10px; cursor:pointer;">⏳ Dejar en Espera (₡0)</button>
+            <button type="button" id="btnDestinoMesaLibre" onclick="setModoDestinoMesaCobro('libre')" class="btn-sm" style="background:transparent; color:#94a3b8; border:1px solid rgba(255,255,255,0.2); border-radius:6px; font-weight:600; padding:4px 10px; cursor:pointer;">🔓 Liberar Mesa (Verde)</button>
+          </div>
+        </div>
         <label class="section-label">Selecciona el Método de Pago:</label>
         <div class="pay-methods-tabs">
           <button class="pay-method-tab active" data-method="Efectivo">💵 Efectivo <kbd class="kbd-sub-shortcut">1 / E</kbd></button>

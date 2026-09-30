@@ -3060,6 +3060,7 @@ app.get('/api/mesas', async (req, res) => {
       SELECT m.*, z.nombre as zonaNombre,
              o.id as orden_activa_id, o.numero_orden, o.subtotal, o.descuento_happy_hour, 
              o.servicio_10, o.iva_13, o.total as orden_total, o.mesero as orden_mesero, 
+             o.estado as orden_estado,
              COALESCE(NULLIF(o.cliente, ''), NULLIF(m.cliente, ''), 'Cliente General') as cliente,
              m.cliente as mesa_cliente,
              o.transferida_de as orden_transferida_de
@@ -3069,7 +3070,10 @@ app.get('/api/mesas', async (req, res) => {
         SELECT MAX(o2.id) FROM Ordenes o2 
         WHERE o2.mesa_id = m.id 
           AND (o2.negocio_id = ? OR (o2.negocio_id IS NULL AND ? = 1))
-          AND o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+          AND (
+            o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+            OR (o2.estado = 'pagada' AND m.estado IN ('esperando', 'ocupada', 'esperando_parcial'))
+          )
       )
       WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
       ORDER BY m.id ASC
@@ -3114,7 +3118,7 @@ app.get('/api/mesas', async (req, res) => {
       if (m.orden_activa_id) {
         const subtotalItems = items.reduce((acc, it) => acc + ((Number(it.precio_unitario) || 0) * (Number(it.cantidad) || 1)), 0);
         const totalAbonado = pagosByOrder[m.orden_activa_id] || 0;
-        const saldoRestante = Math.max(0, subtotalItems - totalAbonado);
+        const saldoRestante = (m.orden_estado === 'pagada') ? 0 : Math.max(0, subtotalItems - totalAbonado);
         m.orden_total = saldoRestante;
         m.total = saldoRestante;
         m.total_pagado = totalAbonado;
@@ -3150,24 +3154,45 @@ app.get('/api/mesas', async (req, res) => {
         }
       } else if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta') {
         const rowsPend = pendientes.filter(d => (d.destino === 'cocina' || (!d.destino && (!d.curso || ![1, 5, 6].includes(d.curso)))));
-        const estadoCalculado = evaluarEstadoMesaKDS(items);
-        if (m.estado !== estadoCalculado) {
-          m.estado = estadoCalculado;
-          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
-          dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
-        }
-        if (rowsPend.length > 0) {
-          m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
-          m.items_pendientes = m.platos_pendientes;
-          const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
-          if (firstHora) {
-            m.primera_comanda_hora = firstHora;
-            m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
+        if (m.orden_estado === 'pagada') {
+          // Orden liquidada con platillos en cocina: mantener en esperando sin modificar estado de orden en DB
+          m.orden_total = 0;
+          m.total = 0;
+          if (rowsPend.length > 0) {
+            m.estado = 'esperando';
+            m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
+            m.items_pendientes = m.platos_pendientes;
+            const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
+            if (firstHora) {
+              m.primera_comanda_hora = firstHora;
+              m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
+            }
+            dbRun("UPDATE Mesas SET estado = 'esperando' WHERE id = ?", [m.id]).catch(() => {});
+          } else {
+            m.platos_pendientes = [];
+            m.items_pendientes = [];
+            m.minutos_espera = 0;
           }
         } else {
-          m.platos_pendientes = [];
-          m.items_pendientes = [];
-          m.minutos_espera = 0;
+          const estadoCalculado = evaluarEstadoMesaKDS(items);
+          if (m.estado !== estadoCalculado) {
+            m.estado = estadoCalculado;
+            dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
+            dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [estadoCalculado, m.orden_activa_id]).catch(() => {});
+          }
+          if (rowsPend.length > 0) {
+            m.platos_pendientes = rowsPend.map(r => r.nombre_producto);
+            m.items_pendientes = m.platos_pendientes;
+            const firstHora = rowsPend[0].hora_pedido || rowsPend[0].creado_en;
+            if (firstHora) {
+              m.primera_comanda_hora = firstHora;
+              m.minutos_espera = Math.max(0, Math.floor((ahora - new Date(firstHora).getTime()) / 60000));
+            }
+          } else {
+            m.platos_pendientes = [];
+            m.items_pendientes = [];
+            m.minutos_espera = 0;
+          }
         }
         m.cliente = clientePreservado;
       } else if (!m.orden_activa_id) {
@@ -6308,9 +6333,14 @@ const handleKdsEstadoUpdate = async (req, res) => {
         // La orden ya fue cobrada y liquidada. NO reabrir la orden a 'activa'.
         totalEmitido = 0;
         if (orden.mesa_id) {
-          estadoFinalMesa = (nuevoEstadoMesa === 'activa' || nuevoEstadoMesa === 'abierta') ? 'ocupada' : nuevoEstadoMesa;
-          await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoFinalMesa, orden.mesa_id]);
-          io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente, negocio_id: ordenNegocioId });
+          const mesaRow = await dbGet('SELECT estado FROM Mesas WHERE id = ?', [orden.mesa_id]);
+          if (mesaRow && mesaRow.estado === 'libre') {
+            estadoFinalMesa = 'libre';
+          } else {
+            estadoFinalMesa = (nuevoEstadoMesa === 'activa' || nuevoEstadoMesa === 'abierta') ? 'ocupada' : nuevoEstadoMesa;
+            await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoFinalMesa, orden.mesa_id]);
+            io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente, negocio_id: ordenNegocioId });
+          }
         }
       } else {
         await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [nuevoEstadoMesa, item.orden_id]);
@@ -6460,6 +6490,8 @@ async function procesarCobroOrden(ordenId, {
   enviarCocina = false,
   mantener_mesa_ocupada = false,
   mantenerOcupada = false,
+  liberar_mesa = false,
+  liberarMesa = false,
   idempotencyKey = null,
   reqNegocioId = null,
   usuarioRol = null
@@ -6894,35 +6926,46 @@ async function procesarCobroOrden(ordenId, {
 
     if (orden.mesa_id) {
       const itemsPendientesCocina = await dbAll(
-        "SELECT id FROM DetalleOrden WHERE orden_id = ? AND (destino = 'cocina' OR (destino IS NULL AND (curso IS NULL OR curso NOT IN (1, 5, 6)))) AND estado_comanda IN ('pendiente', 'preparando')",
+        "SELECT id, nombre_producto FROM DetalleOrden WHERE orden_id = ? AND (destino = 'cocina' OR (destino IS NULL AND (curso IS NULL OR curso NOT IN (1, 5, 6)))) AND estado_comanda IN ('pendiente', 'preparando')",
         [ordenId]
       );
       const tieneItemsCocinaPendientes = itemsPendientesCocina.length > 0;
+      const hayNuevosCocina = itemsProcesadosCobro.some(it => it.destino === 'cocina' || (!it.destino && it.curso !== 1 && it.curso !== 5 && it.curso !== 6));
 
       await dbRun(
         "UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
         [ahora, orden.mesa_id]
       );
 
-      const mantenerMesaOcupada = Boolean(mantener_mesa_ocupada || mantenerOcupada);
+      const clientePidioCuenta = Boolean(orden.cuenta_pedida || orden.pidio_cuenta_qr);
+      const forzarLiberar = Boolean(liberar_mesa || liberarMesa);
+      const forzarMantener = Boolean(mantener_mesa_ocupada || mantenerOcupada || enviar_cocina || enviarCocina);
+
+      // Si agrego comida a una mesa y la pago de una vez:
+      // Debe quedar ocupada en naranja ('esperando') con saldo ₡0 mientras cocina prepara los platos.
+      // Si el cliente pidió la cuenta para retirarse o se forzó liberar: se libera inmediatamente a 'libre'.
+      const mantenerMesaOcupada = forzarMantener || (!forzarLiberar && !clientePidioCuenta && (hayNuevosCocina || tieneItemsCocinaPendientes));
 
       if (mantenerMesaOcupada) {
         await dbRun(
           "UPDATE Mesas SET estado = 'esperando', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
           [orden.mesa_id]
         );
+        const nombresPendientes = itemsPendientesCocina.map(it => it.nombre_producto);
         io.emit('mesa_actualizada', {
           mesaId: orden.mesa_id,
           estado: 'esperando',
           cliente: orden.cliente,
           total: 0,
           total_pagado: totalPagadoAcum,
+          platos_pendientes: nombresPendientes,
+          items_pendientes: nombresPendientes,
           transferida_de: null,
           mesas_unidas: [],
           negocio_id: negocioIdFinal
         });
       } else {
-        // Cobro de mesa: LIBERAR LA MESA INMEDIATAMENTE
+        // Cobro normal de mesa al terminar: LIBERAR LA MESA INMEDIATAMENTE
         await dbRun(
           "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
           [orden.mesa_id]
