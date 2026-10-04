@@ -6491,6 +6491,7 @@ window.abrirModalNuevoNegocio = function(modalidad = 'individual') {
   document.getElementById('devNegocioNombre').value = '';
   document.getElementById('devNegocioSlogan').value = '';
   document.getElementById('devNegocioLogoUrl').value = '';
+  if (typeof window.actualizarPreviewLogoDev === 'function') window.actualizarPreviewLogoDev('');
   document.getElementById('devNegocioTelefono').value = '';
   const elMoneda = document.getElementById('devNegocioMoneda');
   if (elMoneda) elMoneda.value = 'CRC';
@@ -6579,6 +6580,7 @@ window.editarNegocioDev = async function(negocioId) {
   document.getElementById('devNegocioNombre').value = n.nombre;
   document.getElementById('devNegocioSlogan').value = n.slogan || '';
   document.getElementById('devNegocioLogoUrl').value = n.logo_url || '';
+  if (typeof window.actualizarPreviewLogoDev === 'function') window.actualizarPreviewLogoDev(n.logo_url || '');
   document.getElementById('devNegocioTelefono').value = n.telefono || '';
   const elMoneda = document.getElementById('devNegocioMoneda');
   if (elMoneda) elMoneda.value = n.moneda || 'CRC';
@@ -6756,6 +6758,101 @@ document.getElementById('btnGuardarDevNegocio')?.addEventListener('click', async
   } catch (e) {
     alert('Error al guardar negocio: ' + e.message);
   }
+});
+
+// --- GESTIÓN DE LOGO DE NEGOCIO (DESARROLLADOR) ---
+window.actualizarPreviewLogoDev = function(url) {
+  const img = document.getElementById('devNegocioLogoPreview');
+  const placeholder = document.getElementById('devNegocioLogoPlaceholder');
+  const btnQuitar = document.getElementById('btnQuitarLogoDev');
+  const inputUrl = document.getElementById('devNegocioLogoUrl');
+  const trimmed = (url || '').trim();
+
+  if (trimmed) {
+    if (img) {
+      img.src = trimmed;
+      img.style.display = 'block';
+    }
+    if (placeholder) placeholder.style.display = 'none';
+    if (btnQuitar) btnQuitar.style.display = 'inline-flex';
+    if (inputUrl && inputUrl.value !== trimmed) inputUrl.value = trimmed;
+  } else {
+    if (img) {
+      img.src = '';
+      img.style.display = 'none';
+    }
+    if (placeholder) placeholder.style.display = 'block';
+    if (btnQuitar) btnQuitar.style.display = 'none';
+    if (inputUrl && inputUrl.value !== '') inputUrl.value = '';
+  }
+};
+
+document.getElementById('devNegocioLogoUrl')?.addEventListener('input', (e) => {
+  window.actualizarPreviewLogoDev(e.target.value);
+});
+
+document.getElementById('btnSubirLogoDev')?.addEventListener('click', () => {
+  document.getElementById('devNegocioLogoFileInput')?.click();
+});
+
+document.getElementById('btnQuitarLogoDev')?.addEventListener('click', () => {
+  window.actualizarPreviewLogoDev('');
+  const fileInput = document.getElementById('devNegocioLogoFileInput');
+  if (fileInput) fileInput.value = '';
+});
+
+document.getElementById('devNegocioLogoFileInput')?.addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('⚠️ Por favor selecciona un archivo de imagen válido (PNG, JPG, WebP, SVG).');
+    return;
+  }
+
+  if (file.size > 20 * 1024 * 1024) {
+    alert('⚠️ La imagen es demasiado pesada (máximo 20 MB).');
+    return;
+  }
+
+  const btnSubir = document.getElementById('btnSubirLogoDev');
+  const originalText = btnSubir ? btnSubir.innerHTML : '';
+  if (btnSubir) {
+    btnSubir.disabled = true;
+    btnSubir.innerHTML = '⏳ Subiendo logo...';
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Data = e.target.result;
+    try {
+      const res = await fetch('/api/upload/imagen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imagen: base64Data,
+          nombre: file.name
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al subir imagen');
+
+      window.actualizarPreviewLogoDev(data.url);
+      if (typeof mostrarNotificacionCentro === 'function') {
+        mostrarNotificacionCentro('✅ Logo subido y guardado exitosamente', 'success');
+      }
+    } catch (err) {
+      alert('❌ Error al subir el logo: ' + err.message);
+    } finally {
+      if (btnSubir) {
+        btnSubir.disabled = false;
+        btnSubir.innerHTML = originalText;
+      }
+      event.target.value = '';
+    }
+  };
+  reader.readAsDataURL(file);
 });
 
 async function cargarUsuariosDev() {

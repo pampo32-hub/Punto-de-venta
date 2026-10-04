@@ -2604,9 +2604,31 @@
             <input type="text" id="devNegocioTelefono" placeholder="Ej: 2222-1111" />
           </div>
         </div>
-        <div class="field-group" style="margin-top:10px;">
-          <label>URL del Logo (Opcional):</label>
-          <input type="url" id="devNegocioLogoUrl" placeholder="https://ejemplo.com/logo.png" />
+        <!-- SECCIÓN: LOGO DEL NEGOCIO (SUBIR DESDE PC O PEGAR URL) -->
+        <div class="field-group" style="margin-top:12px; padding:12px; background:rgba(30,41,59,0.5); border:1px solid #334155; border-radius:10px;">
+          <label style="font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+            🖼️ Logo del Comercio
+          </label>
+          <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
+            <div id="devLogoPreviewContainer" style="width:72px; height:72px; border-radius:12px; background:#0f172a; border:2px dashed #475569; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+              <img id="devNegocioLogoPreview" src="" alt="Logo del Negocio" style="width:100%; height:100%; object-fit:contain; display:none;" />
+              <span id="devNegocioLogoPlaceholder" style="font-size:2rem; color:#64748b;">🏢</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; flex:1;">
+              <input type="file" id="devNegocioLogoFileInput" accept="image/*" style="display:none;" />
+              <button type="button" class="btn-pri" id="btnSubirLogoDev" style="padding:7px 14px; font-size:0.85rem; display:inline-flex; align-items:center; gap:6px; width:fit-content; cursor:pointer;">
+                📁 Subir Logo desde tu PC / Celular
+              </button>
+              <button type="button" class="btn-sec" id="btnQuitarLogoDev" style="padding:4px 10px; font-size:0.75rem; color:#ef4444; border-color:rgba(239,68,68,0.3); width:fit-content; display:none;">
+                🗑️ Quitar Logo
+              </button>
+              <small style="color:#94a3b8; font-size:0.75rem;">PNG, JPG, WebP o SVG. Se guardará de inmediato en el servidor.</small>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:0.78rem; color:#94a3b8; font-weight:600;">O pegar enlace web (URL):</label>
+            <input type="url" id="devNegocioLogoUrl" placeholder="https://ejemplo.com/logo.png" style="font-size:0.85rem;" />
+          </div>
         </div>
         <div class="field-group" style="margin-top:10px;">
           <label>Estado del Comercio:</label>
@@ -7417,7 +7439,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=3.8.0"></script>
+  <script src="app.js?v=3.8.1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
