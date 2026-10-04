@@ -741,6 +741,23 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
   }
 });
 
+app.get('/api/auth/negocio-info/:id', async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const n = await dbGet('SELECT id, nombre, logo_url, slogan, activo FROM Negocios WHERE id = ? OR LOWER(TRIM(nombre)) = LOWER(TRIM(?))', [Number(rawId) || 0, String(rawId).trim()]);
+    if (!n) return res.status(404).json({ error: 'Comercio no encontrado' });
+    res.json({
+      id: n.id,
+      nombre: n.nombre,
+      logo_url: n.logo_url || '',
+      slogan: n.slogan || '',
+      activo: Number(n.activo) !== 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 function obtenerIpCliente(req) {
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
@@ -758,6 +775,8 @@ app.post('/api/auth/login', async (req, res) => {
     const rawUser = req.body.usuario || req.body.username || req.body.email || req.body.user || '';
     const rawPass = req.body.password || req.body.pass || req.body.pin || req.body.clave || '';
     const rawPin = req.body.pin || '';
+    const reqNegocioId = req.body.negocio_id ? Number(req.body.negocio_id) : (req.body.comercio_id ? Number(req.body.comercio_id) : null);
+    const reqUsuarioId = req.body.usuario_id ? Number(req.body.usuario_id) : null;
 
     const uInput = String(rawUser).trim();
     const pInput = String(rawPass || rawPin).trim();
@@ -768,21 +787,60 @@ app.post('/api/auth/login', async (req, res) => {
 
     let u = null;
 
-    if (uInput) {
-      // 1. Buscar usuario por coincidencia de usuario, nombre, email o PIN
-      const candidatos = await dbAll(
-        `SELECT * FROM Usuarios 
-         WHERE (LOWER(TRIM(usuario)) = LOWER(TRIM(?)) 
-            OR LOWER(TRIM(nombre_completo)) = LOWER(TRIM(?)) 
-            OR pin = ? 
-            OR TRIM(pin) = TRIM(?)) 
-           AND (COALESCE(activo, 1) = 1)
-         ORDER BY 
-           (CASE WHEN LOWER(TRIM(usuario)) = LOWER(TRIM(?)) THEN 1 
-                 WHEN rol IN ('developer', 'admin', 'superadmin') THEN 2 
-                 ELSE 3 END)`,
-        [uInput, uInput, uInput, uInput, uInput]
-      );
+    // CASO 1: Se especificó un usuario_id puntual (ej: selección desde modal de desambiguación)
+    if (reqUsuarioId) {
+      const cand = await dbGet('SELECT * FROM Usuarios WHERE id = ? AND (COALESCE(activo, 1) = 1)', [reqUsuarioId]);
+      if (cand) {
+        const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
+        if (passOk) {
+          u = cand;
+        }
+      }
+      if (!u) {
+        return res.status(401).json({ error: 'Credenciales inválidas para el usuario seleccionado.' });
+      }
+    }
+
+    // CASO 2: Se especificó un negocio_id (ej: enlace directo ?negocio=ID o terminal asignada a un comercio)
+    if (!u && reqNegocioId) {
+      let candidatos = [];
+      if (uInput) {
+        candidatos = await dbAll(
+          `SELECT * FROM Usuarios 
+           WHERE (LOWER(TRIM(usuario)) = LOWER(TRIM(?)) 
+              OR LOWER(TRIM(nombre_completo)) = LOWER(TRIM(?)) 
+              OR pin = ? 
+              OR TRIM(pin) = TRIM(?)) 
+             AND (COALESCE(activo, 1) = 1)
+             AND (negocio_id = ? OR rol = 'developer')
+           ORDER BY 
+             (CASE WHEN LOWER(TRIM(usuario)) = LOWER(TRIM(?)) THEN 1 
+                   WHEN rol IN ('developer', 'admin', 'superadmin') THEN 2 
+                   ELSE 3 END)`,
+          [uInput, uInput, uInput, uInput, reqNegocioId, uInput]
+        );
+        if (!candidatos.length) {
+          const todos = await dbAll(
+            `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1) AND (negocio_id = ? OR rol = 'developer')
+             ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`,
+            [reqNegocioId]
+          );
+          for (const cand of todos) {
+            const candUser = (cand.usuario || '').toLowerCase().trim();
+            const candNom = (cand.nombre_completo || '').toLowerCase().trim();
+            const uInputLower = uInput.toLowerCase().trim();
+            if (candUser === uInputLower || candNom === uInputLower) {
+              candidatos.push(cand);
+            }
+          }
+        }
+      } else if (pInput) {
+        candidatos = await dbAll(
+          `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1) AND (negocio_id = ? OR rol = 'developer')
+           ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`,
+          [reqNegocioId]
+        );
+      }
 
       for (const cand of candidatos) {
         const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
@@ -792,36 +850,107 @@ app.post('/api/auth/login', async (req, res) => {
         }
       }
 
-      // Fallback: búsqueda general por nombre fonético o aproximado
       if (!u) {
-        const todos = await dbAll(
-          `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
-           ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`
+        return res.status(401).json({ error: 'Credenciales inválidas para este comercio. Verifica tu usuario o contraseña.' });
+      }
+    }
+
+    // CASO 3: Login general desde la página principal sin especificar comercio previamente
+    if (!u) {
+      let candidatos = [];
+      if (uInput) {
+        candidatos = await dbAll(
+          `SELECT * FROM Usuarios 
+           WHERE (LOWER(TRIM(usuario)) = LOWER(TRIM(?)) 
+              OR LOWER(TRIM(nombre_completo)) = LOWER(TRIM(?)) 
+              OR pin = ? 
+              OR TRIM(pin) = TRIM(?)) 
+             AND (COALESCE(activo, 1) = 1)
+           ORDER BY 
+             (CASE WHEN LOWER(TRIM(usuario)) = LOWER(TRIM(?)) THEN 1 
+                   WHEN rol IN ('developer', 'admin', 'superadmin') THEN 2 
+                   ELSE 3 END)`,
+          [uInput, uInput, uInput, uInput, uInput]
         );
-        for (const cand of todos) {
-          const candUser = (cand.usuario || '').toLowerCase().trim();
-          const candNom = (cand.nombre_completo || '').toLowerCase().trim();
-          const uInputLower = uInput.toLowerCase().trim();
-          if (candUser === uInputLower || candNom === uInputLower) {
-            const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
-            if (passOk) {
-              u = cand;
-              break;
+
+        if (!candidatos.length) {
+          const todos = await dbAll(
+            `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
+             ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`
+          );
+          for (const cand of todos) {
+            const candUser = (cand.usuario || '').toLowerCase().trim();
+            const candNom = (cand.nombre_completo || '').toLowerCase().trim();
+            const uInputLower = uInput.toLowerCase().trim();
+            if (candUser === uInputLower || candNom === uInputLower) {
+              candidatos.push(cand);
             }
           }
         }
+      } else if (pInput) {
+        candidatos = await dbAll(
+          `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
+           ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`
+        );
       }
-    } else if (pInput) {
-      // 2. Login directo solo con PIN
-      const candidatos = await dbAll(
-        `SELECT * FROM Usuarios WHERE (COALESCE(activo, 1) = 1)
-         ORDER BY (CASE WHEN rol IN ('developer', 'admin', 'superadmin') THEN 1 ELSE 2 END)`
-      );
+
+      // Validar contraseñas de todos los candidatos coincidentes
+      const validos = [];
       for (const cand of candidatos) {
-        const passOk = await verificarCredencialUsuario(cand, pInput);
+        const passOk = await verificarCredencialUsuario(cand, pInput || uInput);
         if (passOk) {
-          u = cand;
-          break;
+          validos.push(cand);
+        }
+      }
+
+      if (validos.length === 0) {
+        return res.status(401).json({ error: 'Credenciales inválidas. Verifica tu usuario, contraseña o PIN.' });
+      }
+
+      // Si coincide exactamente con 'dev' (developer único)
+      const devExacto = validos.find(c => c.rol === 'developer' && (c.usuario || '').toLowerCase() === uInput.toLowerCase());
+      if (devExacto && validos.length === 1) {
+        u = devExacto;
+      } else {
+        // Agrupar por negocio_id para detectar si pertenecen a múltiples locales
+        const negociosMap = new Map();
+        for (const cand of validos) {
+          const nId = cand.negocio_id || 1;
+          if (!negociosMap.has(nId)) {
+            negociosMap.set(nId, cand);
+          }
+        }
+
+        if (negociosMap.size === 1) {
+          // Solo existe en un único negocio: acceso directo
+          u = validos[0];
+        } else {
+          // ¡Colisión detectada! Este usuario y contraseña existen en más de un local.
+          const comerciosInfo = await Promise.all([...negociosMap.entries()].map(async ([nId, cand]) => {
+            const neg = await dbGet('SELECT id, nombre, logo_url, slogan, activo FROM Negocios WHERE id = ?', [nId]);
+            let rolDisplay = 'Colaborador';
+            if (cand.rol === 'superadmin' || cand.rol === 'super_admin' || cand.rol === 'superadministrador') rolDisplay = 'Super Administrador (Dueño)';
+            else if (cand.rol === 'admin') rolDisplay = 'Administrador';
+            else if (cand.rol === 'cajero') rolDisplay = 'Cajero';
+            else if (cand.rol === 'salonero') rolDisplay = cand.genero === 'F' ? 'Salonera' : 'Salonero';
+            else if (cand.rol === 'developer') rolDisplay = 'Desarrollador';
+
+            return {
+              usuario_id: cand.id,
+              negocio_id: nId,
+              negocio_nombre: neg ? neg.nombre : `Comercio #${nId}`,
+              negocio_logo: neg ? (neg.logo_url || '') : '',
+              negocio_slogan: neg ? (neg.slogan || '') : '',
+              nombre_completo: cand.nombre_completo,
+              rol: cand.rol,
+              rol_display: rolDisplay
+            };
+          }));
+
+          return res.status(200).json({
+            requiere_seleccion_negocio: true,
+            comercios: comerciosInfo
+          });
         }
       }
     }

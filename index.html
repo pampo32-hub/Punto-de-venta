@@ -115,6 +115,18 @@
           <p>Ingresa tus credenciales para acceder a <strong>GAMMA POS</strong></p>
         </div>
 
+        <!-- INDICADOR DE COMERCIO FIJADO POR ENLACE O MEMORIA -->
+        <div id="badgeComercioFijadoLogin" style="display:none; margin-bottom:14px; padding:10px 14px; background:rgba(56,189,248,0.12); border:1.5px solid #38bdf8; border-radius:12px; font-size:0.85rem; color:#e0f2fe; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <span style="font-size:1.2rem;">🏬</span>
+            <div style="text-align:left; line-height:1.2;">
+              <small style="color:#94a3b8; font-size:0.7rem; display:block;">Accediendo a:</small>
+              <strong id="lblComercioFijadoNombre" style="color:#38bdf8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">Comercio</strong>
+            </div>
+          </div>
+          <button type="button" onclick="window.quitarComercioFijadoLogin()" style="background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.4); color:#fca5a5; font-size:0.75rem; font-weight:700; cursor:pointer; padding:4px 8px; border-radius:6px; flex-shrink:0;" title="Ingresar a otro comercio">✕ Cambiar</button>
+        </div>
+
         <form id="formLogin" onsubmit="event.preventDefault(); ejecutarLogin();">
           <div class="field-group">
             <label>Usuario o PIN:</label>
@@ -4919,6 +4931,27 @@
   </div>
 
   <!-- ===================================================================== -->
+  <!-- MODAL: SELECCIÓN DE COMERCIO (DESAMBIGUACIÓN MULTI-NEGOCIO EN LOGIN) -->
+  <!-- ===================================================================== -->
+  <div class="modal-backdrop" id="modalSeleccionNegocioLogin" style="display:none; z-index: 100075; backdrop-filter: blur(10px); background: rgba(15, 23, 42, 0.92);">
+    <div class="modal-dialog" style="max-width: 460px; width: 92vw; border-radius: 20px; background: #0f172a; border: 1.5px solid #38bdf8; box-shadow: 0 25px 65px rgba(56, 189, 248, 0.25); overflow: hidden; text-align: center; padding: 26px 22px;">
+      <div style="font-size: 3rem; margin-bottom: 8px;">🏬</div>
+      <h3 style="margin: 0 0 8px; color: #f8fafc; font-size: 1.35rem; font-weight: 800;">Selecciona tu Comercio</h3>
+      <p style="margin: 0 0 16px; color: #94a3b8; font-size: 0.88rem; line-height: 1.4;">
+        Hemos detectado que esta cuenta existe en más de un local. Toca el comercio al que deseas ingresar:
+      </p>
+
+      <div id="listaNegociosLoginColision" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; max-height: 320px; overflow-y: auto; text-align: left;">
+        <!-- Se llena dinámicamente con los comercios coincidentes -->
+      </div>
+
+      <button type="button" onclick="window.cerrarModalSeleccionNegocioLogin()" class="btn-sec" style="width: 100%; padding: 11px; font-size: 0.9rem; border-radius: 10px; cursor: pointer;">
+        ✕ Cancelar
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
   <!-- MODAL: ALERTA SESIÓN YA ACTIVA EN OTRO DISPOSITIVO -->
   <!-- ===================================================================== -->
   <div class="modal-backdrop" id="modalAlertaSesionYaActiva" style="display:none; z-index: 100070; backdrop-filter: blur(10px); background: rgba(15, 23, 42, 0.9);">
@@ -7439,7 +7472,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=3.8.1"></script>
+  <script src="app.js?v=3.8.2"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

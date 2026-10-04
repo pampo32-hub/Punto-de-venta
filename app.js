@@ -2709,7 +2709,7 @@ window.cargarUsuariosPublicosLogin = async function() {
             const defaultPass = u.pin || demoDefaults[u.usuario] || '1234';
             const rolClass = u.rol === 'salonero' && u.genero === 'F' ? 'salonera' : u.rol;
             return `
-              <button type="button" class="chip-account ${escapeHtml(rolClass)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}')" title="Ingresar como ${escapeHtml(u.nombre_completo)} (${escapeHtml(neg.nombre)})">
+              <button type="button" class="chip-account ${escapeHtml(rolClass)}" onclick="cargarCredencialDemo('${escapeHtml(u.usuario)}', '${defaultPass}', ${Number(u.negocio_id) || 1})" title="Ingresar como ${escapeHtml(u.nombre_completo)} (${escapeHtml(neg.nombre)})">
                 ${u.avatar || '👤'} ${escapeHtml(u.nombre_completo)} <small style="opacity:0.8; font-size:0.75rem;">(${escapeHtml(u.rolDisplay)})</small>
               </button>
             `;
@@ -2722,19 +2722,19 @@ window.cargarUsuariosPublicosLogin = async function() {
   }
 };
 
-window.cargarCredencialDemo = function(user, pass) {
+window.cargarCredencialDemo = function(user, pass, negocioId = null) {
   const u = document.getElementById('loginUsuario');
   const p = document.getElementById('loginPassword');
   if (u) u.value = user || '';
   if (p) p.value = pass || '';
   if (pass) {
-    window.ejecutarLogin();
+    window.ejecutarLogin(negocioId ? { negocio_id: Number(negocioId) } : {});
   } else if (p) {
     p.focus();
   }
 };
 
-window.ejecutarLogin = async function() {
+window.ejecutarLogin = async function(opciones = {}) {
   const uEl = document.getElementById('loginUsuario');
   const pEl = document.getElementById('loginPassword');
   const usuario = uEl ? uEl.value.trim() : '';
@@ -2754,15 +2754,46 @@ window.ejecutarLogin = async function() {
 
   try {
     const devToken = typeof window.obtenerDeviceToken === 'function' ? window.obtenerDeviceToken() : (localStorage.getItem('pos_device_token') || '');
+    
+    // Obtenemos negocio_id si viene en opciones, en la URL, o recordado
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlNegocio = urlParams.get('negocio') || urlParams.get('comercio') || urlParams.get('n');
+    const badgeActivo = document.getElementById('badgeComercioFijadoLogin')?.style.display !== 'none';
+    const ultimoNegocioId = localStorage.getItem('pos_ultimo_negocio_id');
+
+    const negocioId = opciones.negocio_id || urlNegocio || (badgeActivo ? ultimoNegocioId : null) || null;
+    const usuarioId = opciones.usuario_id || null;
+
+    const payload = {
+      usuario,
+      password,
+      deviceToken: devToken,
+      forzar_cierre_previo: true
+    };
+    if (negocioId) payload.negocio_id = Number(negocioId);
+    if (usuarioId) payload.usuario_id = Number(usuarioId);
+    if (ultimoNegocioId) payload.negocio_id_preferido = Number(ultimoNegocioId);
+
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-device-token': devToken
       },
-      body: JSON.stringify({ usuario, password, deviceToken: devToken, forzar_cierre_previo: true })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
+
+    // ¿Requiere desambiguación de comercio por colisión multi-negocio?
+    if (data.requiere_seleccion_negocio && Array.isArray(data.comercios)) {
+      window.mostrarModalSeleccionNegocioLogin(data.comercios);
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = '🔐 Ingresar al Sistema';
+      }
+      return;
+    }
+
     if (!res.ok) {
       if (data.sesion_ya_activa) {
         window._ultimoUsuarioIdBloqueado = data.usuario_id;
@@ -2834,6 +2865,9 @@ window.ejecutarLogin = async function() {
     localStorage.setItem('pos_usuario', JSON.stringify(data.usuario));
     sessionStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
     localStorage.setItem('pos_negocio', JSON.stringify(data.negocio));
+    if (data.negocio && data.negocio.id) {
+      localStorage.setItem('pos_ultimo_negocio_id', data.negocio.id);
+    }
     sessionStorage.setItem('pos_user_context', data.usuario?.rol === 'developer' ? 'dev' : 'pos');
     localStorage.setItem('pos_user_context', data.usuario?.rol === 'developer' ? 'dev' : 'pos');
 
@@ -2846,6 +2880,91 @@ window.ejecutarLogin = async function() {
       btnSubmit.textContent = '🔐 Ingresar al Sistema';
     }
   }
+};
+
+// --- DESAMBIGUACIÓN MULTI-COMERCIO EN LOGIN ---
+window.mostrarModalSeleccionNegocioLogin = function(comercios) {
+  const modal = document.getElementById('modalSeleccionNegocioLogin');
+  const lista = document.getElementById('listaNegociosLoginColision');
+  if (!modal || !lista) return;
+
+  const ultimoId = Number(localStorage.getItem('pos_ultimo_negocio_id')) || null;
+
+  lista.innerHTML = comercios.map(c => {
+    const esHabitual = ultimoId && (Number(c.negocio_id) === ultimoId);
+    const logoHtml = c.negocio_logo 
+      ? `<img src="${escapeHtml(c.negocio_logo)}" alt="Logo" style="width:46px; height:46px; border-radius:12px; object-fit:contain; background:#0f172a; padding:2px; border:1px solid #334155;" onerror="this.outerHTML='<span style=\\'font-size:2.2rem;\\'>🏢</span>'" />`
+      : `<span style="font-size:2.2rem; width:46px; height:46px; display:flex; align-items:center; justify-content:center; background:#0f172a; border-radius:12px; border:1px solid #334155;">🏢</span>`;
+
+    return `
+      <div onclick="window.seleccionarComercioLogin(${c.negocio_id}, ${c.usuario_id})" 
+           style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:${esHabitual ? 'rgba(56,189,248,0.15)' : 'rgba(30,41,59,0.7)'}; border:${esHabitual ? '2px solid #38bdf8' : '1px solid #334155'}; border-radius:14px; cursor:pointer; text-align:left; transition:all 0.2s ease;"
+           onmouseover="this.style.background='rgba(56,189,248,0.25)'; this.style.borderColor='#38bdf8';"
+           onmouseout="this.style.background='${esHabitual ? 'rgba(56,189,248,0.15)' : 'rgba(30,41,59,0.7)'}'; this.style.borderColor='${esHabitual ? '#38bdf8' : '#334155'}';">
+        ${logoHtml}
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <strong style="color:#f8fafc; font-size:1.05rem;">${escapeHtml(c.negocio_nombre)}</strong>
+            ${esHabitual ? '<span style="background:#0284c7; color:#fff; font-size:0.68rem; font-weight:700; padding:2px 7px; border-radius:10px;">⭐ Usado recientemente aquí</span>' : ''}
+          </div>
+          <div style="color:#cbd5e1; font-size:0.8rem; margin-top:2px;">
+            👤 ${escapeHtml(c.nombre_completo || '')} &bull; <span style="color:#38bdf8; font-weight:700;">${escapeHtml(c.rol_display || '')}</span>
+          </div>
+          ${c.negocio_slogan ? `<div style="color:#94a3b8; font-size:0.75rem; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(c.negocio_slogan)}</div>` : ''}
+        </div>
+        <div style="color:#38bdf8; font-size:1.4rem; font-weight:bold;">&rsaquo;</div>
+      </div>
+    `;
+  }).join('');
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+  window._modalActivoId = 'modalSeleccionNegocioLogin';
+};
+
+window.seleccionarComercioLogin = function(negocioId, usuarioId) {
+  if (negocioId) localStorage.setItem('pos_ultimo_negocio_id', negocioId);
+  window.cerrarModalSeleccionNegocioLogin();
+  window.ejecutarLogin({ negocio_id: negocioId, usuario_id: usuarioId });
+};
+
+window.cerrarModalSeleccionNegocioLogin = function() {
+  const modal = document.getElementById('modalSeleccionNegocioLogin');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+window.quitarComercioFijadoLogin = function() {
+  localStorage.removeItem('pos_ultimo_negocio_id');
+  const url = new URL(window.location.href);
+  url.searchParams.delete('negocio');
+  url.searchParams.delete('comercio');
+  url.searchParams.delete('n');
+  window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+  const badge = document.getElementById('badgeComercioFijadoLogin');
+  if (badge) badge.style.display = 'none';
+};
+
+window.verificarComercioFijadoUrl = async function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const nParam = urlParams.get('negocio') || urlParams.get('comercio') || urlParams.get('n');
+  const nId = nParam || localStorage.getItem('pos_ultimo_negocio_id');
+  const badge = document.getElementById('badgeComercioFijadoLogin');
+  const lbl = document.getElementById('lblComercioFijadoNombre');
+  if (!nId || !badge || !lbl) return;
+
+  try {
+    const res = await fetch('/api/auth/negocio-info/' + encodeURIComponent(nId));
+    if (res.ok) {
+      const info = await res.json();
+      if (info && info.nombre) {
+        lbl.textContent = info.nombre;
+        badge.style.display = 'flex';
+      }
+    }
+  } catch (_) {}
 };
 
 window.guardarPasswordTemporalObligatorio = async function() {
@@ -3014,6 +3133,9 @@ window.cerrarSesion = function(notificarServidor = true) {
   document.getElementById('loginPassword').value = '';
   if (typeof cargarUsuariosPublicosLogin === 'function') {
     cargarUsuariosPublicosLogin();
+  }
+  if (typeof verificarComercioFijadoUrl === 'function') {
+    verificarComercioFijadoUrl();
   }
 };
 
@@ -19179,6 +19301,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (posView) posView.classList.remove('active');
     if (typeof cargarUsuariosPublicosLogin === 'function') {
       cargarUsuariosPublicosLogin();
+    }
+    if (typeof verificarComercioFijadoUrl === 'function') {
+      verificarComercioFijadoUrl();
     }
   }
 });
