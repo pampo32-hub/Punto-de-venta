@@ -533,6 +533,51 @@ function obtenerNegocioIdReq(req, idFallback = 1) {
   return idFallback;
 }
 
+// ============================================================================
+// JERARQUÍA Y NORMALIZACIÓN CANÓNICA DE ROLES EN SERVIDOR
+// ============================================================================
+function normalizarRol(rol) {
+  if (!rol) return '';
+  const r = String(rol).toLowerCase().trim().replace(/[\s_-]/g, '');
+  if (r === 'superadmin' || r === 'superadministrador') return 'superadmin';
+  if (r === 'developer' || r === 'desarrollador' || r === 'dev') return 'developer';
+  if (r === 'admin' || r === 'administrador') return 'admin';
+  if (r === 'cajero' || r === 'cajera') return 'cajero';
+  if (r === 'salonero' || r === 'salonera' || r === 'mesero' || r === 'mesera' || r === 'camarero') return 'salonero';
+  if (r === 'cocina' || r === 'cocinero' || r === 'chef') return 'cocina';
+  return r;
+}
+
+function esDeveloperRol(rol) {
+  return normalizarRol(rol) === 'developer';
+}
+
+function esSuperAdminRol(rol) {
+  const r = normalizarRol(rol);
+  return r === 'superadmin' || r === 'developer';
+}
+
+function esAdminRol(rol) {
+  const r = normalizarRol(rol);
+  return r === 'admin' || r === 'superadmin' || r === 'developer';
+}
+
+function esAdminOCajeroRol(rol) {
+  const r = normalizarRol(rol);
+  return esAdminRol(r) || r === 'cajero';
+}
+
+function obtenerRolReq(req) {
+  return normalizarRol(
+    req.usuario?.rol ||
+    req.userRol ||
+    req.headers['x-user-rol'] ||
+    (req.query && req.query.rol) ||
+    (req.body && (req.body.rol || req.body.userRol)) ||
+    ''
+  );
+}
+
 app.use(extraerUsuarioJWT);
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -889,6 +934,8 @@ app.post('/api/auth/login', async (req, res) => {
       rolEtiqueta = 'Cajero';
     } else if (u.rol === 'developer') {
       rolEtiqueta = 'Desarrollador Global';
+    } else if (u.rol === 'superadmin' || u.rol === 'super_admin' || u.rol === 'superadministrador') {
+      rolEtiqueta = 'Super Administrador (Dueño)';
     }
 
     const perfilVisual = `${u.nombre_completo} (${rolEtiqueta})`;
@@ -2781,8 +2828,9 @@ app.get('/api/admin/empleados', async (req, res) => {
     const listado = empleados.map(e => {
       let rolDisplay = e.rol;
       if (e.rol === 'salonero') rolDisplay = e.genero === 'F' ? 'Salonera' : 'Salonero';
-      if (e.rol === 'cajero') rolDisplay = 'Cajero';
-      if (e.rol === 'admin') rolDisplay = 'Administrador';
+      else if (e.rol === 'cajero') rolDisplay = 'Cajero';
+      else if (e.rol === 'admin') rolDisplay = 'Administrador';
+      else if (e.rol === 'superadmin' || e.rol === 'super_admin') rolDisplay = 'Super Administrador';
       return { ...e, rolDisplay };
     });
 
@@ -2797,9 +2845,25 @@ app.post('/api/admin/empleados', async (req, res) => {
     const negocioId = obtenerNegocioIdReq(req, req.body.negocio_id || 1);
     const { usuario, nombre_completo, nombre, password, rol = 'salonero', genero = 'M', pin = '1234', caja_defecto_id } = req.body;
     
-    // Bloqueo estricto: el admin NO puede crear roles developer
-    if (rol === 'developer') {
-      return res.status(403).json({ ok: false, error: 'Permiso denegado: El administrador no puede crear usuarios de desarrollador' });
+    const reqRol = normalizarRol(req.usuario?.rol || req.headers['x-user-rol'] || '');
+    const esDev = reqRol === 'developer';
+    const esSuper = esSuperAdminRol(reqRol);
+    const esAdmin = esAdminRol(reqRol);
+
+    if (!esAdmin) {
+      return res.status(403).json({ ok: false, error: 'Permiso denegado: Se requiere rol de Administrador o Super Administrador' });
+    }
+
+    const rolNormalizado = normalizarRol(rol);
+
+    // Bloqueo estricto: Nadie excepto developer puede crear roles developer
+    if (rolNormalizado === 'developer' && !esDev) {
+      return res.status(403).json({ ok: false, error: 'Permiso denegado: No se pueden crear usuarios de desarrollador' });
+    }
+
+    // Si quien crea es Admin regular (no superadmin ni developer), solo puede crear roles de su nivel para abajo (salonero, cajero)
+    if (!esSuper && (rolNormalizado === 'admin' || rolNormalizado === 'superadmin')) {
+      return res.status(403).json({ ok: false, error: 'Permiso denegado: Un administrador solo puede crear colaboradores subordinados (Salonero, Cajero)' });
     }
 
     const nombreFinal = (nombre_completo || nombre || usuario || '').trim();
@@ -2807,17 +2871,19 @@ app.post('/api/admin/empleados', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Usuario y contraseña son requeridos' });
     }
 
-    const permisos = rol === 'cajero' 
+    const permisos = rolNormalizado === 'cajero' 
       ? '{"salon":true,"caja":true,"facturacion":true}'
-      : '{"salon":true,"kds":true}';
+      : (rolNormalizado === 'admin' || rolNormalizado === 'superadmin')
+        ? '{"salon":true,"caja":true,"facturacion":true,"admin":true}'
+        : '{"salon":true,"kds":true}';
 
-    const debeCambiar = (rol !== 'admin' && rol !== 'developer') ? 1 : 0;
+    const debeCambiar = !esAdminRol(rolNormalizado) ? 1 : 0;
     const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
 
     const r = await dbRun(
       `INSERT INTO Usuarios (negocio_id, usuario, nombre_completo, password, rol, genero, pin, permisos, debe_cambiar_password, caja_defecto_id, activo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      [negocioId, String(usuario).trim(), nombreFinal, hashedPassword, rol, genero, pin, permisos, debeCambiar, caja_defecto_id ? Number(caja_defecto_id) : null]
+      [negocioId, String(usuario).trim(), nombreFinal, hashedPassword, rolNormalizado, genero, pin, permisos, debeCambiar, caja_defecto_id ? Number(caja_defecto_id) : null]
     );
 
     res.json({ ok: true, message: 'Empleado registrado con éxito', id: r.lastID });
@@ -2828,40 +2894,103 @@ app.post('/api/admin/empleados', async (req, res) => {
 
 app.put('/api/admin/empleados/:id', async (req, res) => {
   try {
-    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    const targetId = Number(req.params.id);
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [targetId]);
     if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
 
-    // Bloqueo estricto: Jamás permitir que un admin modifique a un developer
-    if (target.rol === 'developer') {
-      return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil' });
+    const reqRol = normalizarRol(req.usuario?.rol || req.headers['x-user-rol'] || '');
+    const esDev = reqRol === 'developer';
+    const esSuper = esSuperAdminRol(reqRol);
+    const esAdmin = esAdminRol(reqRol);
+
+    if (!esAdmin) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de Administrador o Super Administrador.' });
     }
 
-    if (req.usuario && req.usuario.rol !== 'developer') {
-      if (Number(target.negocio_id) !== Number(req.usuario.negocio_id)) {
-        return res.status(403).json({ error: 'Acceso denegado: No tienes permisos para modificar empleados de otro comercio.' });
+    // Bloqueo estricto: Jamás permitir que nadie excepto developer modifique a un developer
+    if (target.rol === 'developer' && !esDev) {
+      return res.status(403).json({ error: 'Acceso restringido: No tienes permisos para modificar este perfil de desarrollador.' });
+    }
+
+    if (!esDev && req.usuario && Number(target.negocio_id) !== Number(req.usuario.negocio_id)) {
+      return res.status(403).json({ error: 'Acceso denegado: No tienes permisos para modificar empleados de otro comercio.' });
+    }
+
+    const reqUserId = req.usuario?.id ? Number(req.usuario.id) : null;
+
+    // Reglas estrictas para Administrador regular (de admin para abajo):
+    if (!esSuper) {
+      // 1. El admin no puede modificarse a sí mismo desde esta gestión de empleados
+      if (reqUserId && targetId === reqUserId) {
+        return res.status(403).json({ error: 'Acción no permitida: No puedes modificar tus propios permisos o cuenta desde la gestión de personal.' });
+      }
+      // 2. El admin no puede modificar a un superadmin
+      if (normalizarRol(target.rol) === 'superadmin') {
+        return res.status(403).json({ error: 'Acción no permitida: Un administrador no puede modificar a un Super Administrador.' });
+      }
+      // 3. El admin no puede modificar a otro admin (solo de admin para abajo)
+      if (normalizarRol(target.rol) === 'admin') {
+        return res.status(403).json({ error: 'Acción no permitida: Un administrador no puede modificar a otros administradores.' });
       }
     }
 
-    const { nombre_completo, password, rol, genero, pin, debe_cambiar_password, caja_defecto_id } = req.body;
-    if (rol === 'developer') return res.status(403).json({ error: 'No se puede elevar a developer' });
+    const { usuario, nombre_completo, password, rol, genero, pin, debe_cambiar_password, caja_defecto_id } = req.body;
 
+    // Validar el nuevo rol a asignar:
+    let rolFinal = rol !== undefined ? normalizarRol(rol) : target.rol;
+    if (rolFinal === 'developer' && !esDev) {
+      return res.status(403).json({ error: 'No se puede elevar a rol developer.' });
+    }
+    if (!esSuper) {
+      // Un admin NO puede asignar roles admin ni superadmin (solo roles de su nivel hacia abajo)
+      if (rolFinal === 'admin' || rolFinal === 'superadmin') {
+        return res.status(403).json({ error: 'Acción no permitida: Un administrador solo puede asignar roles subordinados (Cajero, Salonero).' });
+      }
+    }
+
+    // Validar nombre de usuario (login) único en el negocio si cambia
+    let usuarioFinal = target.usuario;
+    if (usuario && String(usuario).trim() && String(usuario).trim().toLowerCase() !== target.usuario.toLowerCase()) {
+      usuarioFinal = String(usuario).trim();
+      const yaExiste = await dbGet(
+        'SELECT id FROM Usuarios WHERE negocio_id = ? AND LOWER(usuario) = LOWER(?) AND id != ?',
+        [target.negocio_id, usuarioFinal, targetId]
+      );
+      if (yaExiste) {
+        return res.status(400).json({ error: `El nombre de usuario "${usuarioFinal}" ya está en uso por otro colaborador.` });
+      }
+    }
+
+    const nombreFinal = (nombre_completo !== undefined && String(nombre_completo).trim()) ? String(nombre_completo).trim() : target.nombre_completo;
+    const generoFinal = genero !== undefined ? genero : target.genero;
+    const pinFinal = pin !== undefined ? String(pin).trim() : target.pin;
     const cDefectoFinal = caja_defecto_id !== undefined ? (caja_defecto_id ? Number(caja_defecto_id) : null) : target.caja_defecto_id;
 
+    // Actualizar permisos según rol final
+    let permisosFinal = target.permisos;
+    if (rolFinal === 'cajero') {
+      permisosFinal = '{"salon":true,"caja":true,"facturacion":true}';
+    } else if (rolFinal === 'admin' || rolFinal === 'superadmin') {
+      permisosFinal = '{"salon":true,"caja":true,"facturacion":true,"admin":true}';
+    } else if (rolFinal === 'salonero') {
+      permisosFinal = '{"salon":true,"kds":true}';
+    }
+
     if (password && String(password).trim()) {
-      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : ((rol !== 'admin' && rol !== 'developer') ? 1 : 0);
+      const debeCambiar = (debe_cambiar_password !== undefined) ? (debe_cambiar_password ? 1 : 0) : (!esAdminRol(rolFinal) ? 1 : 0);
       const hashedPassword = await bcrypt.hash(String(password).trim(), 10);
       await dbRun(
-        'UPDATE Usuarios SET nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, debe_cambiar_password = ?, caja_defecto_id = ? WHERE id = ?',
-        [nombre_completo, hashedPassword, rol, genero, pin, debeCambiar, cDefectoFinal, req.params.id]
+        'UPDATE Usuarios SET usuario = ?, nombre_completo = ?, password = ?, rol = ?, genero = ?, pin = ?, permisos = ?, debe_cambiar_password = ?, caja_defecto_id = ? WHERE id = ?',
+        [usuarioFinal, nombreFinal, hashedPassword, rolFinal, generoFinal, pinFinal, permisosFinal, debeCambiar, cDefectoFinal, targetId]
       );
     } else {
       await dbRun(
-        'UPDATE Usuarios SET nombre_completo = ?, rol = ?, genero = ?, pin = ?, caja_defecto_id = ? WHERE id = ?',
-        [nombre_completo, rol, genero, pin, cDefectoFinal, req.params.id]
+        'UPDATE Usuarios SET usuario = ?, nombre_completo = ?, rol = ?, genero = ?, pin = ?, permisos = ?, caja_defecto_id = ? WHERE id = ?',
+        [usuarioFinal, nombreFinal, rolFinal, generoFinal, pinFinal, permisosFinal, cDefectoFinal, targetId]
       );
     }
 
-    res.json({ message: 'Empleado actualizado con éxito' });
+    res.json({ ok: true, message: 'Colaborador actualizado con éxito' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -2869,18 +2998,45 @@ app.put('/api/admin/empleados/:id', async (req, res) => {
 
 app.delete('/api/admin/empleados/:id', async (req, res) => {
   try {
-    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    const targetId = Number(req.params.id);
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [targetId]);
     if (!target) return res.status(404).json({ error: 'Empleado no encontrado' });
-    if (target.rol === 'developer') return res.status(403).json({ error: 'Acción prohibida' });
 
-    if (req.usuario && req.usuario.rol !== 'developer') {
-      if (Number(target.negocio_id) !== Number(req.usuario.negocio_id)) {
-        return res.status(403).json({ error: 'Acceso denegado: No tienes permisos para eliminar empleados de otro comercio.' });
+    const reqRol = normalizarRol(req.usuario?.rol || req.headers['x-user-rol'] || '');
+    const esDev = reqRol === 'developer';
+    const esSuper = esSuperAdminRol(reqRol);
+    const esAdmin = esAdminRol(reqRol);
+
+    if (!esAdmin) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requiere rol de Administrador o Super Administrador.' });
+    }
+
+    if (target.rol === 'developer' && !esDev) {
+      return res.status(403).json({ error: 'Acción prohibida: No se puede eliminar a un desarrollador global.' });
+    }
+
+    if (!esDev && req.usuario && Number(target.negocio_id) !== Number(req.usuario.negocio_id)) {
+      return res.status(403).json({ error: 'Acceso denegado: No tienes permisos para eliminar empleados de otro comercio.' });
+    }
+
+    const reqUserId = req.usuario?.id ? Number(req.usuario.id) : null;
+    // Nadie puede eliminarse a sí mismo
+    if (reqUserId && targetId === reqUserId) {
+      return res.status(403).json({ error: 'Acción no permitida: No puedes despedirte o eliminar tu propia cuenta.' });
+    }
+
+    if (!esSuper) {
+      // El admin no puede despedir a superadmin ni a otros admin
+      if (normalizarRol(target.rol) === 'superadmin') {
+        return res.status(403).json({ error: 'Acción no permitida: Un administrador no puede eliminar a un Super Administrador.' });
+      }
+      if (normalizarRol(target.rol) === 'admin') {
+        return res.status(403).json({ error: 'Acción no permitida: Un administrador no puede eliminar a otros administradores.' });
       }
     }
 
-    await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Empleado eliminado' });
+    await dbRun('DELETE FROM Usuarios WHERE id = ?', [targetId]);
+    res.json({ ok: true, message: 'Empleado eliminado con éxito' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3576,8 +3732,8 @@ app.delete('/api/mesas/:id', async (req, res) => {
   try {
     const mesaId = req.params.id;
     const forzar = req.query.forzar === 'true' || (req.body && req.body.forzar === true);
-    const rol = req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol);
-    const esAdmin = rol === 'admin' || rol === 'developer';
+    const rol = obtenerRolReq(req);
+    const esAdmin = esAdminRol(rol);
 
     const mesaRow = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
     if (!mesaRow) return res.status(404).json({ error: 'Mesa no encontrada' });
@@ -3944,7 +4100,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     const negocioId = Number(mesa.negocio_id || reqNid || 1);
     const exigirPin = await negocioTieneModulo(negocioId, 'pedir_pin_liberar_con_saldo');
 
-    const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+    const rol = obtenerRolReq(req);
     const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
     const usuarioNom = req.usuario?.nombre || req.usuario?.nombre_completo || req.body?.usuarioNombre || 'Personal';
 
@@ -3952,10 +4108,10 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     if (totalPendiente > 0) {
       let pinValidado = false;
       if (exigirPin) {
-        let autorizado = (rol === 'admin' || rol === 'developer');
+        let autorizado = esAdminRol(rol);
         if (!autorizado && pin) {
           pinValidado = await validarPinAdministrador(pin, negocioId);
-          autorizado = pinValidado;
+          autorizado = Boolean(pinValidado);
         }
 
         if (!autorizado) {
@@ -3983,7 +4139,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
       }
 
       // Registrar SIEMPRE en Auditoría (General para todos los comercios)
-      const adminInfo = pinValidado ? `${pinValidado.usuario} (${pinValidado.nombre_completo || pinValidado.usuario})` : (rol === 'admin' || rol === 'developer' ? usuarioNom : null);
+      const adminInfo = pinValidado ? `${pinValidado.usuario} (${pinValidado.nombre_completo || pinValidado.usuario})` : (esAdminRol(rol) ? usuarioNom : null);
       await registrarAuditoria({
         negocioId,
         usuarioId: req.usuario?.id || null,
@@ -3995,7 +4151,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
         detalle: `Cierre forzado de cuenta en mesa "${mesa.numero}". Saldo pendiente anulado: ₡${Math.round(totalPendiente).toLocaleString('es-CR')} • Operador: @${usuarioNom} ${adminInfo ? `• Autorizó: @${adminInfo}` : ''}`,
         motivo: req.body?.motivo || (pin ? 'Liberación/Cierre autorizado con PIN' : 'Cierre forzado con saldo pendiente'),
         monto: totalPendiente,
-        pinAutorizado: (pinValidado || pin || rol === 'admin' || rol === 'developer') ? 1 : 0
+        pinAutorizado: (pinValidado || pin || esAdminRol(rol)) ? 1 : 0
       });
     }
 
@@ -5434,11 +5590,11 @@ app.get('/api/happy-hour', (req, res) => {
 
 // POST: Activar / Desactivar (y opcionalmente cambiar horario y reglas) - Protegido por rol/PIN
 app.post('/api/happy-hour', async (req, res) => {
-  const userRol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.body && req.body.userRol) || '').toLowerCase();
-  const adminPin = req.headers['x-admin-pin'] || (req.body && req.body.pin);
+  const userRol = obtenerRolReq(req);
+  const adminPin = req.headers['x-admin-pin'] || (req.body && (req.body.pin || req.body.adminPin));
   const negocioId = obtenerNegocioIdReq(req);
 
-  let esAutorizado = ['admin', 'developer', 'cajero'].includes(userRol);
+  let esAutorizado = esAdminOCajeroRol(userRol);
   if (!esAutorizado && adminPin) {
     esAutorizado = await validarPinAdministrador(adminPin, negocioId);
   }
@@ -7430,10 +7586,10 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
   try {
     const ordenId = req.params.id;
     const { modo } = req.body;
-    const rol = req.headers['x-user-rol'] || req.query.rol || (req.body && req.body.rol);
+    const rol = obtenerRolReq(req);
 
-    // Permisos: solo admin, developer o cajero
-    const esAutorizado = rol === 'admin' || rol === 'developer' || rol === 'cajero';
+    // Permisos: solo admin, superadmin, developer o cajero
+    const esAutorizado = esAdminOCajeroRol(rol);
     if (!esAutorizado) {
       return res.status(403).json({ error: 'Requiere permisos de Administrador o Cajero para cambiar el modo de Happy Hour.' });
     }
@@ -9145,11 +9301,11 @@ app.post('/api/auth/verificar-pin-admin', async (req, res) => {
 });
 
 async function verificarAdmin(req, res, next) {
-  const rol = (req.usuario?.rol || req.headers['x-user-rol'] || (req.query && req.query.rol) || (req.body && req.body.rol) || '').toLowerCase();
+  const rol = obtenerRolReq(req);
   const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
   const negocioId = obtenerNegocioIdReq(req);
 
-  if (['admin', 'developer', 'supervisor', 'superadmin', 'super_admin', 'superadministrador', 'administrador'].includes(rol)) {
+  if (esAdminRol(rol) || rol === 'supervisor') {
     return next();
   }
 
@@ -11027,8 +11183,8 @@ app.get('/api/sistema/actualizaciones/estado', async (req, res) => {
 // Endpoint: Búsqueda manual (Sólo Admin y Developer)
 app.post('/api/sistema/actualizaciones/buscar', async (req, res) => {
   try {
-    const rol = (req.headers['x-user-rol'] || req.body.rol || '').toLowerCase();
-    if (rol !== 'admin' && rol !== 'developer') {
+    const rol = obtenerRolReq(req);
+    if (!esAdminRol(rol)) {
       return res.status(403).json({ error: 'Acceso denegado. Solo administradores o desarrolladores pueden buscar actualizaciones.' });
     }
 
@@ -11042,8 +11198,8 @@ app.post('/api/sistema/actualizaciones/buscar', async (req, res) => {
 // Endpoint: Aplicar actualización (Sólo Admin y Developer)
 app.post('/api/sistema/actualizaciones/aplicar', async (req, res) => {
   try {
-    const rol = (req.headers['x-user-rol'] || req.body.rol || '').toLowerCase();
-    if (rol !== 'admin' && rol !== 'developer') {
+    const rol = obtenerRolReq(req);
+    if (!esAdminRol(rol)) {
       return res.status(403).json({ error: 'Acceso denegado.' });
     }
 

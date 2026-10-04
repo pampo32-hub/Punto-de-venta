@@ -47,6 +47,64 @@ window.obtenerIconoCategoriaInsumo = function(categoria) {
 })();
 
 // ============================================================================
+// GESTIÓN CENTRALIZADA DE ROLES Y PERMISOS DE USUARIO (FRONTEND)
+// ============================================================================
+window.obtenerUsuarioActual = function() {
+  if (typeof estado !== 'undefined' && estado) {
+    if (estado.usuarioActual) return estado.usuarioActual;
+    if (estado.usuario) return estado.usuario;
+  }
+  try {
+    const su = JSON.parse(sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario') || 'null');
+    if (su && typeof su === 'object' && (su.rol || su.usuario || su.id)) {
+      if (typeof estado !== 'undefined' && estado && !estado.usuarioActual) {
+        estado.usuarioActual = su;
+      }
+      return su;
+    }
+  } catch (_) {}
+  return null;
+};
+
+window.obtenerRolUsuarioActual = function() {
+  const u = window.obtenerUsuarioActual();
+  const rawRol = u?.rol || '';
+  const r = (rawRol || '').toLowerCase().replace(/[\s_-]/g, '');
+  if (r === 'superadmin' || r === 'superadministrador') return 'superadmin';
+  if (r === 'developer' || r === 'desarrollador' || r === 'dev') return 'developer';
+  if (r === 'admin' || r === 'administrador') return 'admin';
+  if (r === 'cajero' || r === 'cajera') return 'cajero';
+  if (r === 'salonero' || r === 'salonera' || r === 'mesero' || r === 'mesera' || r === 'camarero') return 'salonero';
+  if (r === 'cocina' || r === 'cocinero' || r === 'chef') return 'cocina';
+  return r || 'salonero';
+};
+
+window.esUsuarioDeveloper = function() {
+  const u = window.obtenerUsuarioActual();
+  const r = window.obtenerRolUsuarioActual();
+  return r === 'developer' || Boolean(u?.es_developer);
+};
+
+window.esUsuarioSuperAdmin = function() {
+  const r = window.obtenerRolUsuarioActual();
+  return r === 'superadmin' || window.esUsuarioDeveloper();
+};
+
+window.esUsuarioAdmin = function() {
+  const r = window.obtenerRolUsuarioActual();
+  return r === 'admin' || r === 'superadmin' || r === 'developer';
+};
+
+window.esUsuarioAdminOCajero = function() {
+  const r = window.obtenerRolUsuarioActual();
+  return window.esUsuarioAdmin() || r === 'cajero';
+};
+
+window.esUsuarioDeveloperOSuperAdmin = function() {
+  return window.esUsuarioDeveloper();
+};
+
+// ============================================================================
 // MODAL MANAGER CENTRALIZADO (CONTROL DE ESTADO ÚNICO Y EXCLUSIVIDAD DE MODALES)
 // ============================================================================
 window._modalActivoId = null;
@@ -55,6 +113,9 @@ window.cerrarTodosLosModales = function(excluirId = null) {
   const modales = document.querySelectorAll('.modal, .modal-backdrop');
   modales.forEach(m => {
     if (m.id === 'modalComandero' && excluirId && ['modalSeleccionBaldeNacional', 'modalSeleccionVariante', 'modalModificadores', 'modalPersonalizarBoton', 'modalCobro', 'modalSplitBill', 'modalConfirmacionAccion'].includes(excluirId)) {
+      return;
+    }
+    if (m.id === 'modalAdminPersonal' && excluirId === 'modalEditarEmpleado') {
       return;
     }
     if (!excluirId || m.id !== excluirId) {
@@ -1906,7 +1967,7 @@ try {
       cargarMenuDesdeBackend();
     });
     socket.on('actualizacion_disponible', (d) => {
-      if (estado.usuarioActual && (estado.usuarioActual.rol === 'admin' || estado.usuarioActual.rol === 'developer')) {
+      if (window.esUsuarioAdmin()) {
         mostrarNotificacionCentro(`🔔 ¡Nueva versión disponible (${d.latestSha || ''})! Puedes instalarla en "Actualizaciones".`, 'info');
       }
     });
@@ -3047,9 +3108,9 @@ function aplicarEnrutamientoPorRol() {
     if (btnComanderoAgregar) btnComanderoAgregar.style.display = 'inline-flex';
     if (btnComanderoAgregarCat) btnComanderoAgregarCat.style.display = 'inline-flex';
     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'inline-flex');
-    document.querySelectorAll('.admin-only-action').forEach(el => el.style.display = 'inline-flex');
-    if (perfilBadge && (u.rol === 'admin' || u.rol === 'superadmin')) {
-      perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(Admin)</small>`;
+    if (perfilBadge && (u.rol === 'admin' || u.rol === 'superadmin' || u.rol === 'developer')) {
+      const tagRol = (u.rol === 'superadmin') ? 'Super Admin' : (u.rol === 'developer' ? 'Developer' : 'Admin');
+      perfilBadge.innerHTML = `👑 <strong>${escapeHtml(u.nombre)}</strong> <small style="color:#fbbf24; font-size:0.75rem;">(${tagRol})</small>`;
     }
   } else {
     // Si es salonero o cajero (no admin), ocultamos por completo el botón de Admin de la barra superior
@@ -4365,8 +4426,8 @@ async function cargarNegociosDev() {
         } catch (_) {}
       }
 
-      const esDev = (estado.usuarioActual?.rol || '').toLowerCase() === 'developer';
-      const esAdmin = ['developer', 'admin', 'administrador'].includes((estado.usuarioActual?.rol || '').toLowerCase());
+      const esDev = window.esUsuarioDeveloper();
+      const esAdmin = window.esUsuarioAdmin();
       const esActivo = n.activo !== 0 && n.activo !== '0';
       const puedeEliminar = esDev;
       const puedeDesactivar = esAdmin;
@@ -6980,40 +7041,104 @@ async function cargarEmpleadosAdmin() {
     }
 
     // Configurar visibilidad de roles en el dropdown según el rol del usuario conectado
-    const userRolActual = (estado.usuarioActual?.rol || '').toLowerCase();
+    const uAct = window.obtenerUsuarioActual();
+    const userRolActual = window.obtenerRolUsuarioActual();
+    const currentUserId = uAct ? Number(uAct.id) : null;
+    const esDev = window.esUsuarioDeveloper();
+    const esSuper = window.esUsuarioSuperAdmin(); // true para superadmin o developer
+    const esAdmin = window.esUsuarioAdmin();      // true para admin, superadmin o developer
+
     const optAdmin = document.getElementById('optStaffRolAdmin');
     const optSuperadmin = document.getElementById('optStaffRolSuperadmin');
-    const puedeCrearAdmin = userRolActual === 'superadmin' || userRolActual === 'developer';
-    if (optAdmin) optAdmin.style.display = puedeCrearAdmin ? '' : 'none';
-    if (optSuperadmin) optSuperadmin.style.display = userRolActual === 'developer' ? '' : 'none';
+    if (optAdmin) optAdmin.style.display = esSuper ? '' : 'none';
+    if (optSuperadmin) optSuperadmin.style.display = esDev ? '' : 'none';
+
+    // Guardar lista en cache global para edición rápida
+    window._listaEmpleadosAdminCache = empleados;
 
     tbody.innerHTML = empleados.map(e => {
       let badgeStyle = 'background:#1e293b; color:#38bdf8;';
       let rolBadge = escapeHtml(e.rolDisplay || e.rol);
-      if (e.rol === 'superadmin') {
+      const eRol = (e.rol || '').toLowerCase();
+      if (eRol === 'superadmin' || eRol === 'super_admin') {
         badgeStyle = 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; font-weight: 800;';
         rolBadge = '👑 Super Admin';
-      } else if (e.rol === 'admin' || e.rol === 'administrador') {
+      } else if (eRol === 'admin' || eRol === 'administrador') {
         badgeStyle = 'background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #0284c7; font-weight: 700;';
         rolBadge = '🛡️ Administrador';
+      } else if (eRol === 'cajero') {
+        badgeStyle = 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #059669; font-weight: 700;';
+        rolBadge = '💼 Cajero';
       }
 
       const cajaBadge = e.caja_defecto_nombre 
         ? `<span class="badge-tag" style="background:rgba(16,185,129,0.15); color:#34d399; font-size:0.75rem; margin-left:4px;">💳 ${escapeHtml(e.caja_defecto_nombre)}</span>`
         : '';
 
+      // Determinar permisos sobre este colaborador específico
+      let puedeEditar = false;
+      let puedeEliminar = false;
+      let etiquetaProtegido = '';
+
+      if (eRol === 'developer' && !esDev) {
+        puedeEditar = false;
+        puedeEliminar = false;
+        etiquetaProtegido = '🛡️ Desarrollador';
+      } else if (esDev) {
+        puedeEditar = true;
+        puedeEliminar = (e.id !== currentUserId);
+        if (!puedeEliminar) etiquetaProtegido = 'Tu cuenta';
+      } else if (esSuper) {
+        // Superadmin puede editar a todos los del negocio
+        puedeEditar = true;
+        // No puede auto-despedirse
+        puedeEliminar = (e.id !== currentUserId);
+        if (!puedeEliminar) etiquetaProtegido = '👑 Tú (Dueño)';
+      } else if (esAdmin) {
+        // Admin regular:
+        if (e.id === currentUserId) {
+          puedeEditar = false;
+          puedeEliminar = false;
+          etiquetaProtegido = '👤 Tu cuenta';
+        } else if (eRol === 'superadmin' || eRol === 'super_admin') {
+          puedeEditar = false;
+          puedeEliminar = false;
+          etiquetaProtegido = '👑 Super Admin';
+        } else if (eRol === 'admin' || eRol === 'administrador') {
+          puedeEditar = false;
+          puedeEliminar = false;
+          etiquetaProtegido = '🛡️ Administrador';
+        } else {
+          // Roles subordinados (cajero, salonero, cocina, etc.)
+          puedeEditar = true;
+          puedeEliminar = true;
+        }
+      }
+
+      let accionColumna = '';
+      if (puedeEditar || puedeEliminar) {
+        accionColumna = '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">';
+        if (puedeEditar) {
+          accionColumna += `<button class="btn-item-tool" style="color:#38bdf8; font-weight:700;" onclick="abrirEditarEmpleado(${e.id})" title="Modificar datos y rol">✏️ Editar</button>`;
+        }
+        if (puedeEliminar) {
+          accionColumna += `<button class="btn-item-tool" style="color:#ef4444; font-weight:700;" onclick="eliminarEmpleadoAdmin(${e.id})" title="Despedir colaborador">🗑️ Despedir</button>`;
+        }
+        if (!puedeEliminar && etiquetaProtegido) {
+          accionColumna += `<small style="color:#94a3b8; font-weight:700;">${etiquetaProtegido}</small>`;
+        }
+        accionColumna += '</div>';
+      } else {
+        accionColumna = `<span class="badge-tag" style="background:rgba(148, 163, 184, 0.12); color:#94a3b8; font-size:0.75rem; border:1px solid rgba(148, 163, 184, 0.25);">🔒 ${escapeHtml(etiquetaProtegido || 'Protegido')}</span>`;
+      }
+
       return `
       <tr>
         <td><strong>${escapeHtml(e.nombre_completo)}</strong></td>
         <td><code>${escapeHtml(e.usuario)}</code></td>
-        <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span></td>
         <td><span class="badge-tag" style="${badgeStyle}">${rolBadge}</span>${cajaBadge}</td>
         <td><code>${escapeHtml(e.pin || '1234')}</code></td>
-        <td>
-          ${e.rol === 'superadmin' && userRolActual !== 'developer' ? '<small style="color:#f59e0b; font-weight:700;">👑 Dueño</small>' : `
-            <button class="btn-item-tool" style="color:#ef4444;" onclick="eliminarEmpleadoAdmin(${e.id})">🗑️ Despedir</button>
-          `}
-        </td>
+        <td>${accionColumna}</td>
       </tr>
       `;
     }).join('');
@@ -7021,6 +7146,126 @@ async function cargarEmpleadosAdmin() {
     console.error('Error cargando empleados admin:', e);
   }
 }
+
+window.abrirEditarEmpleado = function(id) {
+  const emp = (window._listaEmpleadosAdminCache || []).find(x => Number(x.id) === Number(id));
+  if (!emp) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('No se encontró la información del colaborador.', 'error');
+    } else {
+      alert('No se encontró la información del colaborador.');
+    }
+    return;
+  }
+
+  // Copiar opciones de caja física al modal de edición si existen
+  const selCajaEdit = document.getElementById('editStaffCajaDefecto');
+  const selCajaOrig = document.getElementById('staffCajaDefecto');
+  if (selCajaEdit && selCajaOrig) {
+    selCajaEdit.innerHTML = selCajaOrig.innerHTML;
+    selCajaEdit.value = emp.caja_defecto_id ? String(emp.caja_defecto_id) : '';
+  }
+
+  document.getElementById('editStaffId').value = emp.id;
+  document.getElementById('editStaffNombre').value = emp.nombre_completo || '';
+  document.getElementById('editStaffUsuario').value = emp.usuario || '';
+  document.getElementById('editStaffPassword').value = '';
+  document.getElementById('editStaffGenero').value = emp.genero || 'M';
+  document.getElementById('editStaffPin').value = emp.pin || '1234';
+
+  const esSuper = window.esUsuarioSuperAdmin();
+  const esDev = window.esUsuarioDeveloper();
+  const optAdmin = document.getElementById('optEditStaffRolAdmin');
+  const optSuperadmin = document.getElementById('optEditStaffRolSuperadmin');
+
+  if (optAdmin) optAdmin.style.display = esSuper ? '' : 'none';
+  if (optSuperadmin) optSuperadmin.style.display = esDev ? '' : 'none';
+
+  const selRol = document.getElementById('editStaffRol');
+  if (selRol) {
+    selRol.value = emp.rol || 'salonero';
+    // Si no es superadmin y el rol del colaborador seleccionado es admin/superadmin, evitar asignación indebida
+    if (!esSuper && (selRol.value === 'admin' || selRol.value === 'superadmin')) {
+      selRol.value = 'cajero';
+    }
+  }
+
+  const modal = document.getElementById('modalEditarEmpleado');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+};
+
+window.cerrarModalEditarEmpleado = function() {
+  const modal = document.getElementById('modalEditarEmpleado');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+};
+
+document.getElementById('btnCloseEditEmpleado')?.addEventListener('click', window.cerrarModalEditarEmpleado);
+document.getElementById('btnCancelarEditEmpleado')?.addEventListener('click', window.cerrarModalEditarEmpleado);
+
+document.getElementById('btnGuardarEditEmpleado')?.addEventListener('click', async () => {
+  const id = document.getElementById('editStaffId')?.value;
+  if (!id) return;
+
+  const nombre_completo = document.getElementById('editStaffNombre').value.trim();
+  const usuario = document.getElementById('editStaffUsuario').value.trim();
+  const password = document.getElementById('editStaffPassword').value.trim();
+  const rol = document.getElementById('editStaffRol').value;
+  const genero = document.getElementById('editStaffGenero').value;
+  const pin = document.getElementById('editStaffPin').value.trim() || '1234';
+  const caja_defecto_id = document.getElementById('editStaffCajaDefecto')?.value || null;
+
+  if (!nombre_completo || !usuario) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro('Por favor completa el nombre completo y el usuario.', 'error');
+    } else {
+      alert('Por favor completa el nombre completo y el usuario.');
+    }
+    return;
+  }
+
+  const payload = {
+    nombre_completo,
+    usuario,
+    rol,
+    genero,
+    pin,
+    caja_defecto_id: caja_defecto_id ? Number(caja_defecto_id) : null
+  };
+  if (password) {
+    payload.password = password;
+  }
+
+  try {
+    const res = await fetch('/api/admin/empleados/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al actualizar colaborador');
+
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`✅ ${data.message || 'Colaborador actualizado con éxito'}`, 'success');
+    } else {
+      alert(`✅ ${data.message || 'Colaborador actualizado con éxito'}`);
+    }
+
+    window.cerrarModalEditarEmpleado();
+    cargarEmpleadosAdmin();
+  } catch (e) {
+    if (typeof mostrarNotificacionCentro === 'function') {
+      mostrarNotificacionCentro(`❌ ${e.message}`, 'error');
+    } else {
+      alert(`❌ ${e.message}`);
+    }
+  }
+});
 
 document.getElementById('btnGuardarEmpleado').addEventListener('click', async () => {
   const nombre_completo = document.getElementById('staffNombre').value.trim();
@@ -10375,8 +10620,8 @@ window.liberarMesaId = async function(mesaId) {
   let pinAutorizado = null;
 
   if (totalMesa > 0) {
-    const uAct = estado.usuarioActual || estado.usuario;
-    const esAdmin = uAct && (uAct.rol === 'admin' || uAct.rol === 'developer');
+    const uAct = window.obtenerUsuarioActual();
+    const esAdmin = window.esUsuarioAdmin();
     if (!esAdmin) {
       pinAutorizado = await window.solicitarPinAdmin({
         icono: '⚠️',
@@ -11344,8 +11589,9 @@ function recalcularTotalesTicket() {
 
 window.toggleModoHappyHourActual = async function() {
   if (!estado.mesaActiva) return;
-  const uAct = estado.usuarioActual || estado.usuario;
-  const esAutorizado = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+  const uAct = window.obtenerUsuarioActual();
+  const rolActivo = window.obtenerRolUsuarioActual();
+  const esAutorizado = window.esUsuarioAdminOCajero();
   if (!esAutorizado) {
     if (typeof mostrarNotificacionCentro === 'function') {
       mostrarNotificacionCentro('🔒 Solo Administrador o Cajero pueden cambiar el modo Happy Hour', 'warning');
@@ -11365,9 +11611,9 @@ window.toggleModoHappyHourActual = async function() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-rol': uAct ? uAct.rol : 'admin'
+          'x-user-rol': rolActivo
         },
-        body: JSON.stringify({ modo: nuevoModo })
+        body: JSON.stringify({ modo: nuevoModo, rol: rolActivo })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -18375,11 +18621,12 @@ async function initHappyHour() {
     const modalCfg = document.getElementById('modalAdminHappyHour') || document.getElementById('modalHHConfig');
     if (modalCfg && (modalCfg.classList.contains('active') || modalCfg.style.display === 'flex')) return;
 
-    const uAct = estado.usuarioActual || estado.usuario;
-    const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'superadmin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
+    const uAct = window.obtenerUsuarioActual();
+    const rolActivo = window.obtenerRolUsuarioActual();
+    const esAdminOCajero = window.esUsuarioAdminOCajero();
     let pinAutorizacion = null;
 
-    if (!esAdminODev) {
+    if (!esAdminOCajero) {
       const pin = await window.solicitarPinAdmin({
         icono: '🍸',
         titulo: 'Autorización Happy Hour',
@@ -18394,19 +18641,20 @@ async function initHappyHour() {
     }
 
     const nuevoActivo = !estado.happyHourActivo;
+    const rolParaEnviar = pinAutorizacion ? 'admin' : rolActivo;
     try {
       const res = await fetch('/api/happy-hour', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'x-user-rol': uAct ? uAct.rol : (pinAutorizacion ? 'admin' : 'salonero'),
+          'x-user-rol': rolParaEnviar,
           'x-admin-pin': pinAutorizacion || ''
         },
         body: JSON.stringify({
           activo: nuevoActivo,
           horaInicio: btnHH.dataset.horaInicio || '16:00',
           horaFin: btnHH.dataset.horaFin || '19:00',
-          userRol: uAct ? uAct.rol : (pinAutorizacion ? 'admin' : 'salonero'),
+          userRol: rolParaEnviar,
           pin: pinAutorizacion
         })
       });
@@ -18426,7 +18674,7 @@ async function initHappyHour() {
         mostrarNotificacionCentro(data.activo ? '🍸 Happy Hour 2x1 ACTIVADO' : '🍸 Happy Hour DESACTIVADO', data.activo ? 'success' : 'info');
       }
     } catch (e) {
-      if (esAdminODev || pinAutorizacion) {
+      if (esAdminOCajero || pinAutorizacion) {
         estado.happyHourActivo = nuevoActivo;
         aplicarEstadoHappyHour(nuevoActivo, btnHH.dataset.horaInicio, btnHH.dataset.horaFin);
         if (estado.mesaActiva) recalcularTotalesTicket();
@@ -18438,9 +18686,8 @@ async function initHappyHour() {
   let hhLongTimer = null;
   btnHH.addEventListener('mousedown', () => {
     hhLongTimer = setTimeout(async () => {
-      const uAct = estado.usuarioActual || estado.usuario;
-      const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
-      if (esAdminODev) {
+      const esAdminOCajero = window.esUsuarioAdminOCajero();
+      if (esAdminOCajero) {
         abrirConfigHappyHour();
       } else {
         const pin = await window.solicitarPinAdmin({
@@ -18460,9 +18707,8 @@ async function initHappyHour() {
   });
   btnHH.addEventListener('touchstart', () => {
     hhLongTimer = setTimeout(async () => {
-      const uAct = estado.usuarioActual || estado.usuario;
-      const esAdminODev = Boolean(uAct && (uAct.rol === 'admin' || uAct.rol === 'developer' || uAct.rol === 'cajero'));
-      if (esAdminODev) {
+      const esAdminOCajero = window.esUsuarioAdminOCajero();
+      if (esAdminOCajero) {
         abrirConfigHappyHour();
       } else {
         const pin = await window.solicitarPinAdmin({
@@ -18765,10 +19011,10 @@ document.addEventListener('DOMContentLoaded', () => {
   initRenombrarMesas();
   initNuevoProducto();
 
-  // Verificar si hay sesión activa en la pestaña actual (sessionStorage para persistencia de F5)
-  const userStr = sessionStorage.getItem('pos_usuario');
-  const negStr = sessionStorage.getItem('pos_negocio');
-  const tokenStr = sessionStorage.getItem('pos_token');
+  // Verificar si hay sesión activa en la pestaña actual (sessionStorage o localStorage para persistencia)
+  const userStr = sessionStorage.getItem('pos_usuario') || localStorage.getItem('pos_usuario');
+  const negStr = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
+  const tokenStr = sessionStorage.getItem('pos_token') || localStorage.getItem('pos_token');
 
   if (userStr && tokenStr) {
     try {
@@ -18777,11 +19023,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
 
     sessionStorage.setItem('pos_token', tokenStr);
+    localStorage.setItem('pos_token', tokenStr);
     if (estado.usuarioActual) {
       sessionStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
+      localStorage.setItem('pos_usuario', JSON.stringify(estado.usuarioActual));
     }
     if (estado.negocioActual) {
       sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
+      localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
     }
 
     if (estado.negocioActual && estado.negocioActual.id) {
