@@ -278,3 +278,37 @@ body.gamma-desktop .modal-content {
   max-height: 90vh !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
 }
+
+/* ============================================================================
+   7. HERRAMIENTAS DE SALÓN Y LEYENDAS VISIBLES EN PC
+   ============================================================================ */
+html.gamma-desktop #btnIrEditorSalon,
+html.gamma-desktop #btnEstiloBotonesSalonQuick,
+html.gamma-desktop #btnAbrirMoverUnirModal,
+html.gamma-desktop #btnVerTodosQRs,
+html.gamma-desktop #btnGestionReservasSalon,
+html.gamma-desktop #btnTogglePisoSalon,
+html.gamma-desktop .zone-tab[data-zona="segundo"],
+body.gamma-desktop #btnIrEditorSalon,
+body.gamma-desktop #btnEstiloBotonesSalonQuick,
+body.gamma-desktop #btnAbrirMoverUnirModal,
+body.gamma-desktop #btnVerTodosQRs,
+body.gamma-desktop #btnGestionReservasSalon,
+body.gamma-desktop #btnTogglePisoSalon,
+body.gamma-desktop .zone-tab[data-zona="segundo"] {
+  display: inline-flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+html.gamma-desktop .legend-group,
+body.gamma-desktop .legend-group {
+  display: flex !important;
+  visibility: visible !important;
+}
+
+html.gamma-desktop .legend-badge,
+body.gamma-desktop .legend-badge {
+  display: inline-flex !important;
+  visibility: visible !important;
+}

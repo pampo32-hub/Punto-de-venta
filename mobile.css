@@ -34,6 +34,80 @@ body.gamma-mobile .kbd-sub-shortcut {
 }
 
 /* ============================================================================
+   ELEMENTOS DE SALÓN EXCLUIDOS EN LA APP MÓVIL
+   (Solicitados para ocultar únicamente en la app móvil; se mantienen en PC)
+   ============================================================================ */
+
+/* 1. Botón Diseñar Salón */
+html.gamma-mobile #btnIrEditorSalon,
+body.gamma-mobile #btnIrEditorSalon,
+#btnIrEditorSalon {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 2. Botón Estilo de Botones */
+html.gamma-mobile #btnEstiloBotonesSalonQuick,
+body.gamma-mobile #btnEstiloBotonesSalonQuick,
+#btnEstiloBotonesSalonQuick {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 3. Botón Unir Mesas / Mover Mesas */
+html.gamma-mobile #btnAbrirMoverUnirModal,
+body.gamma-mobile #btnAbrirMoverUnirModal,
+#btnAbrirMoverUnirModal {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 4. Botón Códigos QR */
+html.gamma-mobile #btnVerTodosQRs,
+body.gamma-mobile #btnVerTodosQRs,
+#btnVerTodosQRs {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 5. Botón Reservas */
+html.gamma-mobile #btnGestionReservasSalon,
+body.gamma-mobile #btnGestionReservasSalon,
+#btnGestionReservasSalon {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 6. Segundo Piso (Botón alternar y pestaña de zona) */
+html.gamma-mobile #btnTogglePisoSalon,
+body.gamma-mobile #btnTogglePisoSalon,
+#btnTogglePisoSalon,
+html.gamma-mobile .zone-tab[data-zona="segundo"],
+body.gamma-mobile .zone-tab[data-zona="segundo"],
+.zone-tab[data-zona="segundo"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 7. Etiquetas de Estados: Libre, Esperando Comida, Esperando Parcial, Cuenta Pedida, Ocupada */
+html.gamma-mobile .legend-group,
+body.gamma-mobile .legend-group,
+.legend-group,
+html.gamma-mobile .legend-badge,
+body.gamma-mobile .legend-badge,
+.legend-badge {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* ============================================================================
    2. BARRA FLOTANTE DE COMANDA (RESUMEN INFERIOR EN EL MENÚ)
    ============================================================================ */
 html.gamma-mobile .com-mob-floating-bar,
