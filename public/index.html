@@ -7,7 +7,41 @@
   <title>GAMMA POS | Punto de Venta Inteligente</title>
   <link rel="icon" type="image/png" href="/img/gamma_pos_logo.png" />
   <link rel="apple-touch-icon" href="/img/gamma_pos_logo.png" />
-  <link rel="stylesheet" href="styles.css?v=2.9.9" />
+  <script>
+    /* Detección Inmediata de Entorno (PC vs Móvil / App) Anti-Flash */
+    (function() {
+      function syncDeviceMode() {
+        var isMob = window.innerWidth <= 900 || (window.innerWidth <= 1024 && window.matchMedia && window.matchMedia('(orientation: portrait)').matches);
+        var doc = document.documentElement;
+        var body = document.body;
+        if (isMob) {
+          doc.classList.add('gamma-mobile');
+          doc.classList.remove('gamma-desktop');
+          if (body) { body.classList.add('gamma-mobile'); body.classList.remove('gamma-desktop'); }
+        } else {
+          doc.classList.add('gamma-desktop');
+          doc.classList.remove('gamma-mobile');
+          if (body) { body.classList.add('gamma-desktop'); body.classList.remove('gamma-mobile'); }
+        }
+      }
+      syncDeviceMode();
+      window.addEventListener('resize', syncDeviceMode, { passive: true });
+      window.addEventListener('orientationchange', syncDeviceMode, { passive: true });
+      document.addEventListener('DOMContentLoaded', syncDeviceMode);
+      window.isGammaMobile = function() {
+        return window.innerWidth <= 900 || (window.innerWidth <= 1024 && window.matchMedia && window.matchMedia('(orientation: portrait)').matches);
+      };
+      window.isGammaDesktop = function() {
+        return !window.isGammaMobile();
+      };
+    })();
+  </script>
+  <!-- 1. Estilos Base del Sistema -->
+  <link rel="stylesheet" href="styles.css?v=3.10.2" />
+  <!-- 2. Hoja de Estilo Exclusiva para Computadoras / PC (Ignorada por móviles y tablets verticales) -->
+  <link rel="stylesheet" href="desktop.css?v=3.10.2" media="screen and (min-width: 901px)" />
+  <!-- 3. Hoja de Estilo Exclusiva para Celulares / App Móvil (Ignorada por computadoras y laptops) -->
+  <link rel="stylesheet" href="mobile.css?v=3.10.2" media="screen and (max-width: 900px), screen and (max-width: 1024px) and (orientation: portrait)" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2085,7 +2119,7 @@
           <div class="mesa-tag-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <button type="button" class="btn-volver-salon-catalog" onclick="cerrarComandero()" title="Volver al Salón y ver todas las mesas">
-                🏠 Salón
+                ← Salón
               </button>
               <span class="mesa-title-tag" id="comMesaNumero">Mesa 1</span>
               <span class="mesa-sub-tag" id="comMesaZona">Salón Principal</span>
@@ -2179,13 +2213,17 @@
       </div>
 
       <div class="comandero-ticket" id="comanderoTicketCol">
-        <!-- BOTÓN VOLVER AL MENÚ (TABLETS PORTRAIT & SMARTPHONES) -->
-        <div class="mob-ticket-back-banner" style="display:flex; gap:8px;">
-          <button type="button" class="btn-mob-volver-salon" onclick="cerrarComandero()" style="flex:0 0 auto;" title="Volver al Salón y ver todas las mesas">
-            🏠 Salón
+        <!-- BARRA SUPERIOR DE COMANDA EN MÓVIL (LIMPIA Y SIN RUIDO) -->
+        <div class="mob-ticket-back-banner">
+          <button type="button" class="btn-mob-back-menu" onclick="switchComanderoMobileTab('menu')" title="Volver al Menú para agregar más platillos">
+            ← Menú
           </button>
-          <button type="button" class="btn-mob-back-menu" onclick="switchComanderoMobileTab('menu')" style="flex:1;">
-            🍽️ Seguir Agregando Productos
+          <div class="mob-ticket-header-title">
+            <span class="mob-ticket-title-main">🧾 Comanda</span>
+            <span class="mob-ticket-mesa-badge" id="mobTicketMesaBadge">Mesa</span>
+          </div>
+          <button type="button" class="btn-mob-volver-salon" onclick="cerrarComandero()" title="Volver al Salón y ver todas las mesas">
+            🏠 Salón
           </button>
         </div>
 
@@ -7472,7 +7510,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/offline-db.js"></script>
   <script src="/offline-sync.js"></script>
-  <script src="app.js?v=3.8.2"></script>
+  <script src="app.js?v=3.10.2"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

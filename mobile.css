@@ -1,0 +1,307 @@
+/**
+ * ============================================================================
+ * GAMMA POS - MOBILE & APP STYLESHEET (mobile.css)
+ * ============================================================================
+ * Archivo exclusivo para teléfonos celulares, tabletas verticales y app PWA.
+ * 
+ * AISLAMIENTO FÍSICO:
+ * - Se carga mediante: media="screen and (max-width: 900px), screen and (max-width: 1024px) and (orientation: portrait)"
+ * - Cualquier regla agregada o modificada aquí aplica ÚNICAMENTE a la versión móvil.
+ * - Las computadoras de escritorio y laptops NUNCA aplican este archivo.
+ * ============================================================================
+ */
+
+/* ============================================================================
+   1. ATRIBUTOS Y ELEMENTOS GENERALES DE MÓVIL
+   ============================================================================ */
+html.gamma-mobile,
+body.gamma-mobile {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Ocultar elementos de escritorio que no tienen sentido en un celular */
+html.gamma-mobile .comandero-resizer,
+body.gamma-mobile .comandero-resizer,
+html.gamma-mobile .ticket-topbar,
+body.gamma-mobile .ticket-topbar,
+html.gamma-mobile kbd.kbd-shortcut,
+body.gamma-mobile kbd.kbd-shortcut,
+html.gamma-mobile .kbd-sub-shortcut,
+body.gamma-mobile .kbd-sub-shortcut {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* ============================================================================
+   2. BARRA FLOTANTE DE COMANDA (RESUMEN INFERIOR EN EL MENÚ)
+   ============================================================================ */
+html.gamma-mobile .com-mob-floating-bar,
+body.gamma-mobile .com-mob-floating-bar {
+  display: flex !important;
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 56px !important;
+  background: linear-gradient(180deg, #065f46 0%, #047857 100%) !important;
+  border-top: 1px solid #10b981 !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5) !important;
+  z-index: 99990 !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 14px !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+}
+
+html.gamma-mobile .mob-float-left,
+body.gamma-mobile .mob-float-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+html.gamma-mobile .mob-float-icon,
+body.gamma-mobile .mob-float-icon {
+  font-size: 1.35rem !important;
+}
+
+html.gamma-mobile .mob-float-title,
+body.gamma-mobile .mob-float-title {
+  color: #ffffff !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+}
+
+html.gamma-mobile .mob-float-total,
+body.gamma-mobile .mob-float-total {
+  color: #a7f3d0 !important;
+  font-weight: 800 !important;
+  font-size: 0.85rem !important;
+}
+
+html.gamma-mobile .mob-float-btn,
+body.gamma-mobile .mob-float-btn {
+  background: #ffffff !important;
+  color: #065f46 !important;
+  font-weight: 800 !important;
+  font-size: 0.85rem !important;
+  padding: 7px 14px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  cursor: pointer !important;
+}
+
+/* ============================================================================
+   3. PANTALLA COMPLETA DE COMANDA / TICKET EN MÓVIL
+   ============================================================================ */
+html.gamma-mobile .comandero-ticket,
+body.gamma-mobile .comandero-ticket {
+  display: none !important;
+}
+
+html.gamma-mobile .comandero-ticket.mobile-active,
+body.gamma-mobile .comandero-ticket.mobile-active {
+  display: flex !important;
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 100005 !important;
+  background: #080d1a !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* Barra superior limpia de la comanda móvil: Volver al Menú + Título + Salón */
+html.gamma-mobile .mob-ticket-back-banner,
+body.gamma-mobile .mob-ticket-back-banner {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: #0b1120 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 8px 12px !important;
+  flex-shrink: 0 !important;
+  gap: 8px !important;
+  height: 48px !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .btn-mob-back-menu,
+body.gamma-mobile .btn-mob-back-menu {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  background: linear-gradient(135deg, #1e293b, #0f172a) !important;
+  border: 1px solid #475569 !important;
+  color: #38bdf8 !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+}
+
+html.gamma-mobile .btn-mob-back-menu:active,
+body.gamma-mobile .btn-mob-back-menu:active {
+  transform: scale(0.95) !important;
+  background: #334155 !important;
+}
+
+html.gamma-mobile .mob-ticket-header-title,
+body.gamma-mobile .mob-ticket-header-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+html.gamma-mobile .mob-ticket-title-main,
+body.gamma-mobile .mob-ticket-title-main {
+  color: #f8fafc !important;
+  font-size: 0.92rem !important;
+  font-weight: 800 !important;
+}
+
+html.gamma-mobile .mob-ticket-mesa-badge,
+body.gamma-mobile .mob-ticket-mesa-badge {
+  background: rgba(56, 189, 248, 0.15) !important;
+  border: 1px solid #0284c7 !important;
+  color: #38bdf8 !important;
+  font-size: 0.8rem !important;
+  font-weight: 800 !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+}
+
+html.gamma-mobile .mob-ticket-back-banner .btn-mob-volver-salon,
+body.gamma-mobile .mob-ticket-back-banner .btn-mob-volver-salon {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #94a3b8 !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+}
+
+/* ============================================================================
+   4. LISTA DE PLATILLOS DE LA COMANDA EN MÓVIL (SCROLL FLUIDO TÁCTIL)
+   ============================================================================ */
+html.gamma-mobile .ticket-body,
+body.gamma-mobile .ticket-body {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: contain !important;
+  padding: 8px 10px !important;
+  gap: 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #080d1a !important;
+}
+
+html.gamma-mobile .ticket-item-row,
+body.gamma-mobile .ticket-item-row {
+  padding: 8px 10px !important;
+  margin-bottom: 4px !important;
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+}
+
+html.gamma-mobile .btn-qty,
+body.gamma-mobile .btn-qty {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 1.1rem !important;
+  border-radius: 8px !important;
+}
+
+/* ============================================================================
+   5. BOTONERA DE ACCIÓN EN MÓVIL
+   Fila 1 (3 Botones Secundarios): [💾 Guardar / Cocina] [📄 Pre-factura] [✂️ Dividir]
+   Fila 2 (Botón Grande Táctil):   [💵 COBRAR CUENTA]
+   ============================================================================ */
+html.gamma-mobile .ticket-bottom,
+body.gamma-mobile .ticket-bottom {
+  flex-shrink: 0 !important;
+  padding: 8px 12px 12px !important;
+  background: #090d16 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5) !important;
+}
+
+html.gamma-mobile .ticket-action-buttons,
+body.gamma-mobile .ticket-action-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 6px !important;
+  margin-top: 6px !important;
+  width: 100% !important;
+}
+
+/* Ocultar botón descuento de la botonera principal móvil */
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.descuento,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.descuento {
+  display: none !important;
+}
+
+/* Fila 1: Botones secundarios arriba en 3 columnas */
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.guardar,
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.cocina,
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.guardado,
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.prefactura,
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.split,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.guardar,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.cocina,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.guardado,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.prefactura,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.split {
+  order: 1 !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  padding: 6px 4px !important;
+  border-radius: 8px !important;
+  white-space: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
+}
+
+/* Fila 2: Botón Cobrar Cuenta principal abajo ocupando todo el ancho (3 columnas) */
+html.gamma-mobile .ticket-action-buttons .btn-btn-cmd.cobrar,
+body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.cobrar {
+  order: 2 !important;
+  grid-column: 1 / -1 !important;
+  min-height: 48px !important;
+  font-size: 1.1rem !important;
+  font-weight: 900 !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  border: 1px solid #34d399 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45) !important;
+  margin-top: 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}

@@ -3355,10 +3355,7 @@ app.get('/api/mesas', async (req, res) => {
         SELECT MAX(o2.id) FROM Ordenes o2 
         WHERE o2.mesa_id = m.id 
           AND (o2.negocio_id = ? OR (o2.negocio_id IS NULL AND ? = 1))
-          AND (
-            o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
-            OR (o2.estado = 'pagada' AND m.estado IN ('esperando', 'ocupada', 'esperando_parcial'))
-          )
+          AND o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
       )
       WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
       ORDER BY m.id ASC
@@ -3378,6 +3375,11 @@ app.get('/api/mesas', async (req, res) => {
         activeOrderIds
       );
       for (const it of allItems) {
+        it.id_detalle_existente = it.id;
+        it.id = it.producto_id || it.id;
+        it.nombre = it.nombre_producto || it.nombre || 'Producto';
+        it.precio = Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0;
+        it.enviado = true;
         if (!itemsByOrder[it.orden_id]) itemsByOrder[it.orden_id] = [];
         itemsByOrder[it.orden_id].push(it);
       }
@@ -5654,18 +5656,16 @@ app.get('/api/ordenes/mesa/:mesaId', async (req, res) => {
       "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') ORDER BY id DESC LIMIT 1",
       [mesaId, negocioId, negocioId]
     );
-    if (!orden) {
-      const mesa = await dbGet('SELECT * FROM Mesas WHERE id = ?', [mesaId]);
-      if (mesa && (mesa.estado === 'esperando' || mesa.estado === 'ocupada' || mesa.estado === 'abierta')) {
-        orden = await dbGet(
-          "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'pagada' ORDER BY id DESC LIMIT 1",
-          [mesaId, negocioId, negocioId]
-        );
-      }
-    }
-    if (!orden) return res.json({ orden: null, items: [] });
+    if (!orden) return res.json({ orden: null, items: [], total_pagado: 0, pagos: [] });
 
     const items = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado' ORDER BY id ASC", [orden.id]);
+    for (const it of items) {
+      it.id_detalle_existente = it.id;
+      it.id = it.producto_id || it.id;
+      it.nombre = it.nombre_producto || it.nombre || 'Producto';
+      it.precio = Number(it.precio_unitario != null ? it.precio_unitario : it.precio) || 0;
+      it.enviado = true;
+    }
     let totalAbonado = 0;
     let pagos = [];
     try {
@@ -6026,12 +6026,12 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     const prodEsBarra = Boolean(prodDb && (prodDb.destino === 'barra' || prodDb.es_licor));
     const prodEsCocina = Boolean(prodDb && prodDb.destino === 'cocina');
 
-    if (prodEsBarra || catEsBarra || esBebidaKeyword || it.destino === 'barra') {
-      destino = 'barra';
-      curso = 1;
-    } else if (prodEsCocina || catEsCocina || it.destino === 'cocina') {
+    if (it.destino === 'cocina' || prodEsCocina || catEsCocina) {
       destino = 'cocina';
       curso = curso || 2;
+    } else if (it.destino === 'barra' || prodEsBarra || catEsBarra || esBebidaKeyword) {
+      destino = 'barra';
+      curso = 1;
     } else {
       destino = (curso === 1 || curso === 5 || curso === 6) ? 'barra' : 'cocina';
     }
@@ -6080,15 +6080,6 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada') ORDER BY id DESC LIMIT 1",
       [mesaIdFinal, negocioIdFinal, negocioIdFinal]
     );
-    if (!orden && mesa && (mesa.estado === 'esperando' || mesa.estado === 'ocupada' || mesa.estado === 'activa')) {
-      orden = await dbGet(
-        "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'pagada' ORDER BY id DESC LIMIT 1",
-        [mesaIdFinal, negocioIdFinal, negocioIdFinal]
-      );
-      if (orden) {
-        await dbRun("UPDATE Ordenes SET estado = 'abierta' WHERE id = ?", [orden.id]);
-      }
-    }
   }
   const ahora = new Date().toISOString();
   let ordenId;
@@ -6235,6 +6226,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     tieneCocina: tieneNuevosCocina,
     es_para_llevar: esParaLlevar,
     mesaNumero,
+    nuevasComandas: nuevasComandas.map(c => ({ id: c.id, producto_id: c.producto_id, nombre: c.nombre_producto })),
     ticketCocina: ticketCocina ? ticketCocina.ticketVisual : null,
     ticketBarra: ticketBarra ? ticketBarra.ticketVisual : null
   };
@@ -6851,17 +6843,11 @@ async function procesarCobroOrden(ordenId, {
   // Manejar items nuevos de la comanda no enviados previamente (para que queden en DetalleOrden y se descuenten de Kárdex)
   let itemsNuevos = [];
   if (Array.isArray(items) && items.length > 0) {
-    let itemsNoEnviados = items.filter(it => !it.enviado);
-    if (itemsNoEnviados.length === 0) {
-      itemsNoEnviados = items.filter(it => !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado);
-    }
-    if (itemsNoEnviados.length > 0) {
-      itemsNuevos = itemsNoEnviados;
+    const rowDetalles = await dbGet("SELECT COUNT(*) as total FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
+    if (!rowDetalles || Number(rowDetalles.total) === 0) {
+      itemsNuevos = items;
     } else {
-      const rowDetalles = await dbGet("SELECT COUNT(*) as total FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
-      if (!rowDetalles || rowDetalles.total === 0) {
-        itemsNuevos = items;
-      }
+      itemsNuevos = items.filter(it => it.enviado === false || it.enviado === 0 || (!it.enviado && !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado));
     }
   }
 
@@ -6957,7 +6943,7 @@ async function procesarCobroOrden(ordenId, {
   }
 
   const hayItemsCocinaOBarra = itemsProcesadosCobro.some(it => it.destino === 'cocina' || it.destino === 'barra');
-  const debeDespacharComanda = debeEnviarCocina || hayItemsCocinaOBarra;
+  const debeDespacharComanda = (debeEnviarCocina || hayItemsCocinaOBarra) && (itemsProcesadosCobro.length > 0);
 
   // Si el usuario confirmó enviar a cocina O si se agregaron productos de cocina/barra en cobro directo:
   if (debeDespacharComanda) {
@@ -7222,14 +7208,17 @@ async function procesarCobroOrden(ordenId, {
         [ahora, orden.mesa_id]
       );
 
+      await dbRun(
+        "UPDATE DetalleOrden SET pagado = 1 WHERE orden_id = ?",
+        [ordenId]
+      );
+
       const clientePidioCuenta = Boolean(orden.cuenta_pedida || orden.pidio_cuenta_qr);
       const forzarLiberar = Boolean(liberar_mesa || liberarMesa);
-      const forzarMantener = Boolean(mantener_mesa_ocupada || mantenerOcupada || enviar_cocina || enviarCocina);
+      const forzarMantener = Boolean(mantener_mesa_ocupada || mantenerOcupada);
 
-      // Si agrego comida a una mesa y la pago de una vez:
-      // Debe quedar ocupada en naranja ('esperando') con saldo ₡0 mientras cocina prepara los platos.
-      // Si el cliente pidió la cuenta para retirarse o se forzó liberar: se libera inmediatamente a 'libre'.
-      const mantenerMesaOcupada = forzarMantener || (!forzarLiberar && !clientePidioCuenta && (hayNuevosCocina || tieneItemsCocinaPendientes));
+      // Si el cliente pide la cuenta o se liquida normalmente, se libera la mesa inmediatamente:
+      const mantenerMesaOcupada = forzarMantener && !forzarLiberar && !clientePidioCuenta;
 
       if (mantenerMesaOcupada) {
         await dbRun(
@@ -7264,6 +7253,9 @@ async function procesarCobroOrden(ordenId, {
           estado: 'libre',
           cliente: null,
           total: 0,
+          orden_activa_id: null,
+          platos_pendientes: [],
+          items_pendientes: [],
           transferida_de: null,
           mesas_unidas: [],
           negocio_id: negocioIdFinal

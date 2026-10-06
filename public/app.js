@@ -1745,6 +1745,10 @@ function actualizarBotonEnviarComanda() {
   const btn = document.getElementById('btnEnviarComandaCocina');
   if (!btn) return;
 
+  const esMovil = typeof window !== 'undefined' && (typeof window.isGammaMobile === 'function' ? window.isGammaMobile() : window.innerWidth <= 900);
+  const ticketCol = document.getElementById('comanderoTicketCol');
+  const esEstrecho = esMovil || (ticketCol && ticketCol.offsetWidth < 380);
+
   if (!estado.mesaActiva || !estado.mesaActiva.items || !estado.mesaActiva.items.length) {
     btn.innerHTML = '💾 Guardar';
     btn.className = 'btn-btn-cmd guardar';
@@ -1759,7 +1763,7 @@ function actualizarBotonEnviarComanda() {
   const tieneCualquierNuevo = estado.mesaActiva.items.some(it => !it.enviado);
 
   if (tieneNuevosCocina) {
-    btn.innerHTML = '🔥 Enviar a Cocina';
+    btn.innerHTML = esEstrecho ? '🔥 Cocina' : '🔥 Enviar a Cocina';
     btn.className = 'btn-btn-cmd cocina';
     btn.disabled = false;
   } else if (tieneCualquierNuevo) {
@@ -1767,7 +1771,7 @@ function actualizarBotonEnviarComanda() {
     btn.className = 'btn-btn-cmd guardar';
     btn.disabled = false;
   } else {
-    btn.innerHTML = '✓ Comanda al día (En Cocina)';
+    btn.innerHTML = esEstrecho ? '✓ Al día' : '✓ Comanda al día';
     btn.className = 'btn-btn-cmd guardado';
     btn.disabled = true;
   }
@@ -1789,10 +1793,11 @@ window.switchComanderoMobileTab = function(tab) {
     if (btnMenu) btnMenu.classList.add('active');
     if (btnTkt) btnTkt.classList.remove('active');
     if (floatBar) {
+      const isMobile = typeof window.isGammaMobile === 'function' ? window.isGammaMobile() : window.innerWidth <= 900;
       const totalQty = (estado.mesaActiva && estado.mesaActiva.items)
         ? estado.mesaActiva.items.reduce((acc, it) => acc + (it.cantidad || 1), 0)
         : 0;
-      floatBar.style.display = totalQty > 0 ? 'flex' : 'none';
+      floatBar.style.display = (isMobile && totalQty > 0) ? 'flex' : 'none';
     }
   } else {
     catCol.classList.add('mobile-hidden');
@@ -1800,6 +1805,11 @@ window.switchComanderoMobileTab = function(tab) {
     if (btnMenu) btnMenu.classList.remove('active');
     if (btnTkt) btnTkt.classList.add('active');
     if (floatBar) floatBar.style.display = 'none';
+    // Sincronizar badge de mesa en header de comanda móvil
+    const mobBadge = document.getElementById('mobTicketMesaBadge');
+    if (mobBadge && estado.mesaActiva) {
+      mobBadge.textContent = estado.mesaActiva.numero || ('Mesa ' + (estado.mesaActiva.id || ''));
+    }
     // Scroll comanda ticket to top for comfortable viewing
     const tktList = document.getElementById('comTicketItemsList');
     if (tktList) tktList.scrollTop = 0;
@@ -8388,12 +8398,12 @@ window.agregarAlTicketOneTap = async function(prodId) {
 
     const esBebidaKeyword = /\b(cerveza|cervezas|imperial|pilsen|bavaria|corona|heineken|stella|coctel|cocteles|cóctel|cócteles|shot|shots|fresco|frescos|refresco|refrescos|gaseosa|gaseosas|coca|pepsi|sprite|fanta|café|cafe|cafes|cafés|agua|aguas|cas|horchata|resbaladera|jugo|jugos|batido|batidos|trago|tragos|ron|vodka|whisky|whiskey|gin|tequila|guaro|vino|vinos|sangria|sangría|licor|licores|botella|botellas|smirnoff|chiliguaro|cacique|pacha|cuarta|centenario|chivas|johnny|buchanans|jagermeister|baileys|kahlua|malibu|amaretto|campari|aperol|fernet|anis|absolut|bacardi|morgan|havana|cuervo|don\s*julio|herradura|patron|tanqueray|bombay|beefeater|red\s*bull|monster|gatorade|tropical|chelada|michelada|mojito|margarita|daiquiri|caipiriña|piña\s*colada|cuba\s*libre)\b/i.test(prod.nombre || '') || /rock\s*ice/i.test(prod.nombre || '');
 
-    if (itemDest === 'barra' || prod.es_licor || catEsBarra || esBebidaKeyword) {
-      itemDest = 'barra';
-      itemCurso = 1;
-    } else if (itemDest === 'cocina' || catEsCocina) {
+    if (itemDest === 'cocina' || catEsCocina) {
       itemDest = 'cocina';
       itemCurso = itemCurso || 2;
+    } else if (itemDest === 'barra' || prod.es_licor || catEsBarra || esBebidaKeyword) {
+      itemDest = 'barra';
+      itemCurso = 1;
     } else {
       itemDest = (itemCurso === 1 || itemCurso === 5 || itemCurso === 6) ? 'barra' : 'cocina';
     }
@@ -10429,9 +10439,17 @@ async function cargarAgendaReservas() {
 window.cargarAgendaReservas = cargarAgendaReservas;
 
 window.abrirComanderoMesa = abrirComanderoMesa;
-async function abrirComanderoMesa(mesaId) {
-  const mesa = estado.mesas.find(m => Number(m.id) === Number(mesaId)) || { id: Number(mesaId), numero: mesaId, items: [] };
+async function abrirComanderoMesa(mesaIdOrObj) {
+  const targetId = (typeof mesaIdOrObj === 'object' && mesaIdOrObj !== null) ? mesaIdOrObj.id : mesaIdOrObj;
+  const mesa = (estado.mesas || []).find(m => Number(m.id) === Number(targetId) || String(m.numero) === String(targetId)) ||
+    (typeof mesaIdOrObj === 'object' && mesaIdOrObj !== null ? mesaIdOrObj : { id: Number(targetId) || 1, numero: 'Mesa ' + (targetId || 1), items: [] });
   if (!mesa) return;
+
+  const mesaId = Number(mesa.id || targetId);
+
+  if (typeof mesa.numero === 'object' || !mesa.numero) {
+    mesa.numero = 'Mesa ' + (mesa.id || 1);
+  }
 
   estado.mesaActiva = mesa;
   document.getElementById('comMesaNumero').textContent = mesa.numero;
@@ -10575,16 +10593,29 @@ async function abrirComanderoMesa(mesaId) {
     } else {
       if (mesa.orden_activa_id || mesa.orden_id) {
         mesa.orden_id = mesa.orden_activa_id || mesa.orden_id;
-        document.getElementById('comTicketOrdenId').textContent = 'Orden #' + (mesa.numero_orden || mesa.orden_id);
+        const numOrd = mesa.numero_orden || mesa.orden_id;
+        document.getElementById('comTicketOrdenId').textContent = numOrd ? ('Orden #' + numOrd) : 'Nueva Orden';
       } else {
         document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
         mesa.orden_id = null;
+        mesa.orden_activa_id = null;
+        mesa.total_pagado = 0;
+        mesa.orden_total = 0;
+        mesa.total = 0;
         mesa.modo_happy_hour = 'estricto';
         mesa.descuento_monto = 0;
         mesa.descuento_porcentaje = 0;
         mesa.descuento_motivo = '';
         mesa.descuento_autorizado_por = '';
         mesa.items = [];
+      }
+      if (Array.isArray(mesa.items) && mesa.items.length > 0) {
+        mesa.items = mesa.items.map(it => ({
+          ...it,
+          nombre: it.nombre || it.nombre_producto || 'Producto',
+          precio: Number(it.precio != null ? it.precio : it.precio_unitario) || 0,
+          cantidad: Number(it.cantidad) || 1
+        }));
       }
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
@@ -10601,6 +10632,10 @@ async function abrirComanderoMesa(mesaId) {
   const elClienteNom = document.getElementById('comClienteNombre');
   if (elClienteNom) {
     elClienteNom.textContent = nomCliente;
+  }
+  const mobBadge = document.getElementById('mobTicketMesaBadge');
+  if (mobBadge) {
+    mobBadge.textContent = mesa.numero || ('Mesa ' + (mesa.id || ''));
   }
 
   // Sincronizar comensales de la mesa
@@ -10665,6 +10700,8 @@ window.abrirModoParaLlevar = function(clienteNombre = 'Cliente Para Llevar') {
   estado.mesaActiva = mesaVirtual;
   const elNum = document.getElementById('comMesaNumero');
   if (elNum) elNum.textContent = '🛍️ Para Llevar';
+  const elBadgeMob = document.getElementById('mobTicketMesaBadge');
+  if (elBadgeMob) elBadgeMob.textContent = '🛍️ Para Llevar';
   const elZona = document.getElementById('comMesaZona');
   if (elZona) elZona.textContent = 'BARRA / EXPRESS';
   const elOrd = document.getElementById('comTicketOrdenId');
@@ -10728,11 +10765,22 @@ if (btnCloseComEl) {
 window.aplicarAnchoTicket = function(widthPx) {
   const ticketCol = document.getElementById('comanderoTicketCol');
   if (!ticketCol) return;
-  const wVal = typeof widthPx === 'number' ? `${widthPx}px` : widthPx;
-  ticketCol.style.flex = `0 0 ${wVal}`;
-  ticketCol.style.width = wVal;
-  ticketCol.style.maxWidth = wVal;
-  ticketCol.style.minWidth = '300px';
+  const numWidth = typeof widthPx === 'number' ? widthPx : parseInt(widthPx, 10);
+  const wVal = `${numWidth}px`;
+  ticketCol.style.setProperty('flex', `0 0 ${wVal}`, 'important');
+  ticketCol.style.setProperty('width', wVal, 'important');
+  ticketCol.style.setProperty('max-width', wVal, 'important');
+  ticketCol.style.setProperty('min-width', '300px', 'important');
+
+  // Sincronizar clases auxiliares para adaptabilidad total
+  ticketCol.classList.toggle('ticket-narrow', numWidth <= 365);
+  ticketCol.classList.toggle('ticket-medium', numWidth > 365 && numWidth <= 460);
+  ticketCol.classList.toggle('ticket-wide', numWidth > 460);
+
+  // Actualizar estado del botón cocina si corresponde
+  if (typeof actualizarBotonEnviarComanda === 'function') {
+    actualizarBotonEnviarComanda();
+  }
 };
 
 window.initComanderoResizer = function() {
@@ -10743,6 +10791,8 @@ window.initComanderoResizer = function() {
   const savedWidth = localStorage.getItem('pos_comanda_width');
   if (savedWidth && window.innerWidth >= 900) {
     window.aplicarAnchoTicket(parseInt(savedWidth, 10));
+  } else if (ticketCol && window.innerWidth >= 900) {
+    window.aplicarAnchoTicket(ticketCol.getBoundingClientRect().width || 380);
   }
 
   let isDragging = false;
@@ -11468,8 +11518,8 @@ function renderTicketItems() {
     return `
       <div class="ticket-item-row">
         <div class="ticket-item-top">
-          <span class="t-name">${origenBadge}${it.nombre} ${comensalTag} ${promoBadge} ${cursoBadge} ${estadoEnvioBadge}</span>
-          <span class="t-price">${formatCRC(it.precio * it.cantidad)}</span>
+          <span class="t-name">${origenBadge}${it.nombre || it.nombre_producto || 'Producto'} ${comensalTag} ${promoBadge} ${cursoBadge} ${estadoEnvioBadge}</span>
+          <span class="t-price">${formatCRC((Number(it.precio != null ? it.precio : it.precio_unitario) || 0) * (Number(it.cantidad) || 1))}</span>
         </div>
         ${it.notas ? `<div class="ticket-item-notes">⚠️ ${it.notas}</div>` : ''}
         <div class="ticket-item-actions">
@@ -11547,9 +11597,10 @@ function renderTicketItems() {
   if (mobCountEl) mobCountEl.textContent = totalQty;
   if (mobFloatCount) mobFloatCount.textContent = totalQty;
   if (mobFloatBar) {
+    const isMobile = typeof window.isGammaMobile === 'function' ? window.isGammaMobile() : window.innerWidth <= 900;
     const catCol = document.getElementById('comanderoCatalogCol');
     const isMenuVisible = !catCol || !catCol.classList.contains('mobile-hidden');
-    mobFloatBar.style.display = (totalQty > 0 && isMenuVisible) ? 'flex' : 'none';
+    mobFloatBar.style.display = (isMobile && totalQty > 0 && isMenuVisible) ? 'flex' : 'none';
   }
 }
 
@@ -11616,7 +11667,11 @@ function recalcularTotalesTicket() {
     return;
   }
 
-  let sub = estado.mesaActiva.items.reduce((acc, it) => acc + (it.precio * it.cantidad), 0);
+  let sub = estado.mesaActiva.items.reduce((acc, it) => {
+    const p = Number(it.precio != null ? it.precio : it.precio_unitario) || 0;
+    const c = Number(it.cantidad) || 1;
+    return acc + (p * c);
+  }, 0);
   let descuentoHH = 0;
   const modoHH = estado.mesaActiva.modo_happy_hour || 'estricto';
 
@@ -11624,20 +11679,21 @@ function recalcularTotalesTicket() {
   let tieneBebidasPromo = false;
 
   estado.mesaActiva.items.forEach(it => {
+    const itNombre = it.nombre || it.nombre_producto || '';
     const esCervezaPromo = Boolean(
       it.happyHour ||
       it.en_happy_hour ||
       it.categoria_id === 4 ||
       it.catId === 4 ||
-      /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(it.nombre || '')
+      /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(itNombre)
     );
     if (!esCervezaPromo) return;
     tieneBebidasPromo = true;
 
-    const key = it.id || it.nombre;
+    const key = it.id || itNombre;
     if (!grupos[key]) {
       grupos[key] = {
-        precio: it.precio,
+        precio: Number(it.precio != null ? it.precio : it.precio_unitario) || 0,
         cantHH: 0,
         cantNoHH: 0
       };
@@ -11775,7 +11831,7 @@ function recalcularTotalesTicket() {
     }
   }
 
-  const totalAbonado = Number(estado.mesaActiva?.total_pagado) || 0;
+  const totalAbonado = Number(estado.mesaActiva?.orden_id ? estado.mesaActiva?.total_pagado : 0) || 0;
   const saldoPendiente = Math.max(0, total - totalAbonado);
 
   const rowAbonos = document.getElementById('rowComAbonos');
@@ -12364,6 +12420,15 @@ document.getElementById('btnEnviarComandaCocina').addEventListener('click', asyn
         if (resData.total !== undefined) {
           estado.mesaActiva.orden_total = resData.total;
           estado.mesaActiva.total = resData.total;
+        }
+        if (Array.isArray(resData.nuevasComandas) && resData.nuevasComandas.length > 0 && estado.mesaActiva.items) {
+          resData.nuevasComandas.forEach(cmd => {
+            const itemSinDetalle = estado.mesaActiva.items.find(it => !it.id_detalle_existente && (Number(it.id) === Number(cmd.producto_id) || it.nombre === cmd.nombre));
+            if (itemSinDetalle) {
+              itemSinDetalle.id_detalle_existente = cmd.id;
+              itemSinDetalle.enviado = true;
+            }
+          });
         }
         const mArr = (estado.mesas || []).find(m => Number(m.id) === Number(estado.mesaActiva.id));
         if (mArr) {
@@ -14883,21 +14948,27 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
     estado.mesaActiva.estado === 'cuenta_pedida'
   );
 
-  // Si agrego comida a una mesa y la pago de una vez:
-  // La comanda se despacha a cocina automáticamente y la mesa permanece ocupada en naranja ('esperando') con saldo ₡0
   if (tieneNuevosCocina) {
     estado.enviarCocinaEnCobro = true;
-    estado.mantenerMesaOcupadaEnCobro = true;
-  } else if (tieneCocinaPendiente && !clientePidioCuenta) {
-    estado.enviarCocinaEnCobro = false;
-    estado.mantenerMesaOcupadaEnCobro = true;
+    estado.mantenerMesaOcupadaEnCobro = false;
   } else {
-    // Si el cliente pidió la cuenta para marcharse o no hay comida en cocina: se libera la mesa de inmediato al pagar
     estado.enviarCocinaEnCobro = false;
     estado.mantenerMesaOcupadaEnCobro = false;
   }
 
-  const totalTxt = document.getElementById('comTotal').textContent;
+  if (typeof recalcularTotalesTicket === 'function') {
+    recalcularTotalesTicket();
+  }
+
+  let totalTxt = document.getElementById('comTotal')?.textContent || '₡ 0.00';
+  let totalNum = parseCRC(totalTxt);
+  if (totalNum <= 0 && estado.mesaActiva?.items?.length) {
+    const rawSum = estado.mesaActiva.items.reduce((acc, it) => acc + ((Number(it.precio != null ? it.precio : it.precio_unitario) || 0) * (Number(it.cantidad) || 1)), 0);
+    if (rawSum > 0) {
+      totalTxt = formatCRC(rawSum);
+    }
+  }
+
   const lblTitulo = document.getElementById('lblTituloCobroModal');
   if (lblTitulo) lblTitulo.textContent = '💵 Cobrar y Liquidar Cuenta';
 
@@ -14927,7 +14998,11 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
   }
 
     inicializarPanelesCobroModal(totalTxt);
-  document.getElementById('modalCobro').classList.add('active');
+  const mCob = document.getElementById('modalCobro');
+  if (mCob) {
+    mCob.style.display = 'flex';
+    mCob.classList.add('active');
+  }
 });
 
 function inicializarPanelesCobroModal(totalTxt) {
@@ -15818,6 +15893,7 @@ window.ejecutarCobroFinal = async function() {
             mesaEnLista.estado = 'libre';
             mesaEnLista.orden_total = 0;
             mesaEnLista.total = 0;
+            mesaEnLista.total_pagado = 0;
             mesaEnLista.orden_activa_id = null;
             mesaEnLista.items = [];
             mesaEnLista.platos_pendientes = [];
@@ -15839,6 +15915,7 @@ window.ejecutarCobroFinal = async function() {
             estado.mesaActiva.orden_activa_id = null;
             estado.mesaActiva.orden_total = 0;
             estado.mesaActiva.total = 0;
+            estado.mesaActiva.total_pagado = 0;
             estado.mesaActiva.pidio_cuenta_qr = 0;
             estado.mesaActiva.cuenta_pedida = false;
           }
@@ -16032,6 +16109,7 @@ window.ejecutarCobroFinal = async function() {
           mesaEnLista.estado = 'libre';
           mesaEnLista.orden_total = 0;
           mesaEnLista.total = 0;
+          mesaEnLista.total_pagado = 0;
           mesaEnLista.orden_activa_id = null;
           mesaEnLista.items = [];
           mesaEnLista.platos_pendientes = [];
@@ -16053,6 +16131,7 @@ window.ejecutarCobroFinal = async function() {
           estado.mesaActiva.orden_activa_id = null;
           estado.mesaActiva.orden_total = 0;
           estado.mesaActiva.total = 0;
+          estado.mesaActiva.total_pagado = 0;
           estado.mesaActiva.pidio_cuenta_qr = 0;
           estado.mesaActiva.cuenta_pedida = false;
         }

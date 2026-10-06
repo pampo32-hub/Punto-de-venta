@@ -1,12 +1,12 @@
-const CACHE_NAME = 'pos-static-v118';
-
-
+const CACHE_NAME = 'pos-static-v122';
 
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/cliente.html',
   '/styles.css',
+  '/desktop.css',
+  '/mobile.css',
   '/app.js',
   '/offline-db.js',
   '/offline-sync.js',

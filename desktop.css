@@ -1,0 +1,280 @@
+/**
+ * ============================================================================
+ * GAMMA POS - DESKTOP & PC STYLESHEET (desktop.css)
+ * ============================================================================
+ * Archivo exclusivo para computadoras de escritorio, laptops y pantallas anchas.
+ * 
+ * AISLAMIENTO FÍSICO:
+ * - Se carga mediante: media="screen and (min-width: 901px)"
+ * - Cualquier regla agregada o modificada aquí aplica ÚNICAMENTE a la versión de PC.
+ * - Los celulares y tabletas NUNCA aplican este archivo.
+ * ============================================================================
+ */
+
+/* ============================================================================
+   1. ATRIBUTOS Y ELEMENTOS GENERALES DE PC
+   ============================================================================ */
+html.gamma-desktop,
+body.gamma-desktop {
+  overflow-x: hidden;
+  user-select: auto;
+}
+
+/* Ocultar estrictamente barras y banners diseñados solo para móvil */
+html.gamma-desktop .com-mob-floating-bar,
+html.gamma-desktop .mob-ticket-back-banner,
+html.gamma-desktop #mobFloatingTicketBar,
+html.gamma-desktop .mob-category-scroll-indicator,
+body.gamma-desktop .com-mob-floating-bar,
+body.gamma-desktop .mob-ticket-back-banner,
+body.gamma-desktop #mobFloatingTicketBar,
+body.gamma-desktop .mob-category-scroll-indicator {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Mostrar elementos de control exclusivos de PC */
+html.gamma-desktop .comandero-resizer,
+body.gamma-desktop .comandero-resizer {
+  display: flex !important;
+}
+
+html.gamma-desktop .ticket-topbar,
+body.gamma-desktop .ticket-topbar {
+  display: flex !important;
+}
+
+/* ============================================================================
+   2. ATAJOS DE TECLADO (HOTKEYS BADGES EN PC)
+   ============================================================================ */
+html.gamma-desktop kbd.kbd-shortcut,
+html.gamma-desktop .kbd-sub-shortcut,
+body.gamma-desktop kbd.kbd-shortcut,
+body.gamma-desktop .kbd-sub-shortcut {
+  display: inline-block !important;
+  padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #f1f5f9;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  margin-left: 6px;
+  vertical-align: middle;
+  pointer-events: none;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================================================
+   3. DISTRIBUCIÓN DEL COMANDERO EN PC (CATÁLOGO + DIVISOR + COMANDA)
+   ============================================================================ */
+html.gamma-desktop .comandero-modal,
+body.gamma-desktop .comandero-modal {
+  display: flex !important;
+  flex-direction: row !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+}
+
+html.gamma-desktop .comandero-catalog,
+body.gamma-desktop .comandero-catalog {
+  flex: 1 1 auto !important;
+  min-width: 320px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+html.gamma-desktop .comandero-ticket,
+body.gamma-desktop .comandero-ticket {
+  display: flex !important;
+  position: relative !important;
+  inset: auto !important;
+  width: var(--ticket-width, 380px) !important;
+  min-width: 290px !important;
+  max-width: 65vw !important;
+  height: 100% !important;
+  z-index: 10 !important;
+  flex-direction: column !important;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4) !important;
+  container-type: inline-size;
+  container-name: ticket-panel;
+}
+
+/* Divisor redimensionable (Splitter) en PC */
+html.gamma-desktop .comandero-resizer,
+body.gamma-desktop .comandero-resizer {
+  width: 10px;
+  background: #0f172a;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transition: background 0.15s ease;
+  z-index: 20;
+}
+
+html.gamma-desktop .comandero-resizer:hover,
+html.gamma-desktop .comandero-resizer:active,
+body.gamma-desktop .comandero-resizer:hover,
+body.gamma-desktop .comandero-resizer:active {
+  background: #0284c7;
+}
+
+html.gamma-desktop .resizer-handle,
+body.gamma-desktop .resizer-handle {
+  color: #64748b;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* ============================================================================
+   4. CUADRÍCULA 2X2 PARA BOTONES DE ACCIÓN DE COMANDA EN PC
+   [Guardar / Cocina]  [Pre-Factura (F9)]
+   [Dividir Cuenta]    [Cobrar Cuenta (F10)]
+   ============================================================================ */
+html.gamma-desktop .ticket-action-buttons,
+body.gamma-desktop .ticket-action-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-rows: repeat(2, minmax(42px, auto)) !important;
+  gap: 8px !important;
+  margin-top: 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Ocultar el botón de descuento en la botonera 2x2 (accesible con Ctrl+D o en Cobrar) */
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.descuento,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.descuento {
+  display: none !important;
+}
+
+/* Fila 1 - Columna 1: Guardar / Enviar a Cocina */
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.guardar,
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.cocina,
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.guardado,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.guardar,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.cocina,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.guardado {
+  order: 1 !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 42px !important;
+  font-weight: 800 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Fila 1 - Columna 2: Pre-Factura */
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.prefactura,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.prefactura {
+  order: 2 !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 42px !important;
+  font-weight: 800 !important;
+  border-radius: 10px !important;
+  background: #1e293b !important;
+  border: 1px solid #475569 !important;
+  color: #38bdf8 !important;
+}
+
+/* Fila 2 - Columna 1: Dividir Cuenta */
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.split,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.split {
+  order: 3 !important;
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 42px !important;
+  font-weight: 800 !important;
+  border-radius: 10px !important;
+  background: #1e293b !important;
+  border: 1px solid #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Fila 2 - Columna 2: Cobrar Cuenta */
+html.gamma-desktop .ticket-action-buttons .btn-btn-cmd.cobrar,
+body.gamma-desktop .ticket-action-buttons .btn-btn-cmd.cobrar {
+  order: 4 !important;
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 42px !important;
+  font-weight: 900 !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  border: 1px solid #34d399 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35) !important;
+}
+
+/* ============================================================================
+   5. ADAPTABILIDAD DINÁMICA DE LA COMANDA EN PC (CONTAINER QUERIES)
+   ============================================================================ */
+@container ticket-panel (max-width: 365px) {
+  .ticket-action-buttons {
+    gap: 5px !important;
+  }
+  .ticket-action-buttons .btn-btn-cmd {
+    padding: 7px 3px !important;
+    font-size: 0.74rem !important;
+    min-height: 40px !important;
+    border-radius: 8px !important;
+  }
+  .ticket-action-buttons .kbd-shortcut {
+    display: none !important;
+  }
+}
+
+@container ticket-panel (min-width: 480px) {
+  .ticket-action-buttons {
+    gap: 10px !important;
+  }
+  .ticket-action-buttons .btn-btn-cmd {
+    padding: 12px 10px !important;
+    font-size: 0.94rem !important;
+    min-height: 52px !important;
+    border-radius: 12px !important;
+  }
+  .ticket-action-buttons .kbd-shortcut {
+    font-size: 0.75rem !important;
+    padding: 2px 6px !important;
+  }
+}
+
+/* ============================================================================
+   6. MODALES Y VENTANAS FLOTANTES EN PC
+   ============================================================================ */
+html.gamma-desktop .modal,
+body.gamma-desktop .modal {
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+html.gamma-desktop .modal-content,
+body.gamma-desktop .modal-content {
+  border-radius: 16px !important;
+  max-height: 90vh !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+}
