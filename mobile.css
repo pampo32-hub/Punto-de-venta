@@ -107,6 +107,289 @@ body.gamma-mobile .legend-badge,
   pointer-events: none !important;
 }
 
+/* 8. Buscador Rápido de la Pantalla Principal (Solo debe aparecer dentro del menú de comanda) */
+html.gamma-mobile .quick-search-box,
+body.gamma-mobile .quick-search-box,
+.quick-search-box {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 9. Botón 'Menú' de la Barra Superior Principal (Redundante en móvil, el menú se abre por mesa o para llevar) */
+html.gamma-mobile #btnNavMenuDirecto,
+body.gamma-mobile #btnNavMenuDirecto,
+#btnNavMenuDirecto {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 10. Botones de Zonas del Salón (Todas las zonas, Salón Principal, Barra, Terraza, VIP) */
+html.gamma-mobile .zone-selector,
+body.gamma-mobile .zone-selector,
+.zone-selector,
+html.gamma-mobile #zoneFilterTabs,
+body.gamma-mobile #zoneFilterTabs,
+#zoneFilterTabs {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Ocultar elementos secundarios no prioritarios en cabecera móvil */
+html.gamma-mobile .happy-hour-pill,
+body.gamma-mobile .happy-hour-pill,
+.happy-hour-pill,
+html.gamma-mobile #netStatusBadge,
+body.gamma-mobile #netStatusBadge,
+#netStatusBadge,
+html.gamma-mobile .pos-live-clock,
+body.gamma-mobile .pos-live-clock,
+.pos-live-clock {
+  display: none !important;
+}
+
+/* ============================================================================
+   REORGANIZACIÓN ULTRA-COMPACTA DE LA CABECERA Y NAVEGACIÓN EN MÓVIL
+   Elimina espacios vacíos y maximiza el área visible para las mesas
+   ============================================================================ */
+html.gamma-mobile .top-nav,
+body.gamma-mobile .top-nav {
+  display: grid !important;
+  grid-template-columns: 1fr auto auto !important;
+  grid-template-areas:
+    "brand admin user"
+    "nav nav nav" !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 6px 10px !important;
+  background: #090d16 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .brand,
+body.gamma-mobile .brand {
+  grid-area: brand !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+html.gamma-mobile .brand-info,
+body.gamma-mobile .brand-info {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+html.gamma-mobile .brand-info h2,
+body.gamma-mobile .brand-info h2 {
+  font-size: 0.95rem !important;
+  font-weight: 800 !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  color: #f8fafc !important;
+}
+
+html.gamma-mobile .brand-info .badge-tag,
+body.gamma-mobile .brand-info .badge-tag {
+  display: none !important;
+}
+
+html.gamma-mobile .admin-extra-actions,
+body.gamma-mobile .admin-extra-actions {
+  grid-area: admin !important;
+  display: flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  width: auto !important;
+}
+
+html.gamma-mobile #btnAbrirPanelAdmin,
+body.gamma-mobile #btnAbrirPanelAdmin {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 4px 8px !important;
+  font-size: 0.76rem !important;
+  font-weight: 800 !important;
+  border-radius: 8px !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+html.gamma-mobile .user-status-pill,
+body.gamma-mobile .user-status-pill {
+  grid-area: user !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 4px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 2px 8px !important;
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  margin: 0 !important;
+  width: auto !important;
+}
+
+html.gamma-mobile .user-subtitle,
+body.gamma-mobile .user-subtitle {
+  display: none !important;
+}
+
+html.gamma-mobile .user-title,
+body.gamma-mobile .user-title {
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  max-width: 85px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+html.gamma-mobile .nav-pills,
+body.gamma-mobile .nav-pills {
+  grid-area: nav !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 4px !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+}
+
+html.gamma-mobile .nav-pills::-webkit-scrollbar {
+  display: none !important;
+}
+
+html.gamma-mobile .nav-pill,
+body.gamma-mobile .nav-pill {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 4px 6px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  background: #1e293b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #cbd5e1 !important;
+}
+
+html.gamma-mobile .nav-pill .pill-icon,
+body.gamma-mobile .nav-pill .pill-icon {
+  font-size: 0.88rem !important;
+}
+
+html.gamma-mobile .nav-pill.active,
+body.gamma-mobile .nav-pill.active {
+  background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4) !important;
+}
+
+/* ============================================================================
+   SUBBAR DE SALÓN EN MÓVIL (COMPACTO Y DIRECTO)
+   ============================================================================ */
+html.gamma-mobile #view-salon .view-subbar,
+body.gamma-mobile #view-salon .view-subbar {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 6px 10px !important;
+  gap: 8px !important;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .salon-quick-tools,
+body.gamma-mobile .salon-quick-tools {
+  display: flex !important;
+  width: 100% !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+}
+
+html.gamma-mobile #btnParaLlevarSalon,
+body.gamma-mobile #btnParaLlevarSalon {
+  flex: 0 0 auto !important;
+  min-width: 110px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  font-size: 0.76rem !important;
+  font-weight: 800 !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  padding: 4px 8px !important;
+  margin: 0 !important;
+}
+
+html.gamma-mobile .view-mode-switcher,
+body.gamma-mobile .view-mode-switcher {
+  display: inline-flex !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  margin: 0 !important;
+  flex: 1 1 auto !important;
+  justify-content: flex-end !important;
+}
+
+html.gamma-mobile .btn-view-mode,
+body.gamma-mobile .btn-view-mode {
+  padding: 4px 6px !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  height: 34px !important;
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+html.gamma-mobile .salon-container,
+body.gamma-mobile .salon-container {
+  height: calc(100vh - 140px) !important;
+  height: calc(100dvh - 140px) !important;
+  min-height: 420px !important;
+  padding: 6px 8px !important;
+}
+
 /* ============================================================================
    2. BARRA FLOTANTE DE COMANDA (RESUMEN INFERIOR EN EL MENÚ)
    ============================================================================ */

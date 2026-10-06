@@ -312,3 +312,24 @@ body.gamma-desktop .legend-badge {
   display: inline-flex !important;
   visibility: visible !important;
 }
+
+/* Elementos de cabecera y zonas garantizados en PC */
+html.gamma-desktop .quick-search-box,
+body.gamma-desktop .quick-search-box {
+  display: flex !important;
+  visibility: visible !important;
+}
+
+html.gamma-desktop #zoneFilterTabs,
+body.gamma-desktop #zoneFilterTabs,
+html.gamma-desktop .zone-selector,
+body.gamma-desktop .zone-selector {
+  display: flex !important;
+  visibility: visible !important;
+}
+
+html.gamma-desktop #btnNavMenuDirecto,
+body.gamma-desktop #btnNavMenuDirecto {
+  display: inline-flex !important;
+  visibility: visible !important;
+}
