@@ -258,6 +258,11 @@ setInterval(async () => {
   } catch (_) {}
 
   for (const nid of comerciosIds) {
+    try {
+      const neg = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [nid]);
+      if (neg && !negocioTieneCaracteristica(neg, 'happy_hour_auto')) continue;
+    } catch (_) {}
+
     const hhEstado = obtenerEstadoHappyHour(nid);
     const [hInicio, mInicio] = (hhEstado.horaInicio || '16:00').split(':').map(Number);
     const minutosInicio = (hInicio || 0) * 60 + (mInicio || 0);
@@ -2273,6 +2278,25 @@ const CATALOGO_CARACTERISTICAS = [
   { id: 'arqueo_ciego_cierre_z', nombre: 'Arqueo Ciego en Cierre Z', categoria: 'seguridad', icono: '🔒', descripcion: 'Oculta los montos esperados al cajero para forzar un conteo físico real en el cierre final Z.' }
 ];
 
+function negocioTieneCaracteristica(negocio, featKey) {
+  if (!negocio) return false;
+  const flags = negocio.caracteristicas_activas;
+  if (!flags) return false;
+  if (flags === 'all') return true;
+  if (Array.isArray(flags)) {
+    return flags.includes(featKey);
+  }
+  if (typeof flags === 'string') {
+    try {
+      const arr = JSON.parse(flags);
+      if (Array.isArray(arr)) return arr.includes(featKey);
+    } catch (_) {}
+    const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
+    return splitArr.includes(String(featKey).toLowerCase());
+  }
+  return false;
+}
+
 app.get('/api/dev/caracteristicas/catalogo', (req, res) => {
   res.json(CATALOGO_CARACTERISTICAS);
 });
@@ -2347,7 +2371,7 @@ app.get('/api/admin/caracteristicas', async (req, res) => {
 
 app.put('/api/admin/caracteristicas', async (req, res) => {
   try {
-    const negocioId = req.headers['x-negocio-id'] || req.body.negocioId || 1;
+    const negocioId = req.body.negocioId || req.headers['x-negocio-id'] || 1;
     const { caracteristicas_activas } = req.body;
     const valorFinal = typeof caracteristicas_activas === 'object' ? JSON.stringify(caracteristicas_activas) : (caracteristicas_activas || 'all');
     await dbRun('UPDATE Negocios SET caracteristicas_activas = ? WHERE id = ?', [valorFinal, negocioId]);
@@ -3355,7 +3379,10 @@ app.get('/api/mesas', async (req, res) => {
         SELECT MAX(o2.id) FROM Ordenes o2 
         WHERE o2.mesa_id = m.id 
           AND (o2.negocio_id = ? OR (o2.negocio_id IS NULL AND ? = 1))
-          AND o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+          AND (
+            o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
+            OR (o2.estado = 'pagada' AND m.estado IN ('esperando', 'esperando_parcial', 'ocupada', 'activa'))
+          )
       )
       WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
       ORDER BY m.id ASC
@@ -3459,6 +3486,10 @@ app.get('/api/mesas', async (req, res) => {
             m.platos_pendientes = [];
             m.items_pendientes = [];
             m.minutos_espera = 0;
+            if (m.estado === 'esperando' || m.estado === 'ocupada' || m.estado === 'activa') {
+              m.estado = 'ocupada';
+              dbRun("UPDATE Mesas SET estado = 'ocupada' WHERE id = ?", [m.id]).catch(() => {});
+            }
           }
         } else {
           const estadoCalculado = evaluarEstadoMesaKDS(items);
@@ -3491,6 +3522,7 @@ app.get('/api/mesas', async (req, res) => {
           m.minutos_espera = 0;
           m.cliente = m.cliente_reserva || clientePreservado;
         } else {
+          const estadoPrevioDb = m.estado;
           m.estado = 'libre';
           m.pidio_cuenta_qr = 0;
           m.hora_pidio_cuenta = null;
@@ -3506,7 +3538,7 @@ app.get('/api/mesas', async (req, res) => {
           m.platos_pendientes = [];
           m.items_pendientes = [];
           m.minutos_espera = 0;
-          if (m.estado !== 'libre') {
+          if (estadoPrevioDb !== 'libre') {
             dbRun("UPDATE Mesas SET estado = 'libre', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL, mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL WHERE id = ?", [m.id]).catch(() => {});
           }
         }
@@ -4205,14 +4237,15 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     if (!mesa) return res.status(404).json({ error: 'Mesa no encontrada' });
 
     const reqNid = obtenerNegocioIdReq(req);
-    if (req.usuario && req.usuario.rol !== 'developer' && mesa.negocio_id && Number(mesa.negocio_id) !== Number(reqNid)) {
+    const mesaNegocioId = Number(mesa.negocio_id || reqNid || 1);
+    if (req.usuario && req.usuario.rol !== 'developer' && req.usuario.rol !== 'admin' && req.usuario.negocio_id && Number(req.usuario.negocio_id) !== mesaNegocioId) {
       return res.status(403).json({ error: 'Acceso denegado: La mesa pertenece a otro comercio.' });
     }
 
     // 1. Obtener órdenes activas de la mesa para verificar si hay saldo pendiente
     const ordenesActivas = await dbAll(
       "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')",
-      [mesaId, Number(mesa.negocio_id || reqNid || 1), Number(mesa.negocio_id || reqNid || 1)]
+      [mesaId, mesaNegocioId, mesaNegocioId]
     );
 
     let totalPendiente = 0;
@@ -4228,8 +4261,11 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     }
 
     const ahora = new Date().toISOString();
-    const negocioId = Number(mesa.negocio_id || reqNid || 1);
-    const exigirPin = await negocioTieneModulo(negocioId, 'pedir_pin_liberar_con_saldo');
+    const negocioId = mesaNegocioId;
+    const exigirPinModulo = await negocioTieneModulo(negocioId, 'pedir_pin_liberar_con_saldo');
+    const negObj = await dbGet('SELECT caracteristicas_activas FROM Negocios WHERE id = ?', [negocioId]);
+    const exigirPinCarac = negObj ? negocioTieneCaracteristica(negObj, 'liberar_mesas_pin') : false;
+    const exigirPin = Boolean(exigirPinModulo || exigirPinCarac);
 
     const rol = obtenerRolReq(req);
     const pin = req.headers['x-supervisor-pin'] || (req.body && req.body.pinAutorizado) || (req.body && req.body.pin);
@@ -4312,6 +4348,7 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     io.emit('kds_actualizado', { negocio_id: negocioId });
 
     io.emit('mesa_actualizada', { mesaId: Number(mesaId), estado: 'libre', cliente: null, total: 0, transferida_de: null, mesas_unidas: [], negocio_id: negocioId });
+    io.emit('mesas_actualizadas', { negocio_id: negocioId });
     io.emit('reserva_actualizada', { negocio_id: negocioId });
 
     res.json({
@@ -5037,17 +5074,8 @@ app.post('/api/ordenes/:id/descuento', async (req, res) => {
 
     const negocio = ordenNegocioId ? await dbGet('SELECT * FROM Negocios WHERE id = ?', [ordenNegocioId]) : null;
 
-    const tieneServicio10 = negocio ? (
-      Boolean(negocio.caracteristicas_activas) &&
-      negocio.caracteristicas_activas !== 'all' &&
-      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
-    ) : false;
-
-    const tieneIVA13 = negocio ? (
-      Boolean(negocio.caracteristicas_activas) &&
-      negocio.caracteristicas_activas !== 'all' &&
-      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
-    ) : false;
+    const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
+    const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
 
     const esParaLlevar = Boolean(orden.es_para_llevar || orden.tipo_orden === 'para_llevar');
     const aplicaServicio = tieneServicio10 && !esParaLlevar;
@@ -5837,17 +5865,8 @@ async function recalcularTotalesOrden(ordenId) {
   
   const negocio = orden?.negocio_id ? await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id]) : null;
 
-  const tieneServicio10 = negocio ? (
-    Boolean(negocio.caracteristicas_activas) &&
-    negocio.caracteristicas_activas !== 'all' &&
-    (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
-  ) : false;
-
-  const tieneIVA13 = negocio ? (
-    Boolean(negocio.caracteristicas_activas) &&
-    negocio.caracteristicas_activas !== 'all' &&
-    (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
-  ) : false;
+  const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
+  const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
 
   const aplicaServicio = tieneServicio10 && !esParaLlevar;
   const aplicaIVA = tieneIVA13;
@@ -6172,7 +6191,9 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
   // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
   let ticketCocina = null;
   let ticketBarra = null;
-  if (nuevasComandas.length > 0) {
+  const negComanda = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [comandaNegocioId]);
+  const tieneDespachoCocinaBarra = negocioTieneCaracteristica(negComanda, 'despacho_cocina_barra');
+  if (nuevasComandas.length > 0 && tieneDespachoCocinaBarra) {
     const itemsCocina = nuevasComandas.filter(c => c.destino === 'cocina');
     const itemsBarra = nuevasComandas.filter(c => c.destino === 'barra');
 
@@ -6961,7 +6982,10 @@ async function procesarCobroOrden(ordenId, {
     const mesaObj = orden.mesa_id ? await dbGet('SELECT numero FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
     const mesaNumeroTxt = mesaObj ? (mesaObj.numero || `Mesa ${orden.mesa_id}`) : (orden.tipo_orden === 'para_llevar' || !orden.mesa_id ? '🛍️ Para Llevar' : 'Mesa Directa');
 
-    if (itemsCocina.length > 0) {
+    const negDirecto = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [orden.negocio_id || reqNegocioId || 1]);
+    const tieneCocinaBarra = negocioTieneCaracteristica(negDirecto, 'despacho_cocina_barra');
+
+    if (itemsCocina.length > 0 && tieneCocinaBarra) {
       // 1. Imprimir comanda de cocina térmica (marcada como PAGADA / DIRECTO)
       const tInfoCocina = printerService.generarTicketComanda({
         ordenId,
@@ -7010,7 +7034,7 @@ async function procesarCobroOrden(ordenId, {
       io.emit('kds_actualizado', { negocio_id: directNegocioId });
     }
 
-    if (itemsBarra.length > 0) {
+    if (itemsBarra.length > 0 && tieneCocinaBarra) {
       // Imprimir comanda de barra térmica (marcada como PAGADA / DIRECTO)
       const tInfoBarra = printerService.generarTicketComanda({
         ordenId,
@@ -7189,11 +7213,14 @@ async function procesarCobroOrden(ordenId, {
       fechaHora: ahora
     });
 
-    printerService.procesarImpresion({
-      destinoImpresora: 'caja',
-      ticketInfo: tInfoLiquidacion,
-      io
-    }).catch(err => console.error('Error al despachar ticket de liquidación:', err.message));
+    const negCobro = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
+    if (negocioTieneCaracteristica(negCobro, 'impresion_auto_cobro')) {
+      printerService.procesarImpresion({
+        destinoImpresora: 'caja',
+        ticketInfo: tInfoLiquidacion,
+        io
+      }).catch(err => console.error('Error al despachar ticket de liquidación:', err.message));
+    }
 
     if (orden.mesa_id) {
       const itemsPendientesCocina = await dbAll(
@@ -7213,12 +7240,11 @@ async function procesarCobroOrden(ordenId, {
         [ordenId]
       );
 
-      const clientePidioCuenta = Boolean(orden.cuenta_pedida || orden.pidio_cuenta_qr);
       const forzarLiberar = Boolean(liberar_mesa || liberarMesa);
       const forzarMantener = Boolean(mantener_mesa_ocupada || mantenerOcupada);
 
-      // Si el cliente pide la cuenta o se liquida normalmente, se libera la mesa inmediatamente:
-      const mantenerMesaOcupada = forzarMantener && !forzarLiberar && !clientePidioCuenta;
+      // Si el usuario seleccionó "Dejar en Espera", su elección explícita prevalece:
+      const mantenerMesaOcupada = forzarMantener && !forzarLiberar;
 
       if (mantenerMesaOcupada) {
         await dbRun(
@@ -7228,6 +7254,7 @@ async function procesarCobroOrden(ordenId, {
         const nombresPendientes = itemsPendientesCocina.map(it => it.nombre_producto);
         io.emit('mesa_actualizada', {
           mesaId: orden.mesa_id,
+          orden_activa_id: ordenId,
           estado: 'esperando',
           cliente: orden.cliente,
           total: 0,
@@ -7366,16 +7393,8 @@ async function procesarCobroOrden(ordenId, {
     }
 
     const montoParcialNum = Number(monto) || totalPagadoAcum || 0;
-    const tieneServicio10 = negocio ? (
-      Boolean(negocio.caracteristicas_activas) &&
-      negocio.caracteristicas_activas !== 'all' &&
-      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
-    ) : false;
-    const tieneIVA13 = negocio ? (
-      Boolean(negocio.caracteristicas_activas) &&
-      negocio.caracteristicas_activas !== 'all' &&
-      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
-    ) : false;
+    const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
+    const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
     const esParaLlevarTicket = Boolean(orden.es_para_llevar || orden.tipo_orden === 'para_llevar');
     const aplicaServ = tieneServicio10 && !esParaLlevarTicket;
 
@@ -7409,11 +7428,14 @@ async function procesarCobroOrden(ordenId, {
       fechaHora: ahora
     });
 
-    printerService.procesarImpresion({
-      destinoImpresora: 'caja',
-      ticketInfo: tInfoParcial,
-      io
-    }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
+    const negParcial = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
+    if (negocioTieneCaracteristica(negParcial, 'impresion_auto_cobro')) {
+      printerService.procesarImpresion({
+        destinoImpresora: 'caja',
+        ticketInfo: tInfoParcial,
+        io
+      }).catch(err => console.error('Error al despachar ticket pago parcial:', err.message));
+    }
 
     if (nuevoTotal === 0 && totalAbonado > 0) {
       await dbRun("UPDATE Ordenes SET estado = 'pagada', fecha_cierre = ?, total = 0, transferida_de = NULL WHERE id = ?", [ahora, ordenId]);
@@ -7611,16 +7633,8 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
     let numeroOrden = mesaId;
 
     const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden?.negocio_id || mesa.negocio_id || 1]);
-    const tieneServicio10 = negocio ? (
-      !negocio.caracteristicas_activas ||
-      negocio.caracteristicas_activas === 'all' ||
-      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('servicio_10') : String(negocio.caracteristicas_activas).includes('servicio_10'))
-    ) : true;
-    const tieneIVA13 = negocio ? (
-      !negocio.caracteristicas_activas ||
-      negocio.caracteristicas_activas === 'all' ||
-      (Array.isArray(negocio.caracteristicas_activas) ? negocio.caracteristicas_activas.includes('desglose_iva_13') : String(negocio.caracteristicas_activas).includes('desglose_iva_13'))
-    ) : true;
+    const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
+    const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
 
     if (orden) {
       // Recalcular totales para asegurar que Happy Hour, IVA y servicio estén 100% al día
@@ -9047,6 +9061,10 @@ async function registrarAuditoria({
 async function descontarInventarioPorItems(items = [], negocioId = null) {
   try {
     const negocioIdFinal = Number(negocioId || 1);
+    const negKardex = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioIdFinal]);
+    if (!negocioTieneCaracteristica(negKardex, 'kardex_tiempo_real')) {
+      return;
+    }
     let huboCambios = false;
     for (const it of items) {
       let rawProdId = it.producto_id != null ? it.producto_id : it.id;

@@ -125,6 +125,14 @@ window.cerrarTodosLosModales = function(excluirId = null) {
   });
   if (!excluirId) {
     window._modalActivoId = null;
+    document.body.classList.remove('comandero-abierto');
+    document.documentElement.classList.remove('comandero-abierto');
+    const viewSalon = document.getElementById('view-salon');
+    if (viewSalon) {
+      viewSalon.style.display = '';
+      viewSalon.style.visibility = 'visible';
+      viewSalon.style.pointerEvents = 'auto';
+    }
   }
 };
 
@@ -1797,14 +1805,26 @@ window.switchComanderoMobileTab = function(tab) {
       const totalQty = (estado.mesaActiva && estado.mesaActiva.items)
         ? estado.mesaActiva.items.reduce((acc, it) => acc + (it.cantidad || 1), 0)
         : 0;
-      floatBar.style.display = (isMobile && totalQty > 0) ? 'flex' : 'none';
+      if (isMobile && totalQty > 0) {
+        floatBar.classList.add('visible');
+        floatBar.classList.remove('oculto');
+        floatBar.style.setProperty('display', 'flex', 'important');
+      } else {
+        floatBar.classList.remove('visible');
+        floatBar.classList.add('oculto');
+        floatBar.style.setProperty('display', 'none', 'important');
+      }
     }
   } else {
     catCol.classList.add('mobile-hidden');
     tktCol.classList.add('mobile-active');
     if (btnMenu) btnMenu.classList.remove('active');
     if (btnTkt) btnTkt.classList.add('active');
-    if (floatBar) floatBar.style.display = 'none';
+    if (floatBar) {
+      floatBar.classList.remove('visible');
+      floatBar.classList.add('oculto');
+      floatBar.style.setProperty('display', 'none', 'important');
+    }
     // Sincronizar badge de mesa en header de comanda móvil
     const mobBadge = document.getElementById('mobTicketMesaBadge');
     if (mobBadge && estado.mesaActiva) {
@@ -4983,9 +5003,10 @@ window.negocioTieneCaracteristica = function(flagId) {
       if (s) neg = JSON.parse(s);
     } catch (_) {}
   }
-  if (!neg) return true;
+  if (!neg) return false;
   const flags = neg.caracteristicas_activas;
-  if (!flags || flags === 'all') return true;
+  if (!flags) return false;
+  if (flags === 'all') return true;
 
   if (Array.isArray(flags)) {
     return flags.includes(flagId);
@@ -4998,25 +5019,25 @@ window.negocioTieneCaracteristica = function(flagId) {
     const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
     return splitArr.includes(String(flagId).toLowerCase());
   }
-  return true;
+  return false;
 };
 
 window.aplicarRestriccionesModulos = function() {
-  const tieneKDS = tieneModulo('kds_cocina') && negocioTieneCaracteristica('despacho_cocina_barra');
-  const tieneSplit = tieneModulo('split_bill') && negocioTieneCaracteristica('division_cuentas');
+  const tieneKDS = negocioTieneCaracteristica('despacho_cocina_barra');
+  const tieneSplit = negocioTieneCaracteristica('division_cuentas');
   const tieneMesasPromos = tieneModulo('mesas_promos');
-  const tieneUnionMesas = tieneMesasPromos && negocioTieneCaracteristica('union_mesas');
+  const tieneUnionMesas = negocioTieneCaracteristica('union_mesas');
   const tieneMoverMesas = true;
-  const tieneHappyHour = tieneMesasPromos && negocioTieneCaracteristica('happy_hour_auto');
+  const tieneHappyHour = negocioTieneCaracteristica('happy_hour_auto');
   const tieneInventario = tieneModulo('inventario_recetas');
-  const tieneKardex = tieneInventario && negocioTieneCaracteristica('kardex_tiempo_real');
-  const tieneQR = tieneModulo('menu_qr') && negocioTieneCaracteristica('menu_digital_qr');
+  const tieneKardex = negocioTieneCaracteristica('kardex_tiempo_real');
+  const tieneQR = negocioTieneCaracteristica('menu_digital_qr');
   const tieneAutoPago = tieneModulo('auto_pago_qr');
   const tieneOffline = tieneModulo('offline_first');
   const tieneWhatsApp = tieneModulo('notificaciones_whatsapp');
   const tieneIA = tieneModulo('inteligencia_artificial');
   const tieneFacturacion = tieneModulo('facturacion_electronica');
-  const tieneDescuentos = tieneModulo('descuentos_cortesias_pin') && negocioTieneCaracteristica('descuentos_cortesias');
+  const tieneDescuentos = negocioTieneCaracteristica('descuentos_cortesias');
   const tienePrecuenta = negocioTieneCaracteristica('impresion_precuenta');
   const tieneServicio10 = negocioTieneCaracteristica('servicio_10');
   const tieneIVA13 = negocioTieneCaracteristica('desglose_iva_13');
@@ -5209,7 +5230,7 @@ window.aplicarRestriccionesModulos = function() {
   });
 
   // 12. Impresión de Pre-Cuenta
-  document.querySelectorAll('#btnImprimirPrecuenta, #btnImprimirPrecuentaComandero, .btn-precuenta, .btn-print-precuenta, #btnImprimirPrecuentaModal').forEach(el => {
+  document.querySelectorAll('#btnImprimirPreFactura, #btnImprimirPreFacturaCobro, #btnImprimirPrecuenta, #btnImprimirPrecuentaComandero, .btn-btn-cmd.prefactura, .btn-precuenta, .btn-print-precuenta, .btn-prefactura-split, #btnImprimirPrecuentaModal').forEach(el => {
     el.style.display = tienePrecuenta ? '' : 'none';
   });
 
@@ -5242,18 +5263,46 @@ window.aplicarRestriccionesModulos = function() {
   const btnZCiego = document.getElementById('btnCorteZCiego');
 
   if (btnXCiego) {
-    btnXCiego.style.display = tieneCorteXCiego ? 'inline-flex' : 'none';
-    btnXCiego.style.gridColumn = (tieneCorteXCiego && tieneArqueoCiegoZ) ? 'span 1' : 'span 2';
+    if (tieneCorteXCiego) {
+      btnXCiego.style.setProperty('display', 'inline-flex', 'important');
+      btnXCiego.classList.remove('is-hidden');
+      btnXCiego.style.gridColumn = (tieneCorteXCiego && tieneArqueoCiegoZ) ? 'span 1' : 'span 2';
+    } else {
+      btnXCiego.style.setProperty('display', 'none', 'important');
+      btnXCiego.classList.add('is-hidden');
+    }
   }
   if (btnZCiego) {
-    btnZCiego.style.display = tieneArqueoCiegoZ ? 'inline-flex' : 'none';
-    btnZCiego.style.gridColumn = (tieneCorteXCiego && tieneArqueoCiegoZ) ? 'span 1' : 'span 2';
+    if (tieneArqueoCiegoZ) {
+      btnZCiego.style.setProperty('display', 'inline-flex', 'important');
+      btnZCiego.classList.remove('is-hidden');
+      btnZCiego.style.gridColumn = (tieneCorteXCiego && tieneArqueoCiegoZ) ? 'span 1' : 'span 2';
+    } else {
+      btnZCiego.style.setProperty('display', 'none', 'important');
+      btnZCiego.classList.add('is-hidden');
+    }
   }
   document.querySelectorAll('.corte-x-ciego').forEach(el => {
-    if (el !== btnXCiego) el.style.display = tieneCorteXCiego ? '' : 'none';
+    if (el !== btnXCiego) {
+      if (tieneCorteXCiego) {
+        el.style.setProperty('display', '', 'important');
+        el.classList.remove('is-hidden');
+      } else {
+        el.style.setProperty('display', 'none', 'important');
+        el.classList.add('is-hidden');
+      }
+    }
   });
   document.querySelectorAll('.corte-z-ciego').forEach(el => {
-    if (el !== btnZCiego) el.style.display = tieneArqueoCiegoZ ? '' : 'none';
+    if (el !== btnZCiego) {
+      if (tieneArqueoCiegoZ) {
+        el.style.setProperty('display', '', 'important');
+        el.classList.remove('is-hidden');
+      } else {
+        el.style.setProperty('display', 'none', 'important');
+        el.classList.add('is-hidden');
+      }
+    }
   });
 
   // 17. Funciones exclusivas de Developer (Ocultas para todos los demás roles)
@@ -5267,33 +5316,6 @@ window.aplicarRestriccionesModulos = function() {
 // ============================================================================
 let _catalogoCaracteristicasCache = [];
 let _negocioCaracteristicasActivoId = 1;
-
-window.negocioTieneCaracteristica = function(flagId) {
-  let neg = estado.negocioActual;
-  if (!neg) {
-    try {
-      const s = sessionStorage.getItem('pos_negocio') || localStorage.getItem('pos_negocio');
-      if (s) neg = JSON.parse(s);
-    } catch (_) {}
-  }
-  if (!neg) return false;
-  const flags = neg.caracteristicas_activas;
-  if (!flags) return false;
-  if (flags === 'all') return true;
-
-  if (Array.isArray(flags)) {
-    return flags.includes(flagId);
-  }
-  if (typeof flags === 'string') {
-    try {
-      const arr = JSON.parse(flags);
-      if (Array.isArray(arr)) return arr.includes(flagId);
-    } catch (_) {}
-    const splitArr = flags.split(',').map(s => s.trim().toLowerCase());
-    return splitArr.includes(String(flagId).toLowerCase());
-  }
-  return false;
-};
 
 window.cargarTabCaracteristicasDev = async function(negocioId) {
   try {
@@ -5639,7 +5661,7 @@ window.guardarCaracteristicasAdmin = async function() {
       }
     });
 
-    const nid = estado.negocioActual?.id || 1;
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || 1;
     const todosSeleccionados = seleccionadas.length === (window._catalogoAdminCaracteristicas?.length || 0);
     const valorFinal = todosSeleccionados ? 'all' : seleccionadas;
 
@@ -5649,7 +5671,7 @@ window.guardarCaracteristicasAdmin = async function() {
         'Content-Type': 'application/json',
         'x-negocio-id': String(nid)
       },
-      body: JSON.stringify({ caracteristicas_activas: valorFinal })
+      body: JSON.stringify({ negocioId: nid, caracteristicas_activas: valorFinal })
     });
 
     const data = await res.json();
@@ -5658,7 +5680,7 @@ window.guardarCaracteristicasAdmin = async function() {
       return;
     }
 
-    if (estado.negocioActual && estado.negocioActual.id === nid) {
+    if (estado.negocioActual && Number(estado.negocioActual.id) === Number(nid)) {
       estado.negocioActual.caracteristicas_activas = valorFinal;
       sessionStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
       localStorage.setItem('pos_negocio', JSON.stringify(estado.negocioActual));
@@ -5666,6 +5688,9 @@ window.guardarCaracteristicasAdmin = async function() {
 
     if (typeof aplicarRestriccionesModulos === 'function') {
       aplicarRestriccionesModulos();
+    }
+    if (typeof cargarCajaDesdeBackend === 'function') {
+      cargarCajaDesdeBackend(null, true);
     }
 
     cerrarModalAdminCaracteristicas();
@@ -7914,7 +7939,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     const casados = standardProds.filter(p => p.nombre.toLowerCase().includes('casado'));
     if (casados.length > 0) {
       specialCardsHtml += `
-        <div class="prod-card-one-tap prod-card-special-group" onclick="abrirModalSeleccionCasado()" style="border: 2px solid #f59e0b; background: linear-gradient(145deg, #1e293b, #292524); position: relative;">
+        <div class="prod-card-one-tap prod-card-special-group" onclick="event.stopPropagation(); abrirModalSeleccionCasado(event)" style="border: 2px solid #f59e0b; background: linear-gradient(145deg, #1e293b, #292524); position: relative;">
           <div class="prod-card-thumb-special" style="font-size: 2.2rem; margin-bottom: 6px; text-align: center;">🍽️</div>
           <div class="prod-card-content">
             <span class="prod-card-name" style="color: #fbbf24; font-weight: 800;">🍱 Casados Típicos</span>
@@ -7929,7 +7954,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
     const arroces = standardProds.filter(p => p.nombre.toLowerCase().includes('arroz con') || p.nombre.toLowerCase().includes('arroz especial') || p.nombre.toLowerCase().includes('arroz cantones'));
     if (arroces.length > 0) {
       specialCardsHtml += `
-        <div class="prod-card-one-tap prod-card-special-group" onclick="abrirModalSeleccionArroz()" style="border: 2px solid #38bdf8; background: linear-gradient(145deg, #1e293b, #172554); position: relative;">
+        <div class="prod-card-one-tap prod-card-special-group" onclick="event.stopPropagation(); abrirModalSeleccionArroz(event)" style="border: 2px solid #38bdf8; background: linear-gradient(145deg, #1e293b, #172554); position: relative;">
           <div class="prod-card-thumb-special" style="font-size: 2.2rem; margin-bottom: 6px; text-align: center;">🍚</div>
           <div class="prod-card-content">
             <span class="prod-card-name" style="color: #38bdf8; font-weight: 800;">🍚 Arroces Especiales</span>
@@ -7966,7 +7991,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
         : '';
 
       return `
-        <div class="prod-card-large ${isAgotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" title="${escapeHtml(p.nombre)} - ${formatCRC(p.precio)}">
+        <div class="prod-card-large ${isAgotado ? 'agotado' : ''}" onclick="event.stopPropagation(); agregarAlTicketOneTap(${p.id}, event)" title="${escapeHtml(p.nombre)} - ${formatCRC(p.precio)}">
           ${btnEditLargeHtml}
           <div class="prod-card-large-media">
             ${imgLargeHtml}
@@ -7991,7 +8016,7 @@ function renderGridProductos(prods, isSearchMode = false, catId = null) {
       : '';
 
     return `
-      <div class="prod-card-one-tap ${isAgotado ? 'agotado' : ''}" onclick="agregarAlTicketOneTap(${p.id})" title="${escapeHtml(p.nombre)} - ${formatCRC(p.precio)}">
+      <div class="prod-card-one-tap ${isAgotado ? 'agotado' : ''}" onclick="event.stopPropagation(); agregarAlTicketOneTap(${p.id}, event)" title="${escapeHtml(p.nombre)} - ${formatCRC(p.precio)}">
         ${btnEditHtml}
         ${imgHtml}
         ${isPromo ? '<span class="prod-badge-promo">🍸 2x1</span>' : ''}
@@ -8076,7 +8101,7 @@ window.abrirModalSeleccionCasado = function() {
     const nombreCap = nombreOpcion.charAt(0).toUpperCase() + nombreOpcion.slice(1);
 
     return `
-      <button class="variante-option-card" onclick="seleccionarOpcionVariante(${c.id})">
+      <button class="variante-option-card" onclick="event.stopPropagation(); seleccionarOpcionVariante(${c.id}, event)">
         <div style="font-size: 2rem; margin-bottom: 6px;">${icon}</div>
         <strong style="font-size: 1.05rem; color: #f8fafc; text-align: center; margin-bottom: 4px;">${nombreCap}</strong>
         <span style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px;">${c.nombre}</span>
@@ -8133,7 +8158,7 @@ window.abrirModalSeleccionArroz = function() {
     }
 
     return `
-      <button class="variante-option-card" onclick="seleccionarOpcionVariante(${c.id})">
+      <button class="variante-option-card" onclick="event.stopPropagation(); seleccionarOpcionVariante(${c.id}, event)">
         <div style="font-size: 2rem; margin-bottom: 6px;">${icon}</div>
         <strong style="font-size: 1.05rem; color: #f8fafc; text-align: center; margin-bottom: 4px;">${c.nombre}</strong>
         <span style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px;">Cocina caliente</span>
@@ -8145,14 +8170,22 @@ window.abrirModalSeleccionArroz = function() {
   modal.classList.add('active');
 };
 
-window.cerrarModalSeleccionVariante = function() {
+window.cerrarModalSeleccionVariante = function(evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
   const modal = document.getElementById('modalSeleccionVariante');
   if (modal) modal.classList.remove('active');
 };
 
-window.seleccionarOpcionVariante = function(prodId) {
-  cerrarModalSeleccionVariante();
-  agregarAlTicketOneTap(prodId);
+window.seleccionarOpcionVariante = function(prodId, evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
+  cerrarModalSeleccionVariante(evt);
+  agregarAlTicketOneTap(prodId, evt);
 };
 
 
@@ -8191,22 +8224,22 @@ window.abrirModalSeleccionBaldeNacional = function(prodId) {
 
   body.innerHTML = listaCervezas.map(c => {
     const imgHtml = c.imagen_url 
-      ? `<img src="${c.imagen_url}" alt="${c.nombre}" style="width: 48px; height: 48px; border-radius: 10px; object-fit: cover; border: 1px solid #334155; flex-shrink: 0;" />`
-      : `<div style="width: 48px; height: 48px; border-radius: 10px; background: #0b1120; border: 1px solid #334155; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;">🍺</div>`;
+      ? `<img class="beer-thumb-box" src="${c.imagen_url}" alt="${c.nombre}" style="width: 42px; height: 42px; border-radius: 8px; object-fit: cover; border: 1px solid #334155; flex-shrink: 0;" />`
+      : `<div class="beer-thumb-box" style="width: 42px; height: 42px; border-radius: 8px; background: #0b1120; border: 1px solid #334155; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;">🍺</div>`;
 
     return `
-      <div class="balde-beer-item" id="balde_beer_card_${c.id}" style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; box-sizing: border-box; transition: all 0.2s ease;">
-        <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0;">
+      <div class="balde-beer-item" id="balde_beer_card_${c.id}" onclick="event.stopPropagation(); incrementarCervezaBalde(${c.id}, event)" style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; box-sizing: border-box; transition: all 0.2s ease; cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
           ${imgHtml}
           <div style="flex: 1; min-width: 0;">
-            <strong style="display: block; color: #f8fafc; font-size: 1.05rem; font-weight: 800; white-space: normal; word-break: break-word; line-height: 1.3;">${c.nombre}</strong>
-            <span style="display: inline-block; margin-top: 3px; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; font-weight: 700; padding: 1px 8px; border-radius: 6px;">Cerveza Nacional</span>
+            <strong class="balde-beer-name" style="display: block; color: #f8fafc; font-size: 0.95rem; font-weight: 800; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.25; padding-bottom: 2px;">${c.nombre}</strong>
+            <span style="display: inline-block; margin-top: 2px; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; font-weight: 700; padding: 1px 7px; border-radius: 6px;">Cerveza Nacional</span>
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-          <button type="button" class="btn-balde-count" onclick="decrementarCervezaBalde(${c.id})" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #475569; background: #0b1120; color: #f8fafc; font-size: 1.4rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; user-select: none;">-</button>
-          <span id="balde_cant_${c.id}" style="min-width: 28px; text-align: center; font-size: 1.25rem; font-weight: 800; color: #38bdf8;">0</span>
-          <button type="button" class="btn-balde-count" onclick="incrementarCervezaBalde(${c.id})" style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.18); color: #38bdf8; font-size: 1.4rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; user-select: none;">+</button>
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;" onclick="event.stopPropagation();">
+          <button type="button" class="btn-balde-count" onclick="event.stopPropagation(); decrementarCervezaBalde(${c.id}, event)" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #475569; background: #0b1120; color: #f8fafc; font-size: 1.3rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; user-select: none;">-</button>
+          <span id="balde_cant_${c.id}" style="min-width: 24px; text-align: center; font-size: 1.2rem; font-weight: 800; color: #38bdf8;">0</span>
+          <button type="button" class="btn-balde-count" onclick="event.stopPropagation(); incrementarCervezaBalde(${c.id}, event)" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.18); color: #38bdf8; font-size: 1.3rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; user-select: none;">+</button>
         </div>
       </div>
     `;
@@ -8218,7 +8251,11 @@ window.abrirModalSeleccionBaldeNacional = function(prodId) {
   window._modalActivoId = 'modalSeleccionBaldeNacional';
 };
 
-window.cerrarModalSeleccionBaldeNacional = function() {
+window.cerrarModalSeleccionBaldeNacional = function(evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
   const modal = document.getElementById('modalSeleccionBaldeNacional');
   if (modal) {
     modal.classList.remove('active');
@@ -8229,7 +8266,11 @@ window.cerrarModalSeleccionBaldeNacional = function() {
   window._modalActivoId = null;
 };
 
-window.incrementarCervezaBalde = function(prodId) {
+window.incrementarCervezaBalde = function(prodId, evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
   const totalActual = Object.values(window._seleccionBaldeActual).reduce((a, b) => a + b, 0);
   if (totalActual >= 6) {
     return;
@@ -8240,7 +8281,11 @@ window.incrementarCervezaBalde = function(prodId) {
   actualizarEstadoVisualBalde();
 };
 
-window.decrementarCervezaBalde = function(prodId) {
+window.decrementarCervezaBalde = function(prodId, evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
   if (!window._seleccionBaldeActual[prodId] || window._seleccionBaldeActual[prodId] <= 0) return;
   window._seleccionBaldeActual[prodId]--;
   if (window._seleccionBaldeActual[prodId] === 0) {
@@ -8287,7 +8332,11 @@ window.actualizarEstadoVisualBalde = function() {
   }
 };
 
-window.confirmarSeleccionBaldeNacional = function() {
+window.confirmarSeleccionBaldeNacional = function(evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
   const total = Object.values(window._seleccionBaldeActual).reduce((a, b) => a + b, 0);
   if (total !== 6) return;
   if (!estado.mesaActiva) return;
@@ -8347,7 +8396,11 @@ window.verificarOfertaBaldeCerveza = async function(prodId, delta = 1) {
   return;
 };
 
-window.agregarAlTicketOneTap = async function(prodId) {
+window.agregarAlTicketOneTap = async function(prodId, evt) {
+  if (evt) {
+    evt.stopPropagation?.();
+    evt.preventDefault?.();
+  }
   if (!estado.mesaActiva) return;
   const prod = estado.productos.find(p => p.id === prodId);
   if (!prod) return;
@@ -8643,6 +8696,95 @@ function cambiarModoVistaSalon(modo) {
 }
 window.cambiarModoVistaSalon = cambiarModoVistaSalon;
 
+/**
+ * Posicionamiento inteligente del modal flotante / tooltip de consumo de mesas.
+ * Si la mesa está entre las primeras de arriba o no hay espacio vertical superior,
+ * el modal se despliega hacia abajo. Si la mesa está muy abajo o no cabe abajo,
+ * el modal se despliega hacia arriba. También evita desbordes laterales.
+ */
+function posicionarTooltipMesa(card, tip) {
+  if (!card || !tip) return;
+
+  // Medir dimensiones del tooltip (si estaba oculto, medir sin parpadeo)
+  const displayPrevio = tip.style.display;
+  const visPrevia = tip.style.visibility;
+  const opacityPrevia = tip.style.opacity;
+  const estabaOculto = (!displayPrevio || displayPrevio === 'none');
+
+  if (estabaOculto) {
+    tip.style.visibility = 'hidden';
+    tip.style.opacity = '0';
+    tip.style.display = 'block';
+  }
+
+  const cardRect = card.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+
+  const tipHeight = tip.offsetHeight || 230;
+  const tipWidth = tip.offsetWidth || 260;
+
+  if (estabaOculto) {
+    tip.style.display = displayPrevio;
+    tip.style.visibility = visPrevia;
+    tip.style.opacity = opacityPrevia;
+  }
+
+  // Límite superior de la pantalla (Navbar / cabecera para no taparla)
+  const topNav = document.getElementById('topNav') || document.querySelector('.top-nav') || document.querySelector('header');
+  const navBottom = topNav ? Math.max(0, topNav.getBoundingClientRect().bottom) : 55;
+  const margenSuperior = Math.max(navBottom, 50);
+
+  // Contenedor scroll del salón si existe
+  const salonEl = document.getElementById('salonContainer') || document.querySelector('.salon-container') || document.getElementById('mesasGridView');
+  const salonRect = salonEl ? salonEl.getBoundingClientRect() : null;
+
+  // Espacio libre real hacia arriba
+  const libreArribaViewport = cardRect.top - margenSuperior;
+  const libreArribaSalon = salonRect ? (cardRect.top - salonRect.top - 10) : libreArribaViewport;
+  const espacioArriba = Math.min(libreArribaViewport, libreArribaSalon);
+
+  // Espacio libre real hacia abajo
+  const libreAbajoViewport = viewportHeight - cardRect.bottom - 15;
+  const libreAbajoSalon = salonRect ? (salonRect.bottom - cardRect.bottom - 10) : libreAbajoViewport;
+  const espacioAbajo = Math.min(libreAbajoViewport, libreAbajoSalon);
+
+  // ── Decisión de despliegue vertical ──────────────────────────────────────
+  let irHaciaAbajo = false;
+  if (espacioArriba < (tipHeight + 15) && espacioAbajo >= espacioArriba) {
+    irHaciaAbajo = true;
+  } else if (espacioAbajo < (tipHeight + 15) && espacioArriba >= espacioAbajo) {
+    irHaciaAbajo = false;
+  } else if (espacioArriba < 220 && espacioAbajo >= 200) {
+    irHaciaAbajo = true;
+  } else if (espacioAbajo < 220 && espacioArriba >= 200) {
+    irHaciaAbajo = false;
+  } else {
+    irHaciaAbajo = espacioAbajo > espacioArriba;
+  }
+
+  if (irHaciaAbajo) {
+    tip.classList.add('tooltip-bottom');
+  } else {
+    tip.classList.remove('tooltip-bottom');
+  }
+
+  // ── Decisión de alineación horizontal para que no se salga de pantalla ───
+  const cardCenterX = cardRect.left + (cardRect.width / 2);
+  const mitadAnchoTip = tipWidth / 2;
+
+  if (cardCenterX - mitadAnchoTip < 12) {
+    tip.classList.add('align-left');
+    tip.classList.remove('align-right');
+  } else if (cardCenterX + mitadAnchoTip > viewportWidth - 12) {
+    tip.classList.add('align-right');
+    tip.classList.remove('align-left');
+  } else {
+    tip.classList.remove('align-left', 'align-right');
+  }
+}
+window.posicionarTooltipMesa = posicionarTooltipMesa;
+
 function renderGrillaOrdenada(filtroZona = null) {
   const gridContainer = document.getElementById('mesasGridView');
   const canvas = document.getElementById('mesasCanvasView');
@@ -8861,6 +9003,28 @@ function renderGrillaOrdenada(filtroZona = null) {
           `;
 
           card.setAttribute('title', `${headerText}\n👤 Atendido por: ${atendidoPor}\n${listItems.map(p => `• ${typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo')}`).join('\n')}`);
+        } else {
+          const headerText = `🟢 ${m.numero || 'Mesa'} - Libre`;
+          const listItems = ['Mesa disponible sin pedidos'];
+          const meseroHtml = `
+            <div class="mesa-tooltip-mesero">
+              <span class="m-tip-mesero-lbl">👤 Estado:</span>
+              <strong class="m-tip-mesero-nom" style="color:#34d399;">Disponible</strong>
+            </div>
+          `;
+          tooltipHtml = `
+            <div class="mesa-tooltip">
+              <div class="mesa-tooltip-header">${escapeHtml(headerText)}</div>
+              ${meseroHtml}
+              <ul class="mesa-tooltip-list">
+                ${listItems.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
+              </ul>
+              <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px; display:flex; gap:6px;">
+                <button onclick="event.stopPropagation(); window.liberarMesaId(${m.id})" class="btn-tool" style="width:100%; background:rgba(239,68,68,0.25); border:1px solid #ef4444; color:#fca5a5; padding:5px 8px; border-radius:6px; font-size:0.75rem; font-weight:700; cursor:pointer;">🔓 Liberar / Limpiar Mesa</button>
+              </div>
+            </div>
+          `;
+          card.setAttribute('title', `${headerText}\nEstado: Disponible`);
         }
 
         let cuentaQrHtml = '';
@@ -8905,31 +9069,123 @@ function renderGrillaOrdenada(filtroZona = null) {
           `;
         }
 
-        card.addEventListener('mouseenter', () => {
-          const tip = card.querySelector('.mesa-tooltip');
-          if (tip) {
-            tip.style.display = 'block';
-            tip.style.opacity = '1';
-            tip.style.visibility = 'visible';
+        const tipEl = card.querySelector('.mesa-tooltip');
+        if (tipEl) {
+          posicionarTooltipMesa(card, tipEl);
+
+          card.addEventListener('mouseenter', () => {
+            posicionarTooltipMesa(card, tipEl);
+            tipEl.style.display = 'block';
+            tipEl.style.opacity = '1';
+            tipEl.style.visibility = 'visible';
             card.style.zIndex = '999999';
+          });
+
+          card.addEventListener('mouseleave', (e) => {
+            if (e.relatedTarget && (tipEl === e.relatedTarget || tipEl.contains(e.relatedTarget))) {
+              return;
+            }
+            if (!tipEl.classList.contains('show-touch')) {
+              tipEl.style.display = 'none';
+              tipEl.style.opacity = '0';
+              tipEl.style.visibility = 'hidden';
+              card.style.zIndex = '1';
+            }
+          });
+
+          tipEl.addEventListener('mouseleave', (e) => {
+            if (e.relatedTarget && (card === e.relatedTarget || card.contains(e.relatedTarget))) {
+              return;
+            }
+            if (!tipEl.classList.contains('show-touch')) {
+              tipEl.style.display = 'none';
+              tipEl.style.opacity = '0';
+              tipEl.style.visibility = 'hidden';
+              card.style.zIndex = '1';
+            }
+          });
+
+        }
+
+        // Long-Press para ver modal de consumos y quién atiende (solo al dejar presionado)
+        let grillaLpTimer = null;
+        let grillaWasLp = false;
+        let grillaStartX = 0;
+        let grillaStartY = 0;
+
+        card.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('.mesa-tooltip')) return;
+          grillaWasLp = false;
+          grillaStartX = e.clientX;
+          grillaStartY = e.clientY;
+          if (grillaLpTimer) clearTimeout(grillaLpTimer);
+          grillaLpTimer = setTimeout(() => {
+            grillaWasLp = true;
+            if (navigator.vibrate) navigator.vibrate(50);
+            document.querySelectorAll('.mesa-tooltip').forEach(t => {
+              t.classList.remove('show-touch');
+              t.style.display = '';
+              t.style.opacity = '';
+              t.style.visibility = '';
+              if (t.parentElement) t.parentElement.style.zIndex = '';
+            });
+            if (tipEl) {
+              posicionarTooltipMesa(card, tipEl);
+              tipEl.classList.add('show-touch');
+              tipEl.style.display = 'block';
+              tipEl.style.opacity = '1';
+              tipEl.style.visibility = 'visible';
+              card.style.zIndex = '999999';
+            }
+          }, 450);
+        });
+
+        card.addEventListener('pointermove', (e) => {
+          if (grillaLpTimer) {
+            const dist = Math.hypot(e.clientX - grillaStartX, e.clientY - grillaStartY);
+            if (dist > 10) {
+              clearTimeout(grillaLpTimer);
+              grillaLpTimer = null;
+            }
           }
         });
 
-        card.addEventListener('mouseleave', (e) => {
-          const tip = card.querySelector('.mesa-tooltip');
-          if (e.relatedTarget && tip && (tip === e.relatedTarget || tip.contains(e.relatedTarget))) {
+        card.addEventListener('pointerup', () => {
+          if (grillaLpTimer) {
+            clearTimeout(grillaLpTimer);
+            grillaLpTimer = null;
+          }
+        });
+
+        card.addEventListener('pointercancel', () => {
+          if (grillaLpTimer) {
+            clearTimeout(grillaLpTimer);
+            grillaLpTimer = null;
+          }
+        });
+
+        // Manejador de tap simple: SIEMPRE abre el menú de comanda
+        card.addEventListener('click', (e) => {
+          if (grillaWasLp) {
+            grillaWasLp = false;
+            e.stopPropagation();
+            e.preventDefault();
             return;
           }
-          if (tip && !tip.classList.contains('show-touch')) {
-            tip.style.display = 'none';
-            tip.style.opacity = '0';
-            tip.style.visibility = 'hidden';
-            card.style.zIndex = '1';
+          if (e.target.closest('.mesa-tooltip')) {
+            return;
           }
-        });
-
-        // Manejador de clic
-        card.addEventListener('click', () => {
+          if (document.body.classList.contains('comandero-abierto') || document.getElementById('modalComandero')?.classList.contains('active')) {
+            return;
+          }
+          // Cerrar cualquier modal tooltip activo
+          document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => {
+            t.classList.remove('show-touch');
+            t.style.display = '';
+            t.style.opacity = '';
+            t.style.visibility = '';
+            if (t.parentElement) t.parentElement.style.zIndex = '';
+          });
           if (m.estado === 'reservada') {
             abrirModalDetalleReserva(m.id);
             return;
@@ -9092,6 +9348,29 @@ function renderSalón(filtroZona = null) {
       `;
 
       card.setAttribute('title', `${headerText}\n👤 Atendido por: ${atendidoPor}\n${listItems.map(p => `• ${typeof p === 'string' ? p : (p.nombre_producto || p.nombre || 'Platillo')}`).join('\n')}`);
+    } else {
+      const isNearTop = (m.y || 0) < 250;
+      const headerText = `🟢 ${m.numero || 'Mesa'} - Libre`;
+      const listItems = ['Mesa disponible sin pedidos'];
+      const meseroHtml = `
+        <div class="mesa-tooltip-mesero">
+          <span class="m-tip-mesero-lbl">👤 Estado:</span>
+          <strong class="m-tip-mesero-nom" style="color:#34d399;">Disponible</strong>
+        </div>
+      `;
+      tooltipHtml = `
+        <div class="mesa-tooltip ${isNearTop ? 'tooltip-bottom' : ''}">
+          <div class="mesa-tooltip-header">${escapeHtml(headerText)}</div>
+          ${meseroHtml}
+          <ul class="mesa-tooltip-list">
+            ${listItems.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
+          </ul>
+          <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px; display:flex; gap:6px;">
+            <button onclick="event.stopPropagation(); window.liberarMesaId(${m.id})" class="btn-tool" style="width:100%; background:rgba(239,68,68,0.25); border:1px solid #ef4444; color:#fca5a5; padding:5px 8px; border-radius:6px; font-size:0.75rem; font-weight:700; cursor:pointer;">🔓 Liberar / Limpiar Mesa</button>
+          </div>
+        </div>
+      `;
+      card.setAttribute('title', `${headerText}\nEstado: Disponible`);
     }
 
     let mergedBadgeHtml = '';
@@ -9157,47 +9436,31 @@ function renderSalón(filtroZona = null) {
 
     aplicarEscalaTextoMesa(card, m.ancho || (esSilla ? 95 : 130), m.alto || (esSilla ? 105 : 120), esSilla);
 
-    // Eventos hover garantizados por JS con detección dinámica de límites visibles
-    card.addEventListener('mouseenter', () => {
-      const tip = card.querySelector('.mesa-tooltip');
-      if (tip) {
-        // Detección dinámica de espacio para evitar solaparse con las zonas superiores
-        const salonEl = document.getElementById('salonContainer') || document.querySelector('.salon-container');
-        if (salonEl) {
-          const salonRect = salonEl.getBoundingClientRect();
-          const cardRect = card.getBoundingClientRect();
-          const espacioArriba = cardRect.top - salonRect.top;
-          // Si hay menos de 240px de espacio libre arriba del contenedor, desplegar hacia abajo
-          if (espacioArriba < 240) {
-            tip.classList.add('tooltip-bottom');
-          } else if ((m.y || 0) >= 250) {
-            tip.classList.remove('tooltip-bottom');
-          }
-        }
-
-        tip.style.display = 'block';
-        tip.style.opacity = '1';
-        tip.style.visibility = 'visible';
-        card.style.zIndex = '999999';
-      }
-    });
-
-    card.addEventListener('mouseleave', (e) => {
-      const tip = card.querySelector('.mesa-tooltip');
-      // Si el cursor se movió hacia el tooltip (para scrollear productos), no ocultarlo
-      if (e.relatedTarget && tip && (tip === e.relatedTarget || tip.contains(e.relatedTarget))) {
-        return;
-      }
-      if (tip && !tip.classList.contains('show-touch')) {
-        tip.style.display = '';
-        tip.style.opacity = '';
-        tip.style.visibility = '';
-        card.style.zIndex = '';
-      }
-    });
-
+    // Eventos hover y táctiles garantizados por JS con detección dinámica de límites visibles
     const tipEl = card.querySelector('.mesa-tooltip');
     if (tipEl) {
+      posicionarTooltipMesa(card, tipEl);
+
+      card.addEventListener('mouseenter', () => {
+        posicionarTooltipMesa(card, tipEl);
+        tipEl.style.display = 'block';
+        tipEl.style.opacity = '1';
+        tipEl.style.visibility = 'visible';
+        card.style.zIndex = '999999';
+      });
+
+      card.addEventListener('mouseleave', (e) => {
+        if (e.relatedTarget && (tipEl === e.relatedTarget || tipEl.contains(e.relatedTarget))) {
+          return;
+        }
+        if (!tipEl.classList.contains('show-touch')) {
+          tipEl.style.display = '';
+          tipEl.style.opacity = '';
+          tipEl.style.visibility = '';
+          card.style.zIndex = '';
+        }
+      });
+
       tipEl.addEventListener('mouseleave', (e) => {
         if (e.relatedTarget && (card === e.relatedTarget || card.contains(e.relatedTarget))) {
           return;
@@ -9209,21 +9472,7 @@ function renderSalón(filtroZona = null) {
           card.style.zIndex = '';
         }
       });
-    }
 
-    const chipEl = card.querySelector('.m-wait-chip');
-    if (chipEl) {
-      chipEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const tip = card.querySelector('.mesa-tooltip');
-        if (tip) {
-          const isShown = tip.classList.contains('show-touch');
-          document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => t.classList.remove('show-touch'));
-          if (!isShown) {
-            tip.classList.add('show-touch');
-          }
-        }
-      });
     }
 
     const badgeSepararEl = card.querySelector('.m-merged-badge');
@@ -9410,109 +9659,137 @@ function agregarDragMesa(card, mesaData, canvas) {
   let isTouchDown = false;
   let startX = 0;
   let startY = 0;
+  let planoLpTimer = null;
+  let planoWasLp = false;
+  let ultimoTapPlanoTimestamp = 0;
+
+  function accionarTapPlano(e) {
+    if (planoWasLp) {
+      planoWasLp = false;
+      if (e) { e.stopPropagation(); e.preventDefault(); }
+      return;
+    }
+    const now = Date.now();
+    if (now - ultimoTapPlanoTimestamp < 350) return;
+    ultimoTapPlanoTimestamp = now;
+
+    if (e && (e.target.closest('.mesa-tooltip') || e.target.closest('.m-merged-badge'))) {
+      return;
+    }
+    if (document.body.classList.contains('comandero-abierto') || document.getElementById('modalComandero')?.classList.contains('active')) {
+      return;
+    }
+    // Cerrar cualquier modal tooltip activo
+    document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => {
+      t.classList.remove('show-touch');
+      t.style.display = '';
+      t.style.opacity = '';
+      t.style.visibility = '';
+      if (t.parentElement) t.parentElement.style.zIndex = '';
+    });
+    if (mesaData.estado === 'reservada') {
+      abrirModalDetalleReserva(mesaData.id);
+    } else {
+      const esMesaSinCliente = mesaData.estado === 'libre' || ((!mesaData.cliente || mesaData.cliente === 'Cliente General') && !mesaData.orden_activa_id);
+      if (esMesaSinCliente) {
+        abrirModalPreguntaCliente(mesaData.id);
+      } else {
+        abrirComanderoMesa(mesaData.id);
+      }
+    }
+  }
 
   card.addEventListener('pointerdown', (e) => {
+    if (document.body.classList.contains('comandero-abierto') || document.getElementById('modalComandero')?.classList.contains('active')) {
+      return;
+    }
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    if (e.target.closest('.m-wait-chip') || e.target.closest('.mesa-tooltip') || e.target.closest('.m-merged-badge')) return;
+    if (e.target.closest('.mesa-tooltip') || e.target.closest('.m-merged-badge')) return;
 
     isTouchDown = true;
+    planoWasLp = false;
     startX = e.clientX;
     startY = e.clientY;
 
-    const rect = card.getBoundingClientRect();
-    const ox = e.clientX - rect.left;
-    const oy = e.clientY - rect.top;
+    if (planoLpTimer) clearTimeout(planoLpTimer);
 
-    dragState.timer = setTimeout(() => {
+    // Long-Press (450ms) abre el modal de consumos y quién atiende
+    planoLpTimer = setTimeout(() => {
       if (!isTouchDown) return;
-      
-      const estaUnida = Boolean(mesaData.es_mesa_unida || mesaData.unida_con || (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0) || mesaData.grupo_mesas);
-      if (estaUnida) {
-        const nombreUnidas = (mesaData.mesas_unidas && mesaData.mesas_unidas.length > 0)
-          ? mesaData.mesas_unidas.join(', ')
-          : (mesaData.unida_con || 'otra mesa');
-        
-        isTouchDown = false;
-        mostrarModalConfirmarSeparar(mesaData, nombreUnidas);
-        return;
-      }
-
-      dragState.active = true;
-      dragState.sourceMesa = mesaData;
-      dragState.sourceCard = card;
-      dragState.startX = startX;
-      dragState.startY = startY;
-      dragState.offsetX = ox;
-      dragState.offsetY = oy;
-      dragState.pointerId = e.pointerId;
-
-      card.classList.add('mesa-drag-source');
-      document.body.style.userSelect = 'none';
-
-      const ghost = card.cloneNode(true);
-      ghost.id = 'dragGhost';
-      ghost.classList.remove('mesa-drag-source');
-      ghost.style.left = (startX - ox) + 'px';
-      ghost.style.top = (startY - oy) + 'px';
-      ghost.style.width = card.offsetWidth + 'px';
-      ghost.style.height = card.offsetHeight + 'px';
-
-      const indicator = document.createElement('div');
-      indicator.className = 'drag-badge-indicator';
-      indicator.textContent = '👉 Arrastra sobre otra mesa';
-      ghost.appendChild(indicator);
-
-      document.body.appendChild(ghost);
-      dragState.ghost = ghost;
-
+      planoWasLp = true;
       if (navigator.vibrate) navigator.vibrate(50);
-    }, 280);
+      document.querySelectorAll('.mesa-tooltip').forEach(t => {
+        t.classList.remove('show-touch');
+        t.style.display = '';
+        t.style.opacity = '';
+        t.style.visibility = '';
+        if (t.parentElement) t.parentElement.style.zIndex = '';
+      });
+      const tip = card.querySelector('.mesa-tooltip');
+      if (tip) {
+        posicionarTooltipMesa(card, tip);
+        tip.classList.add('show-touch');
+        tip.style.display = 'block';
+        tip.style.opacity = '1';
+        tip.style.visibility = 'visible';
+        card.style.zIndex = '999999';
+      }
+    }, 450);
   });
 
   card.addEventListener('pointermove', (e) => {
-    if (!dragState.active && isTouchDown && dragState.timer) {
+    if (planoLpTimer) {
       const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
-      if (dist > 12) {
-        clearTimeout(dragState.timer);
-        dragState.timer = null;
-        isTouchDown = false;
+      if (dist > 10) {
+        clearTimeout(planoLpTimer);
+        planoLpTimer = null;
       }
     }
   });
 
   card.addEventListener('pointerup', (e) => {
-    const wasDragging = dragState.active;
-    if (dragState.timer) {
-      clearTimeout(dragState.timer);
-      dragState.timer = null;
+    if (planoLpTimer) {
+      clearTimeout(planoLpTimer);
+      planoLpTimer = null;
     }
     isTouchDown = false;
-
-    if (!wasDragging) {
-      const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
-      if (dist <= 12) {
-        if (mesaData.estado === 'reservada') {
-          abrirModalDetalleReserva(mesaData.id);
-        } else {
-          const esMesaSinCliente = mesaData.estado === 'libre' || ((!mesaData.cliente || mesaData.cliente === 'Cliente General') && !mesaData.orden_activa_id);
-          if (esMesaSinCliente) {
-            abrirModalPreguntaCliente(mesaData.id);
-          } else {
-            abrirComanderoMesa(mesaData.id);
-          }
-        }
-      }
+    if (planoWasLp) {
+      return;
+    }
+    const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+    if (dist <= 12) {
+      accionarTapPlano(e);
     }
   });
 
   card.addEventListener('pointercancel', () => {
-    if (dragState.timer) {
-      clearTimeout(dragState.timer);
-      dragState.timer = null;
+    if (planoLpTimer) {
+      clearTimeout(planoLpTimer);
+      planoLpTimer = null;
     }
     isTouchDown = false;
   });
+
+  card.addEventListener('click', (e) => {
+    accionarTapPlano(e);
+  });
 }
+
+// Cerrar modal tooltip táctil al tocar fuera de cualquier tarjeta de mesa
+function cerrarTooltipsAbiertosFuera(e) {
+  const el = (e.target && e.target.nodeType === 1) ? e.target : (e.target?.parentElement || null);
+  if (!el || (!el.closest('.mesa-tooltip') && !el.closest('.mesa-card') && !el.closest('.mesa-grid-card') && !el.closest('.mesa-render-card') && !el.closest('.mesa-grid-item'))) {
+    document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => {
+      t.classList.remove('show-touch');
+      t.style.display = '';
+      t.style.opacity = '';
+      t.style.visibility = '';
+      if (t.parentElement) t.parentElement.style.zIndex = '';
+    });
+  }
+}
+document.addEventListener('pointerdown', cerrarTooltipsAbiertosFuera);
+document.addEventListener('click', cerrarTooltipsAbiertosFuera);
 
 function mostrarModalConfirmarUnir(sourceMesa, targetMesa) {
   if (typeof negocioTieneCaracteristica === 'function' && !negocioTieneCaracteristica('union_mesas')) {
@@ -10457,8 +10734,25 @@ async function abrirComanderoMesa(mesaIdOrObj) {
 
   let data = null;
 
+  // Reset preventivo de barra flotante móvil e ítems si la mesa no tiene orden activa
+  if (mesa.estado === 'libre' || !mesa.orden_activa_id) {
+    mesa.items = [];
+    mesa.orden_total = 0;
+    mesa.total = 0;
+    const mobBarPre = document.getElementById('mobFloatingTicketBar');
+    if (mobBarPre) {
+      mobBarPre.classList.remove('visible');
+      mobBarPre.classList.add('oculto');
+      mobBarPre.style.setProperty('display', 'none', 'important');
+    }
+    const mobCountPre = document.getElementById('mobFloatingCount');
+    if (mobCountPre) mobCountPre.textContent = '0';
+    const mobTotalPre = document.getElementById('mobFloatingTotal');
+    if (mobTotalPre) mobTotalPre.textContent = '₡ 0';
+  }
+
   // 1. Intentar consultar orden activa al servidor si creemos que hay red
-  const nid = estado.negocioActual?.id || localStorage.getItem('gamma_negocio_activo') || 1;
+  const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || mesa.negocio_id || 1;
   if (navigator.onLine && (!window.PosOfflineSync || window.PosOfflineSync.isOnline)) {
     try {
       const res = await fetch(`/api/ordenes/mesa/${mesaId}?negocio_id=${nid}`, {
@@ -10466,18 +10760,27 @@ async function abrirComanderoMesa(mesaIdOrObj) {
       });
       if (res.ok) {
         data = await res.json();
-        if (data && data.orden && window.PosOfflineDB) {
-          window.PosOfflineDB.guardarOrdenMesa(mesaId, data.orden, data.items).catch(() => {});
+        if (data && data.orden && data.orden.id) {
+          if (window.PosOfflineDB) {
+            window.PosOfflineDB.guardarOrdenMesa(mesaId, data.orden, data.items).catch(() => {});
+          }
+        } else {
+          // Servidor confirma que NO HAY orden activa en esta mesa:
+          // Limpiar inmediatamente cualquier orden residual en PosOfflineDB para evitar revivir pedidos viejos
+          if (window.PosOfflineDB) {
+            window.PosOfflineDB.limpiarOrdenMesa(mesaId).catch(() => {});
+          }
+          data = { orden: null, items: [] };
         }
       }
     } catch (e) {}
   }
 
-  // 2. Comprobar datos locales de IndexedDB (por caída de conexión, fallback o ítems pendientes en Outbox)
-  if (window.PosOfflineDB) {
+  // 2. Comprobar datos locales de IndexedDB ÚNICAMENTE si offline o si falló la conexión con el servidor
+  if (window.PosOfflineDB && (!navigator.onLine || !data || (window.PosOfflineSync && !window.PosOfflineSync.isOnline))) {
     try {
       const local = await window.PosOfflineDB.obtenerComandaLocalMesa(mesaId);
-      if (local && (local.orden || (local.items && local.items.length > 0))) {
+      if (local && (local.tienePendientes || !data)) {
         if (!data || !data.orden) {
           data = local;
         } else if (local.items && local.items.length > 0) {
@@ -10591,32 +10894,18 @@ async function abrirComanderoMesa(mesaIdOrObj) {
         }
       }
     } else {
-      if (mesa.orden_activa_id || mesa.orden_id) {
-        mesa.orden_id = mesa.orden_activa_id || mesa.orden_id;
-        const numOrd = mesa.numero_orden || mesa.orden_id;
-        document.getElementById('comTicketOrdenId').textContent = numOrd ? ('Orden #' + numOrd) : 'Nueva Orden';
-      } else {
-        document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
-        mesa.orden_id = null;
-        mesa.orden_activa_id = null;
-        mesa.total_pagado = 0;
-        mesa.orden_total = 0;
-        mesa.total = 0;
-        mesa.modo_happy_hour = 'estricto';
-        mesa.descuento_monto = 0;
-        mesa.descuento_porcentaje = 0;
-        mesa.descuento_motivo = '';
-        mesa.descuento_autorizado_por = '';
-        mesa.items = [];
-      }
-      if (Array.isArray(mesa.items) && mesa.items.length > 0) {
-        mesa.items = mesa.items.map(it => ({
-          ...it,
-          nombre: it.nombre || it.nombre_producto || 'Producto',
-          precio: Number(it.precio != null ? it.precio : it.precio_unitario) || 0,
-          cantidad: Number(it.cantidad) || 1
-        }));
-      }
+      document.getElementById('comTicketOrdenId').textContent = 'Nueva Orden';
+      mesa.orden_id = null;
+      mesa.orden_activa_id = null;
+      mesa.total_pagado = 0;
+      mesa.orden_total = 0;
+      mesa.total = 0;
+      mesa.modo_happy_hour = 'estricto';
+      mesa.descuento_monto = 0;
+      mesa.descuento_porcentaje = 0;
+      mesa.descuento_motivo = '';
+      mesa.descuento_autorizado_por = '';
+      mesa.items = [];
       const bannerEl = document.getElementById('comMergedBanner');
       if (bannerEl) {
         bannerEl.style.display = 'none';
@@ -10661,18 +10950,30 @@ async function abrirComanderoMesa(mesaIdOrObj) {
     aplicarRestriccionesModulos();
   }
   const btnResetMesa = document.getElementById('btnResetearMesaComandero');
+  const btnMobResetMesa = document.getElementById('btnMobResetearMesa');
+  const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre') || (mesa.orden_total > 0));
   if (btnResetMesa) {
-    const tieneCuentaOcupada = Boolean(mesa.orden_id || mesa.orden_activa_id || (mesa.items && mesa.items.length > 0) || (mesa.estado && mesa.estado !== 'libre') || (mesa.orden_total > 0));
     btnResetMesa.style.display = tieneCuentaOcupada ? 'inline-flex' : 'none';
     const esSaldoCero = !mesa.orden_total || Number(mesa.orden_total) === 0;
     btnResetMesa.innerHTML = esSaldoCero ? '🔓 Liberar Mesa' : '⚠️ Liberar Mesa (PIN)';
     btnResetMesa.title = esSaldoCero ? 'Liberar mesa pagada y dejar disponible' : 'Liberar mesa con saldo pendiente (Requiere PIN de Administrador)';
   }
+  if (btnMobResetMesa) {
+    btnMobResetMesa.style.display = tieneCuentaOcupada ? 'inline-flex' : 'none';
+  }
 
+  document.body.classList.add('comandero-abierto');
+  document.documentElement.classList.add('comandero-abierto');
   const modCom = document.getElementById('modalComandero');
   if (modCom) {
     modCom.classList.add('active');
     modCom.style.display = 'flex';
+  }
+  const viewSalon = document.getElementById('view-salon');
+  if (viewSalon && (window.innerWidth <= 900 || document.body.classList.contains('gamma-mobile'))) {
+    viewSalon.style.display = 'none';
+    viewSalon.style.visibility = 'hidden';
+    viewSalon.style.pointerEvents = 'none';
   }
   if (typeof aplicarPersonalizacionAlDOM === 'function') {
     aplicarPersonalizacionAlDOM(estado.personalizacionPagina);
@@ -10720,18 +11021,34 @@ window.abrirModoParaLlevar = function(clienteNombre = 'Cliente Para Llevar') {
   renderCatalogoComandero();
   if (typeof switchComanderoMobileTab === 'function') switchComanderoMobileTab('menu');
 
+  document.body.classList.add('comandero-abierto');
+  document.documentElement.classList.add('comandero-abierto');
   const modCom = document.getElementById('modalComandero');
   if (modCom) {
     modCom.classList.add('active');
     modCom.style.display = 'flex';
   }
+  const viewSalon = document.getElementById('view-salon');
+  if (viewSalon && (window.innerWidth <= 900 || document.body.classList.contains('gamma-mobile'))) {
+    viewSalon.style.display = 'none';
+    viewSalon.style.visibility = 'hidden';
+    viewSalon.style.pointerEvents = 'none';
+  }
 };
 
 window.cerrarComandero = function() {
+  document.body.classList.remove('comandero-abierto');
+  document.documentElement.classList.remove('comandero-abierto');
   const modal = document.getElementById('modalComandero');
   if (modal) {
     modal.classList.remove('active');
     modal.style.display = 'none';
+  }
+  const viewSalon = document.getElementById('view-salon');
+  if (viewSalon) {
+    viewSalon.style.display = '';
+    viewSalon.style.visibility = 'visible';
+    viewSalon.style.pointerEvents = 'auto';
   }
   estado.asistenteComensal = {
     activo: false,
@@ -10745,7 +11062,6 @@ window.cerrarComandero = function() {
   document.querySelectorAll('.pos-view').forEach(v => v.classList.remove('active'));
   const btnSalon = document.querySelector('.nav-pill[data-view="salon"]');
   if (btnSalon) btnSalon.classList.add('active');
-  const viewSalon = document.getElementById('view-salon');
   if (viewSalon) viewSalon.classList.add('active');
   sessionStorage.setItem('pos_active_view', 'salon');
 
@@ -10888,7 +11204,8 @@ window.liberarMesaId = async function(mesaId) {
   const totalMesa = Number(mesa.orden_total) || 0;
   let pinAutorizado = null;
 
-  if (totalMesa > 0) {
+  const exigePin = typeof negocioTieneCaracteristica === 'function' ? negocioTieneCaracteristica('liberar_mesas_pin') : true;
+  if (totalMesa > 0 && exigePin) {
     const uAct = window.obtenerUsuarioActual();
     const esAdmin = window.esUsuarioAdmin();
     if (!esAdmin) {
@@ -10916,7 +11233,13 @@ window.liberarMesaId = async function(mesaId) {
   if (!confirmado) return;
 
   try {
-    const headers = { 'Content-Type': 'application/json' };
+    const nid = estado.negocioActual?.id || (JSON.parse(sessionStorage.getItem('pos_negocio') || '{}').id) || (JSON.parse(localStorage.getItem('pos_negocio') || '{}').id) || mesa.negocio_id || 1;
+    const token = estado.token || localStorage.getItem('pos_token') || sessionStorage.getItem('pos_token');
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-negocio-id': String(nid)
+    };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
     if (pinAutorizado) headers['x-supervisor-pin'] = pinAutorizado;
 
     const res = await fetch(`/api/mesas/${mesa.id}/liberar`, {
@@ -10924,6 +11247,7 @@ window.liberarMesaId = async function(mesaId) {
       headers,
       body: JSON.stringify({
         pinAutorizado,
+        negocio_id: nid,
         usuarioNombre: estado.usuarioActual?.nombre || 'Personal'
       })
     });
@@ -10938,10 +11262,11 @@ window.liberarMesaId = async function(mesaId) {
           mensaje: 'Ingresa el PIN de Administrador para confirmar la liberación.'
         });
         if (pinReintentar) {
+          const headers2 = { ...headers, 'x-supervisor-pin': pinReintentar };
           const res2 = await fetch(`/api/mesas/${mesa.id}/liberar`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-supervisor-pin': pinReintentar },
-            body: JSON.stringify({ pinAutorizado: pinReintentar })
+            headers: headers2,
+            body: JSON.stringify({ pinAutorizado: pinReintentar, negocio_id: nid })
           });
           const data2 = await res2.json();
           if (res2.ok) {
@@ -10974,6 +11299,8 @@ async function procesarExitoLiberacionMesa(mesa, mesaNom) {
   mesa.orden_id = null;
   mesa.orden_activa_id = null;
   mesa.orden_total = 0;
+  mesa.total = 0;
+  mesa.total_pagado = 0;
   mesa.pidio_cuenta_qr = 0;
   mesa.platos_pendientes = [];
   mesa.items_pendientes = [];
@@ -10984,15 +11311,53 @@ async function procesarExitoLiberacionMesa(mesa, mesaNom) {
     mesaEnEstado.cliente = null;
     mesaEnEstado.mesa_cliente = null;
     mesaEnEstado.orden_total = 0;
+    mesaEnEstado.total = 0;
+    mesaEnEstado.total_pagado = 0;
     mesaEnEstado.orden_activa_id = null;
     mesaEnEstado.items = [];
     mesaEnEstado.platos_pendientes = [];
     mesaEnEstado.items_pendientes = [];
   }
 
+  if (estado.mesaActiva && Number(estado.mesaActiva.id) === Number(mesa.id)) {
+    estado.mesaActiva = null;
+    estado.comanda = [];
+  }
+
+  // Limpiar completamente comanda y barra móvil
+  const mobBar = document.getElementById('mobFloatingTicketBar');
+  if (mobBar) {
+    mobBar.classList.remove('visible');
+    mobBar.classList.add('oculto');
+    mobBar.style.setProperty('display', 'none', 'important');
+  }
+  const mobFloatCnt = document.getElementById('mobFloatingCount');
+  if (mobFloatCnt) mobFloatCnt.textContent = '0';
+  const mobFloatTot = document.getElementById('mobFloatingTotal');
+  if (mobFloatTot) mobFloatTot.textContent = '₡ 0';
+  const mobTktCnt = document.getElementById('mobTicketCount');
+  if (mobTktCnt) mobTktCnt.textContent = '0';
+  const tktItemsList = document.getElementById('comTicketItems');
+  if (tktItemsList) tktItemsList.innerHTML = '';
+  const comTotEl = document.getElementById('comTotal');
+  if (comTotEl) comTotEl.textContent = '₡ 0.00';
+  const comSubEl = document.getElementById('comSubtotal');
+  if (comSubEl) comSubEl.textContent = '₡ 0.00';
+  const ordIdEl = document.getElementById('comTicketOrdenId');
+  if (ordIdEl) ordIdEl.textContent = 'Nueva Orden';
+
   const modCom = document.getElementById('modalComandero');
-  if (modCom && modCom.classList.contains('active') && estado.mesaActiva?.id === mesa.id) {
+  if (modCom && modCom.classList.contains('active')) {
     modCom.classList.remove('active');
+    modCom.style.display = 'none';
+    document.body.classList.remove('comandero-abierto');
+    document.documentElement.classList.remove('comandero-abierto');
+    const viewSalon = document.getElementById('view-salon');
+    if (viewSalon) {
+      viewSalon.style.display = '';
+      viewSalon.style.visibility = '';
+      viewSalon.style.pointerEvents = '';
+    }
   }
 
   mostrarNotificacionCentro(`🔓 "${mesaNom}" liberada con éxito`, 'success');
@@ -11600,7 +11965,15 @@ function renderTicketItems() {
     const isMobile = typeof window.isGammaMobile === 'function' ? window.isGammaMobile() : window.innerWidth <= 900;
     const catCol = document.getElementById('comanderoCatalogCol');
     const isMenuVisible = !catCol || !catCol.classList.contains('mobile-hidden');
-    mobFloatBar.style.display = (isMobile && totalQty > 0 && isMenuVisible) ? 'flex' : 'none';
+    if (isMobile && totalQty > 0 && isMenuVisible) {
+      mobFloatBar.classList.add('visible');
+      mobFloatBar.classList.remove('oculto');
+      mobFloatBar.style.setProperty('display', 'flex', 'important');
+    } else {
+      mobFloatBar.classList.remove('visible');
+      mobFloatBar.classList.add('oculto');
+      mobFloatBar.style.setProperty('display', 'none', 'important');
+    }
   }
 }
 
@@ -13065,6 +13438,10 @@ async function cargarCajaDesdeBackend(cajaIdFiltro = null, force = false) {
 
     estado.meserosReporte = data.tipPool || [];
     renderTipPoolTable();
+
+    if (typeof aplicarRestriccionesModulos === 'function') {
+      aplicarRestriccionesModulos();
+    }
   } catch (e) {
     console.warn('Error cargando caja:', e);
   } finally {
@@ -14920,6 +15297,16 @@ window.setModoDestinoMesaCobro = function(modo) {
   estado.mantenerMesaOcupadaEnCobro = (modo === 'esperando');
   if (modo === 'libre') {
     estado.enviarCocinaEnCobro = false;
+  } else if (modo === 'esperando') {
+    const items = estado.mesaActiva?.items || [];
+    const tieneNuevosCocina = items.some(it => 
+      !it.enviado && (it.destino === 'cocina' || (!it.destino && it.curso !== 1 && it.curso !== 5 && it.curso !== 6))
+    );
+    const tieneCocinaPendiente = items.some(it => 
+      (it.destino === 'cocina' || (!it.destino && it.curso !== 1 && it.curso !== 5 && it.curso !== 6)) &&
+      (it.estado_comanda === 'pendiente' || it.estado_comanda === 'preparando' || (!it.estado_comanda && it.enviado))
+    );
+    estado.enviarCocinaEnCobro = Boolean(tieneNuevosCocina || tieneCocinaPendiente);
   }
   window.actualizarModoDestinoMesaCobroUI();
 };
@@ -14948,13 +15335,8 @@ document.getElementById('btnAbrirCobroModal').addEventListener('click', async ()
     estado.mesaActiva.estado === 'cuenta_pedida'
   );
 
-  if (tieneNuevosCocina) {
-    estado.enviarCocinaEnCobro = true;
-    estado.mantenerMesaOcupadaEnCobro = false;
-  } else {
-    estado.enviarCocinaEnCobro = false;
-    estado.mantenerMesaOcupadaEnCobro = false;
-  }
+  estado.enviarCocinaEnCobro = false;
+  estado.mantenerMesaOcupadaEnCobro = false;
 
   if (typeof recalcularTotalesTicket === 'function') {
     recalcularTotalesTicket();
@@ -15863,7 +16245,7 @@ window.ejecutarCobroFinal = async function() {
         // Marcar items como pagados
         itemsMesa.forEach(it => { it.pagado = true; it.ya_pagado = true; });
 
-        const debeMantenerMesa = Boolean(estado.mantenerMesaOcupadaEnCobro || estado.enviarCocinaEnCobro);
+        const debeMantenerMesa = Boolean(estado.mantenerMesaOcupadaEnCobro);
         if (debeMantenerMesa) {
           const platosEnviados = (itemsMesa || []).filter(it => it.destino === 'cocina' || (!it.destino && it.curso !== 1 && it.curso !== 5 && it.curso !== 6));
           const nombresPlatos = platosEnviados.map(it => it.nombre || it.nombre_producto);
@@ -15921,10 +16303,30 @@ window.ejecutarCobroFinal = async function() {
           }
         }
 
-        // Limpiar comanda activa
+        // Limpiar comanda activa y barra flotante móvil
         estado.mesaActiva = null;
         estado.comanda = [];
         estado.cobroSplitPersonaIndex = null;
+        const mobBarSplit = document.getElementById('mobFloatingTicketBar');
+        if (mobBarSplit) {
+          mobBarSplit.classList.remove('visible');
+          mobBarSplit.classList.add('oculto');
+          mobBarSplit.style.setProperty('display', 'none', 'important');
+        }
+        const mobFloatCntSplit = document.getElementById('mobFloatingCount');
+        if (mobFloatCntSplit) mobFloatCntSplit.textContent = '0';
+        const mobFloatTotSplit = document.getElementById('mobFloatingTotal');
+        if (mobFloatTotSplit) mobFloatTotSplit.textContent = '₡ 0';
+        const mobTktCntSplit = document.getElementById('mobTicketCount');
+        if (mobTktCntSplit) mobTktCntSplit.textContent = '0';
+        const tktItemsListSplit = document.getElementById('comTicketItems');
+        if (tktItemsListSplit) tktItemsListSplit.innerHTML = '';
+        const comTotElSplit = document.getElementById('comTotal');
+        if (comTotElSplit) comTotElSplit.textContent = '₡ 0.00';
+        const comSubElSplit = document.getElementById('comSubtotal');
+        if (comSubElSplit) comSubElSplit.textContent = '₡ 0.00';
+        const ordIdElSplit = document.getElementById('comTicketOrdenId');
+        if (ordIdElSplit) ordIdElSplit.textContent = 'Nueva Orden';
         if (typeof splitState !== 'undefined') {
           splitState.personas = [];
           splitState.personaActivaIndex = 0;
@@ -16057,24 +16459,34 @@ window.ejecutarCobroFinal = async function() {
     } else {
       // COBRO ESTÁNDAR COMPLETO DE MESA (NO SPLIT)
       const mesaIdCobrada = estado.mesaActiva?.id;
-      const debeMantenerMesaOcupada = Boolean(estado.mantenerMesaOcupadaEnCobro || estado.enviarCocinaEnCobro);
+      const debeMantenerMesaOcupada = Boolean(estado.mantenerMesaOcupadaEnCobro);
 
       if (debeMantenerMesaOcupada) {
-        // La cuenta fue liquidada pero los platillos fueron enviados a cocina: la mesa debe quedar en ESPERA
+        // La cuenta fue liquidada pero se configuró explícitamente para dejar la mesa en ESPERA
         const platosEnviados = (itemsMesa || []).filter(it => it.destino === 'cocina' || (!it.destino && it.curso !== 1 && it.curso !== 5 && it.curso !== 6));
         const nombresPlatos = platosEnviados.map(it => it.nombre || it.nombre_producto);
+        const ordenIdPagada = cobroResData?.ordenId || ordenId;
 
         if (estado.mesaActiva) {
           estado.mesaActiva.estado = 'esperando';
           estado.mesaActiva.orden_total = 0;
           estado.mesaActiva.total = 0;
           estado.mesaActiva.total_pagado = totalNum;
+          if (ordenIdPagada) {
+            estado.mesaActiva.orden_id = ordenIdPagada;
+            estado.mesaActiva.orden_activa_id = ordenIdPagada;
+          }
           estado.mesaActiva.platos_pendientes = nombresPlatos;
           estado.mesaActiva.items_pendientes = nombresPlatos;
           (estado.mesaActiva.items || []).forEach(it => { it.enviado = true; it.pagado = true; });
           try {
             if (window.PosOfflineDB && typeof window.PosOfflineDB.guardarOrdenMesa === 'function') {
-              window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, { estado: 'esperando', total: 0 }, estado.mesaActiva.items).catch(() => {});
+              window.PosOfflineDB.guardarOrdenMesa(estado.mesaActiva.id, { 
+                estado: 'esperando', 
+                total: 0,
+                orden_id: ordenIdPagada,
+                orden_activa_id: ordenIdPagada
+              }, estado.mesaActiva.items).catch(() => {});
             }
           } catch (_) {}
         }
@@ -16085,6 +16497,10 @@ window.ejecutarCobroFinal = async function() {
             mesaEnLista.orden_total = 0;
             mesaEnLista.total = 0;
             mesaEnLista.total_pagado = totalNum;
+            if (ordenIdPagada) {
+              mesaEnLista.orden_id = ordenIdPagada;
+              mesaEnLista.orden_activa_id = ordenIdPagada;
+            }
             mesaEnLista.platos_pendientes = nombresPlatos;
             mesaEnLista.items_pendientes = nombresPlatos;
             (mesaEnLista.items || []).forEach(it => { it.enviado = true; it.pagado = true; });
@@ -16137,10 +16553,30 @@ window.ejecutarCobroFinal = async function() {
         }
       }
 
-      // Limpiar comanda activa
+      // Limpiar comanda activa y barra flotante móvil
       estado.mesaActiva = null;
       estado.comanda = [];
       estado.cobroSplitPersonaIndex = null;
+      const mobBarStd = document.getElementById('mobFloatingTicketBar');
+      if (mobBarStd) {
+        mobBarStd.classList.remove('visible');
+        mobBarStd.classList.add('oculto');
+        mobBarStd.style.setProperty('display', 'none', 'important');
+      }
+      const mobFloatCntStd = document.getElementById('mobFloatingCount');
+      if (mobFloatCntStd) mobFloatCntStd.textContent = '0';
+      const mobFloatTotStd = document.getElementById('mobFloatingTotal');
+      if (mobFloatTotStd) mobFloatTotStd.textContent = '₡ 0';
+      const mobTktCntStd = document.getElementById('mobTicketCount');
+      if (mobTktCntStd) mobTktCntStd.textContent = '0';
+      const tktItemsListStd = document.getElementById('comTicketItems');
+      if (tktItemsListStd) tktItemsListStd.innerHTML = '';
+      const comTotElStd = document.getElementById('comTotal');
+      if (comTotElStd) comTotElStd.textContent = '₡ 0.00';
+      const comSubElStd = document.getElementById('comSubtotal');
+      if (comSubElStd) comSubElStd.textContent = '₡ 0.00';
+      const ordIdElStd = document.getElementById('comTicketOrdenId');
+      if (ordIdElStd) ordIdElStd.textContent = 'Nueva Orden';
       if (typeof splitState !== 'undefined') {
         splitState.personas = [];
         splitState.personaActivaIndex = 0;
@@ -19256,7 +19692,10 @@ function initNavegacion() {
 
       if (view === 'salon') cargarMesasDesdeBackend();
       if (view === 'kds') cargarKDSDesdeBackend();
-      if (view === 'caja') cargarCajaDesdeBackend();
+      if (view === 'caja') {
+        cargarCajaDesdeBackend(null, true);
+        if (typeof aplicarRestriccionesModulos === 'function') aplicarRestriccionesModulos();
+      }
     });
   });
 
@@ -19416,13 +19855,28 @@ function initNuevoProducto() {
   });
 }
 
-// Dismiss touch tooltips when tapping outside
+// Dismiss touch tooltips when tapping outside and maintain position on scroll
 if (typeof document !== 'undefined') {
-  document.addEventListener('click', (e) => {
-    if (e.target && !e.target.closest('.m-wait-chip') && !e.target.closest('.mesa-tooltip')) {
-      document.querySelectorAll('.mesa-tooltip.show-touch').forEach(t => t.classList.remove('show-touch'));
+  const cerrarTooltipsAlTocarFuera = (e) => {
+    if (e.target && !e.target.closest('.m-wait-chip') && !e.target.closest('.mesa-tooltip') && !e.target.closest('.m-total') && !e.target.closest('.m-grid-total')) {
+      document.querySelectorAll('.mesa-tooltip.show-touch, .mesa-tooltip[style*="display: block"]').forEach(t => {
+        t.classList.remove('show-touch');
+        t.style.display = '';
+        t.style.opacity = '';
+        t.style.visibility = '';
+        if (t.parentElement) t.parentElement.style.zIndex = '';
+      });
     }
-  });
+  };
+  document.addEventListener('click', cerrarTooltipsAlTocarFuera);
+  document.addEventListener('touchstart', cerrarTooltipsAlTocarFuera, { passive: true });
+
+  window.addEventListener('scroll', () => {
+    const openTip = document.querySelector('.mesa-tooltip.show-touch, .mesa-tooltip[style*="display: block"]');
+    if (openTip && openTip.parentElement && typeof window.posicionarTooltipMesa === 'function') {
+      window.posicionarTooltipMesa(openTip.parentElement, openTip);
+    }
+  }, { passive: true });
 }
 
 // Auto-actualizar minutos de espera cada 30 segundos si hay mesas esperando

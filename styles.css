@@ -1322,7 +1322,10 @@ body {
   left: 50%;
   transform: translateX(-50%);
   min-width: 190px;
-  max-width: 280px;
+  max-width: min(290px, calc(100vw - 20px));
+  max-height: min(340px, calc(100vh - 120px));
+  overflow-y: auto;
+  box-sizing: border-box;
   background: #0f172a;
   border: 1px solid #f59e0b;
   box-shadow: 0 14px 35px rgba(0, 0, 0, 0.95), 0 0 22px rgba(245, 158, 11, 0.4);
@@ -1345,14 +1348,38 @@ body {
 }
 
 .mesa-tooltip.tooltip-bottom {
-  bottom: auto;
-  top: calc(100% + 12px);
+  bottom: auto !important;
+  top: calc(100% + 12px) !important;
 }
 
 .mesa-tooltip.tooltip-bottom::after {
-  top: auto;
-  bottom: 100%;
-  border-color: transparent transparent #f59e0b transparent;
+  top: auto !important;
+  bottom: 100% !important;
+  border-color: transparent transparent #f59e0b transparent !important;
+}
+
+.mesa-tooltip.align-left {
+  left: 0 !important;
+  right: auto !important;
+  transform: none !important;
+}
+
+.mesa-tooltip.align-left::after {
+  left: 28px !important;
+  right: auto !important;
+  transform: none !important;
+}
+
+.mesa-tooltip.align-right {
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
+}
+
+.mesa-tooltip.align-right::after {
+  left: auto !important;
+  right: 28px !important;
+  transform: none !important;
 }
 
 .mesa-tooltip-header {

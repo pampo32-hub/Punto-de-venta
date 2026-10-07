@@ -395,7 +395,7 @@ body.gamma-mobile .salon-container {
    ============================================================================ */
 html.gamma-mobile .com-mob-floating-bar,
 body.gamma-mobile .com-mob-floating-bar {
-  display: flex !important;
+  display: none !important;
   position: fixed !important;
   bottom: 0 !important;
   left: 0 !important;
@@ -410,6 +410,22 @@ body.gamma-mobile .com-mob-floating-bar {
   padding: 0 14px !important;
   box-sizing: border-box !important;
   cursor: pointer !important;
+}
+
+html.gamma-mobile .com-mob-floating-bar.visible,
+body.gamma-mobile .com-mob-floating-bar.visible,
+html.gamma-mobile .com-mob-floating-bar.active,
+body.gamma-mobile .com-mob-floating-bar.active {
+  display: flex !important;
+}
+
+html.gamma-mobile .com-mob-floating-bar.oculto,
+body.gamma-mobile .com-mob-floating-bar.oculto,
+html.gamma-mobile #mobFloatingTicketBar.oculto,
+body.gamma-mobile #mobFloatingTicketBar.oculto {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 html.gamma-mobile .mob-float-left,
@@ -554,6 +570,21 @@ body.gamma-mobile .mob-ticket-back-banner .btn-mob-volver-salon {
   cursor: pointer !important;
 }
 
+html.gamma-mobile .mob-ticket-back-banner .btn-mob-liberar-mesa,
+body.gamma-mobile .mob-ticket-back-banner .btn-mob-liberar-mesa {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  background: rgba(239, 68, 68, 0.2) !important;
+  border: 1px solid #ef4444 !important;
+  color: #fca5a5 !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+}
+
 /* ============================================================================
    4. LISTA DE PLATILLOS DE LA COMANDA EN MÓVIL (SCROLL FLUIDO TÁCTIL)
    ============================================================================ */
@@ -662,3 +693,502 @@ body.gamma-mobile .ticket-action-buttons .btn-btn-cmd.cobrar {
   align-items: center !important;
   justify-content: center !important;
 }
+
+/* ============================================================================
+   6. AISLAMIENTO TOTAL DEL MENÚ / COMANDERO RESPECTO AL SALÓN EN MÓVIL
+   ============================================================================ */
+/* Cuando el menú / comandero está abierto en móvil, el salón queda 100% oculto e inactivo */
+html.gamma-mobile body.comandero-abierto #view-salon,
+body.gamma-mobile.comandero-abierto #view-salon,
+html.gamma-mobile body.comandero-abierto .main-viewport,
+body.gamma-mobile.comandero-abierto .main-viewport,
+html.gamma-mobile.comandero-abierto #view-salon,
+html.gamma-mobile body.comandero-abierto .mesas-canvas-view,
+body.gamma-mobile.comandero-abierto .mesas-canvas-view,
+html.gamma-mobile body.comandero-abierto #mesasGridView,
+body.gamma-mobile.comandero-abierto #mesasGridView,
+html.gamma-mobile body.comandero-abierto .mesa-render-card,
+body.gamma-mobile.comandero-abierto .mesa-render-card,
+body.gamma-mobile:has(#modalComandero.active) #view-salon,
+html.gamma-mobile:has(#modalComandero.active) #view-salon,
+body.gamma-mobile:has(#modalComandero.active) .main-viewport,
+html.gamma-mobile:has(#modalComandero.active) .main-viewport {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Modal comandero en móvil: pantalla completa 100% opaca y aislada */
+html.gamma-mobile #modalComandero,
+body.gamma-mobile #modalComandero {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 100000 !important;
+  overflow: hidden !important;
+  background: #080d1a !important;
+  pointer-events: auto !important;
+}
+
+html.gamma-mobile .comandero-window,
+body.gamma-mobile .comandero-window {
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: #080d1a !important;
+  z-index: 100001 !important;
+  pointer-events: auto !important;
+}
+
+/* ============================================================================
+   7. OPTIMIZACIÓN DE TARJETAS Y NOMBRES DE PRODUCTOS EN MÓVIL
+   (Nombres completos visibles sin cortes ni líneas truncadas abajo)
+   ============================================================================ */
+html.gamma-mobile .prod-card-one-tap,
+body.gamma-mobile .prod-card-one-tap {
+  min-height: 105px !important;
+  height: auto !important;
+  padding: 6px 8px 8px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  gap: 4px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+html.gamma-mobile .prod-card-content,
+body.gamma-mobile .prod-card-content {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 52px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+html.gamma-mobile .prod-card-name,
+body.gamma-mobile .prod-card-name {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  color: #f8fafc !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: visible !important;
+  text-overflow: ellipsis !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  padding-bottom: 2px !important;
+  margin: 0 0 2px 0 !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .prod-card-price,
+body.gamma-mobile .prod-card-price {
+  font-size: 0.85rem !important;
+  font-weight: 800 !important;
+  color: #38bdf8 !important;
+  margin-top: auto !important;
+  line-height: 1.15 !important;
+  padding-top: 3px !important;
+}
+
+/* Vista de fotos grandes en móvil */
+html.gamma-mobile .prod-card-large,
+body.gamma-mobile .prod-card-large {
+  min-height: 155px !important;
+  height: auto !important;
+  border-radius: 12px !important;
+  overflow: visible !important;
+}
+
+html.gamma-mobile .prod-card-large-info,
+body.gamma-mobile .prod-card-large-info {
+  padding: 6px 8px 8px !important;
+  overflow: visible !important;
+}
+
+html.gamma-mobile .prod-card-large-name,
+body.gamma-mobile .prod-card-large-name {
+  font-size: 0.84rem !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: visible !important;
+  text-overflow: ellipsis !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  padding-bottom: 2px !important;
+}
+
+/* ============================================================================
+   8. OPTIMIZACIÓN DE MODAL SELECCIÓN BALDE NACIONAL EN MÓVIL
+   (Diseño responsivo, nombres completos y sin corte inferior)
+   ============================================================================ */
+html.gamma-mobile #modalSeleccionBaldeNacional,
+body.gamma-mobile #modalSeleccionBaldeNacional {
+  z-index: 100060 !important;
+  background: rgba(4, 7, 15, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 10px !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile #modalSeleccionBaldeNacional .modal-dialog,
+body.gamma-mobile #modalSeleccionBaldeNacional .modal-dialog {
+  width: 96vw !important;
+  max-width: 480px !important;
+  max-height: 90vh !important;
+  max-height: 90dvh !important;
+  border-radius: 16px !important;
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9) !important;
+}
+
+html.gamma-mobile #modalSeleccionBaldeNacional .dialog-header,
+body.gamma-mobile #modalSeleccionBaldeNacional .dialog-header {
+  padding: 12px 14px !important;
+  background: linear-gradient(135deg, #1e293b, #0f172a) !important;
+  border-bottom: 1px solid #334155 !important;
+}
+
+html.gamma-mobile #modalSeleccionBaldeNacional .dialog-body,
+body.gamma-mobile #modalSeleccionBaldeNacional .dialog-body {
+  padding: 10px 12px !important;
+  gap: 8px !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+}
+
+html.gamma-mobile .balde-beer-item,
+body.gamma-mobile .balde-beer-item {
+  padding: 10px 12px !important;
+  gap: 10px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #1e293b, #0f172a) !important;
+  border: 1px solid #334155 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .balde-beer-item .beer-thumb-box,
+body.gamma-mobile .balde-beer-item .beer-thumb-box {
+  width: 42px !important;
+  height: 42px !important;
+  flex-shrink: 0 !important;
+  border-radius: 8px !important;
+}
+
+html.gamma-mobile .balde-beer-name,
+body.gamma-mobile .balde-beer-name {
+  font-size: 0.95rem !important;
+  font-weight: 800 !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  color: #f8fafc !important;
+  display: block !important;
+  padding-bottom: 2px !important;
+}
+
+html.gamma-mobile .btn-balde-count,
+body.gamma-mobile .btn-balde-count {
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 1.25rem !important;
+  border-radius: 8px !important;
+}
+
+/* Modales de Variantes (Casados / Arroces) en móvil */
+html.gamma-mobile #modalSeleccionVariante,
+body.gamma-mobile #modalSeleccionVariante {
+  z-index: 100060 !important;
+  background: rgba(4, 7, 15, 0.95) !important;
+}
+
+html.gamma-mobile #modalSeleccionVariante .modal-dialog,
+body.gamma-mobile #modalSeleccionVariante .modal-dialog {
+  width: 96vw !important;
+  max-width: 480px !important;
+  max-height: 90vh !important;
+  max-height: 90dvh !important;
+}
+
+/* ============================================================================
+   SECCIÓN DE CAJA Y CONTROL DE PROPINAS EN MÓVIL (100% CENTRADO Y RESPONSIVO)
+   ============================================================================ */
+
+/* Ajuste del viewport principal para vista de caja en móvil */
+html.gamma-mobile .main-viewport,
+body.gamma-mobile .main-viewport {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+}
+
+html.gamma-mobile #view-caja,
+body.gamma-mobile #view-caja,
+#view-caja {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  padding: 4px 6px 24px 6px !important;
+}
+
+html.gamma-mobile #view-caja.active,
+body.gamma-mobile #view-caja.active {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+}
+
+html.gamma-mobile .caja-grid-layout,
+body.gamma-mobile .caja-grid-layout,
+.caja-grid-layout {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 520px !important;
+  margin: 0 auto !important;
+  gap: 16px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+}
+
+html.gamma-mobile .caja-card,
+body.gamma-mobile .caja-card,
+.caja-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  padding: 16px 14px !important;
+  border-radius: 16px !important;
+  background: #111827 !important;
+  border: 1px solid #1f2937 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Encabezado de la tarjeta de Turno */
+html.gamma-mobile .caja-card h3,
+body.gamma-mobile .caja-card h3 {
+  font-size: 1.1rem !important;
+  font-weight: 800 !important;
+  color: #f8fafc !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
+}
+
+/* Badge de Caja Activa */
+html.gamma-mobile #badgeCajaFisicaActiva,
+body.gamma-mobile #badgeCajaFisicaActiva {
+  font-size: 0.8rem !important;
+  padding: 4px 8px !important;
+  white-space: nowrap !important;
+  border-radius: 8px !important;
+}
+
+/* Filas estadísticas financieras */
+html.gamma-mobile .caja-stat-rows,
+body.gamma-mobile .caja-stat-rows {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  margin-top: 10px !important;
+  width: 100% !important;
+}
+
+html.gamma-mobile .caja-stat-rows .stat-row,
+body.gamma-mobile .caja-stat-rows .stat-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 8px 4px !important;
+  gap: 8px !important;
+  border-bottom: 1px solid #1f2937 !important;
+  font-size: 0.88rem !important;
+}
+
+html.gamma-mobile .caja-stat-rows .stat-row span,
+body.gamma-mobile .caja-stat-rows .stat-row span {
+  color: #94a3b8 !important;
+  font-weight: 500 !important;
+  flex: 1 !important;
+  text-align: left !important;
+}
+
+html.gamma-mobile .caja-stat-rows .stat-row strong,
+body.gamma-mobile .caja-stat-rows .stat-row strong {
+  text-align: right !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+  font-size: 0.95rem !important;
+}
+
+/* Fila de Total General en Gaveta */
+html.gamma-mobile .caja-stat-rows .stat-row.total,
+body.gamma-mobile .caja-stat-rows .stat-row.total {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  border-radius: 10px !important;
+  padding: 12px 10px !important;
+  margin-top: 8px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+html.gamma-mobile .caja-stat-rows .stat-row.total span,
+body.gamma-mobile .caja-stat-rows .stat-row.total span {
+  font-weight: 800 !important;
+  color: #fbbf24 !important;
+  font-size: 0.9rem !important;
+  line-height: 1.25 !important;
+}
+
+html.gamma-mobile .caja-stat-rows .stat-row.total strong,
+body.gamma-mobile .caja-stat-rows .stat-row.total strong {
+  font-size: 1.25rem !important;
+  color: #34d399 !important;
+}
+
+/* Botones de Operación de Caja en móvil */
+html.gamma-mobile .caja-actions-grid,
+body.gamma-mobile .caja-actions-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  margin-top: 14px !important;
+  width: 100% !important;
+}
+
+html.gamma-mobile .caja-actions-grid .btn-caja-op,
+body.gamma-mobile .caja-actions-grid .btn-caja-op {
+  min-height: 46px !important;
+  padding: 10px 6px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  border-radius: 10px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+/* Solo mostrar como flex si NO tiene display:none y NO tiene clase is-hidden */
+html.gamma-mobile .caja-actions-grid .btn-caja-op:not([style*="display: none"]):not([style*="display:none"]):not(.is-hidden),
+body.gamma-mobile .caja-actions-grid .btn-caja-op:not([style*="display: none"]):not([style*="display:none"]):not(.is-hidden) {
+  display: flex !important;
+}
+
+/* Forzar que cualquier botón oculto por permisos o características permanezca 100% oculto */
+html.gamma-mobile .caja-actions-grid .btn-caja-op[style*="display: none"],
+body.gamma-mobile .caja-actions-grid .btn-caja-op[style*="display: none"],
+html.gamma-mobile .caja-actions-grid .btn-caja-op[style*="display:none"],
+body.gamma-mobile .caja-actions-grid .btn-caja-op[style*="display:none"],
+html.gamma-mobile .caja-actions-grid .btn-caja-op.is-hidden,
+body.gamma-mobile .caja-actions-grid .btn-caja-op.is-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html.gamma-mobile .caja-actions-grid #btnAbrirCaja,
+body.gamma-mobile .caja-actions-grid #btnAbrirCaja,
+html.gamma-mobile .caja-actions-grid #btnReasignarTurnoCaja,
+body.gamma-mobile .caja-actions-grid #btnReasignarTurnoCaja {
+  grid-column: span 2 !important;
+}
+
+/* Tarjeta de Tip Pool & Propinas */
+html.gamma-mobile #cajaCardTipPool,
+body.gamma-mobile #cajaCardTipPool {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .tip-pool-table-wrapper,
+body.gamma-mobile .tip-pool-table-wrapper {
+  width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  margin-top: 10px !important;
+}
+
+html.gamma-mobile .tip-table,
+body.gamma-mobile .tip-table {
+  width: 100% !important;
+  font-size: 0.82rem !important;
+}
+
+html.gamma-mobile .tip-table th,
+body.gamma-mobile .tip-table th,
+html.gamma-mobile .tip-table td,
+body.gamma-mobile .tip-table td {
+  padding: 8px 6px !important;
+  white-space: nowrap !important;
+}
+
+/* Tooltip / Modal flotante de consumos de mesas en móvil */
+html.gamma-mobile .mesa-tooltip,
+body.gamma-mobile .mesa-tooltip {
+  min-width: 200px !important;
+  max-width: min(290px, calc(100vw - 20px)) !important;
+  max-height: min(340px, calc(100vh - 120px)) !important;
+  z-index: 9999999 !important;
+  box-sizing: border-box !important;
+}
+
+html.gamma-mobile .mesa-render-card:has(.mesa-tooltip.show-touch),
+html.gamma-mobile .mesa-grid-card:has(.mesa-tooltip.show-touch),
+body.gamma-mobile .mesa-render-card:has(.mesa-tooltip.show-touch),
+body.gamma-mobile .mesa-grid-card:has(.mesa-tooltip.show-touch) {
+  z-index: 9999999 !important;
+}
+
+html.gamma-mobile .m-total,
+html.gamma-mobile .m-grid-total,
+body.gamma-mobile .m-total,
+body.gamma-mobile .m-grid-total {
+  cursor: pointer !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
