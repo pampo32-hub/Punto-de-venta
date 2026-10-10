@@ -316,7 +316,7 @@ app.use(
         styleSrcAttr: ["'unsafe-inline'"],
         styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.supabase.co", "https://*.supabase.com", "https://cdn-icons-png.flaticon.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.supabase.co", "https://*.supabase.com", "https://cdn-icons-png.flaticon.com", "https://api.qrserver.com"],
         connectSrc: ["'self'", "ws:", "wss:", "http://localhost:*", "http://127.0.0.1:*", "https://*.supabase.co", "https://*.supabase.com"],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"]
