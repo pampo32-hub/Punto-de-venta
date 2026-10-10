@@ -6882,13 +6882,17 @@ async function procesarCobroOrden(ordenId, {
     ordenId = orden.id;
 
   // Manejar items nuevos de la comanda no enviados previamente (para que queden en DetalleOrden y se descuenten de Kárdex)
+  const itemsEntrantes = (Array.isArray(items) && items.length > 0)
+    ? items
+    : (Array.isArray(items_pagados) && items_pagados.length > 0 ? items_pagados : []);
+
   let itemsNuevos = [];
-  if (Array.isArray(items) && items.length > 0) {
+  if (itemsEntrantes.length > 0) {
     const rowDetalles = await dbGet("SELECT COUNT(*) as total FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [ordenId]);
     if (!rowDetalles || Number(rowDetalles.total) === 0) {
-      itemsNuevos = items;
+      itemsNuevos = itemsEntrantes;
     } else {
-      itemsNuevos = items.filter(it => it.enviado === false || it.enviado === 0 || (!it.enviado && !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado));
+      itemsNuevos = itemsEntrantes.filter(it => it.enviado === false || it.enviado === 0 || (!it.enviado && !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado));
     }
   }
 
@@ -6898,7 +6902,7 @@ async function procesarCobroOrden(ordenId, {
     const comandaNumero = (rowMax && rowMax.maxNum ? Number(rowMax.maxNum) : 0) + 1;
     const ordenNegocioId = Number(orden?.negocio_id || reqNegocioId || 1);
 
-    const cobroProdIds = [...new Set(itemsNuevos.map(it => parseInt(it.producto_id != null ? it.producto_id : it.id)).filter(id => !isNaN(id) && id > 0))];
+    const cobroProdIds = [...new Set(itemsNuevos.map(it => parseInt(it.producto_id != null ? it.producto_id : (it.menuItemId != null ? it.menuItemId : it.id))).filter(id => !isNaN(id) && id > 0))];
     const cobroProdsMap = new Map();
     if (cobroProdIds.length > 0) {
       const pl = cobroProdIds.map(() => '?').join(',');
@@ -6907,12 +6911,13 @@ async function procesarCobroOrden(ordenId, {
     }
 
     for (const it of itemsNuevos) {
-      const itNombre = it.nombre_producto || it.nombre || 'Producto';
-      const cant = Number(it.cantidad) || 1;
-      const subtotal = (Number(it.precio) || 0) * cant;
+      const itNombre = it.nombre_producto || it.nombre || it.name || 'Producto';
+      const cant = Number(it.cantidad != null ? it.cantidad : it.quantity) || 1;
+      const precioUnit = Number(it.precio != null ? it.precio : (it.unitPrice != null ? it.unitPrice : it.precio_unitario)) || 0;
+      const subtotal = precioUnit * cant;
 
       // Resolver ID numérico válido para producto_id en BD
-      let rawProdId = it.producto_id != null ? it.producto_id : it.id;
+      let rawProdId = it.producto_id != null ? it.producto_id : (it.menuItemId != null ? it.menuItemId : it.id);
       let prodIdNum = parseInt(rawProdId);
       let prodId = (!isNaN(prodIdNum) && prodIdNum > 0) ? prodIdNum : null;
 
@@ -9082,19 +9087,35 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
   try {
     const negocioIdFinal = Number(negocioId || 1);
     const negKardex = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioIdFinal]);
-    if (!negocioTieneCaracteristica(negKardex, 'kardex_tiempo_real')) {
-      return;
+    const kardexHabilitado = !negKardex || !negKardex.caracteristicas_activas || negKardex.caracteristicas_activas === 'all' || negocioTieneCaracteristica(negKardex, 'kardex_tiempo_real');
+    if (!kardexHabilitado) {
+      const tieneRecetas = await dbGet(
+        'SELECT r.id FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) LIMIT 1',
+        [negocioIdFinal, negocioIdFinal]
+      );
+      if (!tieneRecetas) {
+        return;
+      }
     }
     let huboCambios = false;
     for (const it of items) {
-      let rawProdId = it.producto_id != null ? it.producto_id : it.id;
+      let rawProdId = it.producto_id != null ? it.producto_id : (it.menuItemId != null ? it.menuItemId : it.id);
       let prodIdNum = parseInt(rawProdId);
       let prodId = (!isNaN(prodIdNum) && prodIdNum > 0) ? prodIdNum : null;
-      const cant = Number(it.cantidad || 1);
+      const cant = Number(it.cantidad != null ? it.cantidad : it.quantity) || 1;
+      const prodNombre = it.nombre || it.nombre_producto || it.name || 'Platillo';
+
+      if (!prodId && prodNombre) {
+        const prodDb = await dbGet(
+          'SELECT id FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+          [prodNombre, `%${prodNombre}%`, negocioIdFinal, negocioIdFinal, prodNombre]
+        );
+        if (prodDb) prodId = prodDb.id;
+      }
+
       if ((!prodId && !it.desglose_balde && !it.es_balde) || cant <= 0) continue;
 
       const ahora = new Date().toISOString();
-      const prodNombre = it.nombre || it.nombre_producto || 'Platillo';
 
       // CASO ESPECIAL: Balde de cerveza con selección múltiple / desglose
       let desgloseObj = null;
