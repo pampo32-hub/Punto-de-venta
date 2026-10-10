@@ -1310,21 +1310,54 @@
       </section>
 
       <!-- VISTA 4: CAJA & CONTROL DE PROPINAS (TIP POOL) -->
+      <!-- VISTA 4: CAJA & CONTROL DE PROPINAS (TIP POOL) -->
       <section id="view-caja" class="pos-view">
-        <div class="caja-grid-layout">
-          <div class="caja-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-              <h3 style="margin:0;">💰 Turno Actual de Operación</h3>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span id="badgeCajaFisicaActiva" style="background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; padding:4px 10px; border-radius:8px; font-size:0.85rem; font-weight:700; display:flex; align-items:center; gap:6px;">
-                  💳 Caja Principal
-                </span>
-                <select id="selCambiarVistaCajaTurno" onchange="cambiarTurnoCajaVisual(this.value)" style="display:none; background:#1e293b; color:#fff; border:1px solid #475569; border-radius:6px; padding:4px 8px; font-size:0.8rem;">
-                </select>
+        <!-- HEADER TOPBAR AURA GASTROBAR PRO -->
+        <div class="caja-header-bar">
+          <div>
+            <div class="caja-breadcrumb">
+              <span>Tesorería &amp; POS</span>
+              <span class="sep">/</span>
+              <span class="active">Gestión de Efectivo</span>
+            </div>
+            <div class="caja-title-box">
+              <div class="caja-icon-square">
+                <span>💰</span>
+              </div>
+              <div>
+                <h2>Turno Actual de Operación</h2>
+                <p>Arqueo continuo de caja, control de flujo en gaveta y cierre contable fiscal</p>
               </div>
             </div>
+          </div>
+          <div class="caja-top-actions">
+            <span id="badgeCajaFisicaActiva" class="badge-caja-activa">
+              <span class="caja-pulse-dot"></span>
+              <span>💳 Caja Principal</span>
+            </span>
+            <select id="selCambiarVistaCajaTurno" onchange="cambiarTurnoCajaVisual(this.value)" style="display:none;" class="select-caja-turnos"></select>
+            <button type="button" class="btn-caja-refresh" id="btnActualizarDatosCaja" onclick="cargarCajaDesdeBackend(null, true)">
+              <span>🔄</span> Actualizar Datos
+            </button>
+          </div>
+        </div>
+
+        <div class="caja-grid-layout">
+          <!-- COLUMNA IZQUIERDA: ARQUEO FINANCIERO Y ACCIONES -->
+          <div class="caja-card">
+            <!-- Cajero Responsable -->
+            <div class="caja-cajero-row">
+              <div class="caja-cajero-label">
+                <span>👤</span> <span id="lblCajeroTurno">Cajero Responsable</span>
+              </div>
+              <div class="caja-cajero-badge">
+                <span class="caja-pulse-dot"></span>
+                <strong id="cajeroTurnoNombre">Juan Jival</strong>
+              </div>
+            </div>
+
+            <!-- Ledger Stat Rows -->
             <div class="caja-stat-rows">
-              <div class="stat-row"><span id="lblCajeroTurno">Cajero Responsable:</span><strong id="cajeroTurnoNombre">Juan Jival</strong></div>
               <div class="stat-row"><span id="lblCajaFondoInicial">Fondo Inicial de Caja:</span><strong id="cajaFondoInicial">₡ 50,000</strong></div>
               <div class="stat-row" id="rowCajaFondoInicialUSD" style="display:none;"><span id="lblCajaFondoInicialUSD">Fondo Inicial Dólares ($):</span><strong id="cajaFondoInicialUSD" style="color:#60a5fa;">$ 0.00</strong></div>
               <div class="stat-row"><span id="lblCajaVentasEfectivo">Ventas en Efectivo (₡):</span><strong id="cajaVentasEfectivo">₡ 0</strong></div>
@@ -1333,60 +1366,141 @@
               <div class="stat-row" id="rowCajaVentasDolares" style="display:none;"><span id="lblCajaVentasDolares">Ventas en Dólares ($ USD):</span><strong id="cajaVentasDolares" style="color:#38bdf8;">$ 0.00 (₡ 0)</strong></div>
               <div class="stat-row"><span id="lblCajaEntradas">Entradas de Efectivo (+):</span><strong id="cajaEntradasTotal" style="color:#34d399;">+₡ 0</strong></div>
               <div class="stat-row"><span id="lblCajaSalidas">Salidas / Gastos Menores (-):</span><strong id="cajaSalidasTotal" style="color:#f87171;">-₡ 0</strong></div>
-              <div class="stat-row" style="border-top: 1px dashed #334155; padding-top: 6px;"><span id="lblCajaTotalEsperadoEfectivo">Total Esperado en Efectivo (₡):</span><strong id="cajaTotalEsperadoEfectivo" style="color:#34d399;">₡ 50,000</strong></div>
-              <div class="stat-row" id="rowCajaTotalEsperadoUSD" style="display:none; background:rgba(56,189,248,0.08); border-radius:6px; padding:4px 8px; margin:3px 0;"><span id="lblCajaTotalEsperadoUSD" style="color:#38bdf8; font-weight:700;">Total Esperado en Dólares ($):</span><strong id="cajaTotalEsperadoUSD" style="color:#38bdf8; font-size:1.05rem;">$ 0.00</strong></div>
-              <div class="stat-row total" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 12px; margin-top: 6px;"><span id="lblCajaTotalEfectivo" style="font-weight:800; color:#fbbf24;">Total General en Gaveta (Efectivo):</span><strong id="cajaTotalEfectivo" style="font-size:1.15rem; color:#34d399;">₡ 50,000</strong></div>
+              <div class="stat-row" style="border-top: 1px dashed #e7e5e1; padding-top: 8px;"><span id="lblCajaTotalEsperadoEfectivo">Total Esperado en Efectivo (₡):</span><strong id="cajaTotalEsperadoEfectivo">₡ 50,000</strong></div>
+              <div class="stat-row" id="rowCajaTotalEsperadoUSD" style="display:none; background:#f5f3f0; border-radius:8px; padding:6px 10px; margin:3px 0;"><span id="lblCajaTotalEsperadoUSD" style="color:#755a21; font-weight:700;">Total Esperado en Dólares ($):</span><strong id="cajaTotalEsperadoUSD" style="color:#755a21; font-size:1.05rem;">$ 0.00</strong></div>
+              
+              <!-- Hero Callout: Conciliación Activa -->
+              <div class="stat-row total" id="boxCajaTotalGaveta">
+                <div class="conciliacion-hero-left">
+                  <div class="conciliacion-icon-box">
+                    <span>💰</span>
+                  </div>
+                  <div>
+                    <span class="conciliacion-overline">Conciliación Activa</span>
+                    <span id="lblCajaTotalEfectivo" class="conciliacion-label">Total General en Gaveta (Efectivo)</span>
+                  </div>
+                </div>
+                <strong id="cajaTotalEfectivo" class="conciliacion-val">₡ 50,000</strong>
+              </div>
             </div>
             
             <div class="caja-actions-grid">
-              <button class="btn-caja-op abrir-caja" id="btnAbrirCaja" onclick="abrirModalAperturaCaja()" style="grid-column: span 2; background: linear-gradient(135deg, #065f46, #047857); border-color: #10b981; color: #ecfdf5; font-size: 0.92rem; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <button class="btn-caja-op abrir-caja" id="btnAbrirCaja" onclick="abrirModalAperturaCaja()" style="grid-column: span 2;">
                 <span>🔓</span> <strong>Abrir Turno de Caja</strong>
               </button>
-              <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')">📥 Entrada de Efectivo</button>
-              <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')">📤 Salida / Gasto Menor</button>
-              <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)">📑 Corte X (Parcial) <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
-              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ(false)" title="Abrir Cierre Z final (Ctrl + Z)">🔒 Cierre Z (Final) <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
-              <button class="btn-caja-op btn-reasignar-caja" id="btnReasignarTurnoCaja" onclick="abrirModalReasignarCajaTurno()" style="grid-column: span 2; background: linear-gradient(135deg, rgba(79,70,229,0.18), rgba(67,56,202,0.18)); border: 1px solid #6366f1; color: #a5b4fc; font-weight: 700; padding: 10px; display:flex; align-items:center; justify-content:center; gap:8px;">
+              <button class="btn-caja-op" id="btnEntradaEfectivo" onclick="abrirModalMovimientoCaja('entrada')"><span>📥</span> Entrada de Efectivo</button>
+              <button class="btn-caja-op" id="btnSalidaEfectivo" onclick="abrirModalMovimientoCaja('salida')"><span>📤</span> Salida / Gasto Menor</button>
+              <button class="btn-caja-op corte-x" id="btnCorteX" onclick="generarCorteX()" title="Generar Corte X parcial (Ctrl + X)"><span>📑 Corte X (Parcial)</span> <kbd class="kbd-shortcut">Ctrl+X</kbd></button>
+              <button class="btn-caja-op corte-z" id="btnCorteZ" onclick="abrirModalCierreZ(false)" title="Abrir Cierre Z final (Ctrl + Z)"><span>🔒 Cierre Z (Final)</span> <kbd class="kbd-shortcut">Ctrl+Z</kbd></button>
+              <button class="btn-caja-op btn-reasignar-caja" id="btnReasignarTurnoCaja" onclick="abrirModalReasignarCajaTurno()" style="grid-column: span 2;">
                 <span>🔁</span> <strong>Reasignar Turno Activo (Admin)</strong>
               </button>
-              <button class="btn-caja-op corte-x-ciego is-hidden" id="btnCorteXCiego" onclick="abrirModalCorteXCiego()" title="Arqueo / Corte X a Ciegas (Conteo físico sin ver totales)" style="display:none !important; grid-column: span 2; background: linear-gradient(135deg, rgba(139,92,246,0.18), rgba(109,40,217,0.18)); border: 1px solid #8b5cf6; color: #c4b5fd; font-weight: 700;">🙈 Cierre X a Ciegas</button>
-              <button class="btn-caja-op corte-z-ciego is-hidden" id="btnCorteZCiego" onclick="abrirModalCierreZ(true)" title="Arqueo Ciego en Cierre Z (Liquidación definitiva con conteo físico sin ver totales)" style="display:none !important; grid-column: span 2; background: linear-gradient(135deg, rgba(239,68,68,0.18), rgba(185,28,28,0.18)); border: 1px solid #ef4444; color: #fca5a5; font-weight: 700;">🙈 Cierre Z a Ciegas</button>
-              <button class="btn-caja-op btn-purgar-caja dev-purge-action is-hidden" id="btnResetCajaPruebas" onclick="purgarHistorialCajaDev()" style="display:none !important; grid-column: span 2; background: rgba(239, 68, 68, 0.12); border: 1px dashed #ef4444; color: #f87171; font-size: 0.82rem; padding: 8px; margin-top: 4px;" title="Resetear historial financiero y dejar caja en blanco para entrega al cliente">
+              <button class="btn-caja-op corte-x-ciego is-hidden" id="btnCorteXCiego" onclick="abrirModalCorteXCiego()" title="Arqueo / Corte X a Ciegas (Conteo físico sin ver totales)" style="display:none !important; grid-column: span 2;">🙈 Cierre X a Ciegas</button>
+              <button class="btn-caja-op corte-z-ciego is-hidden" id="btnCorteZCiego" onclick="abrirModalCierreZ(true)" title="Arqueo Ciego en Cierre Z (Liquidación definitiva con conteo físico sin ver totales)" style="display:none !important; grid-column: span 2;">🙈 Cierre Z a Ciegas</button>
+              <button class="btn-caja-op btn-purgar-caja dev-purge-action is-hidden" id="btnResetCajaPruebas" onclick="purgarHistorialCajaDev()" style="display:none !important; grid-column: span 2;" title="Resetear historial financiero y dejar caja en blanco para entrega al cliente">
                 🧹 Resetear Historial Financiero de Caja
               </button>
             </div>
           </div>
 
-          <div class="caja-card row-servicio-10" id="cajaCardTipPool">
-            <div class="card-title-row">
-              <h3>💵 Control de Propinas & Meseros (Tip Pool)</h3>
-              <span class="pill-counter" style="background:#10b981;">10% Servicio Salón</span>
+          <!-- COLUMNA DERECHA: CANALES DE PAGO, MOVIMIENTOS Y TIP POOL -->
+          <div class="caja-right-column">
+            <!-- Canales de Pago -->
+            <div class="caja-card caja-canales-card">
+              <div class="caja-card-header">
+                <div class="caja-card-header-left">
+                  <span class="caja-section-icon">📊</span>
+                  <h3>Canales de Pago</h3>
+                </div>
+                <span class="caja-pill-total" id="cajaCanalesTotalHeader">Total: ₡ 0</span>
+              </div>
+              <div class="caja-canales-body">
+                <div class="caja-canales-donut-box">
+                  <div class="donut-chart-mini">
+                    <svg viewBox="0 0 36 36" class="donut-svg">
+                      <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#efeeeb" stroke-width="4.5"></circle>
+                      <circle id="donutCircleTarjeta" cx="18" cy="18" fill="none" stroke="#1d1b19" stroke-width="4.5" stroke-dasharray="0 100" stroke-dashoffset="0"></circle>
+                      <circle id="donutCircleEfectivo" cx="18" cy="18" fill="none" stroke="#755a21" stroke-width="4.5" stroke-dasharray="0 100" stroke-dashoffset="0"></circle>
+                      <circle id="donutCircleSinpe" cx="18" cy="18" fill="none" stroke="#4a6b5d" stroke-width="4.5" stroke-dasharray="0 100" stroke-dashoffset="0"></circle>
+                    </svg>
+                    <div class="donut-center-text">
+                      <small>Ventas</small>
+                      <strong id="cajaDonutCenterVias">Turno</strong>
+                    </div>
+                  </div>
+                </div>
+                <div class="caja-canales-legend">
+                  <div class="canal-row">
+                    <div class="canal-label"><span class="canal-dot dot-tarjeta"></span><span>Datáfono (<span id="cajaPctTarjeta">0%</span>)</span></div>
+                    <strong id="cajaMontoCanalTarjeta">₡ 0</strong>
+                  </div>
+                  <div class="canal-row">
+                    <div class="canal-label"><span class="canal-dot dot-efectivo"></span><span>Efectivo (<span id="cajaPctEfectivo">0%</span>)</span></div>
+                    <strong id="cajaMontoCanalEfectivo">₡ 0</strong>
+                  </div>
+                  <div class="canal-row">
+                    <div class="canal-label"><span class="canal-dot dot-sinpe"></span><span>SINPE Móvil (<span id="cajaPctSinpe">0%</span>)</span></div>
+                    <strong id="cajaMontoCanalSinpe">₡ 0</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="caja-discrepancia-strip" id="cajaDiscrepanciaStrip">
+                <span class="disc-icon">ℹ️</span>
+                <span class="disc-label">Estado de Gaveta:</span>
+                <strong class="disc-status" id="cajaDiscrepanciaStatus">Turno Operativo al Día</strong>
+              </div>
             </div>
-            <p class="card-desc">Cálculo del 10% de ley y propinas voluntarias por colaborador del turno.</p>
 
-            <div class="tip-pool-table-wrapper">
-              <table class="tip-table">
-                <thead>
-                  <tr>
-                    <th>Colaborador</th>
-                    <th>Mesas</th>
-                    <th style="text-align:right;">Venta Total</th>
-                    <th style="text-align:right;">Propina (10%)</th>
-                  </tr>
-                </thead>
-                <tbody id="tipPoolTableBody"></tbody>
-                <tfoot>
-                  <tr>
-                    <th colspan="3">Fondo Total de Propinas Acumulado:</th>
-                    <th style="text-align:right; color:#38bdf8; font-size:1.1rem;" id="tipPoolTotalDisplay">₡ 0</th>
-                  </tr>
-                </tfoot>
-              </table>
+            <!-- Movimientos Recientes de Gaveta -->
+            <div class="caja-card caja-movimientos-card">
+              <div class="caja-card-header">
+                <div class="caja-card-header-left">
+                  <span class="caja-section-icon">🕒</span>
+                  <h3>Movimientos de Gaveta</h3>
+                </div>
+                <span class="caja-pill-total">Últimos eventos</span>
+              </div>
+              <div class="caja-movimientos-list" id="cajaMovimientosList">
+                <div class="mov-empty">No hay movimientos registrados en este turno.</div>
+              </div>
+              <div class="caja-movimientos-footer">
+                <span class="printer-status">🖨️ Impresora Térmica: Lista</span>
+                <button type="button" class="btn-link-action" onclick="generarCorteX()">Reimprimir Resumen</button>
+              </div>
             </div>
 
-            <button class="btn-primary" id="btnLiquidarPropinas" style="margin-top:16px; width:100%; padding:12px;">
-              📋 Imprimir Reporte de Reparto de Propinas
-            </button>
+            <!-- Control de Propinas & Meseros (Tip Pool) -->
+            <div class="caja-card row-servicio-10" id="cajaCardTipPool">
+              <div class="card-title-row">
+                <h3>💵 Control de Propinas &amp; Meseros (Tip Pool)</h3>
+                <span class="pill-counter" style="background:#4a6b5d; color:#ffffff; padding:4px 10px; border-radius:9999px; font-size:0.78rem; font-weight:700;">10% Servicio Salón</span>
+              </div>
+              <p class="card-desc" style="color:#757774; font-size:0.85rem; margin:6px 0 14px;">Cálculo del 10% de ley y propinas voluntarias por colaborador del turno.</p>
+
+              <div class="tip-pool-table-wrapper">
+                <table class="tip-table">
+                  <thead>
+                    <tr>
+                      <th>Colaborador</th>
+                      <th>Mesas</th>
+                      <th style="text-align:right;">Venta Total</th>
+                      <th style="text-align:right;">Propina (10%)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tipPoolTableBody"></tbody>
+                  <tfoot>
+                    <tr>
+                      <th colspan="3">Fondo Total de Propinas Acumulado:</th>
+                      <th style="text-align:right; color:#755a21; font-family:'Newsreader', serif; font-size:1.15rem;" id="tipPoolTotalDisplay">₡ 0</th>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <button class="btn-primary" id="btnLiquidarPropinas" style="margin-top:16px; width:100%; padding:12px; background:#1b1c1a; border-radius:12px; font-weight:700; color:#fff;">
+                📋 Imprimir Reporte de Reparto de Propinas
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -5889,18 +6003,18 @@
 
   <!-- MODAL ENTRADA / SALIDA DE EFECTIVO (MOVIMIENTOS DE CAJA) -->
   <div class="modal-backdrop" id="modalMovimientoCaja" style="z-index: 100015; display: none;">
-    <div class="modal-dialog" style="max-width: 480px; width: 94vw; max-height: 94vh; overflow-y: auto; background: #0f172a; border-radius: 16px; border: 1px solid #334155; box-shadow: 0 25px 60px rgba(0,0,0,0.85); overflow: hidden;">
-      <div class="dialog-header" style="background: #0f172a; border-bottom: 1px solid #1e293b; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+    <div class="modal-dialog" style="max-width: 480px; width: 94vw; max-height: 94vh; overflow-y: auto;">
+      <div class="dialog-header">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.4rem;" id="iconModalMovimientoCaja">📥</span>
           <div>
-            <h3 style="margin:0; font-size:1.15rem; color:#f8fafc;" id="titleModalMovimientoCaja">Entrada de Efectivo</h3>
-            <small style="color:var(--text-muted);" id="subModalMovimientoCaja">Registrar ingreso de dinero a la gaveta</small>
+            <h3 style="margin:0; font-size:1.15rem;" id="titleModalMovimientoCaja">Entrada de Efectivo</h3>
+            <small id="subModalMovimientoCaja">Registrar ingreso de dinero a la gaveta</small>
           </div>
         </div>
         <button class="btn-icon-close" onclick="cerrarModalMovimientoCaja()">✕</button>
       </div>
-      <div class="dialog-body" style="padding: 18px 20px; background: #0b0f19;">
+      <div class="dialog-body">
         <input type="hidden" id="txtMovimientoCajaTipo" value="entrada" />
         
         <div class="field-row" style="margin-bottom: 12px;">
@@ -5951,9 +6065,9 @@
           💡 Este movimiento afectará inmediatamente el arqueo y el total esperado en gaveta.
         </div>
       </div>
-      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:flex-end; gap:10px; background:#080d18; border-top:1px solid #1e293b;">
+      <div class="dialog-footer" style="padding: 16px 22px; display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn-sec" onclick="cerrarModalMovimientoCaja()">Cancelar</button>
-        <button class="btn-pri" id="btnGuardarMovimientoCaja" onclick="guardarMovimientoCaja()" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; padding:10px 20px; border-radius:8px; border:none; cursor:pointer;">
+        <button class="btn-pri" id="btnGuardarMovimientoCaja" onclick="guardarMovimientoCaja()" style="background:#1b1c1a; color:#fff; font-weight:700; padding:10px 22px; border-radius:10px; border:none; cursor:pointer;">
           💾 Registrar Movimiento
         </button>
       </div>
@@ -5963,17 +6077,17 @@
   <!-- MODAL CIERRE Z (ARQUEO FINAL Y CIERRE DE TURNO) -->
   <div class="modal-backdrop" id="modalCierreZ" style="z-index: 100018;">
     <div class="modal-dialog" style="max-width: 520px; width: 94vw; max-height: 94vh; overflow-y: auto;">
-      <div class="dialog-header" style="background: linear-gradient(135deg, #1e1b4b, #0f172a); border-bottom: 1px solid #334155;">
+      <div class="dialog-header">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.5rem;" id="czModalHeaderIcon">🔒</span>
           <div>
-            <h3 style="margin:0; font-size:1.2rem; color:#fff;" id="czModalHeaderTitle">Cierre Z Definitivo & Arqueo</h3>
-            <small style="color:#94a3b8;" id="czModalHeaderSubtitle">Liquidación del turno y cuadre de efectivo en gaveta</small>
+            <h3 style="margin:0; font-size:1.2rem;" id="czModalHeaderTitle">Cierre Z Definitivo & Arqueo</h3>
+            <small style="color:#757774;" id="czModalHeaderSubtitle">Liquidación del turno y cuadre de efectivo en gaveta</small>
           </div>
         </div>
         <button class="btn-icon-close" onclick="cerrarModalCierreZ()">✕</button>
       </div>
-      <div class="dialog-body" style="padding: 20px; background: #0b0f19;">
+      <div class="dialog-body">
         <!-- Banner Informativo de Modo Ciego (aparece cuando es Cierre Z Ciego) -->
         <div id="czAvisoCiegoBox" style="display:none; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;">
           <div style="display:flex; align-items:flex-start; gap:10px;">
@@ -6063,9 +6177,9 @@
           <textarea id="txtCierreZNotas" rows="2" placeholder="Observaciones de caja, justificación de diferencias, etc." class="select-styled" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid #374151; background:#111827; color:#fff; border-radius:8px; resize:vertical;"></textarea>
         </div>
       </div>
-      <div class="dialog-footer" style="padding: 14px 20px; display:flex; justify-content:space-between; align-items:center; background:#080d18; border-top:1px solid #1e293b;">
+      <div class="dialog-footer" style="padding: 16px 22px; display:flex; justify-content:space-between; align-items:center;">
         <button class="btn-sec" onclick="cerrarModalCierreZ()">Cancelar</button>
-        <button class="btn-pri" id="btnEjecutarCierreZ" onclick="ejecutarCierreZ()" style="background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; font-weight:800; padding:10px 22px; border-radius:8px; border:none;">
+        <button class="btn-pri" id="btnEjecutarCierreZ" onclick="ejecutarCierreZ()" style="background:#1b1c1a; color:#fff; font-weight:800; padding:10px 22px; border-radius:10px; border:none; cursor:pointer;">
           🔒 Confirmar y Cerrar Turno
         </button>
       </div>

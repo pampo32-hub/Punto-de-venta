@@ -13268,6 +13268,10 @@ window.resetearEstadoFinancieroCero = function() {
   if (rowVentasUSD) rowVentasUSD.style.display = aceptaUSD ? 'flex' : 'none';
   const rowTotalUSD = document.getElementById('rowCajaTotalEsperadoUSD');
   if (rowTotalUSD) rowTotalUSD.style.display = aceptaUSD ? 'flex' : 'none';
+
+  if (typeof window.resetearCanalesYMovimientosAura === 'function') {
+    window.resetearCanalesYMovimientosAura();
+  }
 };
 
 let _inFlightCargarCaja = null;
@@ -13427,6 +13431,10 @@ async function cargarCajaDesdeBackend(cajaIdFiltro = null, force = false) {
         totalEsperado: totalGeneralGavetaCRC,
         movimientos: data.movimientos || []
       };
+
+      if (typeof window.actualizarCanalesYMovimientosAura === 'function') {
+        window.actualizarCanalesYMovimientosAura(data, efect, tarj, sinpe);
+      }
     } else {
       if (badgeCaja) {
         badgeCaja.innerHTML = `🔒 Caja Cerrada`;
@@ -13476,6 +13484,141 @@ async function cargarCajaDesdeBackend(cajaIdFiltro = null, force = false) {
 window.cambiarTurnoCajaVisual = function(cajaId) {
   window._cajaVisualFiltroId = cajaId ? Number(cajaId) : null;
   cargarCajaDesdeBackend(window._cajaVisualFiltroId);
+};
+
+window.actualizarCanalesYMovimientosAura = function(data, efect = 0, tarj = 0, sinpe = 0) {
+  try {
+    const totVentas = efect + tarj + sinpe;
+    const elTot = document.getElementById('cajaCanalesTotalHeader');
+    if (elTot) elTot.textContent = `Total: ${formatCRC(totVentas)}`;
+
+    const pctTarj = totVentas > 0 ? Math.round((tarj / totVentas) * 100) : 0;
+    const pctEf = totVentas > 0 ? Math.round((efect / totVentas) * 100) : 0;
+    const pctSinpe = totVentas > 0 ? Math.max(0, 100 - pctTarj - pctEf) : 0;
+
+    const elPctT = document.getElementById('cajaPctTarjeta');
+    if (elPctT) elPctT.textContent = `${pctTarj}%`;
+    const elPctE = document.getElementById('cajaPctEfectivo');
+    if (elPctE) elPctE.textContent = `${pctEf}%`;
+    const elPctS = document.getElementById('cajaPctSinpe');
+    if (elPctS) elPctS.textContent = `${pctSinpe}%`;
+
+    const elMontT = document.getElementById('cajaMontoCanalTarjeta');
+    if (elMontT) elMontT.textContent = formatCRC(tarj);
+    const elMontE = document.getElementById('cajaMontoCanalEfectivo');
+    if (elMontE) elMontE.textContent = formatCRC(efect);
+    const elMontS = document.getElementById('cajaMontoCanalSinpe');
+    if (elMontS) elMontS.textContent = formatCRC(sinpe);
+
+    const cT = document.getElementById('donutCircleTarjeta');
+    const cE = document.getElementById('donutCircleEfectivo');
+    const cS = document.getElementById('donutCircleSinpe');
+    if (cT && cE && cS) {
+      if (totVentas > 0) {
+        cT.setAttribute('stroke-dasharray', `${pctTarj} ${100 - pctTarj}`);
+        cT.setAttribute('stroke-dashoffset', '0');
+        cE.setAttribute('stroke-dasharray', `${pctEf} ${100 - pctEf}`);
+        cE.setAttribute('stroke-dashoffset', `-${pctTarj}`);
+        cS.setAttribute('stroke-dasharray', `${pctSinpe} ${100 - pctSinpe}`);
+        cS.setAttribute('stroke-dashoffset', `-${pctTarj + pctEf}`);
+      } else {
+        cT.setAttribute('stroke-dasharray', '0 100');
+        cE.setAttribute('stroke-dasharray', '0 100');
+        cS.setAttribute('stroke-dasharray', '0 100');
+      }
+    }
+
+    const listEl = document.getElementById('cajaMovimientosList');
+    if (listEl) {
+      const items = [];
+      if (data && data.caja && data.caja.monto_inicial) {
+        const hora = data.caja.fecha_apertura ? new Date(data.caja.fecha_apertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Inicio';
+        items.push(`
+          <div class="caja-mov-item">
+            <div class="mov-left">
+              <div class="mov-icon mov-icon-apertura">🔓</div>
+              <div>
+                <strong class="mov-title">Apertura de Turno #${data.caja.id}</strong>
+                <small class="mov-desc">Fondo base en gaveta</small>
+              </div>
+            </div>
+            <div class="mov-right">
+              <strong class="mov-amount">${formatCRC(data.caja.monto_inicial)}</strong>
+              <small class="mov-time">${hora}</small>
+            </div>
+          </div>
+        `);
+      }
+
+      (data.movimientos || []).slice(-5).reverse().forEach(m => {
+        const isEntrada = m.tipo === 'entrada';
+        const hora = m.fecha ? new Date(m.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        items.push(`
+          <div class="caja-mov-item">
+            <div class="mov-left">
+              <div class="mov-icon ${isEntrada ? 'mov-icon-in' : 'mov-icon-out'}">${isEntrada ? '📥' : '📤'}</div>
+              <div>
+                <strong class="mov-title">${isEntrada ? 'Entrada de Efectivo' : 'Salida / Gasto Menor'}</strong>
+                <small class="mov-desc">${escapeHtml(m.concepto || (isEntrada ? 'Ingreso extra' : 'Gasto operativo'))}</small>
+              </div>
+            </div>
+            <div class="mov-right">
+              <strong class="mov-amount ${isEntrada ? 'amount-in' : 'amount-out'}">${isEntrada ? '+' : '-'}${formatCRC(m.monto)}</strong>
+              <small class="mov-time">${hora}</small>
+            </div>
+          </div>
+        `);
+      });
+
+      (data.ventas || []).slice(-5).reverse().forEach(v => {
+        const hora = v.fecha ? new Date(v.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const met = (v.metodo || 'Efectivo').toLowerCase();
+        const icon = met.includes('tarjeta') ? '💳' : (met.includes('sinpe') ? '📱' : '💵');
+        items.push(`
+          <div class="caja-mov-item">
+            <div class="mov-left">
+              <div class="mov-icon mov-icon-venta">${icon}</div>
+              <div>
+                <strong class="mov-title">Venta #${v.id || ''} ${v.mesa_nombre ? '· ' + escapeHtml(v.mesa_nombre) : ''}</strong>
+                <small class="mov-desc">${escapeHtml(v.metodo || 'Efectivo')}</small>
+              </div>
+            </div>
+            <div class="mov-right">
+              <strong class="mov-amount amount-in">+${formatCRC(v.total)}</strong>
+              <small class="mov-time">${hora}</small>
+            </div>
+          </div>
+        `);
+      });
+
+      listEl.innerHTML = items.length > 0 ? items.join('') : '<div class="mov-empty">No hay movimientos registrados en este turno.</div>';
+    }
+  } catch (err) {
+    console.warn('Error renderizando canales/movimientos Aura:', err);
+  }
+};
+
+window.resetearCanalesYMovimientosAura = function() {
+  const elTot = document.getElementById('cajaCanalesTotalHeader');
+  if (elTot) elTot.textContent = 'Total: ₡ 0';
+  ['cajaPctTarjeta', 'cajaPctEfectivo', 'cajaPctSinpe'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '0%';
+  });
+  ['cajaMontoCanalTarjeta', 'cajaMontoCanalEfectivo', 'cajaMontoCanalSinpe'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '₡ 0';
+  });
+  const cT = document.getElementById('donutCircleTarjeta');
+  const cE = document.getElementById('donutCircleEfectivo');
+  const cS = document.getElementById('donutCircleSinpe');
+  if (cT && cE && cS) {
+    cT.setAttribute('stroke-dasharray', '0 100');
+    cE.setAttribute('stroke-dasharray', '0 100');
+    cS.setAttribute('stroke-dasharray', '0 100');
+  }
+  const listEl = document.getElementById('cajaMovimientosList');
+  if (listEl) listEl.innerHTML = '<div class="mov-empty">Caja cerrada. Sin movimientos activos.</div>';
 };
 
 // -------------------------------------------------------------

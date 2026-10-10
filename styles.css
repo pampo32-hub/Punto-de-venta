@@ -14027,29 +14027,21 @@ body.theme-capsula-elegance .btn-prefactura-split {
   color: #d1fae5;
   font-weight: 800;
 }
-.chip-comensal-add {
 .chip-comensal-add, .chip-comensal.chip-add {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 12px;
-  background: rgba(59, 130, 246, 0.12);
-  border: 1.5px dashed rgba(59, 130, 246, 0.6);
   padding: 7px 14px;
   background: rgba(59, 130, 246, 0.15);
   border: 1.5px dashed #3b82f6;
   border-radius: 20px;
   color: #60a5fa;
-  font-size: 0.82rem;
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
 }
-.chip-comensal-add:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: #3b82f6;
 .chip-comensal-add:hover, .chip-comensal.chip-add:hover {
   background: rgba(59, 130, 246, 0.3);
   border-color: #60a5fa;
@@ -14564,4 +14556,819 @@ body.theme-capsula-elegance .btn-prefactura-split {
 .btn-ver-pagina-top,
 .btn-ver-pagina-box {
   display: none !important;
+}
+
+
+/* ========================================================================== */
+/* PASO 3: AURA GASTROBAR PRO - CONTROL Y TURNO DE CAJA & MODALES FINANCIEROS */
+/* ========================================================================== */
+
+#view-caja {
+  padding: 24px;
+  max-width: 1360px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Header Topbar */
+.caja-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.caja-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8 !important;
+  margin-bottom: 6px;
+}
+
+.caja-breadcrumb .sep {
+  color: #64748b !important;
+}
+
+.caja-breadcrumb .active {
+  color: #fbbf24 !important;
+}
+
+.caja-title-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.caja-icon-square {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e7e5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.caja-title-box h2 {
+  margin: 0;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.85rem;
+  font-weight: 600;
+  color: #f8fafc !important;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.caja-title-box p {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: #94a3b8 !important;
+}
+
+.caja-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.badge-caja-activa {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  padding: 6px 14px !important;
+  border-radius: 9999px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03) !important;
+}
+
+.caja-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a6b5d;
+  box-shadow: 0 0 0 3px rgba(74, 107, 93, 0.2);
+  display: inline-block;
+}
+
+.badge-turno-tag {
+  background: #fed892;
+  color: #755a21;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+#view-caja .btn-caja-refresh,
+body.theme-plata-titanio #view-caja .btn-caja-refresh {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-bottom: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  padding: 7px 14px !important;
+  border-radius: 12px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03) !important;
+  transition: all 0.2s ease !important;
+}
+
+#view-caja .btn-caja-refresh:hover,
+body.theme-plata-titanio #view-caja .btn-caja-refresh:hover {
+  background: #f5f3f0 !important;
+  border-color: #cec5bd !important;
+  color: #1b1c1a !important;
+}
+
+/* Grid Layout */
+.caja-grid-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .caja-grid-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Cards Generales */
+#view-caja .caja-card {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 18px !important;
+  padding: 24px !important;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.03) !important;
+  box-sizing: border-box;
+}
+
+/* Cajero Responsable Row */
+.caja-cajero-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f0eee9;
+  margin-bottom: 12px;
+}
+
+.caja-cajero-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #757774;
+}
+
+.caja-cajero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f5f3f0;
+  border: 1px solid #e7e5e1;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #1b1c1a;
+}
+
+/* Ledger Stat Rows */
+.caja-stat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.caja-stat-rows .stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border-bottom: 1px solid #f5f3f0;
+  transition: background 0.15s ease;
+  font-size: 0.9rem;
+}
+
+.caja-stat-rows .stat-row:hover {
+  background: #fbf9f6;
+}
+
+.caja-stat-rows .stat-row span {
+  color: #4b4640 !important;
+  font-weight: 500;
+}
+
+.caja-stat-rows .stat-row strong {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1b1c1a;
+  letter-spacing: -0.01em;
+}
+
+.caja-stat-rows .stat-row strong#cajaVentasEfectivo,
+.caja-stat-rows .stat-row strong#cajaEntradasTotal {
+  color: #4a6b5d !important;
+}
+
+.caja-stat-rows .stat-row strong#cajaSalidasTotal {
+  color: #ba1a1a !important;
+}
+
+.caja-stat-rows .stat-row strong#cajaTotalEsperadoEfectivo {
+  color: #1b1c1a !important;
+  font-weight: 700;
+}
+
+/* Hero Conciliación Box */
+.caja-conciliacion-hero,
+.caja-stat-rows .stat-row.total,
+#view-caja .stat-row.total {
+  background: linear-gradient(135deg, #f5f3f0 0%, #faf8f5 100%) !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 14px !important;
+  padding: 16px 18px !important;
+  margin-top: 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02) !important;
+}
+
+.conciliacion-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.conciliacion-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #1b1c1a;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.conciliacion-overline {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  color: #755a21;
+  display: block;
+}
+
+.conciliacion-label,
+.caja-stat-rows .stat-row.total span#lblCajaTotalEfectivo {
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  color: #1b1c1a !important;
+  display: block;
+}
+
+.conciliacion-val,
+.caja-stat-rows .stat-row.total strong#cajaTotalEfectivo {
+  font-family: 'Newsreader', Georgia, serif !important;
+  font-size: 1.85rem !important;
+  font-weight: 600 !important;
+  color: #1b1c1a !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* Action Buttons Grid */
+.caja-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-caja-op {
+  height: 48px;
+  border-radius: 12px;
+  background: #f5f3f0 !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.btn-caja-op:hover {
+  background: #eae8e5 !important;
+  border-color: #cec5bd !important;
+  transform: translateY(-1px);
+}
+
+.btn-caja-op:active {
+  transform: translateY(0);
+}
+
+.btn-caja-op.abrir-caja {
+  background: #1b1c1a !important;
+  border-color: #1b1c1a !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(27,28,26,0.18) !important;
+}
+
+.btn-caja-op.abrir-caja:hover {
+  background: #2d2e2c !important;
+}
+
+.btn-caja-op#btnEntradaEfectivo {
+  color: #4a6b5d !important;
+  font-weight: 700;
+}
+
+.btn-caja-op#btnSalidaEfectivo {
+  color: #ba1a1a !important;
+  font-weight: 700;
+}
+
+.btn-caja-op.corte-x,
+.btn-caja-op.corte-z {
+  background: #f5f3f0 !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  justify-content: space-between !important;
+  padding: 0 14px !important;
+}
+
+.btn-caja-op.corte-z {
+  color: #755a21 !important;
+  font-weight: 700;
+}
+
+.btn-caja-op kbd.kbd-shortcut {
+  background: #e4e2df !important;
+  border: 1px solid #cec5bd !important;
+  color: #4b4640 !important;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.btn-caja-op.btn-reasignar-caja {
+  background: transparent !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #755a21 !important;
+  font-weight: 700;
+}
+
+.btn-caja-op.btn-reasignar-caja:hover {
+  background: #f5f3f0 !important;
+}
+
+/* Columna Derecha */
+.caja-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.caja-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.caja-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.caja-section-icon {
+  font-size: 1.15rem;
+}
+
+.caja-card-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1b1c1a;
+}
+
+.caja-pill-total {
+  background: #f5f3f0;
+  border: 1px solid #e7e5e1;
+  color: #4b4640;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* Canales de Pago */
+.caja-canales-body {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+.caja-canales-donut-box {
+  width: 104px !important;
+  height: 104px !important;
+  min-width: 104px !important;
+  max-width: 104px !important;
+  flex-shrink: 0 !important;
+}
+
+.donut-chart-mini {
+  position: relative !important;
+  width: 104px !important;
+  height: 104px !important;
+  min-width: 104px !important;
+  max-width: 104px !important;
+  flex-shrink: 0 !important;
+}
+
+.donut-svg {
+  width: 104px !important;
+  height: 104px !important;
+  max-width: 104px !important;
+  max-height: 104px !important;
+  transform: rotate(-90deg) !important;
+  display: block !important;
+}
+
+.donut-center-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donut-center-text small {
+  font-size: 0.68rem;
+  color: #757774;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.donut-center-text strong {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #1b1c1a;
+}
+
+.caja-canales-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.canal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.canal-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b4640;
+}
+
+.canal-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-tarjeta { background: #1b1c1a; }
+.dot-efectivo { background: #755a21; }
+.dot-sinpe { background: #4a6b5d; }
+
+.canal-row strong {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1b1c1a;
+}
+
+.caja-discrepancia-strip {
+  margin-top: 14px;
+  background: #f0f5f2;
+  border: 1px solid #c6ebd9;
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.disc-icon { font-size: 1rem; }
+.disc-label { color: #2d4d40; font-weight: 500; }
+.disc-status { margin-left: auto; color: #2d4d40; font-weight: 700; }
+
+/* Movimientos de Gaveta */
+.caja-movimientos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.caja-mov-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #f5f3f0;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.mov-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mov-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: #ffffff;
+}
+
+.mov-icon-apertura { background: #fed892; }
+.mov-icon-in { background: #c6ebd9; }
+.mov-icon-out { background: #ffdad6; }
+.mov-icon-venta { background: #ffffff; }
+
+.mov-title {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1b1c1a;
+  line-height: 1.2;
+}
+
+.mov-desc {
+  display: block;
+  font-size: 0.74rem;
+  color: #757774;
+}
+
+.mov-right {
+  text-align: right;
+}
+
+.mov-amount {
+  display: block;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1b1c1a;
+}
+
+.mov-amount.amount-in { color: #4a6b5d; }
+.mov-amount.amount-out { color: #ba1a1a; }
+
+.mov-time {
+  display: block;
+  font-size: 0.72rem;
+  color: #757774;
+}
+
+.caja-movimientos-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0eee9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #757774;
+}
+
+.btn-link-action {
+  background: none;
+  border: none;
+  color: #755a21;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.mov-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #757774;
+  background: #fbf9f6;
+  border-radius: 10px;
+}
+
+/* Tip Pool Card */
+#cajaCardTipPool .card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#cajaCardTipPool h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1b1c1a;
+}
+
+#cajaCardTipPool .tip-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#cajaCardTipPool .tip-table th {
+  background: #f5f3f0;
+  color: #4b4640;
+  font-size: 0.8rem;
+  padding: 8px 10px;
+  font-weight: 700;
+  border-bottom: 1px solid #e7e5e1;
+}
+
+#cajaCardTipPool .tip-table td {
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  color: #1b1c1a;
+  border-bottom: 1px solid #f5f3f0;
+}
+
+/* Modales de Caja Aura POS */
+#modalMovimientoCaja .modal-dialog,
+#modalCierreZ .modal-dialog,
+#modalAperturaCaja .modal-dialog,
+#modalReasignarCajaTurno .modal-dialog,
+#modalCorteXCiego .modal-dialog {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.15) !important;
+  color: #1b1c1a !important;
+  overflow: hidden;
+}
+
+#modalMovimientoCaja .dialog-header,
+#modalCierreZ .dialog-header,
+#modalAperturaCaja .dialog-header,
+#modalReasignarCajaTurno .dialog-header,
+#modalCorteXCiego .dialog-header {
+  background: #f5f3f0 !important;
+  border-bottom: 1px solid #e7e5e1 !important;
+  padding: 18px 24px !important;
+}
+
+#modalMovimientoCaja .dialog-header h3,
+#modalCierreZ .dialog-header h3,
+#modalAperturaCaja .dialog-header h3,
+#modalReasignarCajaTurno .dialog-header h3,
+#modalCorteXCiego .dialog-header h3 {
+  font-family: 'Newsreader', Georgia, serif !important;
+  font-size: 1.35rem !important;
+  font-weight: 600 !important;
+  color: #1b1c1a !important;
+}
+
+#modalMovimientoCaja .dialog-header small,
+#modalCierreZ .dialog-header small,
+#modalAperturaCaja .dialog-header small {
+  color: #757774 !important;
+}
+
+#modalMovimientoCaja .dialog-body,
+#modalCierreZ .dialog-body,
+#modalAperturaCaja .dialog-body,
+#modalReasignarCajaTurno .dialog-body,
+#modalCorteXCiego .dialog-body {
+  background: #ffffff !important;
+  padding: 24px !important;
+  color: #1b1c1a !important;
+}
+
+#modalMovimientoCaja .dialog-footer,
+#modalCierreZ .dialog-footer,
+#modalAperturaCaja .dialog-footer,
+#modalReasignarCajaTurno .dialog-footer,
+#modalCorteXCiego .dialog-footer {
+  background: #f5f3f0 !important;
+  border-top: 1px solid #e7e5e1 !important;
+  padding: 16px 24px !important;
+}
+
+#modalMovimientoCaja input,
+#modalCierreZ input,
+#modalCierreZ textarea,
+#modalAperturaCaja input {
+  background: #fbf9f6 !important;
+  border: 1.5px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  border-radius: 10px !important;
+}
+
+#modalMovimientoCaja input:focus,
+#modalCierreZ input:focus,
+#modalCierreZ textarea:focus,
+#modalAperturaCaja input:focus {
+  border-color: #755a21 !important;
+  box-shadow: 0 0 0 3px rgba(117, 90, 33, 0.1) !important;
+}
+
+#modalMovimientoCaja .num-btn {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+}
+
+#modalMovimientoCaja .num-btn:hover {
+  background: #f5f3f0 !important;
+}
+
+#modalMovimientoCaja .num-btn.del {
+  background: #ffdad6 !important;
+  color: #ba1a1a !important;
+  border-color: #ffdad6 !important;
+}
+
+#czResumenEsperadoBox {
+  background: #f5f3f0 !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+}
+
+#czResumenEsperadoBox span {
+  color: #757774 !important;
+}
+
+#czResumenEsperadoBox strong {
+  color: #1b1c1a !important;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 0.95rem;
+}
+
+#boxDiferenciaCierreZ {
+  background: #f0f5f2 !important;
+  border: 1px solid #c6ebd9 !important;
+  color: #2d4d40 !important;
+  border-radius: 10px !important;
 }
