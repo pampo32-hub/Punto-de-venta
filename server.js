@@ -9087,15 +9087,10 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
   try {
     const negocioIdFinal = Number(negocioId || 1);
     const negKardex = await dbGet('SELECT id, caracteristicas_activas FROM Negocios WHERE id = ?', [negocioIdFinal]);
-    const kardexHabilitado = !negKardex || !negKardex.caracteristicas_activas || negKardex.caracteristicas_activas === 'all' || negocioTieneCaracteristica(negKardex, 'kardex_tiempo_real');
-    if (!kardexHabilitado) {
-      const tieneRecetas = await dbGet(
-        'SELECT r.id FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) LIMIT 1',
-        [negocioIdFinal, negocioIdFinal]
-      );
-      if (!tieneRecetas) {
-        return;
-      }
+    // El Kárdex en tiempo real es una característica adicional (add-on de pago).
+    // Si el comercio no la tiene activa en sus características, no descuenta inventario ni registra en Kárdex.
+    if (!negocioTieneCaracteristica(negKardex, 'kardex_tiempo_real')) {
+      return;
     }
     let huboCambios = false;
     for (const it of items) {
