@@ -9630,7 +9630,7 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     const {
-      nombre, categoria, unidad_medida, stock_minimo, costo_unitario, producto_id,
+      nombre, categoria, unidad_medida, stock_minimo, stock_actual, costo_unitario, producto_id,
       es_licor, capacidad_ml, medida_shot_ml, usuarioNombre = 'Administrador'
     } = req.body;
     const ahora = new Date().toISOString();
@@ -9650,11 +9650,14 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
     if (Number(shotMl) === 355) shotMl = 350;
     const rendShots = esLic && shotMl > 0 ? Math.round((capMl / shotMl) * 100) / 100 : (capMl ? 1 : null);
 
+    const valStockActual = stock_actual !== undefined && stock_actual !== null && stock_actual !== '' ? Number(stock_actual) : null;
+
     await dbRun(
       `UPDATE Inventario SET 
         nombre = COALESCE(?, nombre),
         categoria = COALESCE(?, categoria),
         unidad_medida = COALESCE(?, unidad_medida),
+        stock_actual = COALESCE(?, stock_actual),
         stock_minimo = COALESCE(?, stock_minimo),
         costo_unitario = COALESCE(?, costo_unitario),
         producto_id = ?,
@@ -9665,7 +9668,7 @@ app.put('/api/admin/inventario/:id', verificarAdmin, async (req, res) => {
         actualizado_en = ?
        WHERE id = ?`,
       [
-        nombre, categoria, unidad_medida, stock_minimo, costo_unitario,
+        nombre, categoria, unidad_medida, valStockActual, stock_minimo, costo_unitario,
         producto_id !== undefined ? producto_id : insumoActual.producto_id,
         esLic, capMl, shotMl, rendShots, ahora, id
       ]
