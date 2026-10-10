@@ -4241,6 +4241,40 @@ app.post('/api/reservas/:id/cancelar', async (req, res) => {
   }
 });
 
+app.delete('/api/reservas/:id', async (req, res) => {
+  try {
+    const reservaId = req.params.id;
+    const reserva = await dbGet('SELECT * FROM Reservas WHERE id = ?', [reservaId]);
+    if (!reserva) return res.status(404).json({ error: 'Reserva no encontrada' });
+
+    await dbRun('DELETE FROM Reservas WHERE id = ?', [reservaId]);
+
+    if (reserva.mesa_id) {
+      const ordActiva = await dbGet(
+        "SELECT id FROM Ordenes WHERE mesa_id = ? AND estado NOT IN ('pagada', 'cancelada')",
+        [reserva.mesa_id]
+      );
+      if (!ordActiva) {
+        await dbRun(
+          "UPDATE Mesas SET estado = 'libre', cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL WHERE id = ?",
+          [reserva.mesa_id]
+        );
+        io.emit('mesa_actualizada', { mesaId: Number(reserva.mesa_id), estado: 'libre', cliente: null, negocio_id: reserva.negocio_id });
+      } else {
+        await dbRun(
+          "UPDATE Mesas SET reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL WHERE id = ?",
+          [reserva.mesa_id]
+        );
+      }
+    }
+
+    io.emit('reserva_actualizada', { negocio_id: reserva.negocio_id });
+    res.json({ ok: true, message: 'Reserva eliminada definitivamente del libro de reservas' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Liberar mesa: Meseros/Cajeros si saldo es ₡0, o requiere PIN de Admin si hay saldo pendiente
 app.post('/api/mesas/:id/liberar', async (req, res) => {
   try {
@@ -4344,6 +4378,10 @@ app.post('/api/mesas/:id/liberar', async (req, res) => {
     if (mesa.reserva_id) {
       await dbRun("UPDATE Reservas SET estado = 'cancelada' WHERE id = ?", [mesa.reserva_id]);
     }
+    await dbRun(
+      "UPDATE Reservas SET estado = 'cancelada' WHERE mesa_id = ? AND estado IN ('confirmada', 'sentada')",
+      [mesaId]
+    );
     await dbRun(
       "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
       [mesaId]
@@ -6838,7 +6876,11 @@ async function procesarCobroOrden(ordenId, {
 
     // Si no se encontró por ID pero se envió mesaId físico, buscar orden activa en la mesa
     if (!orden && mesaId && !esParaLlevarCobro) {
-      orden = await dbGet("SELECT * FROM Ordenes WHERE mesa_id = ? AND estado != 'pagada' AND estado != 'cancelada' ORDER BY id DESC LIMIT 1", [mesaId]);
+      const nidFiltro = reqNegocioId || 1;
+      orden = await dbGet(
+        "SELECT * FROM Ordenes WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado != 'pagada' AND estado != 'cancelada' ORDER BY id DESC LIMIT 1",
+        [mesaId, nidFiltro, nidFiltro]
+      );
     }
 
     // Si aún no hay orden y tenemos mesaId físico con items (cobro directo sin guardar comanda previamente)
@@ -7291,7 +7333,11 @@ async function procesarCobroOrden(ordenId, {
       } else {
         // Cobro normal de mesa al terminar: LIBERAR LA MESA INMEDIATAMENTE
         await dbRun(
-          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+          "UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, reserva_id = NULL, cliente_reserva = NULL, hora_reserva = NULL, fecha_reserva = NULL, pax_reserva = NULL, notas_reserva = NULL, telefono_reserva = NULL, transferida_de = NULL, unida_con = NULL, unida_a_mesa_id = NULL, grupo_mesas = NULL, pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+          [orden.mesa_id]
+        );
+        await dbRun(
+          "UPDATE Reservas SET estado = 'cancelada' WHERE mesa_id = ? AND estado IN ('confirmada', 'sentada')",
           [orden.mesa_id]
         );
         await dbRun(
