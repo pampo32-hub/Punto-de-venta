@@ -1225,6 +1225,481 @@ body {
   font-size: 0.85rem;
 }
 
+/* ========================================================
+   AURA GASTROBAR PRO - PASO 2: COMANDERO, MENÚ, TICKET Y COBRO
+   ======================================================== */
+
+/* 1. Ventana Principal del Comandero */
+.comandero-window {
+  background: #fbf9f6 !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45) !important;
+}
+
+.comandero-catalog {
+  background: #fbf9f6 !important;
+  border-right: 1px solid #e7e5e1 !important;
+}
+
+/* 2. Topbar del Catálogo */
+.catalog-topbar {
+  background: #f5f3f0 !important;
+  border-bottom: 1px solid #e7e5e1 !important;
+  padding: 12px 18px !important;
+}
+
+.btn-volver-salon-catalog {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  border-radius: 12px !important;
+  padding: 7px 15px !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+
+.btn-volver-salon-catalog:hover {
+  background: #eae8e5 !important;
+  border-color: #cec5bd !important;
+}
+
+.mesa-title-tag {
+  background: #1b1c1a !important;
+  color: #ffffff !important;
+  border-radius: 12px !important;
+  padding: 6px 14px !important;
+  font-weight: 800 !important;
+  font-size: 1rem !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
+}
+
+.mesa-sub-tag {
+  color: #7d766f !important;
+  font-size: 0.80rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.btn-qr-mesa-client,
+.btn-edit-cliente-header {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  border-radius: 12px !important;
+  padding: 6px 12px !important;
+  font-weight: 700 !important;
+  font-size: 0.82rem !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  cursor: pointer !important;
+}
+
+.btn-qr-mesa-client:hover,
+.btn-edit-cliente-header:hover {
+  background: #eae8e5 !important;
+}
+
+/* 3. Category Chips */
+.cat-chip {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #4b4640 !important;
+  border-radius: 9999px !important;
+  padding: 6px 14px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+  transition: all 0.18s ease !important;
+}
+
+.cat-chip:hover {
+  background: #eae8e5 !important;
+  color: #1b1c1a !important;
+  border-color: #cec5bd !important;
+}
+
+.cat-chip.active {
+  background: #1b1c1a !important;
+  color: #ffffff !important;
+  border-color: #1b1c1a !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18) !important;
+}
+
+/* 4. Barra de Búsqueda del Menú */
+.comandero-search-bar {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+
+.comandero-search-bar input {
+  color: #1b1c1a !important;
+}
+
+.comandero-search-bar input::placeholder {
+  color: #7d766f !important;
+}
+
+.menu-view-switcher {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 10px !important;
+  padding: 3px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+
+.btn-menu-view {
+  color: #7d766f !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+}
+
+.btn-menu-view.active {
+  background: #1b1c1a !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12) !important;
+}
+
+/* 5. Catálogo de Productos (Cards One-Tap & Large) */
+.prod-card-large {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+  overflow: hidden !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+.prod-card-large:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important;
+  border-color: #cec5bd !important;
+}
+
+.prod-card-large-media {
+  background: #f5f3f0 !important;
+  border-bottom: 1px solid #efeeeb !important;
+  height: 125px !important;
+}
+
+.prod-card-large-price {
+  background: rgba(27, 28, 26, 0.88) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-family: 'Newsreader', serif !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  padding: 3px 8px !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.prod-card-large-info {
+  background: #ffffff !important;
+  padding: 10px 12px !important;
+}
+
+.prod-card-large-name {
+  color: #1b1c1a !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+}
+
+.prod-card-one-tap {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
+}
+
+.prod-card-one-tap:hover {
+  border-color: #cec5bd !important;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.07) !important;
+}
+
+.prod-card-name {
+  color: #1b1c1a !important;
+  font-weight: 700 !important;
+}
+
+.prod-card-price {
+  color: #1b1c1a !important;
+  font-family: 'Newsreader', serif !important;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+}
+
+/* 6. Ticket Lateral (Right Side Order Slip) */
+.comandero-ticket {
+  background: #ffffff !important;
+  border-left: 1px solid #e7e5e1 !important;
+}
+
+.ticket-topbar {
+  background: #f5f3f0 !important;
+  border-bottom: 1px solid #e7e5e1 !important;
+}
+
+.ticket-topbar h3 {
+  font-family: 'Newsreader', serif !important;
+  font-size: 1.25rem !important;
+  color: #1b1c1a !important;
+  margin: 0 !important;
+}
+
+.ticket-topbar small {
+  color: #7d766f !important;
+  font-weight: 600 !important;
+}
+
+.ticket-body {
+  background: #ffffff !important;
+}
+
+.ticket-item-row {
+  background: #fbfbf9 !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02) !important;
+}
+
+.ticket-item-row .t-name {
+  color: #1b1c1a !important;
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+}
+
+.ticket-item-row .t-price {
+  font-family: 'Newsreader', serif !important;
+  font-size: 1.05rem !important;
+  color: #1b1c1a !important;
+  font-weight: 700 !important;
+}
+
+.qty-pill {
+  background: #f5f3f0 !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 8px !important;
+  padding: 2px 4px !important;
+}
+
+.btn-qty {
+  background: #1b1c1a !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 6px !important;
+}
+
+.ticket-bottom {
+  background: #f5f3f0 !important;
+  border-top: 1px solid #e7e5e1 !important;
+}
+
+.ticket-calc-box {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 14px !important;
+  padding: 12px 16px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03) !important;
+}
+
+.ticket-calc-box .calc-line {
+  color: #4b4640 !important;
+  font-size: 0.85rem !important;
+}
+
+.ticket-calc-box .calc-line.total {
+  border-top: 1px solid #efeeeb !important;
+  padding-top: 8px !important;
+  margin-top: 8px !important;
+}
+
+.ticket-calc-box .calc-line.total span:first-child {
+  font-size: 0.9rem !important;
+  font-weight: 800 !important;
+  color: #1b1c1a !important;
+  letter-spacing: 0.04em !important;
+}
+
+.ticket-calc-box .calc-line.total span:last-child {
+  font-family: 'Newsreader', serif !important;
+  font-size: 1.7rem !important;
+  font-weight: 700 !important;
+  color: #1b1c1a !important;
+}
+
+.ticket-action-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 8px !important;
+}
+
+.btn-btn-cmd {
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
+  padding: 11px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  transition: all 0.18s ease !important;
+}
+
+.btn-btn-cmd.guardar {
+  background: #ffffff !important;
+  color: #1b1c1a !important;
+  border: 1px solid #e7e5e1 !important;
+}
+
+.btn-btn-cmd.split {
+  background: #ffffff !important;
+  color: #1b1c1a !important;
+  border: 1px solid #e7e5e1 !important;
+}
+
+.btn-btn-cmd.prefactura {
+  background: #ffffff !important;
+  color: #1b1c1a !important;
+  border: 1px solid #e7e5e1 !important;
+}
+
+.btn-btn-cmd.cobrar {
+  grid-column: span 2 !important;
+  background: #755a21 !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(117, 90, 33, 0.35) !important;
+  font-size: 1rem !important;
+}
+
+.btn-btn-cmd.cobrar:hover {
+  background: #5b430a !important;
+  transform: translateY(-1px) !important;
+}
+
+/* 7. Modal de Cobro y Liquidación */
+.cobro-dialog {
+  background: #ffffff !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 22px !important;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.3) !important;
+  overflow: hidden !important;
+}
+
+.cobro-dialog .dialog-header {
+  background: #f5f3f0 !important;
+  border-bottom: 1px solid #e7e5e1 !important;
+}
+
+.cobro-dialog .dialog-header h3 {
+  color: #1b1c1a !important;
+  font-size: 1.15rem !important;
+  font-weight: 800 !important;
+}
+
+.cobro-dialog .dialog-header small {
+  color: #755a21 !important;
+  font-weight: 700 !important;
+}
+
+.cobro-total-banner {
+  background: #f5f3f0 !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 16px !important;
+  padding: 16px !important;
+}
+
+.cobro-total-banner span {
+  color: #7d766f !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+}
+
+.cobro-total-banner h1 {
+  font-family: 'Newsreader', serif !important;
+  font-size: 2.5rem !important;
+  font-weight: 700 !important;
+  color: #1b1c1a !important;
+  margin: 4px 0 0 0 !important;
+}
+
+.pay-method-tab {
+  background: #fbfbf9 !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #4b4640 !important;
+  border-radius: 12px !important;
+}
+
+.pay-method-tab.active {
+  background: #1b1c1a !important;
+  border: 1px solid #1b1c1a !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+}
+
+.cash-chip {
+  background: #f5f3f0 !important;
+  border: 1px solid #e7e5e1 !important;
+  color: #1b1c1a !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+}
+
+.cash-chip.exact {
+  background: #fed892 !important;
+  color: #785d24 !important;
+  border-color: #f59e0b !important;
+}
+
+.vuelto-box {
+  background: #e8f3ed !important;
+  border: 1px solid #abcebe !important;
+  border-radius: 12px !important;
+  color: #1b1c1a !important;
+}
+
+.vuelto-box strong {
+  font-family: 'Newsreader', serif !important;
+  font-size: 1.5rem !important;
+  color: #4A6B5D !important;
+}
+
+#btnFinalizarCobro {
+  background: #1b1c1a !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 12px 20px !important;
+  font-weight: 800 !important;
+  font-size: 1rem !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2) !important;
+  cursor: pointer !important;
+}
+
+#btnCancelarCobro {
+  background: #f5f3f0 !important;
+  color: #4b4640 !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 12px !important;
+  padding: 10px 18px !important;
+  font-weight: 700 !important;
+}
+
+#btnImprimirPreFacturaCobro {
+  background: #ffffff !important;
+  color: #1b1c1a !important;
+  border: 1px solid #e7e5e1 !important;
+  border-radius: 12px !important;
+  padding: 10px 18px !important;
+  font-weight: 700 !important;
+}
+
 @keyframes iconGlowAndBlinkSoft {
   0%, 100% {
     opacity: 1;
