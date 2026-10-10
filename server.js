@@ -5309,6 +5309,8 @@ app.post('/api/productos', async (req, res) => {
       destino,
       curso,
       imagen_url,
+      happy_hour,
+      happyHour,
       kardex_tipo,
       insumo_id,
       ml_shot,
@@ -5349,11 +5351,13 @@ app.post('/api/productos', async (req, res) => {
     }
 
     const cursoNum = Number(curso) || (destinoFinal === 'barra' ? 1 : 2);
+    const hhRaw = happy_hour !== undefined ? happy_hour : happyHour;
+    const hhVal = hhRaw ? 1 : 0;
 
     const result = await dbRun(
       `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, agotado, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 1)`,
-      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)`,
+      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null, hhVal]
     );
 
     const prodId = result.lastID;
@@ -5514,7 +5518,8 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
       }
     }
 
-    const hhVal = happy_hour !== undefined ? (happy_hour ? 1 : 0) : prod.happy_hour;
+    const hhRaw = happy_hour !== undefined ? happy_hour : req.body.happyHour;
+    const hhVal = hhRaw !== undefined ? (hhRaw ? 1 : 0) : prod.happy_hour;
     const agotadoVal = agotado !== undefined ? (agotado ? 1 : 0) : prod.agotado;
 
     await dbRun(
