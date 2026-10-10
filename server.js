@@ -9839,10 +9839,16 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
       accionAuditoria = 'conteo_fisico';
     }
 
-    const ahora = new Date().toISOString();
-    await dbRun('UPDATE Inventario SET stock_actual = ?, actualizado_en = ? WHERE id = ?', [nuevoStock, ahora, id]);
+    let nuevoCosto = insumo.costo_unitario;
+    const inputCosto = req.body.costo_unitario != null ? Number(req.body.costo_unitario) : (req.body.costoUnitario != null ? Number(req.body.costoUnitario) : null);
+    if (inputCosto !== null && !isNaN(inputCosto) && inputCosto >= 0) {
+      nuevoCosto = inputCosto;
+    }
 
-    const costoTotalAjuste = Math.abs(cantNum) * (insumo.costo_unitario || 0);
+    const ahora = new Date().toISOString();
+    await dbRun('UPDATE Inventario SET stock_actual = ?, costo_unitario = ?, actualizado_en = ? WHERE id = ?', [nuevoStock, nuevoCosto, ahora, id]);
+
+    const costoTotalAjuste = Math.round(Math.abs(cantNum) * (nuevoCosto || 0));
 
     const negocioId = insumo.negocio_id || reqNid || 1;
     await registrarAuditoria({
