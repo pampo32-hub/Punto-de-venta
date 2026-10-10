@@ -3379,10 +3379,7 @@ app.get('/api/mesas', async (req, res) => {
         SELECT MAX(o2.id) FROM Ordenes o2 
         WHERE o2.mesa_id = m.id 
           AND (o2.negocio_id = ? OR (o2.negocio_id IS NULL AND ? = 1))
-          AND (
-            o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
-            OR (o2.estado = 'pagada' AND m.estado IN ('esperando', 'esperando_parcial', 'ocupada', 'activa'))
-          )
+          AND o2.estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')
       )
       WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
       ORDER BY m.id ASC
@@ -3521,6 +3518,15 @@ app.get('/api/mesas', async (req, res) => {
           m.items_pendientes = [];
           m.minutos_espera = 0;
           m.cliente = m.cliente_reserva || clientePreservado;
+        } else if (m.estado === 'ocupada') {
+          // Mesa ocupada sin orden activa (recién abierta o liquidada con "Dejar ocupada" a ₡0)
+          m.orden_total = 0;
+          m.total = 0;
+          m.orden_activa_id = null;
+          m.platos_pendientes = [];
+          m.items_pendientes = [];
+          m.minutos_espera = 0;
+          m.cliente = clientePreservado;
         } else {
           const estadoPrevioDb = m.estado;
           m.estado = 'libre';
@@ -7248,14 +7254,14 @@ async function procesarCobroOrden(ordenId, {
 
       if (mantenerMesaOcupada) {
         await dbRun(
-          "UPDATE Mesas SET estado = 'esperando', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
+          "UPDATE Mesas SET estado = 'ocupada', pidio_cuenta_qr = 0, hora_pidio_cuenta = NULL WHERE id = ?",
           [orden.mesa_id]
         );
         const nombresPendientes = itemsPendientesCocina.map(it => it.nombre_producto);
         io.emit('mesa_actualizada', {
           mesaId: orden.mesa_id,
-          orden_activa_id: ordenId,
-          estado: 'esperando',
+          orden_activa_id: null,
+          estado: 'ocupada',
           cliente: orden.cliente,
           total: 0,
           total_pagado: totalPagadoAcum,
