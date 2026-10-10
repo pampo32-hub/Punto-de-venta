@@ -6685,11 +6685,34 @@ app.put('/api/comandas/:id/estado', handleKdsEstadoUpdate);
 // Despacho de platillos en lote / seleccionados en KDS
 app.post('/api/kds/despachar-lote', async (req, res) => {
   try {
-    const ids = req.body.detalleIds || req.body.itemIds || [];
+    let ids = req.body.detalleIds || req.body.itemIds || [];
     const estado = req.body.estado || 'listo';
     const batchNegocioId = obtenerNegocioIdReq(req);
+
+    // Si no se pasaron IDs de detalle específicos pero sí orden_id o ticketId, resolver todos los items pendientes
+    if ((!Array.isArray(ids) || ids.length === 0) && (req.body.orden_id || req.body.ordenId || req.body.ticketId || req.body.ticket_id)) {
+      let ordId = req.body.orden_id || req.body.ordenId;
+      let comandaNum = req.body.comanda_numero || req.body.comandaNumero;
+      const rawTicketId = req.body.ticketId || req.body.ticket_id;
+      if (!ordId && rawTicketId) {
+        const parts = String(rawTicketId).split('_');
+        ordId = Number(parts[0]);
+        if (parts[1]) comandaNum = Number(parts[1]);
+      }
+      if (ordId) {
+        let q = "SELECT id FROM DetalleOrden WHERE orden_id = ? AND estado_comanda IN ('pendiente', 'preparando')";
+        const qParams = [Number(ordId)];
+        if (comandaNum) {
+          q += " AND comanda_numero = ?";
+          qParams.push(Number(comandaNum));
+        }
+        const pendingItems = await dbAll(q, qParams);
+        ids = pendingItems.map(p => p.id);
+      }
+    }
+
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Lista de identificadores de platillos requerida' });
+      return res.json({ ok: true, mensaje: 'Sin platillos pendientes por despachar', actualizados: 0, ids: [] });
     }
 
     const horaListo = estado === 'listo' ? new Date().toISOString() : null;
@@ -6726,7 +6749,8 @@ app.post('/api/kds/despachar-lote', async (req, res) => {
             io.emit('mesa_actualizada', { mesaId: orden.mesa_id, estado: estadoFinalMesa, total: 0, cliente: orden.cliente, negocio_id: ordNid });
           }
         } else {
-          await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [nuevoEstadoMesa, ordId]);
+          const finalOrdenEstado = (!orden.mesa_id && (nuevoEstadoMesa === 'abierta' || nuevoEstadoMesa === 'activa')) ? 'lista' : nuevoEstadoMesa;
+          await dbRun('UPDATE Ordenes SET estado = ? WHERE id = ?', [finalOrdenEstado, ordId]);
           if (orden.mesa_id) {
             mesasAfectadas.add(orden.mesa_id);
             await dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [nuevoEstadoMesa, orden.mesa_id]);

@@ -90,7 +90,10 @@ const puppeteer = require('puppeteer');
     await new Promise(r => setTimeout(r, 1000));
     const asideText = await page.evaluate(() => document.querySelector('aside')?.innerText || '');
     const hasChifrijo = asideText.includes('Chifrijo');
-    console.log(`Segundo ${s} post-envío: ¿Tiene Chifrijo en comanda? ${hasChifrijo}`);
+    console.log(`Segundo ${s} post-envío: ¿Tiene Chifrijo en comanda? ${hasChifrijo} (len: ${asideText.length})`);
+    if (!hasChifrijo && s === 1) {
+      console.log('Snippet asideText en s1:', JSON.stringify(asideText.substring(0, 200)));
+    }
     if (!hasChifrijo && s > 1) {
       console.error(`¡ERROR! Ítem se borró de la comanda en segundo ${s}`);
     }
