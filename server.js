@@ -10885,6 +10885,14 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         ganancia_bruta: gananciaTotal,
         margen_bruto_promedio_pct: margenGlobalPct
       },
+      resumen_global: {
+        total_ordenes: ultimasVentas.length,
+        total_items_vendidos: totalUnidadesVendidas,
+        ingresos_totales: totalIngresosBrutos,
+        costo_total_insumos: totalCostoInsumos,
+        ganancia_bruta: gananciaTotal,
+        margen_global_porcentaje: margenGlobalPct
+      },
       productos: productosDetallados,
       ultimas_ventas: ultimasVentas,
       insumos_consumidos: Array.from(insumosGlobalesMap.values()).sort((a, b) => b.costo_total - a.costo_total)
