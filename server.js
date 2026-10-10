@@ -754,7 +754,7 @@ app.get('/api/auth/negocio-info/:id', async (req, res) => {
     res.json({
       id: n.id,
       nombre: n.nombre,
-      logo_url: n.logo_url || '',
+      logo_url: n.logo_url ? String(n.logo_url).replace(/\$1/g, '?') : '',
       slogan: n.slogan || '',
       activo: Number(n.activo) !== 0
     });
@@ -1393,6 +1393,9 @@ app.get('/api/dev/negocios', async (req, res) => {
       FROM Negocios n
       ORDER BY n.id ASC
     `);
+    for (const neg of negocios) {
+      if (neg.logo_url) neg.logo_url = String(neg.logo_url).replace(/\$1/g, '?');
+    }
     res.json(negocios);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3446,7 +3449,14 @@ app.get('/api/mesas', async (req, res) => {
 
       // Reconciliar estado real de la mesa con los pedidos para evitar estados huérfanos o montos pegados
       const clientePreservado = m.mesa_cliente || m.cliente || null;
-      if (m.estado === 'libre') {
+      if (items.length > 0 && m.orden_activa_id) {
+        // La mesa tiene comanda activa: asegurar que no quede marcada como libre
+        const estadoCalculado = evaluarEstadoMesaKDS(items);
+        if (m.estado === 'libre' || !m.estado) {
+          m.estado = estadoCalculado;
+          dbRun('UPDATE Mesas SET estado = ? WHERE id = ?', [estadoCalculado, m.id]).catch(() => {});
+        }
+      } else if (m.estado === 'libre') {
         m.orden_total = 0;
         m.orden_activa_id = null;
         m.platos_pendientes = [];
@@ -3459,10 +3469,6 @@ app.get('/api/mesas', async (req, res) => {
         m.pidio_cuenta_qr = 0;
         m.hora_pidio_cuenta = null;
         m.cliente = clientePreservado;
-        // Si habían órdenes activas huérfanas en una mesa que está libre, cancelarlas para consistencia total
-        if (m.orden_activa_id) {
-          dbRun("UPDATE Ordenes SET estado = 'cancelada', fecha_cierre = ? WHERE mesa_id = ? AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [new Date().toISOString(), m.id]).catch(() => {});
-        }
       } else if (m.orden_activa_id && m.estado !== 'cuenta_pedida' && m.estado !== 'cuenta') {
         const rowsPend = pendientes.filter(d => (d.destino === 'cocina' || (!d.destino && (!d.curso || ![1, 5, 6].includes(d.curso)))));
         if (m.orden_estado === 'pagada') {
@@ -4120,9 +4126,9 @@ app.post('/api/mesas/:id/cliente', async (req, res) => {
     }
 
     const negId = Number(mesaRow.negocio_id || reqNid || 1);
-    await dbRun('UPDATE Mesas SET cliente = ? WHERE id = ?', [clienteLimpio || null, mesaId]);
+    await dbRun("UPDATE Mesas SET cliente = ?, estado = CASE WHEN estado = 'libre' OR estado IS NULL THEN 'ocupada' ELSE estado END WHERE id = ?", [clienteLimpio || null, mesaId]);
     await dbRun("UPDATE Ordenes SET cliente = ? WHERE mesa_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado IN ('abierta', 'esperando', 'esperando_parcial', 'activa', 'cuenta_pedida', 'ocupada')", [clienteLimpio || 'Cliente General', mesaId, negId, negId]);
-    io.emit('mesa_actualizada', { mesaId: Number(mesaId), cliente: clienteLimpio || null, negocio_id: negId });
+    io.emit('mesa_actualizada', { mesaId: Number(mesaId), cliente: clienteLimpio || null, estado: 'ocupada', negocio_id: negId });
     res.json({ ok: true, cliente: clienteLimpio });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -6469,10 +6475,10 @@ app.post('/api/comandas/anular-item', async (req, res) => {
 // ============================================================================
 app.get('/api/kds', async (req, res) => {
   try {
-    const destino = req.query.destino || 'cocina';
+    const destino = req.query.destino || 'todas';
     const negocioId = obtenerNegocioIdReq(req);
     let query = `
-      SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar, o.estado as orden_estado, o.total as orden_total,
+      SELECT d.*, o.numero_orden, o.mesa_id, o.cliente, o.mesero, o.tipo_orden, o.es_para_llevar, o.estado as orden_estado, o.total as orden_total,
         COALESCE((SELECT SUM(monto) FROM Pagos WHERE orden_id = o.id), 0) as orden_total_pagado,
         COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
       FROM DetalleOrden d
@@ -6484,8 +6490,8 @@ app.get('/api/kds', async (req, res) => {
     const params = [negocioId, negocioId];
     if (destino === 'barra') {
       query += " AND d.destino = 'barra'";
-    } else {
-      query += " AND (d.destino = 'cocina' OR (d.destino IS NULL AND d.curso NOT IN (1, 5, 6))) AND (d.destino != 'barra' OR d.destino IS NULL)";
+    } else if (destino === 'cocina') {
+      query += " AND (d.destino = 'cocina' OR (d.destino IS NULL AND d.curso NOT IN (1, 5, 6)))";
     }
     query += ' ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC';
 
