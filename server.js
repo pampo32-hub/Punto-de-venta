@@ -5849,15 +5849,10 @@ async function recalcularTotalesOrden(ordenId) {
   let descuentoHH = 0;
   for (const key in grupos) {
     const g = grupos[key];
-    if (modoHH === 'flexible') {
-      const totalPares = Math.floor((g.cantHH + g.cantNoHH) / 2);
-      const maxParesPosibles = Math.floor(g.cantHH / 2) + ((g.cantHH % 2 === 1 && g.cantNoHH > 0) ? 1 : 0);
-      const pares = Math.min(totalPares, maxParesPosibles);
-      descuentoHH += pares * g.precio;
-    } else {
-      const pares = Math.floor(g.cantHH / 2);
-      descuentoHH += pares * g.precio;
-    }
+    const cantHH = g.cantHH;
+    // 50% de descuento directo por cada unidad consumida en Happy Hour
+    const descPorUnidad = Math.round(g.precio * 0.5);
+    descuentoHH += cantHH * descPorUnidad;
   }
 
   // Precios con Impuestos Incluidos (Monto final que paga el cliente)
@@ -6069,9 +6064,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       /imperial|pilsen|bavaria|corona|rock ice|cerveza/i.test(nombre || '')
     );
     const hhEstadoItem = obtenerEstadoHappyHour(itemNegocioId);
-    const itemEnHH = (it.en_happy_hour !== undefined)
-      ? (it.en_happy_hour ? 1 : 0)
-      : (((hhEstadoItem.activo || happyHourActivo) && esCervezaOEligible) ? 1 : 0);
+    const itemEnHH = (it.en_happy_hour === 1 || it.en_happy_hour === true || ((hhEstadoItem.activo || happyHourActivo) && esCervezaOEligible)) ? 1 : 0;
 
     itemsProcesados.push({
       id: prodId,
