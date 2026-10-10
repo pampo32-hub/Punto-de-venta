@@ -580,66 +580,113 @@ body {
   position: absolute;
   width: 140px;
   height: 130px;
-  background: var(--bg-card);
-  border: 2px solid var(--border);
-  border-radius: 14px;
-  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid #e7e5e1;
+  border-radius: 16px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
-  box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-  transition: transform 0.15s, border-color 0.15s;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
 }
 
 .mesa-render-card:hover {
-  transform: translateY(-4px) scale(1.02);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
-.mesa-render-card.round {
-  border-radius: 50%;
-  width: 130px;
-  height: 130px;
-  text-align: center;
+.mesa-render-card .m-num {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1b1c1a;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.mesa-render-card .m-badge {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2.5px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mesa-render-card.libre .m-badge {
+  background: rgba(74, 107, 93, 0.12) !important;
+  color: #4A6B5D !important;
+  border: 1px solid rgba(74, 107, 93, 0.25) !important;
+}
+
+.mesa-render-card.ocupada .m-badge,
+.mesa-render-card.abierta .m-badge,
+.mesa-render-card.activa .m-badge {
+  background: rgba(196, 115, 85, 0.15) !important;
+  color: #C47355 !important;
+  border: 1px solid rgba(196, 115, 85, 0.3) !important;
+}
+
+.mesa-render-card.esperando .m-badge {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid #fde68a !important;
+}
+
+.mesa-render-card.esperando_parcial .m-badge {
+  background: #fef9c3 !important;
+  color: #854d0e !important;
+  border: 1px solid #fef08a !important;
+}
+
+.mesa-render-card.cuenta .m-badge {
+  background: rgba(158, 74, 59, 0.15) !important;
+  color: #9E4A3B !important;
+  border: 1px solid rgba(158, 74, 59, 0.3) !important;
 }
 
 .mesa-render-card.libre {
-  border-color: #10b98166;
-  background: linear-gradient(180deg, #111827 0%, #064e3b33 100%);
+  border-color: #d1fae5;
+  background: #ffffff;
 }
 
-.mesa-render-card.ocupada {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
-  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65), inset 0 0 8px rgba(239, 68, 68, 0.25) !important;
-  animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
-}
-
-.mesa-render-card.abierta {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
-  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65), inset 0 0 8px rgba(239, 68, 68, 0.25) !important;
-  animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
+.mesa-render-card.ocupada,
+.mesa-render-card.abierta,
+.mesa-render-card.activa {
+  border-color: #fecdd3 !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(196, 115, 85, 0.2) !important;
 }
 
 .mesa-render-card.esperando {
-  border-color: #f97316 !important;
-  background: linear-gradient(180deg, #111827 0%, #7c2d1244 100%);
-  box-shadow: 0 0 14px rgba(249, 115, 22, 0.45), inset 0 0 6px rgba(249, 115, 22, 0.15) !important;
+  border-color: #fed7aa !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.2) !important;
 }
 
-.mesa-render-card.esperando_parcial {
-  border-color: #f59e0b !important;
-  background: linear-gradient(180deg, #111827 0%, #78350f44 100%);
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45), inset 0 0 6px rgba(245, 158, 11, 0.15) !important;
+.mesa-render-card.cuenta {
+  border-color: #fecdd3 !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(158, 74, 59, 0.25) !important;
 }
 
-.mesa-render-card.activa {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
-  box-shadow: 0 0 18px rgba(239, 68, 68, 0.65), inset 0 0 8px rgba(239, 68, 68, 0.25) !important;
-  animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
+.mesa-render-card .m-total {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1b1c1a;
+}
+
+.mesa-render-card .m-footer .m-cap-tag,
+.mesa-render-card .m-footer .m-zona-tag {
+  color: #7d766f;
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 /* MESA RESERVADA (ESTILO APAGADO IDÉNTICO A PRODUCTO AGOTADO) */
@@ -843,40 +890,38 @@ body {
 }
 
 .zone-grid-column {
-  flex: 0 0 320px;
+  flex: 1 1 320px;
   min-width: 290px;
-  max-width: 440px;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 16px;
+  max-width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 16px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  gap: 14px;
 }
 
 .zone-grid-column.wide-column {
-  flex: 0 0 460px;
-  min-width: 380px;
+  flex: 1 1 100%;
 }
 
 .zone-grid-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   padding-bottom: 10px;
   margin-bottom: 4px;
 }
 
 .zone-grid-title {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1f5f9;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   margin: 0;
   display: flex;
   align-items: center;
@@ -885,171 +930,275 @@ body {
 
 .zone-grid-count {
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #94a3b8;
-  font-size: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cbd5e1;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 10px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
 }
 
 .zone-grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
 }
 
 .zone-grid-cards.barra-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
 }
 
-/* Tarjeta individual en Grilla */
+/* ========================================================
+   AURA GASTROBAR PRO (LUMINOUS ATELIER) - TARJETA DE MESA
+   ======================================================== */
 .mesa-grid-card {
-  background: linear-gradient(180deg, #111827 0%, #1e293b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e7e5e1;
+  border-radius: 18px;
+  padding: 14px 15px;
   cursor: pointer;
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 105px;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-height: 135px;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
   user-select: none;
+  overflow: visible;
 }
 
 .mesa-grid-card:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5);
-  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px -4px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  border-color: #cec5bd;
 }
 
-/* Estados en Grilla */
-.mesa-grid-card.libre {
-  border-color: rgba(16, 185, 129, 0.35);
-  background: linear-gradient(180deg, #111827 0%, #064e3b22 100%);
+/* Aura Card Header */
+.aura-num-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
 }
 
-.mesa-grid-card.ocupada,
-.mesa-grid-card.abierta,
-.mesa-grid-card.activa {
-  border-color: #ef4444 !important;
-  background: linear-gradient(180deg, #181d28 0%, rgba(239, 68, 68, 0.25) 100%) !important;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55), inset 0 0 6px rgba(239, 68, 68, 0.2) !important;
-  animation: mesaOcupadaHaloGlow 2.5s infinite ease-in-out !important;
+.aura-mesa-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7d766f;
+  margin-bottom: 2px;
 }
 
-.mesa-grid-card.esperando {
-  border-color: #f97316 !important;
-  background: linear-gradient(180deg, #111827 0%, #7c2d1244 100%) !important;
-  box-shadow: 0 0 14px rgba(249, 115, 22, 0.45), inset 0 0 6px rgba(249, 115, 22, 0.15) !important;
-}
-
-.mesa-grid-card.esperando_parcial {
-  border-color: #f59e0b !important;
-  background: linear-gradient(180deg, #111827 0%, #78350f44 100%) !important;
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.45), inset 0 0 6px rgba(245, 158, 11, 0.15) !important;
-}
-
-.mesa-grid-card.cuenta,
-.mesa-grid-card.cuenta-qr {
-  border-color: #f59e0b !important;
-  background: linear-gradient(180deg, #181d28 0%, #78350f55 100%) !important;
-  animation: mesaCuentaHaloGlow 1.8s infinite ease-in-out !important;
+.aura-mesa-num {
+  font-family: 'Newsreader', serif;
+  font-size: 1.7rem;
+  font-weight: 500;
+  color: #1b1c1a;
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .m-grid-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin-bottom: 4px;
 }
 
-.m-grid-num {
-  font-size: 0.98rem;
-  font-weight: 800;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+/* Badges de Estado estilo Aura */
 .m-grid-badge {
-  font-size: 0.65rem;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 5px;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .m-grid-badge.badge-libre {
-  background: rgba(16, 185, 129, 0.18);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(74, 107, 93, 0.12) !important;
+  color: #4A6B5D !important;
+  border: 1px solid rgba(74, 107, 93, 0.25) !important;
 }
 
 .m-grid-badge.badge-ocupada {
-  background: rgba(239, 68, 68, 0.22);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.6);
+  background: rgba(196, 115, 85, 0.15) !important;
+  color: #C47355 !important;
+  border: 1px solid rgba(196, 115, 85, 0.3) !important;
 }
 
 .m-grid-badge.badge-esperando {
-  background: rgba(249, 115, 22, 0.22);
-  color: #fb923c;
-  border: 1px solid rgba(249, 115, 22, 0.55);
+  background: #fed892 !important;
+  color: #785d24 !important;
+  border: 1px solid #e6c27e !important;
 }
 
 .m-grid-badge.badge-esperando_parcial {
-  background: rgba(245, 158, 11, 0.22);
-  color: #fde047;
-  border: 1px solid rgba(245, 158, 11, 0.55);
+  background: rgba(150, 124, 86, 0.15) !important;
+  color: #967C56 !important;
+  border: 1px solid rgba(150, 124, 86, 0.3) !important;
 }
 
 .m-grid-badge.badge-cuenta {
-  background: rgba(245, 158, 11, 0.25);
-  color: #fcd34d;
-  border: 1px solid rgba(245, 158, 11, 0.5);
+  background: rgba(158, 74, 59, 0.15) !important;
+  color: #9E4A3B !important;
+  border: 1px solid rgba(158, 74, 59, 0.3) !important;
 }
 
-.m-grid-total {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #cbd5e1;
-  margin: 4px 0;
+.m-grid-badge.badge-reservada {
+  background: rgba(217, 119, 6, 0.15) !important;
+  color: #d97706 !important;
+  border: 1px solid rgba(217, 119, 6, 0.3) !important;
 }
 
-.m-grid-footer {
+/* Estados de Borde sutiles en la tarjeta */
+.mesa-grid-card.libre {
+  border-color: rgba(74, 107, 93, 0.25);
+  background: #ffffff;
+}
+
+.mesa-grid-card.ocupada,
+.mesa-grid-card.abierta,
+.mesa-grid-card.activa {
+  border-color: rgba(196, 115, 85, 0.45) !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(196, 115, 85, 0.12) !important;
+  animation: none !important;
+}
+
+.mesa-grid-card.esperando {
+  border-color: #fed892 !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.12) !important;
+}
+
+.mesa-grid-card.esperando_parcial {
+  border-color: rgba(150, 124, 86, 0.4) !important;
+  background: #ffffff !important;
+}
+
+.mesa-grid-card.cuenta,
+.mesa-grid-card.cuenta-qr {
+  border-color: rgba(158, 74, 59, 0.45) !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(158, 74, 59, 0.12) !important;
+  animation: none !important;
+}
+
+/* Aura Card Body (Inset Box) */
+.aura-card-body {
+  background: #f5f3f0;
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin: 10px 0;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aura-occupied-row {
+  display: flex;
   align-items: center;
-  font-size: 0.72rem;
-  color: #94a3b8;
-  margin-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  padding-top: 5px;
+  justify-content: space-between;
+  gap: 6px;
 }
 
-.m-grid-cap {
-  color: #94a3b8;
-  font-weight: 600;
-}
-
-.m-grid-zona {
-  color: #64748b;
+.aura-client-name {
+  font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  max-width: 60%;
+  color: #1b1c1a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 105px;
+}
+
+.aura-pax-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #755a21;
+}
+
+.aura-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.aura-time-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4b4640;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.aura-price-display {
+  font-family: 'Newsreader', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1b1c1a;
+}
+
+.aura-free-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.aura-pax-free {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b4640;
+}
+
+.aura-free-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4A6B5D;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Aura Card Footer */
+.aura-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid #efeeeb;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7d766f;
+}
+
+.aura-action-icon {
+  font-size: 13px;
+  color: #1b1c1a;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.mesa-grid-card:hover .aura-action-icon {
+  opacity: 1;
 }
 
 /* Tarjeta Barra en formato fila horizontal / pill */

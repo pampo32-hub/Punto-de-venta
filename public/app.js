@@ -9051,19 +9051,41 @@ function renderGrillaOrdenada(filtroZona = null) {
             ${tooltipHtml}
           `;
         } else {
+          const numDisplay = escapeHtml(m.numero).replace(/^mesa\s*/i, '');
           card.innerHTML = `
             <div class="m-grid-header">
-              <span class="m-grid-num">${escapeHtml(m.numero)} ${mergedBadgeHtml}</span>
+              <div class="aura-num-container">
+                <span class="aura-mesa-tag">Mesa</span>
+                <span class="aura-mesa-num">${numDisplay} ${mergedBadgeHtml}</span>
+              </div>
               <span class="m-grid-badge ${badgeClass}">${estadoEtiqueta}</span>
             </div>
-            ${clienteHtml}
+
+            <div class="aura-card-body">
+              ${isOccupied ? `
+                <div class="aura-occupied-row">
+                  <span class="aura-client-name" title="${escapeHtml(clienteMesa || '')}">${escapeHtml(clienteMesa && clienteMesa !== 'Cliente General' ? clienteMesa : 'En Consumo')}</span>
+                  <span class="aura-pax-tag">${cap}</span>
+                </div>
+                <div class="aura-stats-row">
+                  <span class="aura-time-pill">⏱️ ${minutosEspera > 0 ? minutosEspera + 'm' : 'Activa'}</span>
+                  <span class="aura-price-display">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '₡0'}</span>
+                </div>
+              ` : `
+                <div class="aura-free-row">
+                  <span class="aura-pax-free">👥 ${cap} Personas</span>
+                  <span class="aura-free-tag">Disponible</span>
+                </div>
+              `}
+            </div>
+
             ${semaforoBadgeHtml}
             ${cuentaQrHtml}
             ${waitChipHtml}
-            <div class="m-grid-total">${m.orden_total > 0 ? formatCRCSinDecimales(m.orden_total) : '—'}</div>
-            <div class="m-grid-footer">
-              <span class="m-grid-cap">👥 ${cap}</span>
-              <span class="m-grid-zona" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
+
+            <div class="aura-card-footer">
+              <span class="aura-zona-label" title="${escapeHtml(zNombre)}">${escapeHtml(zNombre.toUpperCase())}</span>
+              <span class="aura-action-icon">${isOccupied ? '🍽️' : '+'}</span>
             </div>
             ${tooltipHtml}
           `;
