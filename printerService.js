@@ -132,6 +132,29 @@ function formatearLinea3Col(cant, desc, total, anchoTotal = 48) {
 }
 
 /**
+ * Extrae y formatea de forma estricta los datos del encabezado del negocio para impresión térmica.
+ * No asume nombres ni teléfonos por defecto si el negocio no los tiene definidos.
+ */
+function obtenerDatosEncabezadoNegocio(negocio) {
+  const nombre = (negocio && negocio.nombre && String(negocio.nombre).trim())
+    ? limpiarTextoTermica(String(negocio.nombre).trim())
+    : 'PUNTO DE VENTA';
+  const slogan = (negocio && negocio.slogan && String(negocio.slogan).trim())
+    ? limpiarTextoTermica(String(negocio.slogan).trim())
+    : '';
+  const telefono = (negocio && negocio.telefono && String(negocio.telefono).trim())
+    ? limpiarTextoTermica(String(negocio.telefono).trim())
+    : '';
+  const direccion = (negocio && negocio.direccion && String(negocio.direccion).trim())
+    ? limpiarTextoTermica(String(negocio.direccion).trim())
+    : '';
+  const cedula = (negocio && (negocio.cedula_juridica || negocio.cedula) && String(negocio.cedula_juridica || negocio.cedula).trim())
+    ? limpiarTextoTermica(String(negocio.cedula_juridica || negocio.cedula).trim())
+    : '';
+  return { nombre, slogan, telefono, direccion, cedula };
+}
+
+/**
  * Generador de comandos ESC/POS y Formato Visual de Comanda para Cocina / Barra
  */
 function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mesero, items, destino = 'cocina', pagada = false, fechaHora = new Date().toISOString() }) {
@@ -146,10 +169,7 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
     fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
   }
 
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   let destinoTitulo = destino.toUpperCase() === 'BARRA' ? 'COMANDA BARRA' : 'COMANDA COCINA';
   if (pagada) {
@@ -164,10 +184,10 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.BEEP;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.DOUBLE_BOTH + ESCPOS.BOLD_ON + `*** ${destinoTitulo} ***\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `MESA: ${limpiarTextoTermica(mesaNumero)}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
@@ -217,7 +237,7 @@ function generarTicketComanda({ negocio, ordenId, comandaNumero, mesaNumero, mes
     tipo: 'comanda',
     destino,
     titulo: destinoTitulo,
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion },
     mesa: mesaNumero,
     ordenId,
     comandaNumero,
@@ -276,11 +296,7 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   if (!fechaStr || fechaStr === 'Invalid Date') {
     fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
   }
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
-  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   const listaItems = Array.isArray(items) ? items : [];
 
@@ -346,11 +362,11 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
-  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.cedula) raw += `Ced. Juridica: ${negHeader.cedula}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `COMPROBANTE DE PAGO / FACTURA\n` + ESCPOS.BOLD_OFF;
   raw += ESCPOS.ALIGN_LEFT;
@@ -443,7 +459,7 @@ function generarTicketLiquidacion(datos = {}, negocioOverride = null) {
   const ticketVisual = {
     tipo: 'cuenta_total',
     titulo: 'COMPROBANTE DE PAGO / FACTURA',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion, cedula: negHeader.cedula },
     ordenId,
     numeroOrden: numeroOrden || ordenId,
     mesa: mesaNumero,
@@ -507,11 +523,7 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   if (!fechaStr || fechaStr === 'Invalid Date') {
     fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
   }
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
-  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   const listaItems = Array.isArray(items) ? items : [];
 
@@ -577,11 +589,11 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
-  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.cedula) raw += `Ced. Juridica: ${negHeader.cedula}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `*** PRE-CUENTA / PRE-FACTURA ***\n`;
   raw += `[ REVISION DE CONSUMOS EN MESA ]\n` + ESCPOS.BOLD_OFF;
@@ -638,7 +650,7 @@ function generarTicketPreFactura(datos = {}, negocioOverride = null) {
   const ticketVisual = {
     tipo: 'prefactura',
     titulo: 'PRE-CUENTA / PRE-FACTURA',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion, cedula: negHeader.cedula },
     ordenId,
     numeroOrden: numeroOrden || ordenId,
     mesa: mesaNumero,
@@ -675,11 +687,7 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   if (!fechaStr || fechaStr === 'Invalid Date') {
     fechaStr = new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
   }
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
-  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   const listaItems = Array.isArray(itemsPagados) ? itemsPagados : [];
   const itemsNormalizados = listaItems.map(it => {
@@ -705,11 +713,11 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
-  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.cedula) raw += `Ced. Juridica: ${negHeader.cedula}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `*** COMPROBANTE DE PAGO PARCIAL ***\n`;
   raw += `[ SPLIT BILL / CUENTA DIVIDIDA ]\n` + ESCPOS.BOLD_OFF;
@@ -755,7 +763,7 @@ function generarTicketPagoParcial({ negocio, ordenId, mesaNumero, personaNombre,
   const ticketVisual = {
     tipo: 'pago_parcial',
     titulo: 'PAGO PARCIAL INDIVIDUAL',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion, cedula: negHeader.cedula },
     ordenId,
     mesa: mesaNumero,
     personaNombre,
@@ -775,20 +783,16 @@ function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_c
   const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
   const fCorte = fecha_corte ? new Date(fecha_corte).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
 
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
-  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
-  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.cedula) raw += `Ced. Juridica: ${negHeader.cedula}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `*** CORTE X (PARCIAL) ***\n`;
   raw += `[ AUDITORIA INFORMATIVA DE TURNO ]\n` + ESCPOS.BOLD_OFF;
@@ -850,7 +854,7 @@ function generarTicketCorteX({ negocio, caja_id, cajero, fecha_apertura, fecha_c
   const ticketVisual = {
     tipo: 'corte_x',
     titulo: 'CORTE X (PARCIAL)',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion, cedula: negHeader.cedula },
     caja_id,
     cajero,
     fecha_apertura,
@@ -907,11 +911,7 @@ function generarTicketCorteXCiego({
   const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
   const fCorte = fecha_corte ? new Date(fecha_corte).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
 
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
-  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   const espCRC = esperado_efectivo_crc !== undefined ? esperado_efectivo_crc : (efectivo_esperado || 0);
   const espUSD = esperado_dolares_usd !== undefined ? esperado_dolares_usd : (dolares_esperado_usd || ventas.dolares_usd || 0);
@@ -921,11 +921,11 @@ function generarTicketCorteXCiego({
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
-  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.cedula) raw += `Ced. Juridica: ${negHeader.cedula}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `*** CORTE X A CIEGAS ***\n`;
   raw += `[ ARQUEO FISICO PARCIAL DE TURNO ]\n` + ESCPOS.BOLD_OFF;
@@ -997,7 +997,7 @@ function generarTicketCorteXCiego({
   const ticketVisual = {
     tipo: 'corte_x_ciego',
     titulo: 'CORTE X A CIEGAS (ARQUEO PARCIAL)',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion, cedula: negHeader.cedula },
     caja_id,
     cajero,
     fecha_apertura,
@@ -1058,11 +1058,7 @@ function generarTicketCierreZ({
   const fApertura = fecha_apertura ? new Date(fecha_apertura).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '-';
   const fCierre = fecha_cierre ? new Date(fecha_cierre).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : new Date().toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
 
-  const negNombre = limpiarTextoTermica((negocio && negocio.nombre) || 'GastroBar Fuego & Brasas');
-  const negSlogan = limpiarTextoTermica((negocio && negocio.slogan) || 'Restaurante, Bar & Lounge');
-  const negTel = limpiarTextoTermica((negocio && negocio.telefono) || '2222-3344');
-  const negDir = limpiarTextoTermica((negocio && negocio.direccion) || 'San Jose, Costa Rica');
-  const negCed = limpiarTextoTermica((negocio && (negocio.cedula_juridica || negocio.cedula)) || '3-101-789458');
+  const negHeader = obtenerDatosEncabezadoNegocio(negocio);
 
   const espCRC = esperado_efectivo_crc !== undefined ? esperado_efectivo_crc : (efectivo_esperado || 0);
   const espUSD = esperado_dolares_usd !== undefined ? esperado_dolares_usd : (ventas.dolares_usd || 0);
@@ -1072,11 +1068,11 @@ function generarTicketCierreZ({
   let raw = '';
   raw += ESCPOS.INIT + ESCPOS.FONT_A + ESCPOS.DOUBLE_STRIKE_ON;
   raw += ESCPOS.ALIGN_CENTER;
-  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negNombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
-  raw += `${negSlogan}\n`;
-  raw += `Tel: ${negTel}\n`;
-  if (negDir) raw += `${negDir}\n`;
-  if (negCed) raw += `Ced. Juridica: ${negCed}\n`;
+  raw += ESCPOS.DOUBLE_HEIGHT + ESCPOS.BOLD_ON + `${negHeader.nombre}\n` + ESCPOS.NORMAL + ESCPOS.DOUBLE_STRIKE_ON;
+  if (negHeader.slogan) raw += `${negHeader.slogan}\n`;
+  if (negHeader.cedula) raw += `Ced. Juridica: ${negHeader.cedula}\n`;
+  if (negHeader.telefono) raw += `Tel: ${negHeader.telefono}\n`;
+  if (negHeader.direccion) raw += `${negHeader.direccion}\n`;
   raw += '='.repeat(48) + '\n';
   raw += ESCPOS.BOLD_ON + `*** CIERRE Z (FINAL) ***\n`;
   raw += `[ LIQUIDACION OFICIAL DE TURNO ]\n` + ESCPOS.BOLD_OFF;
@@ -1139,7 +1135,7 @@ function generarTicketCierreZ({
   const ticketVisual = {
     tipo: 'cierre_z',
     titulo: 'CIERRE Z (FINAL)',
-    negocio: { nombre: negNombre, slogan: negSlogan, tel: negTel, dir: negDir, cedula: negCed },
+    negocio: { nombre: negHeader.nombre, slogan: negHeader.slogan, tel: negHeader.telefono, dir: negHeader.direccion, cedula: negHeader.cedula },
     caja_id,
     cajero,
     fecha_apertura,

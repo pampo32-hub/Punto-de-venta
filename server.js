@@ -7624,7 +7624,7 @@ app.post('/api/ordenes/:id/prefactura', async (req, res) => {
       return res.status(400).json({ error: 'La orden no tiene consumos activos para generar pre-factura.' });
     }
 
-    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || 1]);
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden.negocio_id || reqNegocioId || 1]);
     const mesa = orden.mesa_id ? await dbGet('SELECT * FROM Mesas WHERE id = ?', [orden.mesa_id]) : null;
     const mesaNumero = mesa ? (mesa.numero || ('Mesa ' + mesa.id)) : (orden.mesa_id ? `Mesa ${orden.mesa_id}` : 'Mesa');
     const mesero = req.body.mesero || (req.user && req.user.nombre) || orden.mesero || (mesa && mesa.mesero) || 'General';
@@ -7701,7 +7701,7 @@ app.post('/api/mesas/:id/prefactura', async (req, res) => {
     let mesero = req.body.mesero || (req.user && req.user.nombre) || (mesa && mesa.mesero) || 'General';
     let numeroOrden = mesaId;
 
-    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden?.negocio_id || mesa.negocio_id || 1]);
+    const negocio = await dbGet('SELECT * FROM Negocios WHERE id = ?', [orden?.negocio_id || mesa.negocio_id || reqNegocioId || 1]);
     const tieneServicio10 = negocio ? negocioTieneCaracteristica(negocio, 'servicio_10') : false;
     const tieneIVA13 = negocio ? negocioTieneCaracteristica(negocio, 'desglose_iva_13') : false;
 
@@ -9099,7 +9099,7 @@ app.get('/api/cliente/mesa/:id', async (req, res) => {
 
     res.json({
       mesa,
-      negocio: negocio || { nombre: 'GastroBar Fuego & Brasas', moneda: 'CRC' },
+      negocio: negocio || { nombre: 'PUNTO DE VENTA', moneda: 'CRC' },
       orden: orden || null,
       items
     });
@@ -10580,7 +10580,9 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
 app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res) => {
   try {
     let { desde, hasta, producto_id, categoria_id, negocio_id } = req.query;
-    const nid = negocio_id ? Number(negocio_id) : (req.query.negocioId ? Number(req.query.negocioId) : 1);
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = negocio_id ? Number(negocio_id) : (req.query.negocioId ? Number(req.query.negocioId) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid));
+    const nid = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
 
     const ahora = new Date();
     if (!desde) {
@@ -10617,9 +10619,9 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
         AND d.estado_comanda != 'anulado'
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+        AND o.negocio_id = ?
     `;
-    const paramsVentas = [desde, hasta, nid, nid];
+    const paramsVentas = [desde, hasta, nid];
 
     if (producto_id) {
       sqlVentas += ' AND (CAST(d.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d.nombre_producto) LIKE ?)';
@@ -10650,15 +10652,15 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
              i.nombre AS insumo_nombre, i.unidad_medida, i.costo_unitario, i.stock_actual, i.es_licor
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-      WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
-    `, [nid, nid]);
+      WHERE i.negocio_id = ?
+    `, [nid]);
     const recetasPorProducto = {};
     for (const r of todasLasRecetas) {
       if (!recetasPorProducto[r.producto_id]) recetasPorProducto[r.producto_id] = [];
       recetasPorProducto[r.producto_id].push(r);
     }
 
-    const todosLosInsumos = await dbAll('SELECT * FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nid, nid]);
+    const todosLosInsumos = await dbAll('SELECT * FROM Inventario WHERE negocio_id = ?', [nid]);
 
     for (const fila of ventasRows) {
       const pId = fila.producto_id;
@@ -10723,8 +10725,8 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-            AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-        `, [String(pId || ''), desde, hasta, nid, nid]);
+            AND o.negocio_id = ?
+        `, [String(pId || ''), desde, hasta, nid]);
 
         const desgloseCervezas = {};
         let totalCervezasContadas = 0;
@@ -10827,10 +10829,10 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
             AND d.estado_comanda != 'anulado'
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) >= ?)
             AND (COALESCE(o.fecha_cierre, o.fecha_apertura, d.creado_en) <= ?)
-            AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+            AND o.negocio_id = ?
           ORDER BY fecha_hora DESC
           LIMIT 100
-        `, [String(producto_id), '%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%', desde, hasta, nid, nid]);
+        `, [String(producto_id), '%' + String(producto_id).replace(/^balde_/i, '').replace(/_/g, ' ') + '%', desde, hasta, nid]);
       }
 
       productosDetallados.push({
@@ -10880,9 +10882,9 @@ app.get('/api/admin/reportes/ventas-productos', verificarAdmin, async (req, res)
       WHERE o.estado = 'pagada'
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura) >= ?)
         AND (COALESCE(o.fecha_cierre, o.fecha_apertura) <= ?)
-        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+        AND o.negocio_id = ?
     `;
-    const paramsUltimas = [desde, hasta, nid, nid];
+    const paramsUltimas = [desde, hasta, nid];
     if (producto_id) {
       sqlUltimasOrdenes += ' AND EXISTS (SELECT 1 FROM DetalleOrden d2 WHERE d2.orden_id = o.id AND (CAST(d2.producto_id AS TEXT) = CAST(? AS TEXT) OR LOWER(d2.nombre_producto) LIKE ?) AND d2.estado_comanda != \'anulado\')';
       paramsUltimas.push(String(producto_id));
@@ -11061,17 +11063,17 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
         COALESCE(SUM(p.propina), 0) as total_propinas,
         COUNT(DISTINCT p.orden_id) as total_cuentas
       FROM Pagos p
-      LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [inicioHoyISO, negocioId, negocioId]);
+      JOIN Ordenes o ON p.orden_id = o.id
+      WHERE p.fecha_hora >= ? AND o.negocio_id = ?
+    `, [inicioHoyISO, negocioId]);
 
     // 2. Ventas de Ayer (para comparativa)
     const ventasAyerRow = await dbGet(`
       SELECT COALESCE(SUM(p.monto), 0) as total_ventas
       FROM Pagos p
-      LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE p.fecha_hora >= ? AND p.fecha_hora < ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [inicioAyerISO, inicioHoyISO, negocioId, negocioId]);
+      JOIN Ordenes o ON p.orden_id = o.id
+      WHERE p.fecha_hora >= ? AND p.fecha_hora < ? AND o.negocio_id = ?
+    `, [inicioAyerISO, inicioHoyISO, negocioId]);
 
     const totalVentasHoy = Number(ventasHoyRow ? ventasHoyRow.total_ventas : 0) || 0;
     const totalVentasAyer = Number(ventasAyerRow ? ventasAyerRow.total_ventas : 0) || 0;
@@ -11084,8 +11086,8 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       SELECT d.hora_pedido, d.hora_listo
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
-      WHERE d.hora_listo IS NOT NULL AND d.creado_en >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [inicioHoyISO, negocioId, negocioId]);
+      WHERE d.hora_listo IS NOT NULL AND d.creado_en >= ? AND o.negocio_id = ?
+    `, [inicioHoyISO, negocioId]);
 
     let sumaMinutos = 0;
     let cantPlatosConTiempo = 0;
@@ -11108,19 +11110,19 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       WHERE d.estado_comanda != 'anulado' AND o.estado IN ('pagada', 'activa', 'abierta', 'cuenta')
-        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+        AND o.negocio_id = ?
       GROUP BY d.nombre_producto, d.destino
       ORDER BY total_unidades DESC
       LIMIT 5
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     // 5. Ventas por Hora (Horas Pico - Zona Horaria Costa Rica America/Costa_Rica)
     const pagosHoras = await dbAll(`
       SELECT p.fecha_hora, p.monto
       FROM Pagos p
-      LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
-    `, [inicioHoyISO, negocioId, negocioId]);
+      JOIN Ordenes o ON p.orden_id = o.id
+      WHERE p.fecha_hora >= ? AND o.negocio_id = ?
+    `, [inicioHoyISO, negocioId]);
 
     const horasMap = {};
     for (const p of pagosHoras) {
@@ -11150,20 +11152,20 @@ app.get('/api/admin/metricas/dashboard', verificarAdmin, async (req, res) => {
         SUM(p.monto) as ventas,
         SUM(COALESCE(p.propina, 0)) as propinas
       FROM Pagos p
-      LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+      JOIN Ordenes o ON p.orden_id = o.id
+      WHERE p.fecha_hora >= ? AND o.negocio_id = ?
       GROUP BY p.mesero
       ORDER BY ventas DESC
-    `, [inicioHoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId]);
 
     // 7. Alertas de Inventario Crítico
     const alertasStock = await dbAll(`
       SELECT id, nombre, stock_actual, stock_minimo, unidad_medida
       FROM Inventario
-      WHERE stock_actual <= stock_minimo AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+      WHERE stock_actual <= stock_minimo AND negocio_id = ?
       ORDER BY stock_actual ASC
       LIMIT 6
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     res.json({
       resumen: {
@@ -11217,10 +11219,10 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       LEFT JOIN Pagos p ON o.id = p.orden_id
       WHERE (o.estado = 'pagada' OR p.id IS NOT NULL) 
         AND (p.fecha_hora >= ? OR (p.fecha_hora IS NULL AND COALESCE(o.fecha_cierre, o.fecha_apertura) >= ?))
-        AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+        AND o.negocio_id = ?
       GROUP BY o.id, m.numero, z.nombre
       ORDER BY fecha_cobro DESC, o.id DESC
-    `, [inicioHoyISO, inicioHoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, inicioHoyISO, negocioId]);
 
     // Consultar detalles de items para cada orden
     const ordenesConItems = await Promise.all(ordenesPagadas.map(async (ord) => {
