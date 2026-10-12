@@ -4670,6 +4670,7 @@ app.post('/api/mesas/unir', async (req, res) => {
     } else if (!orden1 && orden2) {
       // Si solo la secundaria tenía orden, transferimos esa orden a la mesa principal
       await dbRun("UPDATE Ordenes SET mesa_id = ? WHERE id = ?", [mesaPrincipalId, orden2.id]);
+      await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaSecundaria.numero, mesaSecundaria.id, orden2.id]);
       orden1 = orden2;
       orden2 = null;
     }
@@ -4716,12 +4717,15 @@ app.post('/api/mesas/unir', async (req, res) => {
 
     // Transferir todos los productos hacia la orden de la Mesa Principal (B) con trazabilidad de origen
     if (orden2 && orden1.id !== orden2.id) {
-      await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaSecundaria.numero, mesaSecundaria.id, orden2.id]);
+      const rowMax1 = await dbGet('SELECT MAX(comanda_numero) as maxNum FROM DetalleOrden WHERE orden_id = ?', [orden1.id]);
+      const maxComanda1 = Number(rowMax1?.maxNum || 1);
+
+      await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?), comanda_numero = COALESCE(comanda_numero, 1) + ? WHERE orden_id = ?", [mesaSecundaria.numero, mesaSecundaria.id, maxComanda1, orden2.id]);
       await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaPrincipal.numero, mesaPrincipal.id, orden1.id]);
       await dbRun('UPDATE DetalleOrden SET orden_id = ? WHERE orden_id = ?', [orden1.id, orden2.id]);
       await dbRun("UPDATE Ordenes SET estado = 'fusionada', total = 0 WHERE id = ?", [orden2.id]);
-    } else {
-      await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?), origen_mesa_id = COALESCE(origen_mesa_id, ?) WHERE orden_id = ?", [mesaPrincipal.numero, mesaPrincipal.id, orden1.id]);
+    } else if (orden1) {
+      await dbRun("UPDATE DetalleOrden SET origen_mesa_numero = COALESCE(origen_mesa_numero, ?) WHERE orden_id = ? AND origen_mesa_numero IS NULL", [mesaPrincipal.numero, orden1.id]);
     }
 
     const allMergedItems = await dbAll("SELECT * FROM DetalleOrden WHERE orden_id = ? AND estado_comanda != 'anulado'", [orden1.id]);
@@ -4730,14 +4734,17 @@ app.post('/api/mesas/unir', async (req, res) => {
     const nuevoEstadoUnido = allMergedItems.length > 0 ? evaluarEstadoMesaKDS(allMergedItems) : 'abierta';
     await dbRun("UPDATE Ordenes SET estado = ?, cliente = ? WHERE id = ?", [nuevoEstadoUnido, clienteAdopta, orden1.id]);
 
-    // La Mesa Secundaria (origen) queda completamente LIBRE y disponible en el salón
-    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, total = 0, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?", [mesaSecundariaId]);
+    // La Mesa Secundaria (origen) queda completamente LIBRE y disponible en el salón (Mesas no tiene columna total)
+    await dbRun("UPDATE Mesas SET estado = 'libre', mesero = NULL, cliente = NULL, unida_a_mesa_id = NULL, unida_con = NULL, grupo_mesas = NULL WHERE id = ?", [mesaSecundariaId]);
     // La Mesa Principal (destino) adopta el cliente, estado y total combinado
     await dbRun("UPDATE Mesas SET estado = ?, unida_con = ?, mesero = ?, cliente = ? WHERE id = ?", [nuevoEstadoUnido, mesaSecundaria.numero, meseroAsignado, clienteAdopta, mesaPrincipalId]);
 
     io.emit('mesas_unidas', { mesaPrincipalId, mesaSecundariaId, ordenPrincipalId: orden1.id, cliente: clienteAdopta, negocio_id: negocioId });
     io.emit('mesa_actualizada', { mesaId: mesaPrincipalId, estado: nuevoEstadoUnido, total, cliente: clienteAdopta, negocio_id: negocioId });
     io.emit('mesa_actualizada', { mesaId: mesaSecundariaId, estado: 'libre', total: 0, cliente: null, negocio_id: negocioId });
+    io.emit('mesas_actualizadas', { negocio_id: negocioId });
+    io.emit('kds_actualizado', { negocio_id: negocioId });
+    io.emit('comandas_actualizadas', { negocio_id: negocioId });
 
     res.json({ message: `Mesas unidas correctamente (Mesa ${mesaPrincipal.numero} adoptó Mesa ${mesaSecundaria.numero})`, ordenId: orden1.id, total, cliente: clienteAdopta });
   } catch (e) {
@@ -6670,7 +6677,8 @@ app.get('/api/kds', async (req, res) => {
     let query = `
       SELECT d.*, o.numero_orden, o.mesa_id, o.cliente, o.mesero, o.tipo_orden, o.es_para_llevar, o.estado as orden_estado, o.total as orden_total,
         COALESCE((SELECT SUM(monto) FROM Pagos WHERE orden_id = o.id), 0) as orden_total_pagado,
-        COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
+        COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero,
+        m.unida_con as mesa_unida_con
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
@@ -6699,7 +6707,8 @@ app.get('/api/comandas/activas', async (req, res) => {
     const comandas = await dbAll(`
       SELECT d.*, o.numero_orden, o.mesa_id, o.tipo_orden, o.es_para_llevar, o.estado as orden_estado, o.total as orden_total,
         COALESCE((SELECT SUM(monto) FROM Pagos WHERE orden_id = o.id), 0) as orden_total_pagado,
-        COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero
+        COALESCE(m.numero, CASE WHEN o.tipo_orden = 'para_llevar' OR o.mesa_id IS NULL THEN '🛍️ Para Llevar' ELSE 'Mesa ' || o.mesa_id END) as mesa_numero,
+        m.unida_con as mesa_unida_con
       FROM DetalleOrden d
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
