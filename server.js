@@ -6638,6 +6638,7 @@ app.get('/api/kds', async (req, res) => {
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
+        AND o.estado NOT IN ('pagada', 'cerrada', 'cancelada')
         AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
     `;
     const params = [negocioId, negocioId];
@@ -6666,6 +6667,7 @@ app.get('/api/comandas/activas', async (req, res) => {
       JOIN Ordenes o ON d.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
       WHERE d.estado_comanda IN ('pendiente', 'preparando')
+        AND o.estado NOT IN ('pagada', 'cerrada', 'cancelada')
         AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       ORDER BY d.orden_id ASC, d.comanda_numero ASC, d.hora_pedido ASC, d.id ASC
     `, [negocioId, negocioId]);
@@ -7049,7 +7051,8 @@ async function procesarCobroOrden(ordenId, {
     if (!rowDetalles || Number(rowDetalles.total) === 0) {
       itemsNuevos = itemsEntrantes;
     } else {
-      itemsNuevos = itemsEntrantes.filter(it => it.enviado === false || it.enviado === 0 || (!it.enviado && !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado));
+      // Si la orden ya cuenta con detalles registrados, NO reinsertar ítems ya existentes o enviados
+      itemsNuevos = itemsEntrantes.filter(it => (it.enviado === false || it.enviado === 0) && !it.id_detalle_existente && !it.id_detalle && !it.ya_guardado);
     }
   }
 
@@ -7108,7 +7111,7 @@ async function procesarCobroOrden(ordenId, {
         destItem = (it.curso === 1 || it.curso === 5 || it.curso === 6) ? 'barra' : 'cocina';
       }
       const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
-      const estadoComanda = esParaCocinaOBarra ? 'pendiente' : (liquidar_total ? 'pagado' : 'recibido');
+      const estadoComanda = liquidar_total ? 'pagado' : (esParaCocinaOBarra ? 'pendiente' : 'recibido');
       const itemPagado = liquidar_total ? 1 : 0;
       await dbRun(
         `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, pagado, hora_pedido, creado_en, comanda_numero, en_happy_hour, comensal)
@@ -7146,7 +7149,7 @@ async function procesarCobroOrden(ordenId, {
   }
 
   const hayItemsCocinaOBarra = itemsProcesadosCobro.some(it => it.destino === 'cocina' || it.destino === 'barra');
-  const debeDespacharComanda = (debeEnviarCocina || hayItemsCocinaOBarra) && (itemsProcesadosCobro.length > 0);
+  const debeDespacharComanda = !liquidar_total && (debeEnviarCocina || hayItemsCocinaOBarra) && (itemsProcesadosCobro.length > 0);
 
   // Si el usuario confirmó enviar a cocina O si se agregaron productos de cocina/barra en cobro directo:
   if (debeDespacharComanda) {
@@ -7266,12 +7269,10 @@ async function procesarCobroOrden(ordenId, {
     caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [negocioIdFinal]);
   }
   if (!caja) {
-    const ahoraApertura = new Date().toISOString();
-    const rCaja = await dbRun(`
-      INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
-      VALUES (?, ?, ?, 50000, 'abierta')
-    `, [negocioIdFinal, mesero || 'Cajero Turno', ahoraApertura]);
-    caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [rCaja.lastID]);
+    return res.status(400).json({
+      error: 'No hay ningún turno de caja abierto para registrar este cobro. Abre la caja primero.',
+      requiere_apertura: true
+    });
   }
   const cajaId = caja ? caja.id : null;
   const montoFinal = (monto !== undefined && monto !== null) ? Number(monto) : (Number(orden.total) || 0);
@@ -8325,9 +8326,10 @@ async function obtenerServicio10Caja(cajaId, fechaApertura, negocioId) {
         LEFT JOIN Ordenes o2 ON p2.orden_id = o2.id
         WHERE (p2.caja_id = ? OR (p2.caja_id IS NULL AND p2.fecha_hora >= ? AND o2.negocio_id = ?))
       )
+      AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       AND d.estado_comanda != 'anulado'
       AND (p.paga_servicio_10 = 1 OR p.paga_servicio_10 = '1')
-    `, [cajaId, fechaApertura, negocioId]);
+    `, [cajaId, fechaApertura, negocioId, negocioId, negocioId]);
 
     const desgloseColaboradores10 = await dbAll(`
       SELECT 
@@ -8344,10 +8346,11 @@ async function obtenerServicio10Caja(cajaId, fechaApertura, negocioId) {
         LEFT JOIN Ordenes o2 ON p2.orden_id = o2.id
         WHERE (p2.caja_id = ? OR (p2.caja_id IS NULL AND p2.fecha_hora >= ? AND o2.negocio_id = ?))
       )
+      AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
       AND d.estado_comanda != 'anulado'
       AND (p.paga_servicio_10 = 1 OR p.paga_servicio_10 = '1')
       GROUP BY o.mesero
-    `, [cajaId, fechaApertura, negocioId]);
+    `, [cajaId, fechaApertura, negocioId, negocioId, negocioId]);
 
     return {
       total: Math.round(Number(totServicio10?.total_servicio_10 || 0) * 100) / 100,
@@ -8481,12 +8484,10 @@ app.post('/api/caja/movimiento', async (req, res) => {
     }
 
     if (!caja) {
-      const ahoraApertura = new Date().toISOString();
-      const r = await dbRun(`
-        INSERT INTO Cajas (negocio_id, cajero, fecha_apertura, monto_inicial, estado)
-        VALUES (?, ?, ?, 50000, 'abierta')
-      `, [negocioId, usuarioNombre, ahoraApertura]);
-      caja = await dbGet('SELECT * FROM Cajas WHERE id = ?', [r.lastID]);
+      return res.status(400).json({
+        error: 'No hay ningún turno de caja abierto para registrar movimientos. Abre la caja primero.',
+        requiere_apertura: true
+      });
     }
 
     const conceptoLimpio = (concepto || (tipo === 'entrada' ? 'Entrada de efectivo' : 'Gasto menor')).trim();
@@ -9090,7 +9091,7 @@ app.post('/api/caja/cierre-z', async (req, res) => {
 // Apertura dinámica de turno de caja (soporta selección de punto físico y validación de ocupación)
 app.post('/api/caja/abrir', async (req, res) => {
   try {
-    const { cajero = 'Cajero Turno', monto_inicial = 50000, negocio_id, caja_fisica_id, forzar = false, usuario_id } = req.body;
+    const { cajero = 'Cajero Turno', monto_inicial = 0, negocio_id, caja_fisica_id, forzar = false, usuario_id } = req.body;
     const negocioId = Number(negocio_id || req.headers['x-negocio-id'] || 1);
     const montoNum = parseFloat(monto_inicial);
     if (isNaN(montoNum) || montoNum < 0) {
