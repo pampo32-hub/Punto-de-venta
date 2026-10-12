@@ -5304,7 +5304,7 @@ app.get('/api/menu', async (req, res) => {
       )
       WHERE (p.activo = 1 OR p.activo IS NULL)
         AND (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
-      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id
+      GROUP BY p.id, p.nombre, p.categoria_id, p.precio, p.codigo, p.descripcion, p.destino, p.activo, p.curso, p.happy_hour, p.agotado, p.imagen_url, p.color_badge, p.negocio_id, p.paga_servicio_10
       ORDER BY p.categoria_id ASC, total_vendidos DESC, p.id ASC
     `, [negocioId, negocioId, negocioId, negocioId]);
     const productos = rawProductos.map(p => ({
@@ -5316,7 +5316,8 @@ app.get('/api/menu', async (req, res) => {
       total_vendidos: Number(p.total_vendidos) || 0,
       happy_hour: (Number(p.happy_hour) === 1 || p.happy_hour === true || p.happy_hour === '1') ? 1 : 0,
       agotado: (Number(p.agotado) === 1 || p.agotado === true || p.agotado === '1') ? 1 : 0,
-      activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1
+      activo: (Number(p.activo) === 0 || p.activo === false || p.activo === '0') ? 0 : 1,
+      paga_servicio_10: (Number(p.paga_servicio_10) === 1 || p.paga_servicio_10 === true || p.paga_servicio_10 === '1') ? 1 : 0
     }));
     res.json({ categorias, productos });
   } catch (e) {
@@ -5501,11 +5502,13 @@ app.post('/api/productos', async (req, res) => {
     const cursoNum = Number(curso) || (destinoFinal === 'barra' ? 1 : 2);
     const hhRaw = happy_hour !== undefined ? happy_hour : happyHour;
     const hhVal = hhRaw ? 1 : 0;
+    const pagaServicioRaw = req.body.paga_servicio_10 !== undefined ? req.body.paga_servicio_10 : req.body.pagaServicio10;
+    const pagaServicioVal = (pagaServicioRaw === 1 || pagaServicioRaw === '1' || pagaServicioRaw === true) ? 1 : 0;
 
     const result = await dbRun(
-      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, agotado, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)`,
-      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null, hhVal]
+      `INSERT INTO Productos (negocio_id, categoria_id, nombre, precio, destino, curso, imagen_url, happy_hour, paga_servicio_10, agotado, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)`,
+      [negocioId, catId, nombreLimpio, precioNum, destinoFinal, cursoNum, imagen_url || null, hhVal, pagaServicioVal]
     );
 
     const prodId = result.lastID;
@@ -5669,12 +5672,16 @@ app.put('/api/productos/:id', verificarAdmin, async (req, res) => {
     const hhRaw = happy_hour !== undefined ? happy_hour : req.body.happyHour;
     const hhVal = hhRaw !== undefined ? (hhRaw ? 1 : 0) : prod.happy_hour;
     const agotadoVal = agotado !== undefined ? (agotado ? 1 : 0) : prod.agotado;
+    const pagaServicioRaw = req.body.paga_servicio_10 !== undefined ? req.body.paga_servicio_10 : req.body.pagaServicio10;
+    const pagaServicioVal = pagaServicioRaw !== undefined
+      ? ((pagaServicioRaw === 1 || pagaServicioRaw === '1' || pagaServicioRaw === true) ? 1 : 0)
+      : (prod.paga_servicio_10 ? 1 : 0);
 
     await dbRun(
       `UPDATE Productos 
-       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, happy_hour = ?, agotado = ?
+       SET nombre = ?, precio = ?, categoria_id = ?, destino = ?, curso = ?, imagen_url = ?, happy_hour = ?, paga_servicio_10 = ?, agotado = ?
        WHERE id = ?`,
-      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, hhVal, agotadoVal, prodId]
+      [nombreLimpio, precioNum, catId, destinoFinal, cursoNum, imgUrl, hhVal, pagaServicioVal, agotadoVal, prodId]
     );
 
     let huboCambiosKardex = false;
@@ -8301,6 +8308,59 @@ app.put('/api/seguridad-local', async (req, res, next) => {
   return app.handle(req, res, next);
 });
 
+// Helper de cálculo interno del 10% de Servicio a Colaboradores sobre productos calificados
+async function obtenerServicio10Caja(cajaId, fechaApertura, negocioId) {
+  try {
+    const totServicio10 = await dbGet(`
+      SELECT 
+        COALESCE(SUM(d.subtotal * 0.10), 0) AS total_servicio_10,
+        COALESCE(SUM(d.subtotal), 0) AS subtotal_calificado,
+        COALESCE(SUM(d.cantidad), 0) AS items_calificados
+      FROM DetalleOrden d
+      JOIN Ordenes o ON d.orden_id = o.id
+      JOIN Productos p ON (p.id = d.producto_id OR (d.producto_id IS NULL AND LOWER(p.nombre) = LOWER(d.nombre_producto)))
+      WHERE d.orden_id IN (
+        SELECT DISTINCT p2.orden_id 
+        FROM Pagos p2 
+        LEFT JOIN Ordenes o2 ON p2.orden_id = o2.id
+        WHERE (p2.caja_id = ? OR (p2.caja_id IS NULL AND p2.fecha_hora >= ? AND o2.negocio_id = ?))
+      )
+      AND d.estado_comanda != 'anulado'
+      AND (p.paga_servicio_10 = 1 OR p.paga_servicio_10 = '1')
+    `, [cajaId, fechaApertura, negocioId]);
+
+    const desgloseColaboradores10 = await dbAll(`
+      SELECT 
+        COALESCE(o.mesero, 'General') AS colaborador,
+        COALESCE(SUM(d.subtotal * 0.10), 0) AS monto_servicio_10,
+        COALESCE(SUM(d.subtotal), 0) AS ventas_calificadas,
+        COALESCE(SUM(d.cantidad), 0) AS items_calificados
+      FROM DetalleOrden d
+      JOIN Ordenes o ON d.orden_id = o.id
+      JOIN Productos p ON (p.id = d.producto_id OR (d.producto_id IS NULL AND LOWER(p.nombre) = LOWER(d.nombre_producto)))
+      WHERE d.orden_id IN (
+        SELECT DISTINCT p2.orden_id 
+        FROM Pagos p2 
+        LEFT JOIN Ordenes o2 ON p2.orden_id = o2.id
+        WHERE (p2.caja_id = ? OR (p2.caja_id IS NULL AND p2.fecha_hora >= ? AND o2.negocio_id = ?))
+      )
+      AND d.estado_comanda != 'anulado'
+      AND (p.paga_servicio_10 = 1 OR p.paga_servicio_10 = '1')
+      GROUP BY o.mesero
+    `, [cajaId, fechaApertura, negocioId]);
+
+    return {
+      total: Math.round(Number(totServicio10?.total_servicio_10 || 0) * 100) / 100,
+      subtotalCalificado: Math.round(Number(totServicio10?.subtotal_calificado || 0) * 100) / 100,
+      itemsCalificados: Number(totServicio10?.items_calificados || 0),
+      desglosePorColaborador: desgloseColaboradores10 || []
+    };
+  } catch (err) {
+    console.warn('Error calculando servicio 10%:', err);
+    return { total: 0, subtotalCalificado: 0, itemsCalificados: 0, desglosePorColaborador: [] };
+  }
+}
+
 app.get('/api/caja/actual', async (req, res) => {
   try {
     const negocioId = obtenerNegocioIdReq(req);
@@ -8349,6 +8409,16 @@ app.get('/api/caja/actual', async (req, res) => {
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id DESC', [caja.id]);
 
+    const pagos = await dbAll(`
+      SELECT p.id, p.orden_id, p.caja_id, p.mesero, p.metodo, p.monto, p.propina, p.cambio, p.fecha_hora,
+             o.mesa_id, m.numero as mesa_numero, o.nombre_cliente
+      FROM Pagos p
+      LEFT JOIN Ordenes o ON p.orden_id = o.id
+      LEFT JOIN Mesas m ON o.mesa_id = m.id
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
+      ORDER BY p.id DESC
+    `, [caja.id, caja.fecha_apertura, negocioId]);
+
     const tipPool = await dbAll(`
       SELECT 
         COALESCE(p.mesero, 'Mesero General') as nombre,
@@ -8361,7 +8431,20 @@ app.get('/api/caja/actual', async (req, res) => {
       GROUP BY p.mesero
     `, [caja.id, caja.fecha_apertura, negocioId]);
 
-    res.json({ ok: true, caja, cajasAbiertas: turnosAbiertos || [], turnos_abiertos: turnosAbiertos || [], ventas, movimientos, tipPool });
+    const servicio10 = await obtenerServicio10Caja(caja.id, caja.fecha_apertura, negocioId);
+
+    res.json({
+      ok: true,
+      caja,
+      cajasAbiertas: turnosAbiertos || [],
+      turnos_abiertos: turnosAbiertos || [],
+      ventas,
+      movimientos,
+      pagos,
+      tipPool,
+      servicio10,
+      total_servicio_10: servicio10.total
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -8536,6 +8619,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
       WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
     `, [caja.id, caja.fecha_apertura, negocioId]);
 
+    const servicio10 = await obtenerServicio10Caja(caja.id, caja.fecha_apertura, negocioId);
+
     const resultadoCorte = {
       tipo: 'Corte X (Parcial)',
       caja_id: caja.id,
@@ -8566,7 +8651,9 @@ app.get('/api/caja/corte-x', async (req, res) => {
       esperado_dolares_crc: ventasDolares,
       total_general_esperado_gaveta_crc: totalGeneralEsperadoGaveta,
       tip_pool: tipPool,
-      total_propinas: totalPropinas
+      total_propinas: totalPropinas,
+      servicio10,
+      total_servicio_10: servicio10.total
     };
 
     res.json({
@@ -8933,6 +9020,8 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     io.emit('caja_actualizada', { negocio_id: caja.negocio_id || negocioId });
     io.emit('cajas_fisicas_actualizadas', { negocio_id: caja.negocio_id || negocioId });
 
+    const servicio10 = await obtenerServicio10Caja(caja.id, caja.fecha_apertura, negocioId);
+
     const resultadoCierre = {
       tipo: 'Cierre Z (Final)',
       caja_id: caja.id,
@@ -8974,6 +9063,8 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       estado_cuadre: estadoCuadre,
       tip_pool: tipPool,
       total_propinas: totalPropinas,
+      servicio10,
+      total_servicio_10: servicio10.total,
       notas
     };
 

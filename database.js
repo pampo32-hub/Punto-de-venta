@@ -323,6 +323,7 @@ function initDb() {
       agotado INTEGER DEFAULT 0,
       imagen_url TEXT,
       color_badge TEXT,
+      paga_servicio_10 INTEGER DEFAULT 0,
       activo INTEGER DEFAULT 1,
       FOREIGN KEY(negocio_id) REFERENCES Negocios(id),
       FOREIGN KEY(categoria_id) REFERENCES Categorias(id)
@@ -335,6 +336,7 @@ function initDb() {
     db.run("ALTER TABLE Productos ADD COLUMN imagen_url TEXT", () => {});
     db.run("ALTER TABLE Productos ADD COLUMN color_badge TEXT", () => {});
     db.run("ALTER TABLE Productos ADD COLUMN negocio_id INTEGER DEFAULT 1", () => {});
+    db.run("ALTER TABLE Productos ADD COLUMN paga_servicio_10 INTEGER DEFAULT 0", () => {});
 
     // 4.5. Puntos de Cobro / Cajas Físicas
     db.run(`CREATE TABLE IF NOT EXISTS PuntosDeCobro (
