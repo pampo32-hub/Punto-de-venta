@@ -703,14 +703,24 @@ function formatearNombreItemConOrigen(item, mesaActualNumero) {
 // ============================================================================
 app.get('/api/auth/usuarios-publicos', async (req, res) => {
   try {
-    const usuarios = await dbAll(`
+    const queryNid = (req.query.negocio_id || req.query.negocioId) ? Number(req.query.negocio_id || req.query.negocioId) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : null);
+    let sql = `
       SELECT u.id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.negocio_id,
-             COALESCE(n.nombre, 'La Terrazita') as negocio_nombre,
+             COALESCE(n.nombre, 'Comercio') as negocio_nombre,
              n.slogan as negocio_slogan,
              n.logo_url as negocio_logo
       FROM Usuarios u
       LEFT JOIN Negocios n ON u.negocio_id = n.id
       WHERE (COALESCE(u.activo, 1) = 1)
+    `;
+    const params = [];
+
+    if (queryNid) {
+      sql += ' AND (u.negocio_id = ? OR u.rol = \'developer\')';
+      params.push(queryNid);
+    }
+
+    sql += `
       ORDER BY 
         COALESCE(u.negocio_id, 1) ASC,
         CASE u.rol 
@@ -719,7 +729,8 @@ app.get('/api/auth/usuarios-publicos', async (req, res) => {
           WHEN 'cajero' THEN 3 
           ELSE 4 
         END, u.id ASC
-    `);
+    `;
+    const usuarios = await dbAll(sql, params);
 
     const lista = usuarios.map(u => {
       let rolDisplay = u.rol.toUpperCase();
@@ -2689,16 +2700,33 @@ app.delete('/api/admin/dispositivos/:id', async (req, res) => {
 });
 
 
-// Usuarios Globales (Developer ve todos los usuarios del sistema)
+// Usuarios (con aislamiento estricto por negocio_id)
 app.get('/api/dev/usuarios', async (req, res) => {
   try {
-    const usuarios = await dbAll(`
+    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : null);
+    const verTodos = (req.query.todos === 'true' || req.query.todos === '1') && isDev;
+
+    let sql = `
       SELECT u.id, u.negocio_id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.permisos, u.activo,
              n.nombre as negocio_nombre
       FROM Usuarios u
       LEFT JOIN Negocios n ON u.negocio_id = n.id
-      ORDER BY u.id ASC
-    `);
+    `;
+    const params = [];
+
+    if (queryNid) {
+      sql += ' WHERE u.negocio_id = ?';
+      params.push(queryNid);
+    } else if (!verTodos) {
+      sql += ' WHERE u.negocio_id = ?';
+      params.push(reqNid || 1);
+    }
+
+    sql += ' ORDER BY u.id ASC';
+    const usuarios = await dbAll(sql, params);
     res.json(usuarios);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -2707,7 +2735,10 @@ app.get('/api/dev/usuarios', async (req, res) => {
 
 app.post('/api/dev/usuarios', async (req, res) => {
   try {
-    const { negocio_id = 1, usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234', permisos = '{}' } = req.body;
+    const reqNid = obtenerNegocioIdReq(req);
+    const explicitNid = req.body.negocio_id ? Number(req.body.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocio_id = explicitNid || 1;
+    const { usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234', permisos = '{}' } = req.body;
     if (!usuario || !password || !nombre_completo) {
       return res.status(400).json({ error: 'Faltan datos obligatorios del usuario' });
     }
@@ -2980,15 +3011,20 @@ app.get('/api/dev/db-ping', async (req, res) => {
 // ============================================================================
 app.get('/api/admin/empleados', async (req, res) => {
   try {
-    const negocioId = obtenerNegocioIdReq(req);
+    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = isDev ? queryNid : reqNid;
+
     const empleados = await dbAll(`
       SELECT u.id, u.negocio_id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.activo, u.caja_defecto_id,
              p.nombre as caja_defecto_nombre
       FROM Usuarios u
       LEFT JOIN PuntosDeCobro p ON u.caja_defecto_id = p.id
-      WHERE (u.negocio_id = ? OR (u.negocio_id IS NULL AND ? = 1)) AND u.rol != 'developer'
+      WHERE u.negocio_id = ? AND u.rol != 'developer'
       ORDER BY u.id ASC
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     // Mapear etiquetas con género
     const listado = empleados.map(e => {
@@ -7153,10 +7189,10 @@ async function procesarCobroOrden(ordenId, {
   if (caja_id) {
     caja = await dbGet("SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta'", [Number(caja_id)]);
   } else if (caja_fisica_id) {
-    caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioIdFinal, negocioIdFinal]);
+    caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioIdFinal]);
   }
   if (!caja) {
-    caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [negocioIdFinal, negocioIdFinal]);
+    caja = await dbGet("SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [negocioIdFinal]);
   }
   if (!caja) {
     const ahoraApertura = new Date().toISOString();
@@ -7853,20 +7889,25 @@ app.put('/api/ordenes/:id/modo-happy-hour', async (req, res) => {
 // Listar puntos de cobro físicos y su estado de ocupación en tiempo real
 app.get('/api/cajas-fisicas', async (req, res) => {
   try {
-    const negocioId = obtenerNegocioIdReq(req);
+    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = (req.query.negocio_id || req.query.negocioId) ? Number(req.query.negocio_id || req.query.negocioId) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = isDev ? queryNid : reqNid;
+
     const puntos = await dbAll(`
       SELECT p.*, u.nombre_completo as pre_asignado_usuario_nombre, u.usuario as pre_asignado_usuario_username
       FROM PuntosDeCobro p
       LEFT JOIN Usuarios u ON p.pre_asignado_usuario_id = u.id
-      WHERE (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1)) AND p.activo = 1
+      WHERE p.negocio_id = ? AND p.activo = 1
       ORDER BY p.id ASC
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     const turnosAbiertos = await dbAll(`
       SELECT * FROM Cajas 
-      WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+      WHERE estado = 'abierta' AND negocio_id = ?
       ORDER BY id DESC
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     const cajasFisicas = puntos.map(punto => {
       const turnoActivo = turnosAbiertos.find(t => Number(t.caja_fisica_id) === Number(punto.id));
@@ -7905,14 +7946,19 @@ app.get('/api/cajas-fisicas', async (req, res) => {
 // Admin CRUD Puntos de Cobro
 app.get('/api/admin/puntos-cobro', async (req, res) => {
   try {
-    const negocioId = obtenerNegocioIdReq(req);
+    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+    const reqNid = obtenerNegocioIdReq(req);
+    const queryNid = (req.query.negocio_id || req.query.negocioId) ? Number(req.query.negocio_id || req.query.negocioId) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocioId = isDev ? queryNid : reqNid;
+
     const puntos = await dbAll(`
       SELECT p.*, u.nombre_completo as pre_asignado_usuario_nombre, u.usuario as pre_asignado_usuario_username
       FROM PuntosDeCobro p
       LEFT JOIN Usuarios u ON p.pre_asignado_usuario_id = u.id
-      WHERE (p.negocio_id = ? OR (p.negocio_id IS NULL AND ? = 1))
+      WHERE p.negocio_id = ?
       ORDER BY p.id ASC
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
     res.json(puntos);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7995,7 +8041,7 @@ app.delete('/api/admin/puntos-cobro/:id', async (req, res) => {
       return res.status(403).json({ error: 'Acceso denegado: El punto de cobro pertenece a otro comercio.' });
     }
 
-    const turnoAbierto = await dbGet("SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'abierta'", [id, puntoNid, puntoNid]);
+    const turnoAbierto = await dbGet("SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND negocio_id = ? AND estado = 'abierta'", [id, puntoNid]);
     if (turnoAbierto) {
       return res.status(400).json({ error: `No se puede eliminar la caja física porque tiene un turno abierto activo por ${turnoAbierto.cajero}` });
     }
@@ -8058,7 +8104,7 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
     let nuevoUsuarioId = nuevo_usuario_id ? Number(nuevo_usuario_id) : null;
 
     if (nuevo_usuario_id) {
-      const u = await dbGet('SELECT * FROM Usuarios WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nuevoUsuarioId, turnoNid, turnoNid]);
+      const u = await dbGet('SELECT * FROM Usuarios WHERE id = ? AND negocio_id = ?', [nuevoUsuarioId, turnoNid]);
       if (u) {
         finalCajero = u.nombre_completo || u.usuario;
       }
@@ -8068,14 +8114,14 @@ app.post('/api/admin/cajas/reasignar', async (req, res) => {
 
     if (nueva_caja_fisica_id && Number(nueva_caja_fisica_id) !== Number(turno.caja_fisica_id)) {
       const nuevoPuntoId = Number(nueva_caja_fisica_id);
-      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))', [nuevoPuntoId, turnoNid, turnoNid]);
+      const punto = await dbGet('SELECT * FROM PuntosDeCobro WHERE id = ? AND negocio_id = ?', [nuevoPuntoId, turnoNid]);
       if (!punto) {
         return res.status(404).json({ ok: false, error: 'La nueva caja física seleccionada no existe o pertenece a otro comercio' });
       }
 
       const ocupadaPorOtro = await dbGet(
-        "SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND estado = 'abierta' AND id != ?",
-        [nuevoPuntoId, turnoNid, turnoNid, turnoIdTarget]
+        "SELECT id, cajero FROM Cajas WHERE caja_fisica_id = ? AND negocio_id = ? AND estado = 'abierta' AND id != ?",
+        [nuevoPuntoId, turnoNid, turnoIdTarget]
       );
       if (ocupadaPorOtro) {
         return res.status(409).json({
@@ -8149,7 +8195,8 @@ app.post('/api/cajas/reasignar', async (req, res, next) => {
 
 // Alias directos para Puntos de Cobro / Cajas Físicas
 app.get('/api/puntos-cobro', async (req, res, next) => {
-  req.url = '/api/admin/puntos-cobro';
+  const qIdx = req.url.indexOf('?');
+  req.url = '/api/admin/puntos-cobro' + (qIdx !== -1 ? req.url.slice(qIdx) : '');
   return app.handle(req, res, next);
 });
 app.post('/api/puntos-cobro', async (req, res, next) => {
@@ -8167,7 +8214,8 @@ app.delete('/api/puntos-cobro/:id', async (req, res, next) => {
 
 // Alias directos para Dispositivos Autorizados
 app.get('/api/dispositivos', async (req, res, next) => {
-  req.url = '/api/admin/dispositivos';
+  const qIdx = req.url.indexOf('?');
+  req.url = '/api/admin/dispositivos' + (qIdx !== -1 ? req.url.slice(qIdx) : '');
   return app.handle(req, res, next);
 });
 app.post('/api/dispositivos/autorizar', async (req, res, next) => {
