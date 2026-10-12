@@ -529,12 +529,22 @@ function extraerUsuarioJWT(req, res, next) {
 }
 
 function obtenerNegocioIdReq(req, idFallback = 1) {
-  if (req.usuario && req.usuario.rol !== 'developer') {
-    return Number(req.usuario.negocio_id) || idFallback;
+  const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+    ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+
+  if (isDev) {
+    const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
+    if (explicitId) return Number(explicitId);
+    if (req.negocioId) return Number(req.negocioId);
+    return idFallback;
   }
+
+  if (req.usuario && req.usuario.negocio_id) {
+    return Number(req.usuario.negocio_id);
+  }
+
   const explicitId = req.headers['x-negocio-id'] || req.query?.negocio_id || req.query?.negocioId || (req.body && (req.body.negocio_id || req.body.negocioId));
   if (explicitId) return Number(explicitId);
-  if (req.negocioId) return Number(req.negocioId);
   return idFallback;
 }
 
@@ -8188,31 +8198,31 @@ app.get('/api/caja/actual', async (req, res) => {
 
     if (caja_id) {
       caja = await dbGet(
-        'SELECT * FROM Cajas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-        [Number(caja_id), negocioId, negocioId]
+        'SELECT * FROM Cajas WHERE id = ? AND negocio_id = ?',
+        [Number(caja_id), negocioId]
       );
     } else if (caja_fisica_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [Number(caja_fisica_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId]
       );
     } else if (cajero) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE LOWER(cajero) = LOWER(?) AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [String(cajero).trim(), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE LOWER(cajero) = LOWER(?) AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [String(cajero).trim(), negocioId]
       );
     }
 
     if (!caja) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [negocioId]
       );
     }
 
     const turnosAbiertos = await dbAll(
-      "SELECT id, cajero, caja_fisica_id, caja_nombre, fecha_apertura, monto_inicial FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC",
-      [negocioId, negocioId]
+      "SELECT id, cajero, caja_fisica_id, caja_nombre, fecha_apertura, monto_inicial FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id ASC",
+      [negocioId]
     );
 
     if (!caja) return res.json({ ok: true, caja: null, cajasAbiertas: turnosAbiertos || [], turnos_abiertos: turnosAbiertos || [] });
@@ -8221,9 +8231,9 @@ app.get('/api/caja/actual', async (req, res) => {
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.metodo
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     const movimientos = await dbAll('SELECT * FROM MovimientosCaja WHERE caja_id = ? ORDER BY id DESC', [caja.id]);
 
@@ -8235,9 +8245,9 @@ app.get('/api/caja/actual', async (req, res) => {
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.mesero
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     res.json({ ok: true, caja, cajasAbiertas: turnosAbiertos || [], turnos_abiertos: turnosAbiertos || [], ventas, movimientos, tipPool });
   } catch (e) {
@@ -8258,20 +8268,20 @@ app.post('/api/caja/movimiento', async (req, res) => {
     let caja = null;
     if (caja_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
-        [Number(caja_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND negocio_id = ?",
+        [Number(caja_id), negocioId]
       );
     } else if (caja_fisica_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [Number(caja_fisica_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId]
       );
     }
 
     if (!caja) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [negocioId]
       );
     }
 
@@ -8327,20 +8337,20 @@ app.get('/api/caja/corte-x', async (req, res) => {
     let caja = null;
     if (caja_id) {
       caja = await dbGet(
-        'SELECT * FROM Cajas WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-        [Number(caja_id), negocioId, negocioId]
+        'SELECT * FROM Cajas WHERE id = ? AND negocio_id = ?',
+        [Number(caja_id), negocioId]
       );
     } else if (caja_fisica_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [Number(caja_fisica_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId]
       );
     }
 
     if (!caja) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [negocioId]
       );
     }
 
@@ -8350,9 +8360,9 @@ app.get('/api/caja/corte-x', async (req, res) => {
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.metodo
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
@@ -8401,9 +8411,9 @@ app.get('/api/caja/corte-x', async (req, res) => {
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.mesero
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
 
@@ -8411,8 +8421,8 @@ app.get('/api/caja/corte-x', async (req, res) => {
       SELECT COUNT(DISTINCT p.orden_id) as total_ordenes 
       FROM Pagos p 
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     const resultadoCorte = {
       tipo: 'Corte X (Parcial)',
@@ -8485,20 +8495,20 @@ app.post('/api/caja/corte-x-ciego', async (req, res) => {
     let caja = null;
     if (caja_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
-        [Number(caja_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND negocio_id = ?",
+        [Number(caja_id), negocioId]
       );
     } else if (caja_fisica_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [Number(caja_fisica_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [Number(caja_fisica_id), negocioId]
       );
     }
 
     if (!caja) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [negocioId]
       );
     }
     if (!caja) return res.status(404).json({ ok: false, error: 'No hay ninguna caja abierta actualmente para realizar el corte.' });
@@ -8507,9 +8517,9 @@ app.post('/api/caja/corte-x-ciego', async (req, res) => {
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.metodo
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
@@ -8575,17 +8585,17 @@ app.post('/api/caja/corte-x-ciego', async (req, res) => {
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.mesero
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
     const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
 
     const ordenesCobros = await dbGet(`
       SELECT COUNT(DISTINCT p.orden_id) as total_ordenes 
       FROM Pagos p 
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     // Registrar en auditoría si la función existe
     try {
@@ -8694,17 +8704,17 @@ app.post('/api/caja/cierre-z', async (req, res) => {
     let caja = null;
     if (caja_id) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
-        [Number(caja_id), negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE id = ? AND estado = 'abierta' AND negocio_id = ?",
+        [Number(caja_id), negocioId]
       );
     } else if (caja_fisica_id) {
-      caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioId, negocioId]);
+      caja = await dbGet("SELECT * FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1", [Number(caja_fisica_id), negocioId]);
     }
 
     if (!caja) {
       caja = await dbGet(
-        "SELECT * FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
-        [negocioId, negocioId]
+        "SELECT * FROM Cajas WHERE estado = 'abierta' AND negocio_id = ? ORDER BY id DESC LIMIT 1",
+        [negocioId]
       );
     }
     if (!caja) return res.status(404).json({ ok: false, error: 'No hay ninguna caja abierta para cerrar' });
@@ -8713,9 +8723,9 @@ app.post('/api/caja/cierre-z', async (req, res) => {
       SELECT p.metodo, SUM(p.monto) as total, SUM(COALESCE(p.monto_usd, 0)) as total_usd, COUNT(*) as transacciones
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.metodo
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
 
     let ventasEfectivo = 0, ventasTarjeta = 0, ventasSinpe = 0, ventasDolares = 0, ventasDolaresUSD = 0, ventasTransferencia = 0, ventasOtros = 0;
     const desgloseMetodos = {};
@@ -8775,9 +8785,9 @@ app.post('/api/caja/cierre-z', async (req, res) => {
         SUM(COALESCE(p.propina, p.monto * 0.10)) as propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))))
+      WHERE (p.caja_id = ? OR (p.caja_id IS NULL AND p.fecha_hora >= ? AND o.negocio_id = ?))
       GROUP BY p.mesero
-    `, [caja.id, caja.fecha_apertura, negocioId, negocioId]);
+    `, [caja.id, caja.fecha_apertura, negocioId]);
     const totalPropinas = tipPool.reduce((acc, curr) => acc + (curr.propina || 0), 0);
 
     const ahora = new Date().toISOString();
@@ -8898,8 +8908,8 @@ app.post('/api/caja/abrir', async (req, res) => {
 
     if (cajaFisicaIdNum) {
       const punto = await dbGet(
-        'SELECT * FROM PuntosDeCobro WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-        [cajaFisicaIdNum, negocioId, negocioId]
+        'SELECT * FROM PuntosDeCobro WHERE id = ? AND negocio_id = ?',
+        [cajaFisicaIdNum, negocioId]
       );
       if (!punto) {
         return res.status(404).json({ ok: false, error: 'La caja física seleccionada no existe' });
@@ -8908,8 +8918,8 @@ app.post('/api/caja/abrir', async (req, res) => {
 
       // Verificar si ESA caja física ya está abierta por otro turno
       const cajaOcupada = await dbGet(
-        "SELECT id, cajero, caja_nombre FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
-        [cajaFisicaIdNum, negocioId, negocioId]
+        "SELECT id, cajero, caja_nombre FROM Cajas WHERE caja_fisica_id = ? AND estado = 'abierta' AND negocio_id = ?",
+        [cajaFisicaIdNum, negocioId]
       );
       if (cajaOcupada) {
         return res.status(409).json({
@@ -8921,9 +8931,9 @@ app.post('/api/caja/abrir', async (req, res) => {
       }
     } else {
       // Si no especificó caja física, intentar asignar la primera disponible o pre-asignada
-      const puntos = await dbAll('SELECT * FROM PuntosDeCobro WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND activo = 1 ORDER BY id ASC', [negocioId, negocioId]);
+      const puntos = await dbAll('SELECT * FROM PuntosDeCobro WHERE negocio_id = ? AND activo = 1 ORDER BY id ASC', [negocioId]);
       if (puntos && puntos.length > 0) {
-        const turnosAbiertos = await dbAll("SELECT caja_fisica_id FROM Cajas WHERE estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))", [negocioId, negocioId]);
+        const turnosAbiertos = await dbAll("SELECT caja_fisica_id FROM Cajas WHERE estado = 'abierta' AND negocio_id = ?", [negocioId]);
         const ocupadosIds = new Set(turnosAbiertos.map(t => Number(t.caja_fisica_id)));
         const disponible = puntos.find(p => !ocupadosIds.has(Number(p.id)));
         if (disponible) {
@@ -8941,8 +8951,8 @@ app.post('/api/caja/abrir', async (req, res) => {
     // Verificar si este mismo cajero ya tiene un turno abierto en este negocio
     if (!forzar) {
       const turnoPrevioCajero = await dbGet(
-        "SELECT id, caja_nombre, caja_fisica_id FROM Cajas WHERE LOWER(cajero) = LOWER(?) AND estado = 'abierta' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))",
-        [nombreCajero.trim(), negocioId, negocioId]
+        "SELECT id, caja_nombre, caja_fisica_id FROM Cajas WHERE LOWER(cajero) = LOWER(?) AND estado = 'abierta' AND negocio_id = ?",
+        [nombreCajero.trim(), negocioId]
       );
       if (turnoPrevioCajero) {
         return res.status(409).json({
@@ -9194,8 +9204,8 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
 
       if (!prodId && prodNombre) {
         const prodDb = await dbGet(
-          'SELECT id FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
-          [prodNombre, `%${prodNombre}%`, negocioIdFinal, negocioIdFinal, prodNombre]
+          'SELECT id FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR nombre LIKE ?) AND negocio_id = ? ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+          [prodNombre, `%${prodNombre}%`, negocioIdFinal, prodNombre]
         );
         if (prodDb) prodId = prodDb.id;
       }
@@ -9227,18 +9237,15 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
             let subProd = null;
             if (validSubId) {
               subProd = await dbGet(
-                'SELECT * FROM Productos WHERE id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-                [validSubId, negocioIdFinal, negocioIdFinal]
+                'SELECT * FROM Productos WHERE id = ? AND negocio_id = ?',
+                [validSubId, negocioIdFinal]
               );
-              if (!subProd) {
-                subProd = await dbGet('SELECT * FROM Productos WHERE id = ?', [validSubId]);
-              }
             }
             let subInsumo = null;
             if (!subProd && validSubId) {
               subInsumo = await dbGet(
-                'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))',
-                [validSubId, negocioIdFinal, negocioIdFinal]
+                'SELECT * FROM Inventario WHERE producto_id = ? AND negocio_id = ?',
+                [validSubId, negocioIdFinal]
               );
             }
             listaCervezas.push({
@@ -9255,8 +9262,8 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
               const subCant = Number(match[1]) * cant;
               const subNombre = match[2].trim();
               let subProd = await dbGet(
-                'SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) LIKE ?) AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
-                [subNombre, `%${subNombre}%`, negocioIdFinal, negocioIdFinal, subNombre]
+                'SELECT * FROM Productos WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) LIKE ?) AND negocio_id = ? ORDER BY CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END LIMIT 1',
+                [subNombre, `%${subNombre}%`, negocioIdFinal, subNombre]
               );
               if (!subProd) {
                 subProd = await dbGet(
@@ -9286,24 +9293,24 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
             // Paso 1: Buscar insumo vinculado por producto_id en el negocio con stock > 0
             if (subProdId) {
               insumoEncontrado = await dbGet(
-                'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND stock_actual > 0 ORDER BY id ASC LIMIT 1',
-                [subProdId, negocioIdFinal, negocioIdFinal]
+                'SELECT * FROM Inventario WHERE producto_id = ? AND negocio_id = ? AND stock_actual > 0 ORDER BY id ASC LIMIT 1',
+                [subProdId, negocioIdFinal]
               );
             }
 
             // Paso 2: Buscar insumo por nombre exacto en el negocio con stock > 0
             if (!insumoEncontrado && subNombre) {
               insumoEncontrado = await dbGet(
-                'SELECT * FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) AND (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) = LOWER(TRIM(?))) AND stock_actual > 0 ORDER BY id ASC LIMIT 1',
-                [negocioIdFinal, negocioIdFinal, subNombre, `Cerveza ${subNombre}`]
+                'SELECT * FROM Inventario WHERE negocio_id = ? AND (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) = LOWER(TRIM(?))) AND stock_actual > 0 ORDER BY id ASC LIMIT 1',
+                [negocioIdFinal, subNombre, `Cerveza ${subNombre}`]
               );
             }
 
             // Paso 3: Buscar en recetas vinculadas donde el insumo tenga stock > 0 en el negocio
             if (!insumoEncontrado && subProdId) {
               const recetas = await dbAll(
-                'SELECT r.*, i.stock_actual FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) AND i.stock_actual > 0 ORDER BY r.id ASC LIMIT 1',
-                [subProdId, negocioIdFinal, negocioIdFinal]
+                'SELECT r.*, i.stock_actual FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND i.negocio_id = ? AND i.stock_actual > 0 ORDER BY r.id ASC LIMIT 1',
+                [subProdId, negocioIdFinal]
               );
               if (recetas && recetas.length > 0) {
                 const r = recetas[0];
@@ -9318,16 +9325,16 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
             // Paso 4: Si no hubo con stock > 0, buscar por producto_id en el negocio (aunque stock sea 0)
             if (!insumoEncontrado && subProdId) {
               insumoEncontrado = await dbGet(
-                'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY id ASC LIMIT 1',
-                [subProdId, negocioIdFinal, negocioIdFinal]
+                'SELECT * FROM Inventario WHERE producto_id = ? AND negocio_id = ? ORDER BY id ASC LIMIT 1',
+                [subProdId, negocioIdFinal]
               );
             }
 
             // Paso 5: Si no hubo por producto_id, buscar por receta en el negocio (aunque stock sea 0)
             if (!insumoEncontrado && subProdId) {
               const recetas = await dbAll(
-                'SELECT r.* FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) ORDER BY r.id ASC LIMIT 1',
-                [subProdId, negocioIdFinal, negocioIdFinal]
+                'SELECT r.* FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND i.negocio_id = ? ORDER BY r.id ASC LIMIT 1',
+                [subProdId, negocioIdFinal]
               );
               if (recetas && recetas.length > 0) {
                 const r = recetas[0];
@@ -9346,7 +9353,7 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
 
               insumoEncontrado = await dbGet(
                 `SELECT * FROM Inventario 
-                 WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) 
+                 WHERE negocio_id = ? 
                    AND (
                      LOWER(TRIM(nombre)) = LOWER(TRIM(?)) 
                      OR LOWER(TRIM(nombre)) = LOWER(TRIM(?)) 
@@ -9415,8 +9422,8 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
 
       // 1. Revisar si hay recetas vinculadas en InventarioRecetas para el negocio
       const recetas = await dbAll(
-        'SELECT r.*, i.stock_actual FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1)) ORDER BY (i.stock_actual > 0) DESC, r.id ASC',
-        [prodId, negocioIdFinal, negocioIdFinal]
+        'SELECT r.*, i.stock_actual FROM InventarioRecetas r JOIN Inventario i ON i.id = r.insumo_id WHERE r.producto_id = ? AND i.negocio_id = ? ORDER BY (i.stock_actual > 0) DESC, r.id ASC',
+        [prodId, negocioIdFinal]
       );
       if (recetas && recetas.length > 0) {
         for (const r of recetas) {
@@ -9466,17 +9473,17 @@ async function descontarInventarioPorItems(items = [], negocioId = null) {
       } else {
         // 2. Si no hay receta, descontar del insumo vinculado directamente al producto en el negocio
         let insumo = await dbGet(
-          'SELECT * FROM Inventario WHERE producto_id = ? AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY (stock_actual > 0) DESC, id ASC LIMIT 1',
-          [prodId, negocioIdFinal, negocioIdFinal]
+          'SELECT * FROM Inventario WHERE producto_id = ? AND negocio_id = ? ORDER BY (stock_actual > 0) DESC, id ASC LIMIT 1',
+          [prodId, negocioIdFinal]
         );
         // 3. Fallback: buscar por nombre en el negocio
         if (!insumo && prodNombre) {
           insumo = await dbGet(
             `SELECT * FROM Inventario 
-             WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+             WHERE negocio_id = ?
                AND (LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) = LOWER(TRIM(?)) OR LOWER(TRIM(nombre)) LIKE ?)
              ORDER BY (stock_actual > 0) DESC, CASE WHEN LOWER(TRIM(nombre)) = LOWER(TRIM(?)) THEN 1 ELSE 2 END, id ASC LIMIT 1`,
-            [negocioIdFinal, negocioIdFinal, prodNombre, `Cerveza ${prodNombre}`, `%${prodNombre}%`, prodNombre]
+            [negocioIdFinal, prodNombre, `Cerveza ${prodNombre}`, `%${prodNombre}%`, prodNombre]
           );
         }
         if (insumo) {
@@ -9604,9 +9611,9 @@ app.get('/api/admin/inventario', verificarAdmin, async (req, res) => {
       SELECT i.*, p.nombre as producto_vinculado_nombre
       FROM Inventario i
       LEFT JOIN Productos p ON i.producto_id = p.id
-      WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
+      WHERE i.negocio_id = ?
       ORDER BY i.categoria ASC, i.nombre ASC
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     const insumosConEstado = insumos.map(ins => {
       let estado = 'normal';
@@ -9980,18 +9987,20 @@ app.post('/api/admin/inventario/:id/ajuste', verificarAdmin, async (req, res) =>
 app.get('/api/admin/recetas/resumen', verificarAdmin, async (req, res) => {
   try {
     const reqNid = obtenerNegocioIdReq(req);
+    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
     const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
-    const negocioId = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
+    const negocioId = isDev ? queryNid : reqNid;
     const productos = await dbAll(
-      'SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) ORDER BY categoria_id ASC, nombre ASC',
-      [negocioId, negocioId]
+      'SELECT id, nombre, precio, categoria_id FROM Productos WHERE activo = 1 AND negocio_id = ? ORDER BY categoria_id ASC, nombre ASC',
+      [negocioId]
     );
     const recetas = await dbAll(`
       SELECT r.producto_id, r.cantidad, COALESCE(r.merma_porcentaje, 0) as merma_porcentaje, i.costo_unitario
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-      WHERE (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
-    `, [negocioId, negocioId]);
+      WHERE i.negocio_id = ?
+    `, [negocioId]);
 
     const costosMap = {};
     const cantIngredientesMap = {};
@@ -10051,9 +10060,9 @@ app.get('/api/admin/recetas/:productoId', verificarAdmin, async (req, res) => {
              i.costo_unitario, i.stock_actual, i.stock_minimo, i.es_licor, i.capacidad_ml, i.medida_shot_ml, i.rendimiento_shots
       FROM InventarioRecetas r
       JOIN Inventario i ON r.insumo_id = i.id
-      WHERE r.producto_id = ? AND (i.negocio_id = ? OR (i.negocio_id IS NULL AND ? = 1))
+      WHERE r.producto_id = ? AND i.negocio_id = ?
       ORDER BY i.nombre ASC
-    `, [prodId, prodNid, prodNid]);
+    `, [prodId, prodNid]);
 
     let costoReceta = 0;
     let porcionesDisponibles = ingredientes.length > 0 ? Infinity : 0;
@@ -10295,9 +10304,9 @@ app.get('/api/admin/inventario/kardex/movimientos', verificarAdmin, async (req, 
       SELECT m.*, i.nombre as insumo_nombre, i.categoria as insumo_categoria, i.unidad_medida, i.es_licor, i.rendimiento_shots
       FROM InventarioMovimientos m
       LEFT JOIN Inventario i ON m.insumo_id = i.id
-      WHERE (m.negocio_id = ? OR (m.negocio_id IS NULL AND ? = 1))
+      WHERE m.negocio_id = ?
     `;
-    const params = [nid, nid];
+    const params = [nid];
     if (insumo_id && insumo_id !== 'todos') {
       query += ' AND m.insumo_id = ?';
       params.push(insumo_id);
@@ -10332,13 +10341,13 @@ const vaciarKardexHandler = async (req, res) => {
       : (req.body?.negocio_id ? Number(req.body.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1));
 
     const totalAntes = await dbGet(
-      `SELECT COUNT(*) as total FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
-      [negocioId, negocioId]
+      `SELECT COUNT(*) as total FROM InventarioMovimientos WHERE negocio_id = ?`,
+      [negocioId]
     );
 
     await dbRun(
-      `DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))`,
-      [negocioId, negocioId]
+      `DELETE FROM InventarioMovimientos WHERE negocio_id = ?`,
+      [negocioId]
     );
 
     // Registrar en auditoría
@@ -10537,11 +10546,11 @@ app.get('/api/admin/inventario/sugerencia-compras', verificarAdmin, async (req, 
     const negocioId = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : 1);
     const insumosCriticos = await dbAll(`
       SELECT * FROM Inventario 
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
+      WHERE negocio_id = ?
         AND stock_actual <= stock_minimo
         AND stock_minimo > 0
       ORDER BY (stock_actual - stock_minimo) ASC, nombre ASC
-    `, [negocioId, negocioId]);
+    `, [negocioId]);
 
     let totalPresupuesto = 0;
     const items = insumosCriticos.map(ins => {
@@ -11008,12 +11017,14 @@ app.get('/api/admin/auditoria', verificarAdmin, async (req, res) => {
     let sql = 'SELECT * FROM Auditoria WHERE 1=1';
     const params = [];
 
+    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
+      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
     const reqNid = obtenerNegocioIdReq(req);
     const queryNid = negocio_id ? Number(negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
-    const negocioId = (req.usuario && req.usuario.rol !== 'developer') ? reqNid : queryNid;
+    const negocioId = isDev ? queryNid : reqNid;
     if (negocioId) {
-      sql += ' AND (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))';
-      params.push(negocioId, negocioId);
+      sql += ' AND negocio_id = ?';
+      params.push(negocioId);
     }
 
     if (tipo) {
@@ -11268,9 +11279,9 @@ app.get('/api/admin/ventas/historial-hoy', verificarAdmin, async (req, res) => {
       SELECT p.metodo, SUM(p.monto) AS total_monto, SUM(p.propina) AS total_propina
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
-      WHERE p.fecha_hora >= ? AND (o.negocio_id = ? OR (o.negocio_id IS NULL AND ? = 1))
+      WHERE p.fecha_hora >= ? AND o.negocio_id = ?
       GROUP BY p.metodo
-    `, [inicioHoyISO, negocioId, negocioId]);
+    `, [inicioHoyISO, negocioId]);
 
     pagosHoy.forEach(pg => {
       const mto = Number(pg.total_monto) || 0;
@@ -11949,14 +11960,13 @@ app.post('/api/developer/purgar-negocio-completo', verificarDeveloper, async (re
 
     // E. Kárdex e Inventario a Cero
     await dbRun(`DELETE FROM InventarioMovimientos WHERE negocio_id = ? OR insumo_id IN (SELECT id FROM Inventario WHERE negocio_id = ?)`, [negocioId, negocioId]).catch(() => {});
-    await dbRun(`DELETE FROM InventarioMovimientos WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)) OR insumo_id IN (SELECT id FROM Inventario WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1)))`, [negocioId, negocioId, negocioId, negocioId]).catch(() => {});
     await dbRun(`
       UPDATE Inventario SET
         stock_actual = 0,
         stock_minimo = 0,
         stock_maximo = 0
-      WHERE (negocio_id = ? OR (negocio_id IS NULL AND ? = 1))
-    `, [negocioId, negocioId]).catch(() => {});
+      WHERE negocio_id = ?
+    `, [negocioId]).catch(() => {});
 
     // F. Auditoría y Notificaciones
     await dbRun(`DELETE FROM Auditoria WHERE negocio_id = ?`, [negocioId]).catch(() => {});
