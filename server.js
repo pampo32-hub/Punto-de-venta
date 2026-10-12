@@ -6379,6 +6379,8 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
     if (comandasCocina.length > 0) {
       io.emit('comanda_nueva', { mesaId: mesaIdFinal, ordenId, mesaNumero, mesero, horaPedido: ahora, items: comandasCocina, es_para_llevar: esParaLlevar, negocio_id: comandaNegocioId });
     }
+    io.emit('kds_actualizado', { negocio_id: comandaNegocioId });
+    io.emit('comandas_actualizadas', { negocio_id: comandaNegocioId });
   }
 
   // Despachar impresión térmica de 80mm a Cocina y Barra (ESC/POS & Virtual)
