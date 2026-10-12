@@ -1043,7 +1043,12 @@ app.post('/api/auth/login', async (req, res) => {
     const sesionUnicaActiva = negocio && (Number(negocio.sesion_unica_activa) === 1 || negocio.sesion_unica_activa === true || negocio.sesion_unica_activa === undefined);
     const forzarCierrePrevio = req.body.forzar_cierre_previo === true;
 
-    if (!esRolExento && !isLoopback && sesionUnicaActiva && u.ultimo_token_sesion && !forzarCierrePrevio) {
+    // Verificar si la sesión previa expiró por inactividad (más de 15 minutos sin actividad)
+    const ultimaConexionMs = u.ultima_conexion ? new Date(u.ultima_conexion).getTime() : 0;
+    const minutosInactivo = ultimaConexionMs ? Math.floor((Date.now() - ultimaConexionMs) / 60000) : 999999;
+    const sesionExpiradaPorTiempo = minutosInactivo >= 15;
+
+    if (!esRolExento && !isLoopback && sesionUnicaActiva && u.ultimo_token_sesion && !forzarCierrePrevio && !sesionExpiradaPorTiempo) {
       const mismoDispositivo = deviceToken && u.ultimo_dispositivo_id && (deviceToken === u.ultimo_dispositivo_id);
       if (!mismoDispositivo) {
         let nombreDispPrevio = 'otro dispositivo';
