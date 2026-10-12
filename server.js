@@ -703,7 +703,8 @@ function formatearNombreItemConOrigen(item, mesaActualNumero) {
 // ============================================================================
 app.get('/api/auth/usuarios-publicos', async (req, res) => {
   try {
-    const queryNid = (req.query.negocio_id || req.query.negocioId) ? Number(req.query.negocio_id || req.query.negocioId) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : null);
+    const isAll = req.query.all === '1' || req.query.all === 'true';
+    const queryNid = !isAll && ((req.query.negocio_id || req.query.negocioId) ? Number(req.query.negocio_id || req.query.negocioId) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : null));
     let sql = `
       SELECT u.id, u.usuario, u.nombre_completo, u.rol, u.genero, u.pin, u.negocio_id,
              COALESCE(n.nombre, 'Comercio') as negocio_nombre,
