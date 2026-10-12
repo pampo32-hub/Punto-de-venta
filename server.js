@@ -8411,7 +8411,7 @@ app.get('/api/caja/actual', async (req, res) => {
 
     const pagos = await dbAll(`
       SELECT p.id, p.orden_id, p.caja_id, p.mesero, p.metodo, p.monto, p.propina, p.cambio, p.fecha_hora,
-             o.mesa_id, m.numero as mesa_numero, o.nombre_cliente
+             o.mesa_id, m.numero as mesa_numero, o.cliente as nombre_cliente
       FROM Pagos p
       LEFT JOIN Ordenes o ON p.orden_id = o.id
       LEFT JOIN Mesas m ON o.mesa_id = m.id
