@@ -2700,11 +2700,15 @@ app.delete('/api/admin/dispositivos/:id', async (req, res) => {
 });
 
 
-// Usuarios (con aislamiento estricto por negocio_id)
+// Usuarios (con aislamiento estricto por negocio_id y RBAC)
 app.get('/api/dev/usuarios', async (req, res) => {
   try {
-    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
-      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+    const rolReq = obtenerRolReq(req);
+    if (!esAdminRol(rolReq)) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de Administrador' });
+    }
+
+    const isDev = esSuperAdminRol(rolReq);
     const reqNid = obtenerNegocioIdReq(req);
     const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : null);
     const verTodos = (req.query.todos === 'true' || req.query.todos === '1') && isDev;
@@ -2735,13 +2739,24 @@ app.get('/api/dev/usuarios', async (req, res) => {
 
 app.post('/api/dev/usuarios', async (req, res) => {
   try {
-    const reqNid = obtenerNegocioIdReq(req);
-    const explicitNid = req.body.negocio_id ? Number(req.body.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
-    const negocio_id = explicitNid || 1;
+    const rolReq = obtenerRolReq(req);
+    if (!esAdminRol(rolReq)) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de Administrador' });
+    }
+
     const { usuario, nombre_completo, password, rol = 'salonero', genero = 'M', pin = '1234', permisos = '{}' } = req.body;
     if (!usuario || !password || !nombre_completo) {
       return res.status(400).json({ error: 'Faltan datos obligatorios del usuario' });
     }
+
+    const rolNormalizado = normalizarRol(rol);
+    if (!esSuperAdminRol(rolReq) && (rolNormalizado === 'developer' || rolNormalizado === 'superadmin')) {
+      return res.status(403).json({ error: 'Un administrador no tiene autorización para crear usuarios con rol developer o superadmin' });
+    }
+
+    const reqNid = obtenerNegocioIdReq(req);
+    const explicitNid = req.body.negocio_id ? Number(req.body.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
+    const negocio_id = explicitNid || 1;
 
     const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos);
     const hashedPassword = await bcrypt.hash(password.trim(), 10);
@@ -2759,6 +2774,28 @@ app.post('/api/dev/usuarios', async (req, res) => {
 
 app.put('/api/dev/usuarios/:id', async (req, res) => {
   try {
+    const rolReq = obtenerRolReq(req);
+    if (!esAdminRol(rolReq)) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de Administrador' });
+    }
+
+    const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    // Restricciones para Admin (no puede tocar developer ni superadmin)
+    if (!esSuperAdminRol(rolReq)) {
+      const targetRol = normalizarRol(target.rol);
+      if (targetRol === 'developer' || targetRol === 'superadmin' || target.usuario === 'developer') {
+        return res.status(403).json({ error: 'Un administrador no tiene autorización para modificar cuentas de desarrollador o superadmin' });
+      }
+      if (req.body.rol) {
+        const rolNuevo = normalizarRol(req.body.rol);
+        if (rolNuevo === 'developer' || rolNuevo === 'superadmin') {
+          return res.status(403).json({ error: 'Un administrador no puede escalar privilegios a developer o superadmin' });
+        }
+      }
+    }
+
     const { nombre_completo, password, rol, genero, pin, permisos, activo, negocio_id } = req.body;
     const permisosStr = typeof permisos === 'string' ? permisos : JSON.stringify(permisos || {});
     
@@ -2784,11 +2821,33 @@ app.put('/api/dev/usuarios/:id', async (req, res) => {
 
 app.delete('/api/dev/usuarios/:id', async (req, res) => {
   try {
+    const rolReq = obtenerRolReq(req);
+    if (!esAdminRol(rolReq)) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de Administrador' });
+    }
+
     const target = await dbGet('SELECT * FROM Usuarios WHERE id = ?', [req.params.id]);
     if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (target.usuario === 'developer' || target.usuario === 'admin') {
+
+    // Protección anti-autoeliminación
+    const reqUserId = req.usuario?.id ? Number(req.usuario.id) : (req.headers['x-user-id'] ? Number(req.headers['x-user-id']) : null);
+    if (reqUserId && reqUserId === Number(req.params.id)) {
+      return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta en sesión activa' });
+    }
+
+    // No se puede eliminar el developer raíz ni admin principal
+    if (target.usuario === 'developer' || (target.usuario === 'admin' && Number(target.negocio_id || 1) === 1)) {
       return res.status(403).json({ error: 'No se puede eliminar el usuario administrador principal del sistema' });
     }
+
+    // Un admin no puede borrar a un developer ni a un superadmin
+    if (!esSuperAdminRol(rolReq)) {
+      const targetRol = normalizarRol(target.rol);
+      if (targetRol === 'developer' || targetRol === 'superadmin' || target.usuario === 'developer') {
+        return res.status(403).json({ error: 'Un administrador no tiene autorización para eliminar a un desarrollador o superadmin' });
+      }
+    }
+
     await dbRun('DELETE FROM Usuarios WHERE id = ?', [req.params.id]);
     res.json({ ok: true, message: 'Usuario eliminado exitosamente' });
   } catch (e) {
@@ -3011,8 +3070,12 @@ app.get('/api/dev/db-ping', async (req, res) => {
 // ============================================================================
 app.get('/api/admin/empleados', async (req, res) => {
   try {
-    const isDev = (req.usuario && req.usuario.rol === 'developer') ||
-      ['developer', 'dev', 'superadmin'].includes((req.headers['x-user-rol'] || '').toLowerCase());
+    const rolReq = obtenerRolReq(req);
+    if (!esAdminRol(rolReq)) {
+      return res.status(403).json({ error: 'Acceso denegado: Se requieren permisos de Administrador' });
+    }
+
+    const isDev = esSuperAdminRol(rolReq);
     const reqNid = obtenerNegocioIdReq(req);
     const queryNid = req.query.negocio_id ? Number(req.query.negocio_id) : (req.headers['x-negocio-id'] ? Number(req.headers['x-negocio-id']) : reqNid);
     const negocioId = isDev ? queryNid : reqNid;
