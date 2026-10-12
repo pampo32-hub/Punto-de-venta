@@ -6053,6 +6053,38 @@ async function recalcularTotalesOrden(ordenId) {
   return { subtotal, descuentoHH, servicio, iva, total, modoHH, esParaLlevar };
 }
 
+function normalizarNotasItem(it) {
+  if (!it) return '';
+  let rawNotas = String(it.notas || it.notes || '').trim();
+  const parts = [];
+  const tServ = it.tiempoServicio || it.tiempo_servicio;
+  if (tServ) parts.push(`[${String(tServ).trim()}]`);
+  if (it.termino) parts.push(`[${String(it.termino).trim()}]`);
+  if (Array.isArray(it.modificadores) && it.modificadores.length > 0) {
+    it.modificadores.forEach(m => {
+      if (m && String(m).trim()) parts.push(`[${String(m).trim()}]`);
+    });
+  }
+  if (parts.length > 0) {
+    if (rawNotas) {
+      if (!parts.some(p => rawNotas.includes(p))) {
+        parts.push(rawNotas);
+      } else {
+        let cleanRemaining = rawNotas;
+        parts.forEach(p => {
+          cleanRemaining = cleanRemaining.replace(p, '');
+        });
+        cleanRemaining = cleanRemaining.trim();
+        if (cleanRemaining) {
+          parts.push(cleanRemaining);
+        }
+      }
+    }
+    return parts.join(' ').trim();
+  }
+  return rawNotas;
+}
+
 async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Cliente General', items = [], happyHourActivo = false, idempotencyKey = null, negocioId = null, usuarioRol = null, tipo_orden = null, es_para_llevar = false }) {
   const esParaLlevar = Boolean(
     tipo_orden === 'para_llevar' ||
@@ -6226,7 +6258,7 @@ async function ejecutarComanda({ mesaId, mesero = 'Juan Jival', cliente = 'Clien
       nombre: nombre || 'Producto',
       precio: precio || 0,
       cantidad: Number(it.cantidad) || 1,
-      notas: it.notas || '',
+      notas: normalizarNotasItem(it),
       curso: Number(curso) || 3,
       destino: destino || 'cocina',
       origen_mesa_numero: it.origen_mesa_numero || null,
@@ -7113,10 +7145,11 @@ async function procesarCobroOrden(ordenId, {
       const esParaCocinaOBarra = destItem === 'cocina' || destItem === 'barra';
       const estadoComanda = liquidar_total ? 'pagado' : (esParaCocinaOBarra ? 'pendiente' : 'recibido');
       const itemPagado = liquidar_total ? 1 : 0;
+      const notasNormalizadas = normalizarNotasItem(it);
       await dbRun(
         `INSERT INTO DetalleOrden (orden_id, producto_id, nombre_producto, precio_unitario, cantidad, subtotal, notas, curso, destino, estado_comanda, pagado, hora_pedido, creado_en, comanda_numero, en_happy_hour, comensal)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [ordenId, prodId, itNombre, it.precio || 0, cant, subtotal, it.notas || '', it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, itemPagado, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
+        [ordenId, prodId, itNombre, it.precio || 0, cant, subtotal, notasNormalizadas, it.curso || (destItem === 'barra' ? 1 : 2), destItem, estadoComanda, itemPagado, ahora, ahora, comandaNumero, it.en_happy_hour ? 1 : 0, it.comensal || 'General']
       );
 
       const esBalde = Boolean(
@@ -7134,7 +7167,7 @@ async function procesarCobroOrden(ordenId, {
         cantidad: cant,
         es_balde: esBalde,
         desglose_balde: it.desglose_balde || null,
-        notas: it.notas || '',
+        notas: notasNormalizadas,
         destino: destItem,
         curso: it.curso || (destItem === 'barra' ? 1 : 2)
       });
